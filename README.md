@@ -1,2 +1,2 @@
-# oups
+# OUPS
 Ordered Updatable Parquet Store
