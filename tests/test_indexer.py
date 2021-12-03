@@ -52,11 +52,11 @@ def test_top_level_nested_dataclass():
     class SubLevel2:
         ma: str
         to: int
-        ou: float    
+        ou: int  
 
     @dataclass(order=True, frozen=True)
     class SubLevel1:
-        pu: float
+        pu: int
         il: str
         iv: SubLevel2
 
@@ -66,13 +66,13 @@ def test_top_level_nested_dataclass():
         to: int
         fo: SubLevel1
 
-    sl2 = SubLevel2('ou', 3, 7.2)
-    sl1 = SubLevel1(5.6, 'oh', sl2)
+    sl2 = SubLevel2('ou', 3, 7)
+    sl1 = SubLevel1(5, 'oh', sl2)
     # Should not raise an exception.
     tl = TopLevel('aha', 2, sl1)
-    to_str_ref = 'aha-2-5.6-oh-ou-3-7.2'
+    to_str_ref = 'aha-2-5-oh-ou-3-7'
     assert str(tl) == to_str_ref
-    to_str_ref = DIR_SEP.join(['aha-2','5.6-oh','ou-3-7.2'])
+    to_str_ref = DIR_SEP.join(['aha-2','5-oh','ou-3-7'])
     assert tl.to_path == to_str_ref
 
     # Test validation with wrong data type.
@@ -107,3 +107,10 @@ def test_top_level_nested_dataclass():
     sl1 = SubLevel1(sl2)
     with pytest.raises(TypeError, match='^A dataclass instance cannot be'):
         tl = TopLevel('aha', 2, sl1)
+
+
+# /!\ Test error if use of a forbidden character! (a float as a string for instance)
+
+# from_path: tester avec un niveau avec seulement une valeur & une dataclass
+
+
