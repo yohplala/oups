@@ -4,12 +4,24 @@
 Created on Wed Dec  1 18:35:00 2021
 @author: yoh
 """
-from dataclasses import asdict
+from dataclasses import asdict, fields, FrozenInstanceError
 import pytest
 
-from oups import sublevel, toplevel
-from oups.indexer import DIR_SEP
+from oups import is_toplevel, sublevel, toplevel
+from oups.defines import DIR_SEP
 
+
+def test_toplevel_is_toplevel():
+    @toplevel
+    class Test:
+        mu : int
+        nu : str
+    assert is_toplevel(Test)
+    @sublevel
+    class Test:
+        mu : int
+        nu : str
+    assert not is_toplevel(Test)
 
 def test_toplevel_to_str():
     # Test without parameter.
@@ -28,7 +40,7 @@ def test_toplevel_to_str():
     test = Test(3, 'oh')
     assert str(test) == '3.oh'
     # Test 'toplevel' is a dataclass only exposing attribute defined by user,
-    # not thos added in 'top_level' definition like '_fields_sep'.
+    # not those added in 'top_level' definition like 'fields_sep'.
     attrs = list(asdict(test))
     assert attrs == ['mu', 'nu']
 
@@ -76,6 +88,32 @@ def test_toplevel_nested_dataclass_to_str():
     to_str_ref = 'aha-2-5-oh-ou-3-7'
     assert str(tl) == to_str_ref
 
+def test_toplevel_nested_dataclass_attributes():
+    @toplevel(fields_sep='.')
+    class TopLevel:
+        ma: str
+        to: int
+        fo: SubLevel1
+    sl2 = SubLevel2('ou', 3, 7)
+    sl1 = SubLevel1(5, 'oh', sl2)
+    tl = TopLevel('aha', 2, sl1)
+    assert len(fields(tl)) == 3
+    assert TopLevel._fields_sep == '.'
+    assert TopLevel._depth == 2
+    assert TopLevel.depth == 2
+    assert tl._fields_sep == '.'
+    assert tl._depth == 2
+    assert tl.depth == 2
+    # Check frozen instance error.
+    with pytest.raises(FrozenInstanceError, match="^cannot assign"):
+        tl.fields_sep = '-'
+    with pytest.raises(FrozenInstanceError, match="^cannot assign"):
+        tl.depth = 4
+    with pytest.raises(AttributeError, match="^can't set"):
+        TopLevel.fields_sep = '-'
+    with pytest.raises(AttributeError, match="^can't set"):
+        TopLevel.depth = 4
+
 def test_toplevel_nested_dataclass_validation():
     # Test validation with wrong data type (dict).
     @sublevel
@@ -85,7 +123,7 @@ def test_toplevel_nested_dataclass_validation():
         iv: SubLevel2
     sl2 = SubLevel2('ou', 3, 7)
     sl1 = SubLevel1(5, {5:['ah']}, sl2)
-    with pytest.raises(TypeError, match='^Field type'):
+    with pytest.raises(TypeError, match='^field type'):
         tl = TopLevel('aha', 2, sl1)
 
     # Test validation with several dataclass instance at same level.
@@ -97,7 +135,7 @@ def test_toplevel_nested_dataclass_validation():
         po: SubLevel2
     sl2_ = SubLevel2('fi', 9, 2)
     sl1 = SubLevel1(5, 'oh', sl2, sl2_)
-    with pytest.raises(TypeError, match='^A dataclass instance is only'):
+    with pytest.raises(TypeError, match='^a dataclass instance is only'):
         tl = TopLevel('aha', 2, sl1)
 
     # Test validation with a single dataclass instance in a level.
@@ -105,7 +143,7 @@ def test_toplevel_nested_dataclass_validation():
     class SubLevel1:
         iv: SubLevel2
     sl1 = SubLevel1(sl2)
-    with pytest.raises(TypeError, match='^A dataclass instance cannot be'):
+    with pytest.raises(TypeError, match='^a dataclass instance cannot be'):
         tl = TopLevel('aha', 2, sl1)
 
     # Test validation with a string embedding a forbidden character (DIR_SEP).
@@ -115,7 +153,7 @@ def test_toplevel_nested_dataclass_validation():
         il: str
         iv: SubLevel2
     sl1 = SubLevel1(4, f'6{DIR_SEP}2', sl2)
-    with pytest.raises(ValueError, match='^Use of a forbidden'):
+    with pytest.raises(ValueError, match='^use of a forbidden'):
         tl = TopLevel('aha', 2, sl1)
 
 def test_toplevel_nested_dataclass_str_roundtrip_3_levels():
