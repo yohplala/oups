@@ -134,7 +134,24 @@ def _dataclass_fields_types_to_lists(cls:Type[dataclass]) -> List[List[Any]]:
         types.append([field.type for field in fields(last)])
     return types
 
-def _dataclass_instance_from_str(cls:Type[dataclass], string:str) -> dataclass:
+def _dataclass_instance_from_str(cls:Type[dataclass], string:str)\
+    -> Union[dataclass, None]:
+    """
+    Returns a dataclass instance derived from input string.
+    Level separator can either be DIR_SEP or 'cls.fields_sep'.
+    If dataclass '__init__' fails, `None` is returned.
+
+    Parameters
+    cls : Type[dataclass]
+        Dataclass to be used for generating dataclass instance.
+    string : str
+        String representation of the dataclass instance (using either
+        'cls.fields_sep' of DIR_SEP)
+
+    Returns
+    Union[dataclass, None]
+        Dataclass instance derived from input string.
+    """
     types = _dataclass_fields_types_to_lists(cls)
     # Split string depending 'fields_sep' and 'DIR_SEP', into different fields.
     fields_sep = cls.fields_sep
@@ -142,24 +159,35 @@ def _dataclass_instance_from_str(cls:Type[dataclass], string:str) -> dataclass:
     # Manages last level first.
     level_types = types.pop() # remove last element
     level_length = len(level_types)
-    level = [field_type(field_as_string) for field_type, field_as_string
-             in zip(level_types, strings_as_list[-level_length:])]
-    while types:
-        strings_as_list = strings_as_list[:-level_length]
-        level_types = types.pop() # remove last element
-        level_length = len(level_types)-1
-        # Relying on the fact that a dataclass is necessarily the last field.
+    try:
         level = [field_type(field_as_string) for field_type, field_as_string
-                 in zip(level_types[:-1], strings_as_list[-level_length:])]\
-                + [level_types[-1](*level)]
-    return cls(*level)
+                 in zip(level_types, strings_as_list[-level_length:])]
+        while types:
+            strings_as_list = strings_as_list[:-level_length]
+            level_types = types.pop() # remove last element
+            level_length = len(level_types)-1
+            # Relying on the fact that a dataclass is necessarily the last
+            # field.
+            level = [field_type(field_as_string)
+                     for field_type, field_as_string
+                     in zip(level_types[:-1],
+                            strings_as_list[-level_length:])]\
+                    + [level_types[-1](*level)]
+        return cls(*level)
+    except (TypeError, ValueError):
+        # TypeError if the number of arguments for instanciation of a
+        # dataclass is not correct (meaning the split has not been done
+        # with the right 'fields_sep' character).
+        # ValueError if there is a type mismatch, for instance when 'int'
+        # is initialized from a string.
+        return None
 
 def _get_depth(obj:Union[dataclass,Type[dataclass]]) -> int:
     """
-    Returns number of sublevels.
+    Returns number of levels, including 'toplevel'.
     To be decorated with '@property'.
     """
-    depth=0
+    depth=1
     level=obj
     while is_dataclass(level := fields(level)[-1].type):
         depth+=1
@@ -208,7 +236,7 @@ def toplevel(index_class=None, *, fields_sep:str='-'):
     fields_sep: str
         Fields separator (can't assign).
     depth: int
-        Number of sublevels (can't assign).
+        Number of levels, including 'toplevel' (can't assign).
     """
     def tweak(index_class):
         # Re-create 'index_class' as a 'TopLevel'-inheriting class to equip it

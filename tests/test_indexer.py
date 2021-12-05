@@ -99,11 +99,11 @@ def test_toplevel_nested_dataclass_attributes():
     tl = TopLevel('aha', 2, sl1)
     assert len(fields(tl)) == 3
     assert TopLevel._fields_sep == '.'
-    assert TopLevel._depth == 2
-    assert TopLevel.depth == 2
+    assert TopLevel._depth == 3
+    assert TopLevel.depth == 3
     assert tl._fields_sep == '.'
-    assert tl._depth == 2
-    assert tl.depth == 2
+    assert tl._depth == 3
+    assert tl.depth == 3
     # Check frozen instance error.
     with pytest.raises(FrozenInstanceError, match="^cannot assign"):
         tl.fields_sep = '-'
@@ -193,3 +193,10 @@ def test_toplevel_nested_dataclass_str_roundtrip_2_levels():
     str_res = str(tl)
     tl_from_str = TopLevel.from_str(str_res)
     assert tl == tl_from_str
+    # Test 'from_path' returning None because of uncorrect 'fields_sep'.
+    @toplevel(fields_sep='.')
+    class TopLevel:
+        ma: str
+        fo: SubLevel1
+    tl_from_path = TopLevel.from_path(path_res)
+    assert tl_from_path is None

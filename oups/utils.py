@@ -10,7 +10,7 @@ from typing import Iterator, List, Tuple
 from oups.defines import DIR_SEP
 
 
-def files_at_depth(basepath:str, depth:int=1)\
+def files_at_depth(basepath:str, depth:int=2)\
     -> Iterator[Tuple[str,List[str]]]:
     """
     Generator yielding a tuple which:
@@ -21,9 +21,9 @@ def files_at_depth(basepath:str, depth:int=1)\
     Parameters
     basepath : str
         Path to directory from which scanning.
-    depth : int, default 1
-        Number of sublevels for directories to be retained.
-        By default, at least 1 sublevel.
+    depth : int, default 2
+        Number of levels for directories to be retained (includes top level).
+        By default, at least 2 levels.
 
     Yields
     Iterator[Dict[str,List[str]]]
