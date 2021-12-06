@@ -5,12 +5,17 @@ Created on Wed Dec  4 18:00:00 2021
 @author: yoh
 """
 from dataclasses import dataclass
+from os import path as os_path
 from sortedcontainers import SortedSet
-from typing import Type
+from typing import Type, Union
+
+from pandas import DataFrame as pDataFrame
+from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.defines import DIR_SEP
 from oups.indexer import is_toplevel
 from oups.utils import files_at_depth
+from oups.writer import write_pandas_dataframe, write_vaex_dataframe
 
 
 def is_parquet_file(file:str) -> bool:
@@ -73,7 +78,8 @@ class ParquetSet:
         indexer : Type[dataclass]
         """
         if not is_toplevel(indexer):
-            raise TypeError('Indexer not decorated with "@toplevel".')
+            raise TypeError(f'{indexer.__name__} has to be "@toplevel"\
+ decorated.')
         self._keys = get_keys(basepath, indexer)
         self._basepath = basepath
         self._indexer = indexer
@@ -92,13 +98,45 @@ class ParquetSet:
     def __repr__(self):
         return '\n'.join(map(str,self._keys))
 
+    def __contains__(self, key):
+        return key in self._keys
+    
+    def set(self, key:dataclass, data:Union[pDataFrame, vDataFrame],
+            row_group_size: int):
+        """
+        Add 'key' into the set, and write 'data' to disk, at location defined
+        by 'key'.
+
+        Parameters
+        key : dataclass
+            Key specifying the location where to write the data. It has to be
+            an instance of the dataclass provided at ParquetSet instanciation.
+        data : Union[pandas.DataFrame, vaex.dataframe.DataFrame]
+            A dataframe, either in pandas format, or in vaex format.
+        row_group_size : int
+            Max row group size.
+        """
+        if not isinstance(key, self._indexer):
+            raise TypeError(f'{key} is not an instance of \
+{self._indexer.__name__}.')
+        dir_name = os_path.join(self._basepath, key.to_path)
+        if isinstance(data, pDataFrame):
+            write_pandas_dataframe(dir_name, data, row_group_size)
+        elif isinstance(data, vDataFrame):
+            write_vaex_dataframe(dir_name, data, row_group_size)
+        # If not trouble from writing, add key.
+        self._key.add(key)
+        return
+        
+
 
 
 #        self.update(dict(*args, **kwargs))  # use the free update to set keys
 
 
 
-
+# inner namespace
+# https://stackoverflow.com/questions/45663249/namespaces-inside-class-in-python3
 
 
 #    def __getitem__(self, key):

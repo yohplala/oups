@@ -14,9 +14,12 @@ from oups.defines import DIR_SEP
 
 # Float removed to prevent having '.' in field values.
 TYPE_ACCEPTED = {int, str}
+# Default fields separator, if not modified by user.
+DEFAULT_FIELDS_SEP = '-'
 # Characters forbidden in field value.
-# 'fields_sep' is also included before check.
+# 'fields_sep' is also included at runtime before check.
 FORBIDDEN_CHARS = (DIR_SEP, '.')
+
 
 def _is_dataclass_instance(obj:Any) -> bool:
     # Check if a class is an instance of a dataclass and not a dataclass
@@ -205,7 +208,7 @@ class TopLevel(type):
     def depth(cls) -> int:
         return cls._depth
 
-def toplevel(index_class=None, *, fields_sep:str='-'):
+def toplevel(index_class=None, *, fields_sep:str=DEFAULT_FIELDS_SEP):
     """
     Decorate a class into a dataclass with methods and attributes to use it
     as a dataset index.
