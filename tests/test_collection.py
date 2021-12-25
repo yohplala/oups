@@ -41,13 +41,24 @@ def test_parquet_set_init(tmp_path):
         spacetime:SpaceTime
     ps = ParquetSet(basepath, WeatherEntry)
     assert len(ps) == 3
+    # Test '__repr__'.
     repr_ref = 'london.temperature.greenwich.summer\nparis.temperature.bastille.summer\nstockholm.pressure.skansen.fall'
     assert repr(ps) == repr_ref
-    
+    # Test '__contains__'.
+    key = WeatherEntry('london','temperature', SpaceTime('greenwich','summer'))
+    assert key in ps
+
+def test_parquet_set_init_exception(tmp_path):
+    # Test with class not being 'toplevel'.
+    class WeatherEntry:
+        capital:str
+        quantity:str
+        spacetime:SpaceTime
+    basepath = os_path.join(tmp_path, 'store')
+    with pytest.raises(TypeError, match='^WeatherEntry'):
+        ParquetSet(basepath, WeatherEntry)    
 
    
 
 
 
-# check error message when using a class not being a toplevel.
-# check with a directory that can't be materialize into a key.

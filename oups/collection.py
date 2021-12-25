@@ -6,7 +6,7 @@ Created on Wed Dec  4 18:00:00 2021
 """
 from dataclasses import dataclass
 from os import path as os_path
-from sortedcontainers import SortedSet
+from sortedcontainers import SortedList
 from typing import Type, Union
 
 from pandas import DataFrame as pDataFrame
@@ -15,8 +15,11 @@ from vaex.dataframe import DataFrame as vDataFrame
 from oups.defines import DIR_SEP
 from oups.indexer import is_toplevel
 from oups.utils import files_at_depth
-from oups.writer import write_pandas_dataframe, write_vaex_dataframe
+from oups.writer import write
 
+
+# Column multi-index separator.
+CMIDX_SEP = '__'
 
 def is_parquet_file(file:str) -> bool:
     """
@@ -26,7 +29,7 @@ def is_parquet_file(file:str) -> bool:
     return (file.endswith('.parquet') or file.endswith('.parq')
             or file == '_metadata' or file == '_common_metadata')
 
-def get_keys(basepath:str, indexer:Type[dataclass]) -> SortedSet:
+def get_keys(basepath:str, indexer:Type[dataclass]) -> SortedList:
     """
     Scan 'basepath' directory and create instances of 'indexer' class from
     compatible subpath.
@@ -52,20 +55,21 @@ def get_keys(basepath:str, indexer:Type[dataclass]) -> SortedSet:
     paths_files = files_at_depth(basepath, depth)
     # Filter, keeping only folders having files with correct extension,
     # then materialize paths into keys, filtering out those that can't.
-    keys = SortedSet([key for path, files in paths_files
-                      if (any((is_parquet_file(file) for file in files))
-                          and (key := indexer.from_path(
+    keys = SortedList([key for path, files in paths_files
+                       if (any((is_parquet_file(file) for file in files))
+                           and (key := indexer.from_path(
                                   DIR_SEP.join(path.rsplit(DIR_SEP,depth)[1:]))
                               ))])
     return keys
 
 class ParquetSet:
     """
-    Sorted set of keys (indexes to parquet datasets).
+    Sorted list of keys (indexes to parquet datasets).
     """
     def __init__(self, basepath:str, indexer:Type[dataclass]):
         """
         Parameters
+        ----------
         basepath : str
             Path of directory containing parquet datasets.
         indexer : Type[dataclass]
@@ -74,15 +78,20 @@ class ParquetSet:
             - creating the folders where recording new parquet datasets.
 
         Attributes
+        ----------
         basepath : str
+            Directory path to the set of parquet datasets.
         indexer : Type[dataclass]
+            Indexer schema (class) to be used to index parquet datasets.
+        keys : SortedList
+            List of indexes of existing parquet datasets.
         """
         if not is_toplevel(indexer):
             raise TypeError(f'{indexer.__name__} has to be "@toplevel"\
  decorated.')
-        self._keys = get_keys(basepath, indexer)
         self._basepath = basepath
         self._indexer = indexer
+        self._keys = get_keys(basepath, indexer)
 
     @property
     def basepath(self):
@@ -119,16 +128,16 @@ class ParquetSet:
         if not isinstance(key, self._indexer):
             raise TypeError(f'{key} is not an instance of \
 {self._indexer.__name__}.')
-        dir_name = os_path.join(self._basepath, key.to_path)
-        if isinstance(data, pDataFrame):
-            write_pandas_dataframe(dir_name, data, row_group_size)
-        elif isinstance(data, vDataFrame):
-            write_vaex_dataframe(dir_name, data, row_group_size)
-        # If not trouble from writing, add key.
-        self._key.add(key)
+        dirpath = os_path.join(self._basepath, key.to_path)
+        write(dirpath, data, row_group_size)
+        # If no trouble from writing, add key.
+        self._key.append(key)
         return
         
 
+
+# check speed of __contains__ for SortedList vs SortedSet: is very likely the same
+# if yes, revert to SortedList (no use to have a set if __contains__ is not even faster)
 
 
 #        self.update(dict(*args, **kwargs))  # use the free update to set keys
@@ -147,6 +156,7 @@ class ParquetSet:
 
 #    def __delitem__(self, key):
 #        del self.store[self._keytransform(key)]
+# or __del__ ?
 
 #    def __iter__(self):
 #        return iter(self.store)
