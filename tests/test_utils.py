@@ -9,9 +9,8 @@ import zipfile
 
 from oups.defines import DIR_SEP
 from oups.utils import files_at_depth
+from . import TEST_DATA
 
-
-TEST_DATA = 'test-data'
 
 def test_files_at_depth(tmp_path):
     fn = os_path.join(TEST_DATA, 'dummy_store.zip')

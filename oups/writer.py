@@ -11,7 +11,7 @@ from pandas import DataFrame as pDataFrame, Index, MultiIndex
 from vaex.dataframe import DataFrame as vDataFrame
 
 
-ROW_GROUP_SIZE = 50_000_000
+ROW_GROUP_SIZE = 5_000_000
 COMPRESSION = 'SNAPPY'
 
 def iter_dataframe(data: Union[pDataFrame, vDataFrame],

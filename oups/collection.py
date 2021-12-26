@@ -7,13 +7,14 @@ Created on Wed Dec  4 18:00:00 2021
 from dataclasses import dataclass
 from os import path as os_path
 from sortedcontainers import SortedSet
-from typing import Type, Union
+from typing import Tuple, Type, Union
 
 from pandas import DataFrame as pDataFrame
 from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.defines import DIR_SEP
 from oups.indexer import is_toplevel
+from oups.router import ParquetHandle
 from oups.utils import files_at_depth
 from oups.writer import write
 
@@ -22,30 +23,38 @@ from oups.writer import write
 CMIDX_SEP = '__'
 
 def is_parquet_file(file:str) -> bool:
-    """
-    Return True if file name is identified as a parquet file, i.e. ending with
-    '.parquet' or '.parq' or being named '_metadata' or '_common_metadata'.
+    """Assess extension to be that of a parquet file. 
+
+    Returns
+    -------
+    bool
+        `True` if file name is identified as a parquet file, i.e. ending with
+        ``.parquet`` or ``.parq`` or being named ``_metadata`` or
+        ``_common_metadata``.
     """
     return (file.endswith('.parquet') or file.endswith('.parq')
             or file == '_metadata' or file == '_common_metadata')
 
 def get_keys(basepath:str, indexer:Type[dataclass]) -> SortedSet:
-    """
+    """Identify directories containing a parquet dataset.
+
     Scan 'basepath' directory and create instances of 'indexer' class from
     compatible subpath.
     Only non-empty directories, with files either ending with '.parq' or
     '.parquet' extension, or named '_medatada' are kept.
     
     Parameters
+    ----------
     basepath : str
         Path to directory containing a dataset collection, in folders complying
         with the schema defined by 'indexer' dataclass.
-    indexer: Type[dataclass]
+    indexer : Type[dataclass]
         Class decorated with '@toplevel' decorator, and defining a path
         schema.
 
     Returns
-    SortedSet[dataclass]: 
+    -------
+    SortedSet[dataclass] 
         Sorted set of keys (i.e. instances of indexer dataclass) that can be
         found in 'basepath' directory and with a 'valid' dataset (directory
         with files either ending with '.parq' or '.parquet' extension, or named
@@ -63,8 +72,21 @@ def get_keys(basepath:str, indexer:Type[dataclass]) -> SortedSet:
     return keys
 
 class ParquetSet:
-    """
-    Sorted list of keys (indexes to parquet datasets).
+    """Sorted list of keys (indexes to parquet datasets).
+
+    Attributes
+    ----------
+    basepath : str
+        Directory path to the set of parquet datasets.
+    indexer : Type[dataclass]
+        Indexer schema (class) to be used to index parquet datasets.
+    keys : SortedSet
+        Set of indexes of existing parquet datasets.
+
+    Notes
+    -----
+    `SortedSet` is the data structure retained for `keys` instead of
+    `SortedList` as `__contains__` appears faster.
     """
     def __init__(self, basepath:str, indexer:Type[dataclass]):
         """
@@ -76,20 +98,6 @@ class ParquetSet:
             Class (not class instance) of the indexer to be used for:
             - identifying existing parquet datasets in 'basepath' directory,
             - creating the folders where recording new parquet datasets.
-
-        Attributes
-        ----------
-        basepath : str
-            Directory path to the set of parquet datasets.
-        indexer : Type[dataclass]
-            Indexer schema (class) to be used to index parquet datasets.
-        keys : SortedSet
-            Set of indexes of existing parquet datasets.
-
-        Notes
-        -----
-        `SortedSet` is the data structure retained for `keys` instead of
-        `SortedList` as `__contains__` appears faster.
         """
         if not is_toplevel(indexer):
             raise TypeError(f'{indexer.__name__} has to be "@toplevel" '
@@ -101,7 +109,7 @@ class ParquetSet:
     @property
     def basepath(self):
         return self._basepath
-    
+
     @property
     def indexer(self):
         return self._indexer
@@ -118,10 +126,10 @@ class ParquetSet:
 
     def __contains__(self, key):
         return key in self._keys
-    
+
     def __iter__(self):
         yield from self._keys
-    
+
     def set(self, key:dataclass, data:Union[pDataFrame, vDataFrame], **kwargs):
         """Write 'data' to disk, at location defined by 'key'.
 
@@ -129,7 +137,7 @@ class ParquetSet:
         ----------
         key : dataclass
             Key specifying the location where to write the data. It has to be
-            an instance of the dataclass provided at ParquetSet instanciation.
+            an instance of the dataclass provided at ParquetSet instantiation.
         data : Union[pandas.DataFrame, vaex.dataframe.DataFrame]
             A dataframe, either in pandas format, or in vaex format.
 
@@ -150,20 +158,22 @@ class ParquetSet:
         self._keys.add(key)
         return
         
-    def __setitem__(self, key, data):
+    def __setitem__(self, key:dataclass,
+                    data:Union[Tuple[dict, Union[pDataFrame, vDataFrame]],
+                               Union[pDataFrame, vDataFrame]]):
         """Alias for `set`.
 
         Parameters
         ----------
         key : dataclass
             Key specifying the location where to write the data. It has to be
-            an instance of the dataclass provided at ParquetSet instanciation.
+            an instance of the dataclass provided at ParquetSet instantiation.
         data : Union[Tuple[dict, Union[pDataFrame, vDataFrame]],
                       Union[pDataFrame, vDataFrame]]
             If a ``tuple``, first element is a ``dict`` containing parameter
             setting for `writer.write`, and second element is a dataframe
             (pandas or vaex).
-            Or can be directly  a dataframe (pandas or vaex).
+            Or can be directly a dataframe (pandas or vaex).
         """
         if isinstance(data, tuple):
             kwargs, data = data
@@ -174,6 +184,27 @@ class ParquetSet:
         else:
             kwargs = {}
         self.set(key, data, **kwargs)
+
+    def get(self, key:dataclass):
+        """Return `ParquetHandle`.
+
+        Parameter
+        ---------
+        key : dataclass
+            Key specifying the location where to write the data. It has to be
+            an instance of the dataclass provided at ParquetSet instantiation.
+        """
+        dirpath = os_path.join(self._basepath, key.to_path)
+        return ParquetHandle(dirpath)
+
+    def __getitem__(self, key:dataclass):
+        """Alias for `get`.
+        """
+        return self.get(key)
+
+
+
+
 
 
 # inner namespace

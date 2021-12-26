@@ -8,13 +8,12 @@ from os import path as os_path
 import pytest
 import zipfile
 
-import pandas as pd
+from pandas import DataFrame as pDataFrame, date_range, MultiIndex
 from fastparquet import ParquetFile
 
 from oups import ParquetSet, sublevel, toplevel
+from . import TEST_DATA
 
-
-TEST_DATA = 'test-data'
 
 @sublevel
 class SpaceTime:
@@ -75,10 +74,9 @@ def test_set_parquet(tmp_path):
     basepath = os_path.join(tmp_path, 'store')    
     ps = ParquetSet(basepath, WeatherEntry)
     we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
-    df = pd.DataFrame({'timestamp': pd.date_range('2021/01/01 08:00',
-                                                  '2021/01/01 10:00',
-                                                  freq='2H'),
-                       'temperature': [8.4, 5.3]})
+    df = pDataFrame({'timestamp': date_range('2021/01/01 08:00',
+                                             '2021/01/01 10:00', freq='2H'),
+                     'temperature': [8.4, 5.3]})
     ps[we] = df
     assert we in ps
     res = ParquetFile(os_path.join(basepath, we.to_path)).to_pandas()
@@ -89,10 +87,9 @@ def test_set_parquet_with_config(tmp_path):
     basepath = os_path.join(tmp_path, 'store')    
     ps = ParquetSet(basepath, WeatherEntry)
     we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
-    df = pd.DataFrame({'timestamp': pd.date_range('2021/01/01 08:00',
-                                                  '2021/01/01 14:00',
-                                                  freq='2H'),
-                       'temperature': [8.4, 5.3, 4.9, 2.3]})
+    df = pDataFrame({'timestamp': date_range('2021/01/01 08:00',
+                                             '2021/01/01 14:00', freq='2H'),
+                     'temperature': [8.4, 5.3, 4.9, 2.3]})
     rg_size=2
     config = {'row_group_size':rg_size}
     ps[we] = config, df
@@ -106,10 +103,9 @@ def test_exception_config_not_a_dict(tmp_path):
     basepath = os_path.join(tmp_path, 'store')    
     ps = ParquetSet(basepath, WeatherEntry)
     we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
-    df = pd.DataFrame({'timestamp': pd.date_range('2021/01/01 08:00',
-                                                  '2021/01/01 14:00',
-                                                  freq='2H'),
-                       'temperature': [8.4, 5.3, 4.9, 2.3]})
+    df = pDataFrame({'timestamp': date_range('2021/01/01 08:00',
+                                             '2021/01/01 14:00', freq='2H'),
+                     'temperature': [8.4, 5.3, 4.9, 2.3]})
     config = [] # First silly thing that comes to mind.
     with pytest.raises(TypeError, match='^First item'):
         ps[we] = config, df
@@ -125,18 +121,70 @@ def test_exception_data_not_a_dataframe(tmp_path):
 
 def test_iterator(tmp_path):
     # Test `__iter__`.
-    basepath = os_path.join(tmp_path, 'store')    
+    basepath = os_path.join(tmp_path, 'store')
     ps = ParquetSet(basepath, WeatherEntry)
     we1 = WeatherEntry('paris', 'temperature',
                        SpaceTime('notredame', 'winter'))
     we2 = WeatherEntry('london', 'temperature',
                        SpaceTime('greenwich', 'winter'))
-    df = pd.DataFrame({'timestamp': pd.date_range('2021/01/01 08:00',
-                                                  '2021/01/01 14:00',
-                                                  freq='2H'),
-                       'temperature': [8.4, 5.3, 4.9, 2.3]})
-    ps[we1] = df
-    ps[we2] = df
+    df = pDataFrame({'timestamp': date_range('2021/01/01 08:00',
+                                             '2021/01/01 14:00', freq='2H'),
+                     'temperature': [8.4, 5.3, 4.9, 2.3]})
+    ps[we1], ps[we2] = df, df
     for key in ps:
         assert key in (we1, we2)
-        
+
+def test_set_and_get_roundtrip_pandas(tmp_path):
+    # Set and get data, roundtrip.
+    ps = ParquetSet(tmp_path, WeatherEntry)
+    we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
+    df = pDataFrame({'timestamp': date_range('2021/01/01 08:00',
+                                             '2021/01/01 14:00', freq='2H'),
+                     'temperature': [8.4, 5.3, 2.9, 6.4]})
+    config = {'row_group_size':2}
+    ps[we] = config, df
+    df_res = ps[we].pdf
+    assert df_res.equals(df)
+
+def test_set_pandas_and_get_vaex(tmp_path):
+    # Set and get data, roundtrip.
+    ps = ParquetSet(tmp_path, WeatherEntry)
+    we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
+    df = pDataFrame({'timestamp': date_range('2021/01/01 08:00',
+                                             '2021/01/01 14:00', freq='2H'),
+                       'temperature': [8.4, 5.3, 2.9, 6.4]})
+    config = {'row_group_size':2}
+    ps[we] = config, df
+    vdf = ps[we].vdf
+    assert vdf.to_pandas_df().equals(df)  
+
+def test_set_pandas_and_get_parquet_file(tmp_path):
+    # Set and get data, roundtrip.
+    ps = ParquetSet(tmp_path, WeatherEntry)
+    we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
+    df = pDataFrame({'timestamp': date_range('2021/01/01 08:00',
+                                             '2021/01/01 14:00', freq='2H'),
+                     'temperature': [8.4, 5.3, 2.9, 6.4]})
+    config = {'row_group_size':2}
+    ps[we] = config, df
+    pf = ps[we].pf
+    assert len(pf.row_groups) == 2
+    assert sorted(df.columns) == sorted(pf.columns)
+
+def test_set_cmidx_get_vaex(tmp_path):
+    # Write column multi-index in pandas, retrieve in vaex.
+    pdf = pDataFrame({('ts',''): date_range('2021/01/01 08:00',
+                                            '2021/01/01 14:00', freq='2H'),
+                      ('temp','1'): [8.4, 5.3, 2.9, 6.4],
+                      ('temp','2'): [8.4, 5.3, 2.9, 6.4]})
+    pdf.columns = MultiIndex.from_tuples([('ts',''),('temp','1'),('temp','2')],
+                                         names=['component', 'point'])
+    ps = ParquetSet(tmp_path, WeatherEntry)
+    we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
+    ps[we] = pdf
+    vdf = ps[we].vdf
+    assert list(map(str, pdf.columns)) == vdf.get_column_names()
+    df_res = vdf.to_pandas_df()
+    df_res.columns = pdf.columns
+    assert df_res.equals(pdf)
+

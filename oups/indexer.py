@@ -178,7 +178,7 @@ def _dataclass_instance_from_str(cls:Type[dataclass], string:str)\
                     + [level_types[-1](*level)]
         return cls(*level)
     except (TypeError, ValueError):
-        # TypeError if the number of arguments for instanciation of a
+        # TypeError if the number of arguments for instantiation of a
         # dataclass is not correct (meaning the split has not been done
         # with the right 'fields_sep' character).
         # ValueError if there is a type mismatch, for instance when 'int'
@@ -222,7 +222,7 @@ def toplevel(index_class=None, *, fields_sep:str=DEFAULT_FIELDS_SEP):
     'toplevel' is to be used as a decorator, with or without parameter
     'fields_sep'.
 
-    Class instanciation is checked.
+    Class instantiation is checked.
       - An instance can only be composed with `int`, 'str' or a dataclass
         object coming in last position;
       - Value of attribute can not incorporate forbidden characters like '/'
