@@ -54,7 +54,7 @@ def test_parquet_set_init(tmp_path):
     key = WeatherEntry('london','temperature', SpaceTime('greenwich','summer'))
     assert key in ps
 
-def test_parquet_set_init_exception(tmp_path):
+def test_exception_key_not_correct_indexer(tmp_path):
     # Test with class not being 'toplevel'.
     class WeatherEntry:
         capital:str
@@ -71,7 +71,7 @@ class WeatherEntry:
     spacetime:SpaceTime
 
 def test_set_parquet(tmp_path):
-    # Initialize a parquet set.
+    # Initialize a parquet dataset.
     basepath = os_path.join(tmp_path, 'store')    
     ps = ParquetSet(basepath, WeatherEntry)
     we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
@@ -83,11 +83,42 @@ def test_set_parquet(tmp_path):
     assert we in ps
     res = ParquetFile(os_path.join(basepath, we.to_path)).to_pandas()
     assert res.equals(df)
-    
-# Test set parquet set with different config
-# (different row group size for instance + vaex and expand cmidx)
 
-# Tester kwargs not a dict in set
-# Tester data not being a pandas dataframe or vaex dataframe
+def test_set_parquet_with_config(tmp_path):
+    # Initialize a parquet dataset with config.
+    basepath = os_path.join(tmp_path, 'store')    
+    ps = ParquetSet(basepath, WeatherEntry)
+    we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
+    df = pd.DataFrame({'timestamp': pd.date_range('2021/01/01 08:00',
+                                                  '2021/01/01 14:00',
+                                                  freq='2H'),
+                       'temperature': [8.4, 5.3, 4.9, 2.3]})
+    rg_size=2
+    config = {'row_group_size':rg_size}
+    ps[we] = config, df
+    assert we in ps
+    # Load only first row group.
+    res = ParquetFile(os_path.join(basepath, we.to_path))[0].to_pandas()
+    assert res.equals(df.loc[:rg_size-1])
 
+def test_exception_config_not_a_dict(tmp_path):
+    # Initialize a parquet dataset with config.
+    basepath = os_path.join(tmp_path, 'store')    
+    ps = ParquetSet(basepath, WeatherEntry)
+    we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
+    df = pd.DataFrame({'timestamp': pd.date_range('2021/01/01 08:00',
+                                                  '2021/01/01 14:00',
+                                                  freq='2H'),
+                       'temperature': [8.4, 5.3, 4.9, 2.3]})
+    config = [] # First silly thing that comes to mind.
+    with pytest.raises(TypeError, match='^First item'):
+        ps[we] = config, df
 
+def test_exception_data_not_a_dataframe(tmp_path):
+    # Initialize a parquet dataset with config.
+    basepath = os_path.join(tmp_path, 'store')    
+    ps = ParquetSet(basepath, WeatherEntry)
+    we = WeatherEntry('paris', 'temperature', SpaceTime('notredame', 'winter'))
+    df = [] # First silly thing that comes to mind.
+    with pytest.raises(TypeError, match='^Data should'):
+        ps[we] = df

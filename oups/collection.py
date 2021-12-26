@@ -6,7 +6,7 @@ Created on Wed Dec  4 18:00:00 2021
 """
 from dataclasses import dataclass
 from os import path as os_path
-from sortedcontainers import SortedList
+from sortedcontainers import SortedSet
 from typing import Type, Union
 
 from pandas import DataFrame as pDataFrame
@@ -29,7 +29,7 @@ def is_parquet_file(file:str) -> bool:
     return (file.endswith('.parquet') or file.endswith('.parq')
             or file == '_metadata' or file == '_common_metadata')
 
-def get_keys(basepath:str, indexer:Type[dataclass]) -> SortedList:
+def get_keys(basepath:str, indexer:Type[dataclass]) -> SortedSet:
     """
     Scan 'basepath' directory and create instances of 'indexer' class from
     compatible subpath.
@@ -55,9 +55,9 @@ def get_keys(basepath:str, indexer:Type[dataclass]) -> SortedList:
     paths_files = files_at_depth(basepath, depth)
     # Filter, keeping only folders having files with correct extension,
     # then materialize paths into keys, filtering out those that can't.
-    keys = SortedList([key for path, files in paths_files
-                       if (any((is_parquet_file(file) for file in files))
-                           and (key := indexer.from_path(
+    keys = SortedSet([key for path, files in paths_files
+                      if (any((is_parquet_file(file) for file in files))
+                          and (key := indexer.from_path(
                                   DIR_SEP.join(path.rsplit(DIR_SEP,depth)[1:]))
                               ))])
     return keys
@@ -83,8 +83,13 @@ class ParquetSet:
             Directory path to the set of parquet datasets.
         indexer : Type[dataclass]
             Indexer schema (class) to be used to index parquet datasets.
-        keys : SortedList
-            List of indexes of existing parquet datasets.
+        keys : SortedSet
+            Set of indexes of existing parquet datasets.
+
+        Notes
+        -----
+        `SortedSet` is the data structure retained for `keys` instead of
+        `SortedList` as `__contains__` appears faster.
         """
         if not is_toplevel(indexer):
             raise TypeError(f'{indexer.__name__} has to be "@toplevel"\
@@ -101,6 +106,10 @@ class ParquetSet:
     def indexer(self):
         return self._indexer
 
+    @property
+    def keys(self):
+        return self._keys
+
     def __len__(self):
         return len(self._keys)
 
@@ -110,8 +119,7 @@ class ParquetSet:
     def __contains__(self, key):
         return key in self._keys
     
-    def set(self, key:dataclass, data:Union[pDataFrame, vDataFrame],
-            **kwargs):
+    def set(self, key:dataclass, data:Union[pDataFrame, vDataFrame], **kwargs):
         """Write 'data' to disk, at location defined by 'key'.
 
         Parameters
@@ -130,6 +138,9 @@ class ParquetSet:
         if not isinstance(key, self._indexer):
             raise TypeError(f'{key} is not an instance of \
 {self._indexer.__name__}.')
+        if (not isinstance(data, pDataFrame)
+            and not isinstance(data, vDataFrame)):
+                raise TypeError('Data should be a pandas or vaex dataframe.')
         dirpath = os_path.join(self._basepath, key.to_path)
         write(dirpath=dirpath, data=data, **kwargs)
         # If no trouble from writing, add key.
@@ -141,6 +152,9 @@ class ParquetSet:
 
         Parameters
         ----------
+        key : dataclass
+            Key specifying the location where to write the data. It has to be
+            an instance of the dataclass provided at ParquetSet instanciation.
         data : Union[Tuple[dict, Union[pDataFrame, vDataFrame]],
                       Union[pDataFrame, vDataFrame]]
             If a ``tuple``, first element is a ``dict`` containing parameter
@@ -152,23 +166,11 @@ class ParquetSet:
             kwargs, data = data
             if not isinstance(kwargs, dict):
                 raise TypeError(f'First item {kwargs} should be a dict to '
-                                 ' define parameter setting for '
+                                 'define parameter setting for '
                                  '`writer.write`.')
         else:
             kwargs = {}
-        if (not isinstance(data, pDataFrame)
-            and not isinstance(data, vDataFrame)):
-                raise TypeError('Data should be a pandas or vaex dataframe.')
         self.set(key, data, **kwargs)
-
-
-
-# check speed of __contains__ for SortedList vs SortedSet: is very likely the same
-# if yes, revert to SortedList (no use to have a set if __contains__ is not even faster)
-
-
-#        self.update(dict(*args, **kwargs))  # use the free update to set keys
-
 
 
 # inner namespace
@@ -177,9 +179,6 @@ class ParquetSet:
 
 #    def __getitem__(self, key):
 #        return self.store[self._keytransform(key)]
-
-#    def __setitem__(self, key, value):
-#        self.store[self._keytransform(key)] = value
 
 #    def __delitem__(self, key):
 #        del self.store[self._keytransform(key)]
