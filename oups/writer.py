@@ -91,7 +91,7 @@ def to_midx(idx: Index, sep:str, levels:List[str]=None) -> MultiIndex:
 
 def write(dirpath:str, data:Union[pDataFrame, vDataFrame],
           row_group_size:int=None, compression:str=COMPRESSION,
-          expand_cmidx:bool=False, cmidx_sep:str=None,
+          cmidx_expand:bool=False, cmidx_sep:str=None,
           cmidx_levels:List[str]=None):
     """Write data to disk at location specified by path.
 
@@ -106,7 +106,7 @@ def write(dirpath:str, data:Union[pDataFrame, vDataFrame],
     compression : str, default SNAPPY
         Algorithm to use for compressing data. This parameter is fastparquet
         specific. Please see fastparquet documentation for more information.
-    expand_cmidx : bool, default False
+    cmidx_expand : bool, default False
         If `True`, expand column index into a column multi-index.
         This requires `cmidx_sep` to be provided.
         This parameter is only used at creation of the dataset. Once column
@@ -132,9 +132,9 @@ def write(dirpath:str, data:Union[pDataFrame, vDataFrame],
     except (FileNotFoundError, ValueError):
         # First time writing.
         chunk = next(iter_data)
-        if expand_cmidx and cmidx_sep:
+        if cmidx_expand and cmidx_sep:
             chunk.columns = to_midx(chunk.columns, cmidx_sep, cmidx_levels)
-        elif expand_cmidx and not cmidx_sep:
+        elif cmidx_expand and not cmidx_sep:
             raise ValueError('Setting `cmidx` but not `cmidx_sep` is not '
                              'possible.')
         fp_write(dirpath, chunk, row_group_offsets=row_group_size,

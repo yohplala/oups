@@ -36,8 +36,12 @@ def files_at_depth(basepath:str, depth:int=2)\
         if files:
             yield basepath, files
     if depth > 0:
-        dirs = [entry.path for entry in scandir(basepath)
-                if entry.is_dir(follow_symlinks=False)]
+        try:
+            dirs = [entry.path for entry in scandir(basepath)
+                    if entry.is_dir(follow_symlinks=False)]
+        except FileNotFoundError:
+            # If directory not existing, return `None`
+            return
         depth -= 1
         for path in dirs:
             yield from files_at_depth(path, depth)

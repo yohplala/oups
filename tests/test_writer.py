@@ -11,6 +11,7 @@ from pandas import DataFrame as pDataFrame, MultiIndex
 from fastparquet import ParquetFile
 from vaex import from_pandas
 
+from oups.collection import CMIDX_SEP
 from oups.writer import write, to_midx
 
 
@@ -74,7 +75,7 @@ def test_init_and_append_vaex_std(tmp_path):
 def test_init_idx_expansion_vaex(tmp_path):
     # Expanding column uindex into a 2-level column multi-index.
     # ('level_sep' set to '__')
-    level_sep = '__'
+    level_sep = CMIDX_SEP
     pdf = pDataFrame({f'lev1-col1{level_sep}lev2-col1':range(6,12),
                       f'lev1-col2{level_sep}lev2-col2':
                                               ['ah','oh','uh','ih','ai','oi']})
@@ -84,7 +85,7 @@ def test_init_idx_expansion_vaex(tmp_path):
                                       names=['l0', 'l1'])
     assert res_midx.equals(ref_midx)
     vdf = from_pandas(pdf)
-    write(str(tmp_path), vdf, expand_cmidx=True, cmidx_sep=level_sep)
+    write(str(tmp_path), vdf, cmidx_expand=True, cmidx_sep=level_sep)
     res = ParquetFile(tmp_path).to_pandas()
     pdf.columns = ref_midx
     assert res.equals(pdf)
@@ -92,7 +93,7 @@ def test_init_idx_expansion_vaex(tmp_path):
 def test_init_idx_expansion_sparse_levels(tmp_path):
     # Expanding column uindex into a 2-level column multi-index.
     # ('level_sep' set to '__')
-    level_sep = '__'
+    level_sep = CMIDX_SEP
     pdf = pDataFrame({f'lev1-col1{level_sep}lev2-col1':range(6,12),
                       f'lev1-col2{level_sep}lev2-col2':
                                               ['ah','oh','uh','ih','ai','oi']})
@@ -114,10 +115,10 @@ def test_init_and_select_vaex(tmp_path):
     assert pdf.loc[pdf.a >3].reset_index(drop=True).equals(res)
 
 def test_cmidx_exception(tmp_path):
-    # Exception in case 'expand_cmidx' is `True`, but 'cmidx_sep' is not set.
-    level_sep = '__'
+    # Exception in case 'cmidx_expand' is `True`, but 'cmidx_sep' is not set.
+    level_sep = CMIDX_SEP
     pdf = pDataFrame({f'lev1-col1{level_sep}lev2-col1':range(6,12),
                       f'lev1-col2{level_sep}lev2-col2':
                                               ['ah','oh','uh','ih','ai','oi']})
     with pytest.raises(ValueError, match="^Setting `cmidx`"):
-        write(str(tmp_path), pdf, expand_cmidx=True)
+        write(str(tmp_path), pdf, cmidx_expand=True)
