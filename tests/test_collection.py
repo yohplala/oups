@@ -122,3 +122,21 @@ def test_exception_data_not_a_dataframe(tmp_path):
     df = [] # First silly thing that comes to mind.
     with pytest.raises(TypeError, match='^Data should'):
         ps[we] = df
+
+def test_iterator(tmp_path):
+    # Test `__iter__`.
+    basepath = os_path.join(tmp_path, 'store')    
+    ps = ParquetSet(basepath, WeatherEntry)
+    we1 = WeatherEntry('paris', 'temperature',
+                       SpaceTime('notredame', 'winter'))
+    we2 = WeatherEntry('london', 'temperature',
+                       SpaceTime('greenwich', 'winter'))
+    df = pd.DataFrame({'timestamp': pd.date_range('2021/01/01 08:00',
+                                                  '2021/01/01 14:00',
+                                                  freq='2H'),
+                       'temperature': [8.4, 5.3, 4.9, 2.3]})
+    ps[we1] = df
+    ps[we2] = df
+    for key in ps:
+        assert key in (we1, we2)
+        

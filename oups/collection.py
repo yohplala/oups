@@ -92,8 +92,8 @@ class ParquetSet:
         `SortedList` as `__contains__` appears faster.
         """
         if not is_toplevel(indexer):
-            raise TypeError(f'{indexer.__name__} has to be "@toplevel"\
- decorated.')
+            raise TypeError(f'{indexer.__name__} has to be "@toplevel" '
+                             'decorated.')
         self._basepath = basepath
         self._indexer = indexer
         self._keys = get_keys(basepath, indexer)
@@ -118,6 +118,9 @@ class ParquetSet:
 
     def __contains__(self, key):
         return key in self._keys
+    
+    def __iter__(self):
+        yield from self._keys
     
     def set(self, key:dataclass, data:Union[pDataFrame, vDataFrame], **kwargs):
         """Write 'data' to disk, at location defined by 'key'.
