@@ -4,6 +4,7 @@
 Created on Wed Dec  6 22:30:00 2021
 @author: yoh
 """
+from ast import literal_eval
 from typing import List, Union
 
 from fastparquet import ParquetFile, write as fp_write
@@ -51,15 +52,19 @@ def iter_dataframe(data: Union[pDataFrame, vDataFrame],
         for start, end in zip(starts,ends):
             yield data.iloc[start:end]
 
-def to_midx(idx: Index, sep:str, levels:List[str]=None) -> MultiIndex:
+def to_midx(idx: Index, levels:List[str]=None) -> MultiIndex:
     """Expand a pandas index into a multi-index.
 
     Parameters
     ----------
     idx : Index
-        Pandas index, with values containing or not `cmidx_sep`.
-    sep : str
-        Separator to split names (index values).
+        Pandas index, with values being string representations of tuples, for
+        instance, for one column, ``"('lev1','lev2')"``.
+    levels : List[str], optional
+        Names of levels to be used when creating the multi-index.
+        If not provided, a generic naming is used, ``[l0, l1, l2, ...]``.
+        If provided list is not long enough for the number of levels, it is
+        completed using a generic naming, ``[..., l4, l5]``.
 
     Returns
     -------
@@ -68,13 +73,28 @@ def to_midx(idx: Index, sep:str, levels:List[str]=None) -> MultiIndex:
 
     Notes
     -----
-    If some column names have fewer occurences of `sep` (resulting in fewer
-    index levels), these column names are appended with empty strings '' as
-    required to be of equal levels number than the longest column names.
+    The accepted string representations of tuples is one typically obtained
+    after a roundtrip from pandas dataframe with a column multi-index to vaex
+    dataframe and back to pandas. The resulting column index is then a simple
+    one, with string representations for tuples.
+
+    If some column names have string representations of smaller tuples
+    (resulting in fewer index levels), these column names are appended with
+    empty strings '' as required to be of equal levels number than the longest
+    column names.    
     """
-    idx = [tuple(s.split(sep)) for s in idx]
-    # Get max number of levels.
-    max_levels = max(map(len,idx))
+    idx_temp = []
+    max_levels = 0
+    for val in idx:
+        try:
+            tup = literal_eval(val)
+            # Get max number of levels.
+            max_levels = max(len(tup), max_levels)
+            idx_temp.append(tup)
+        except ValueError:
+            # Keep value as string, enclosed in a tuple.
+            idx_temp.append(tuple(val))
+    
     # Generate names of levels if required.
     diff = 0
     if levels is None:
@@ -86,13 +106,13 @@ def to_midx(idx: Index, sep:str, levels:List[str]=None) -> MultiIndex:
     if diff > 0:
         levels.extend([f'l{i}' for i in range(len_lev, max_levels)])
     # Equalize length of tuples.
-    tuples = [(*t, *['']*n) if (n:=(max_levels-len(t))) else t for t in idx]
+    tuples = [(*t, *['']*n) if (n:=(max_levels-len(t))) else t
+              for t in idx_temp]
     return MultiIndex.from_tuples(tuples, names=levels)
 
 def write(dirpath:str, data:Union[pDataFrame, vDataFrame],
           row_group_size:int=None, compression:str=COMPRESSION,
-          cmidx_expand:bool=False, cmidx_sep:str=None,
-          cmidx_levels:List[str]=None):
+          cmidx_expand:bool=False, cmidx_levels:List[str]=None):
     """Write data to disk at location specified by path.
 
     Parameters
@@ -108,12 +128,6 @@ def write(dirpath:str, data:Union[pDataFrame, vDataFrame],
         specific. Please see fastparquet documentation for more information.
     cmidx_expand : bool, default False
         If `True`, expand column index into a column multi-index.
-        This requires `cmidx_sep` to be provided.
-        This parameter is only used at creation of the dataset. Once column
-        names are set, they cannot be modified by use of this parameter.
-    cmidx_sep : str, optional
-        Characters with which splitting column names to expand them into a
-        column multi-index. Required if `cmidx=True`.
         This parameter is only used at creation of the dataset. Once column
         names are set, they cannot be modified by use of this parameter.
     cmidx_levels : List[str], optional
@@ -132,11 +146,8 @@ def write(dirpath:str, data:Union[pDataFrame, vDataFrame],
     except (FileNotFoundError, ValueError):
         # First time writing.
         chunk = next(iter_data)
-        if cmidx_expand and cmidx_sep:
-            chunk.columns = to_midx(chunk.columns, cmidx_sep, cmidx_levels)
-        elif cmidx_expand and not cmidx_sep:
-            raise ValueError('Setting `cmidx` but not `cmidx_sep` is not '
-                             'possible.')
+        if cmidx_expand:
+            chunk.columns = to_midx(chunk.columns, cmidx_levels)
         fp_write(dirpath, chunk, row_group_offsets=row_group_size,
                  compression=compression, file_scheme='hive',
                  write_index=False, append=False)

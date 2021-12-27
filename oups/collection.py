@@ -19,9 +19,6 @@ from oups.utils import files_at_depth
 from oups.writer import write
 
 
-# Column multi-index separator, available as a proposal.
-CMIDX_SEP = '__'
-
 def is_parquet_file(file:str) -> bool:
     """Assess extension to be that of a parquet file. 
 
@@ -181,9 +178,9 @@ class ParquetSet:
                 raise TypeError(f'First item {kwargs} should be a dict to '
                                  'define parameter setting for '
                                  '`writer.write`.')
+            self.set(key, data, **kwargs)
         else:
-            kwargs = {}
-        self.set(key, data, **kwargs)
+            self.set(key, data)
 
     def get(self, key:dataclass):
         """Return `ParquetHandle`.
@@ -203,26 +200,6 @@ class ParquetSet:
         return self.get(key)
 
 
-
-
-
-
-# inner namespace
-# https://stackoverflow.com/questions/45663249/namespaces-inside-class-in-python3
-
-
-#    def __getitem__(self, key):
-#        return self.store[self._keytransform(key)]
-
 #    def __delitem__(self, key):
 #        del self.store[self._keytransform(key)]
 # or __del__ ?
-
-#    def __iter__(self):
-#        return iter(self.store)
-    
-#    def __len__(self):
-#        return len(self.store)
-
-#    def _keytransform(self, key):
-#        return key
