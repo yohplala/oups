@@ -94,7 +94,6 @@ def to_midx(idx: Index, levels:List[str]=None) -> MultiIndex:
         except ValueError:
             # Keep value as string, enclosed in a tuple.
             idx_temp.append(tuple(val))
-    
     # Generate names of levels if required.
     diff = 0
     if levels is None:

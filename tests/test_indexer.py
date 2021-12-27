@@ -124,7 +124,7 @@ def test_toplevel_nested_dataclass_validation():
     sl2 = SubLevel2('ou', 3, 7)
     sl1 = SubLevel1(5, {5:['ah']}, sl2)
     with pytest.raises(TypeError, match='^field type'):
-        tl = TopLevel('aha', 2, sl1)
+        TopLevel('aha', 2, sl1)
 
     # Test validation with several dataclass instance at same level.
     @sublevel
@@ -136,7 +136,7 @@ def test_toplevel_nested_dataclass_validation():
     sl2_ = SubLevel2('fi', 9, 2)
     sl1 = SubLevel1(5, 'oh', sl2, sl2_)
     with pytest.raises(TypeError, match='^a dataclass instance is only'):
-        tl = TopLevel('aha', 2, sl1)
+        TopLevel('aha', 2, sl1)
 
     # Test validation with a single dataclass instance in a level.
     @sublevel
@@ -144,7 +144,7 @@ def test_toplevel_nested_dataclass_validation():
         iv: SubLevel2
     sl1 = SubLevel1(sl2)
     with pytest.raises(TypeError, match='^a dataclass instance cannot be'):
-        tl = TopLevel('aha', 2, sl1)
+        TopLevel('aha', 2, sl1)
 
     # Test validation with a string embedding a forbidden character (DIR_SEP).
     @sublevel
@@ -154,7 +154,7 @@ def test_toplevel_nested_dataclass_validation():
         iv: SubLevel2
     sl1 = SubLevel1(4, f'6{DIR_SEP}2', sl2)
     with pytest.raises(ValueError, match='^use of a forbidden'):
-        tl = TopLevel('aha', 2, sl1)
+        TopLevel('aha', 2, sl1)
 
 def test_toplevel_nested_dataclass_str_roundtrip_3_levels():
     # Test '._to_path', '_from_str' and '_from_path'.

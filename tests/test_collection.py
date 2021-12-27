@@ -205,13 +205,16 @@ def test_dataset_removal(tmp_path):
     # Delete london-related data.
     we3_path = os_path.join(basepath, we3.to_path)
     assert os_path.exists(we3_path)
+    assert len(ps) == 3
     del ps[we3]
     assert not os_path.exists(we3_path)
+    assert len(ps) == 2
     # Delete paris-summer-related data.
     we2_path = os_path.join(basepath, we2.to_path)
     assert os_path.exists(we2_path)
     del ps[we2]    
-    assert not os_path.exists(we2_path)    
+    assert not os_path.exists(we2_path)
+    assert len(ps) == 1
     # Check paris-winter-related data still exists.
     we1_path = os_path.join(basepath, we1.to_path)
     assert os_path.exists(we1_path)

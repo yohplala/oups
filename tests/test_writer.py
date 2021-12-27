@@ -5,7 +5,6 @@ Created on Sat Dec 18 15:00:00 2021
 @author: yoh
 """
 from os import path as os_path
-import pytest
 
 from pandas import DataFrame as pDataFrame, MultiIndex
 from fastparquet import ParquetFile

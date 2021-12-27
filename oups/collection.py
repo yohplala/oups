@@ -5,7 +5,7 @@ Created on Wed Dec  4 18:00:00 2021
 @author: yoh
 """
 from dataclasses import dataclass
-from os import listdir, path as os_path, remove, rmdir
+from os import listdir, path as os_path, rmdir
 from shutil import rmtree
 from sortedcontainers import SortedSet
 from typing import Tuple, Type, Union
@@ -202,7 +202,7 @@ class ParquetSet:
 
 
     def __delitem__(self, key:dataclass):
-        """Remove dataset.
+        """Remove dataset from parquet set.
 
         Parameter
         ---------
@@ -216,11 +216,8 @@ class ParquetSet:
         dirpath = os_path.join(basepath, key.to_path)
         rmtree(dirpath)
         self._keys.remove(key)
-        print(f'dirpath: {dirpath}')
         # Remove possibly empty directories.
         upper_dir = strip_path_tail(dirpath)
-        print(f'upper_dir: {upper_dir}')
         while (upper_dir != basepath) and (not listdir(upper_dir)):
             rmdir(upper_dir)
             upper_dir = strip_path_tail(upper_dir)
-            print(f'upper_dir: {upper_dir}')

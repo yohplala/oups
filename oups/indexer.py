@@ -33,15 +33,18 @@ def _dataclass_instance_to_dict(obj:dataclass) -> dict:
     return {field.name: getattr(obj, field.name) for field in fields(obj)}
 
 def _dataclass_instance_to_lists(obj:dataclass) -> Iterator[List[Any]]:
-    """
-    Yields items as lists of fields values.
+    """Yields items as lists of fields values.
+
     As a new dataclass instance is found, its fields values are yielded in a
     next item, and so on...
 
     Parameters
+    ----------
     obj : dataclass
         May contain nested dataclass instances.
+
     Returns
+    -------
     Iterator[List[Any]]
         Yields list of fields values.
     """
@@ -53,15 +56,15 @@ def _dataclass_instance_to_lists(obj:dataclass) -> Iterator[List[Any]]:
                 yield from _dataclass_instance_to_lists(field)
 
 def _validate_toplevel_instance(toplevel:dataclass):
-    """
-    Validate a 'toplevel'-decorated data class instance.
-     - Check field type is only among 'int', 'str' or another dataclass
-       instance;
-     - Check that there is at most only one dataclass instance per nesting
-       level, and if present, it is not the 1st field, nor the last field.
-     Raise a TypeError or ValueError if instance is not compliant.
+    """Validate a 'toplevel'-decorated data class instance.
+
+    Check field type is only among 'int', 'str' or another dataclass instance.
+    Check that there is at most only one dataclass instance per nesting level,
+    and if present, it is not the 1st field, nor the last field.
+    Raise a TypeError or ValueError if instance is not compliant.
 
     Parameters
+    ----------
     toplevel : dataclass
     """
     forbidden_chars = (toplevel.fields_sep, *FORBIDDEN_CHARS)
@@ -93,11 +96,13 @@ last position.')
     return
 
 def _dataclass_instance_to_str(toplevel:dataclass, as_path:bool=False) -> str:
-    """
-    Returns a dataclass instance as a string, in which the different levels are
-    either separated with 'fields_sep' or with DIR_SEP.
+    """Returns a dataclass instance as a string.
+    
+    The different levels in this string are either separated with 'fields_sep'
+    or with DIR_SEP.
 
     Parameters
+    ----------
     toplevel : dataclass
     as_path : bool, default False
         Defines separator to be used between levels of the dataclass.
@@ -105,6 +110,7 @@ def _dataclass_instance_to_str(toplevel:dataclass, as_path:bool=False) -> str:
         If False, use 'fields_sep'
 
     Returns
+    -------
     str
         All fields values, joined:
             - At a same level, using 'fields_sep';
@@ -120,15 +126,18 @@ def _dataclass_instance_to_str(toplevel:dataclass, as_path:bool=False) -> str:
     return levels_sep.join(to_str)
 
 def _dataclass_fields_types_to_lists(cls:Type[dataclass]) -> List[List[Any]]:
-    """
+    """Type of fields in dataclass returned in lists.
+
     Return the type of each field, one list per level, and all levels in a
     list.
 
     Parameters
+    ----------
     cls : Type[dataclass]
         A dataclass instance or a dataclass.
 
     Returns
+    -------
     List[List[Any]]
         List of fields types lists, one list per level.
     """
@@ -139,12 +148,13 @@ def _dataclass_fields_types_to_lists(cls:Type[dataclass]) -> List[List[Any]]:
 
 def _dataclass_instance_from_str(cls:Type[dataclass], string:str)\
     -> Union[dataclass, None]:
-    """
-    Returns a dataclass instance derived from input string.
+    """Returns a dataclass instance derived from input string.
+
     Level separator can either be DIR_SEP or 'cls.fields_sep'.
     If dataclass '__init__' fails, `None` is returned.
 
     Parameters
+    ----------
     cls : Type[dataclass]
         Dataclass to be used for generating dataclass instance.
     string : str
@@ -152,6 +162,7 @@ def _dataclass_instance_from_str(cls:Type[dataclass], string:str)\
         'cls.fields_sep' of DIR_SEP)
 
     Returns
+    -------
     Union[dataclass, None]
         Dataclass instance derived from input string.
     """
@@ -186,8 +197,8 @@ def _dataclass_instance_from_str(cls:Type[dataclass], string:str)\
         return None
 
 def _get_depth(obj:Union[dataclass,Type[dataclass]]) -> int:
-    """
-    Returns number of levels, including 'toplevel'.
+    """Returns number of levels, including 'toplevel'.
+
     To be decorated with '@property'.
     """
     depth=1
@@ -204,42 +215,50 @@ class TopLevel(type):
     @property
     def fields_sep(cls) -> str:
         return cls._fields_sep
+
     @property
     def depth(cls) -> int:
         return cls._depth
 
 def toplevel(index_class=None, *, fields_sep:str=DEFAULT_FIELDS_SEP):
-    """
+    """`toplevel` decorator.
+
     Decorate a class into a dataclass with methods and attributes to use it
     as a dataset index.
     Decorated class has to be defined as one would define a class decorated by
     '@dataclass'.
+
+    Parameters
+    ----------
+    fields_sep : str, default '.'
+        Character to use as separator between fields of the dataclass.
+
+    Returns
+    -------
+    Decorated class.
+    
+    Attributes
+    ----------
+    fields_sep: str
+        Fields separator (can't assign).
+    depth: int
+        Number of levels, including 'toplevel' (can't assign).
+
+    Notes
+    -----
     '@dataclass' is actually called when decorating with '@toplevel' with
     parameters set to:
         - order=True,
         - frozen=True
     
-    'toplevel' is to be used as a decorator, with or without parameter
-    'fields_sep'.
+    `toplevel` is to be used as a decorator, with or without parameter
+    `fields_sep`.
 
     Class instantiation is checked.
       - An instance can only be composed with `int`, 'str' or a dataclass
         object coming in last position;
       - Value of attribute can not incorporate forbidden characters like '/'
         and 'self.fields_sep'.
-
-    Parameters
-    fields_sep : str, default '.'
-        Character to use as separator between fields of the dataclass.
-
-    Returns
-    Decorated class.
-    
-    Attributes
-    fields_sep: str
-        Fields separator (can't assign).
-    depth: int
-        Number of levels, including 'toplevel' (can't assign).
     """
     def tweak(index_class):
         # Re-create 'index_class' as a 'TopLevel'-inheriting class to equip it
@@ -290,7 +309,8 @@ def toplevel(index_class=None, *, fields_sep:str=DEFAULT_FIELDS_SEP):
     return tweak
 
 def is_toplevel(toplevel) -> bool:
-    """
+    """`True` if `toplevel`-decorated class.
+
     Returns 'True' if 'toplevel' (class or instance) has been decorated with
     '@toplevel'. It checks presence 'fields_sep' attribute and 'from_path'
     method.
@@ -299,7 +319,8 @@ def is_toplevel(toplevel) -> bool:
             and callable(getattr(toplevel, 'from_path', None)))
 
 def sublevel(index_class):
-    """
+    """Alias for `dataclass` decorator with appropriate setting.
+
     Decorator to be used as an alias of '@dataclass' decorator, with parameters
     set to:
         - order=True,
