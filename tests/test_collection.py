@@ -188,3 +188,31 @@ def test_set_cmidx_get_vaex(tmp_path):
     df_res.columns = pdf.columns
     assert df_res.equals(pdf)
 
+def test_dataset_removal(tmp_path):
+    # Test `__delitem__`.
+    basepath = os_path.join(tmp_path, 'store')
+    ps = ParquetSet(basepath, WeatherEntry)
+    we1 = WeatherEntry('paris', 'temperature',
+                       SpaceTime('notredame', 'winter'))
+    we2 = WeatherEntry('paris', 'temperature',
+                       SpaceTime('notredame', 'summer'))
+    we3 = WeatherEntry('london', 'temperature',
+                       SpaceTime('greenwich', 'winter'))
+    df = pDataFrame({'timestamp': date_range('2021/01/01 08:00',
+                                             '2021/01/01 14:00', freq='2H'),
+                     'temperature': [8.4, 5.3, 4.9, 2.3]})
+    ps[we1], ps[we2], ps[we3] = df, df, df
+    # Delete london-related data.
+    we3_path = os_path.join(basepath, we3.to_path)
+    assert os_path.exists(we3_path)
+    del ps[we3]
+    assert not os_path.exists(we3_path)
+    # Delete paris-summer-related data.
+    we2_path = os_path.join(basepath, we2.to_path)
+    assert os_path.exists(we2_path)
+    del ps[we2]    
+    assert not os_path.exists(we2_path)    
+    # Check paris-winter-related data still exists.
+    we1_path = os_path.join(basepath, we1.to_path)
+    assert os_path.exists(we1_path)
+    

@@ -5,7 +5,8 @@ Created on Wed Dec  4 18:00:00 2021
 @author: yoh
 """
 from dataclasses import dataclass
-from os import path as os_path
+from os import listdir, path as os_path, remove, rmdir
+from shutil import rmtree
 from sortedcontainers import SortedSet
 from typing import Tuple, Type, Union
 
@@ -15,7 +16,7 @@ from vaex.dataframe import DataFrame as vDataFrame
 from oups.defines import DIR_SEP
 from oups.indexer import is_toplevel
 from oups.router import ParquetHandle
-from oups.utils import files_at_depth
+from oups.utils import files_at_depth, strip_path_tail
 from oups.writer import write
 
 
@@ -200,6 +201,26 @@ class ParquetSet:
         return self.get(key)
 
 
-#    def __delitem__(self, key):
-#        del self.store[self._keytransform(key)]
-# or __del__ ?
+    def __delitem__(self, key:dataclass):
+        """Remove dataset.
+
+        Parameter
+        ---------
+        key : dataclass
+            Key specifying the location where to write the data. It has to be
+            an instance of the dataclass provided at ParquetSet instantiation.
+        """
+        # Keep track of intermediate partition folders, in case one get
+        # empty.
+        basepath = self._basepath
+        dirpath = os_path.join(basepath, key.to_path)
+        rmtree(dirpath)
+        self._keys.remove(key)
+        print(f'dirpath: {dirpath}')
+        # Remove possibly empty directories.
+        upper_dir = strip_path_tail(dirpath)
+        print(f'upper_dir: {upper_dir}')
+        while (upper_dir != basepath) and (not listdir(upper_dir)):
+            rmdir(upper_dir)
+            upper_dir = strip_path_tail(upper_dir)
+            print(f'upper_dir: {upper_dir}')

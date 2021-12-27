@@ -12,13 +12,15 @@ from oups.defines import DIR_SEP
 
 def files_at_depth(basepath:str, depth:int=2)\
     -> Iterator[Tuple[str,List[str]]]:
-    """
+    """Yield file list in dirs.
+
     Generator yielding a tuple which:
         - 1st value is the path of a non-empty directory at 'depth' sublevel,
           counting from 'basepath'.
         - 2nd value is the list of files in this directory.
 
     Parameters
+    ----------
     basepath : str
         Path to directory from which scanning.
     depth : int, default 2
@@ -26,6 +28,7 @@ def files_at_depth(basepath:str, depth:int=2)\
         By default, at least 2 levels.
 
     Yields
+    ------
     Iterator[Dict[str,List[str]]]
         List of files within directory specified by the key. Empty directories
         are not returned.
@@ -45,3 +48,19 @@ def files_at_depth(basepath:str, depth:int=2)\
         depth -= 1
         for path in dirs:
             yield from files_at_depth(path, depth)
+
+def strip_path_tail(dirpath:str) -> str:
+    """Remove last level directory from provided path.
+
+    Parameters
+    ----------
+    dirpath : str
+        Directory path.
+
+    Returns
+    -------
+    str
+        Directory path stripped from last directory.
+    """
+    if DIR_SEP in dirpath:
+        return dirpath.rsplit("/", 1)[0]
