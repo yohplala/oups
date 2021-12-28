@@ -37,16 +37,16 @@ jobs:
           poetry config experimental.new-installer false
 
       # Setup cached pre-commit
-      - name: Setup cached pre-commit
-        id: cache-pre-commit
-        uses: actions/cache@v2
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-${{ hashFiles('.github/workflows/*.yml', '.pre-commit-config.yaml') }}
+#      - name: Setup cached pre-commit
+#        id: cache-pre-commit
+#        uses: actions/cache@v2
+#        with:
+#          path: ~/.cache/pre-commit
+#          key: pre-commit-${{ hashFiles('.github/workflows/*.yml', '.pre-commit-config.yaml') }}
 
       # Run pre-commit
-      - name: Run pre-commit
-        run: pre-commit run --all-files
+#      - name: Run pre-commit
+#        run: pre-commit run --all-files
 
       # Run pytest
       - name: Run pytest
