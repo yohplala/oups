@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Wed Dec 26 22:30:00 2021
+Created on Wed Dec 26 22:30:00 2021.
+
 @author: yoh
 """
 from fastparquet import ParquetFile
@@ -22,8 +22,10 @@ class ParquetHandle:
     vdf : vDataFrame
         Dataframe in vaex format.
     """
-    def __init__(self, dirpath:str):
-        """
+
+    def __init__(self, dirpath: str):
+        """Instantiate parquet handle.
+
         Parameter
         ---------
         dirpath : str
@@ -33,16 +35,20 @@ class ParquetHandle:
 
     @property
     def dirpath(self):
+        """Return dirpath."""
         return self._dirpath
 
     @property
     def pf(self):
+        """Return parquet file."""
         return ParquetFile(self._dirpath)
 
     @property
     def pdf(self):
+        """Return pandas dataframe."""
         return ParquetFile(self._dirpath).to_pandas()
 
     @property
     def vdf(self):
+        """Return vaex dataframe."""
         return vx_open(self._dirpath)

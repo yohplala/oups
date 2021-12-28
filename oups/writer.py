@@ -1,23 +1,26 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Wed Dec  6 22:30:00 2021
+Created on Wed Dec  6 22:30:00 2021.
+
 @author: yoh
 """
 from ast import literal_eval
 from typing import List, Union
 
-from fastparquet import ParquetFile, write as fp_write
-from pandas import DataFrame as pDataFrame, Index, MultiIndex
+from fastparquet import ParquetFile
+from fastparquet import write as fp_write
+from pandas import DataFrame as pDataFrame
+from pandas import Index
+from pandas import MultiIndex
 from vaex.dataframe import DataFrame as vDataFrame
 
 
 ROW_GROUP_SIZE = 5_000_000
-COMPRESSION = 'SNAPPY'
+COMPRESSION = "SNAPPY"
 
-def iter_dataframe(data: Union[pDataFrame, vDataFrame],
-                   row_group_size:int=None):
-    """Generator yielding dataframe chunks.
+
+def iter_dataframe(data: Union[pDataFrame, vDataFrame], row_group_size: int = None):
+    """Yield dataframe chunks.
 
     Parameters
     ----------
@@ -41,18 +44,19 @@ def iter_dataframe(data: Union[pDataFrame, vDataFrame],
     # Define row group offsets.
     # Acknowledging this piece of code to be an extract from fastparquet.
     n_rows = len(data)
-    n_parts = (n_rows-1)//row_group_size + 1
-    row_group_size = min((n_rows-1)//n_parts+1, n_rows)
+    n_parts = (n_rows - 1) // row_group_size + 1
+    row_group_size = min((n_rows - 1) // n_parts + 1, n_rows)
     starts = list(range(0, n_rows, row_group_size))
     ends = starts[1:] + [None]
     if isinstance(data, vDataFrame):
-        for start, end in zip(starts,ends):
+        for start, end in zip(starts, ends):
             yield data[start:end].to_pandas_df()
     else:
-        for start, end in zip(starts,ends):
+        for start, end in zip(starts, ends):
             yield data.iloc[start:end]
 
-def to_midx(idx: Index, levels:List[str]=None) -> MultiIndex:
+
+def to_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
     """Expand a pandas index into a multi-index.
 
     Parameters
@@ -81,7 +85,7 @@ def to_midx(idx: Index, levels:List[str]=None) -> MultiIndex:
     If some column names have string representations of smaller tuples
     (resulting in fewer index levels), these column names are appended with
     empty strings '' as required to be of equal levels number than the longest
-    column names.    
+    column names.
     """
     idx_temp = []
     max_levels = 0
@@ -103,15 +107,20 @@ def to_midx(idx: Index, levels:List[str]=None) -> MultiIndex:
     elif (len_lev := len(levels)) < max_levels:
         diff = max_levels - len_lev
     if diff > 0:
-        levels.extend([f'l{i}' for i in range(len_lev, max_levels)])
+        levels.extend([f"l{i}" for i in range(len_lev, max_levels)])
     # Equalize length of tuples.
-    tuples = [(*t, *['']*n) if (n:=(max_levels-len(t))) else t
-              for t in idx_temp]
+    tuples = [(*t, *[""] * n) if (n := (max_levels - len(t))) else t for t in idx_temp]
     return MultiIndex.from_tuples(tuples, names=levels)
 
-def write(dirpath:str, data:Union[pDataFrame, vDataFrame],
-          row_group_size:int=None, compression:str=COMPRESSION,
-          cmidx_expand:bool=False, cmidx_levels:List[str]=None):
+
+def write(
+    dirpath: str,
+    data: Union[pDataFrame, vDataFrame],
+    row_group_size: int = None,
+    compression: str = COMPRESSION,
+    cmidx_expand: bool = False,
+    cmidx_levels: List[str] = None,
+):
     """Write data to disk at location specified by path.
 
     Parameters
@@ -147,13 +156,18 @@ def write(dirpath:str, data:Union[pDataFrame, vDataFrame],
         chunk = next(iter_data)
         if cmidx_expand:
             chunk.columns = to_midx(chunk.columns, cmidx_levels)
-        fp_write(dirpath, chunk, row_group_offsets=row_group_size,
-                 compression=compression, file_scheme='hive',
-                 write_index=False, append=False)
+        fp_write(
+            dirpath,
+            chunk,
+            row_group_offsets=row_group_size,
+            compression=compression,
+            file_scheme="hive",
+            write_index=False,
+            append=False,
+        )
         # Re-open to write remaining chunks.
         pf = ParquetFile(dirpath)
     # Appending
-    pf.write_row_groups(data=iter_data, row_group_offsets=None,
-                        compression=compression)
+    pf.write_row_groups(data=iter_data, row_group_offsets=None, compression=compression)
     # TODO: implement 'update'.
     # (to be run depending value on 'ordered_on' column)
