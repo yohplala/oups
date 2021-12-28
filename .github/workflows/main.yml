@@ -29,12 +29,14 @@ jobs:
         with:
           python-version: 3.9
 
-      # Install build dependencies
+      # Install dependencies
       # setuptools required by pre-commit
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip setuptools wheel poetry pre-commit pytest
-          poetry config experimental.new-installer false
+#          python -m pip install --upgrade pip setuptools wheel poetry pre-commit pytest
+          python -m pip install pytest pandas vaex
+          python -m pip install git+https://github.com/dask/fastparquet@cmidx_write_rg
+#          poetry config experimental.new-installer false
 
       # Setup cached pre-commit
 #      - name: Setup cached pre-commit
@@ -48,6 +50,10 @@ jobs:
 #      - name: Run pre-commit
 #        run: pre-commit run --all-files
 
+      # Install oups
+#      - name: Install oups
+#        run: poetry install
+
       # Run pytest
       - name: Run pytest
-        run: poetry run pytest
+        run: python -m pytest
