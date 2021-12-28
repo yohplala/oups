@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip pytest pandas vaex
-          python -m pip install git+https://github.com/dask/fastparquet@cmidx_write_rg
+          python -m pip install git+https://github.com/yohplala/fastparquet@cmidx_write_rg
 #          python -m pip install --upgrade pip setuptools wheel poetry pre-commit pytest
 #          poetry config experimental.new-installer false
 
