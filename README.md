@@ -1,7 +1,7 @@
 # OUPS
 Ordered Updatable Parquet Store
 
-Help organize parquet datasets with objective to deliver convenience functions for updating ordered datasets.
+Help organize parquet datasets with objective to deliver convenience function for updating ordered datasets.
 
 ```python
 from os import path as os_path
