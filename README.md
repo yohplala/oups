@@ -66,3 +66,21 @@ Out[2]:
 ```
 
 Function to update ordered dataset, with management of duplicates is a target.
+
+Goodies
+```python
+# Review store content.
+ps
+Out[3]: 
+germany-berlin
+japan-tokyo
+
+# Get number of datasets.
+len(ps)
+Out[4]: 2
+
+# Delete a dataset (delete data from disk).
+del ps[idx1]
+ps
+Out[5]: japan-tokyo
+```
