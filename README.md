@@ -30,7 +30,6 @@ This schema (decorated class) is then used when instantiating a `ParquetSet`, in
 
 ```python
 from os import path as os_path
-import pandas as pd
 from oups import ParquetSet
 
 # Initialize a parquet store, specifying:
@@ -43,6 +42,7 @@ ps = ParquetSet(store_path, DatasetIndex)
 #### OUPS in action.
 All is now set to create a new dataset, from new data.
 ```python
+import pandas as pd
 # Key to a first dataset, for some temperature records related to Berlin.
 idx1 = DatasetIndex('germany','berlin')
 df1 = pd.DataFrame({'timestamp':pd.date_range('2021/01/01', '2021/01/05', freq='1D'),
