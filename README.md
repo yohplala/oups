@@ -75,7 +75,7 @@ Other libraries out there already exist to manage collections of datasets,
 - many that I have not tested, for instance [Arctic](https://github.com/man-group/arctic)
 - one that I have tested, [pystore](https://github.com/ranaroussi/pystore). Being based on Dask, it supports parallelized reading/writing out of the box. Its update logic can be reviewed in [`collection.py`](https://github.com/ranaroussi/pystore/blob/ed9beca774312811527c80d199c3cf437623477b/pystore/collection.py#L181). Not elaborating about [possible performance issues](https://github.com/ranaroussi/pystore/issues/56), and only focusing on usability, current procedure implies that any duplicate rows, considering all columns, but not the index (which is necessarily a `Datetimeindex` as per `pystore` implementation), be dropped, except last. But this hard-coded logic may not suit all dataflows (discussed in [ticket #43](https://github.com/ranaroussi/pystore/issues/43)).
 
-In comparison, current version of OUPS:
+In comparison, current version of OUPS,
 - is not based on Dask but directly on [fastparquet](https://fastparquet.readthedocs.io/en/latest/). No parallelized reading/writing is yet possible.
 - only appends new data, without dropping duplicates. It is however a target to propose an update function with a user-defined logic for dropping duplicates.
 
