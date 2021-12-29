@@ -46,7 +46,7 @@ import pandas as pd
 # Key to a first dataset, for some temperature records related to Berlin.
 idx1 = DatasetIndex('germany','berlin')
 df1 = pd.DataFrame({'timestamp':pd.date_range('2021/01/01', '2021/01/05', freq='1D'),
-                   'temperature':range(10,15)})
+                    'temperature':range(10,15)})
 # Initiate the new parquet dataset.
 ps[idx1] = df1
 ```
