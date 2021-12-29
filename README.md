@@ -117,7 +117,7 @@ To record a new dataset into an existing collection, the same `@toplevel`-decora
 ```python
 idx2 = DatasetIndex('japan','tokyo')
 df2 = pd.DataFrame({'timestamp':pd.date_range('2020/01/01', '2020/01/05', freq='1D'),
-                   'temperature':range(15,20)})
+                    'temperature':range(15,20)})
 ps[idx2] = df2
 ```
 
