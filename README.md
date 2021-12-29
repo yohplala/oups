@@ -10,7 +10,7 @@ OUPS aims primarily at:
 ### 1.a Organized datasets.
 
 #### `@toplevel` and `@sublevel` class decorators.
-With OUPS, datasets are organized in separate folders, which naming follows a user-defined schema.
+In OUPS, datasets are organized in separate folders, which naming follows a user-defined schema.
 This schema is formalized by use of `@toplevel` (and optionally one or several `@sublevel`) class decorator(s).
 A class decorated with `@toplevel` defines necessarily the first directory level (while `@sublevel` has to be used for sub-directories).
  These decorators act in the same way than `@dataclass`. They actually wrap it and force some settings.
