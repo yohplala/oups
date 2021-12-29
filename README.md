@@ -123,7 +123,7 @@ ps[idx2] = df2
 ```
 
 #### Update existing datasets.
-Currently OUPS only append new data to existing one, with no additional processing (no drop of duplicate, no re-ordering of data when 'old' data is being added).
+Currently OUPS only append new data to existing one, with no additional processing (in particular, no drop of duplicate, nor re-ordering of data when 'old' data is being added).
 ```python
 ps[idx1] = df1
 
