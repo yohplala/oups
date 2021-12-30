@@ -56,33 +56,40 @@ ps[idx1] = df1
 No function yet has been implemented.
 It is however a target to deliver it.
 
-## 2. Requirements
-- python (3.7 or higher)
+## 2. Install
+[Install poetry](https://python-poetry.org/docs/master/#installation), then `oups`.
+```python
+curl -sSL https://install.python-poetry.org | python3 -
+poetry install
+```
+
+Requirements will be taken care of by `poetry`.
+- python (3.9 or higher)
 - pandas (1.3.4 or higher)
 - vaex (4.6.0 or higher)
 - fastparquet, specific branch (PR pending)
 ```bash
 git+https://github.com/yohplala/fastparquet@cmidx_write_rg
 ```
-- sortedcontainers
+- sortedcontainers (2.4.0 or higher)
 
 ## 3. Why OUPS?
 As a self-taught data wrangler, I have been confronted with managing 'large-size' collections of ordered datasets, more specifically time series.
 These datasets may contain different data (from different channels or feeds) or be the results of different processings of the same raw data.
-To ease their management, i.e. organize how storing these datasets, a first step in OUPS has then been the implementation of `@toplevel` and `@sublevel` class decorators.
+To ease their management, i.e. organize how storing these datasets, a first step in `oups` has then been the implementation of `@toplevel` and `@sublevel` class decorators.
 
 Other libraries out there already exist to manage collections of datasets,
 - many that I have not tested, for instance [Arctic](https://github.com/man-group/arctic)
 - one that I have tested, [pystore](https://github.com/ranaroussi/pystore). Being based on Dask, it supports parallelized reading/writing out of the box. Its update logic can be reviewed in [`collection.py`](https://github.com/ranaroussi/pystore/blob/ed9beca774312811527c80d199c3cf437623477b/pystore/collection.py#L181). Not elaborating about its [possible performance issues](https://github.com/ranaroussi/pystore/issues/56), and only focusing on this logic applicability, current procedure implies that any duplicate rows, considering all columns, but not the index (which is necessarily a `Datetimeindex` as per `pystore` implementation), be dropped, except last. But this hard-coded logic [may not suit all dataflows](https://github.com/ranaroussi/pystore/issues/43).
 
-In comparison, current version of OUPS,
+In comparison, current version of `oups`,
 - is not based on Dask but directly on [fastparquet](https://fastparquet.readthedocs.io/en/latest/). No parallelized reading/writing is yet possible.
 - only appends new data, without dropping duplicates. It is however a target to propose an `update` function with a user-defined logic for dropping duplicates.
 
 ## 4. Usage notes.
 
 ### 4.a Dataframe format.
-- OUPS accepts [pandas](https://github.com/pandas-dev/pandas) or [vaex](https://github.com/vaexio/vaex) dataframes.
+- `oups` accepts [pandas](https://github.com/pandas-dev/pandas) or [vaex](https://github.com/vaexio/vaex) dataframes.
 - Row index is dropped when recording. If the index of your dataframe is meaningful, make sure to reset it as a column.
 ```python
 pandas_df = pandas_df.reset_index()
@@ -97,7 +104,7 @@ ps[idx] = {'cmidx_expand'=True}, vaex_df
 ### 4.b Overview of OUPS features.
 
 #### Get your data back.
-OUPS returns data either through 'handles' (vaex dataframe or fastparquet parquet file) or directly as a pandas dataframe.
+`oups` returns data either through 'handles' (vaex dataframe or fastparquet parquet file) or directly as a pandas dataframe.
   - fastparquet parquet file `ps[idx].pf`,
   - vaex dataframe `ps[idx].vdf`.
   - or pandas dataframe `ps[idx].pdf`,
@@ -123,7 +130,7 @@ ps[idx2] = df2
 ```
 
 #### Update existing datasets.
-Currently OUPS only append new data to existing one, with no additional processing (in particular, no dropping of duplicates, nor re-ordering of data when 'old' data is being added).
+Currently `oups` only append new data to existing one, with no additional processing (in particular, no dropping of duplicates, nor re-ordering of data when 'old' data is being added).
 ```python
 ps[idx1] = df1
 
