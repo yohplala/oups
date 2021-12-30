@@ -60,6 +60,9 @@ It is however a target to deliver it.
 [Install poetry](https://python-poetry.org/docs/master/#installation), then `oups`.
 ```python
 curl -sSL https://install.python-poetry.org | python3 -
+# From a directory where to clone oups.
+git clone https://github.com/yohplala/oups
+cd oups
 poetry install
 ```
 
