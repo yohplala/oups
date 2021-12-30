@@ -69,7 +69,7 @@ git+https://github.com/yohplala/fastparquet@cmidx_write_rg
 ## 3. Why OUPS?
 As a self-taught data wrangler, I have been confronted with managing 'large-size' collections of ordered datasets, more specifically time series.
 These datasets may contain different data (from different channels or feeds) or be the results of different processings of the same raw data.
-To ease their management, i.e. where these datasets have to be stored, a first step in OUPS has then been the implementation of `@toplevel` and `@sublevel` class decorators.
+To ease their management, i.e. organize how storing these datasets, a first step in OUPS has then been the implementation of `@toplevel` and `@sublevel` class decorators.
 
 Other libraries out there already exist to manage collections of datasets,
 - many that I have not tested, for instance [Arctic](https://github.com/man-group/arctic)
