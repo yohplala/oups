@@ -160,7 +160,7 @@ ps
 Out[5]: japan-tokyo
 
 # 'Discover' an existing dataset collection.
-# Schema definition needs to be available.
+# Initial schema definition is needed.
 ps2 = ParquetSet(store_path, DatasetIndex)
 ps2
 Out[6]: japan-tokyo
