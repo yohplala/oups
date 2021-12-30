@@ -88,7 +88,7 @@ In comparison, current version of OUPS,
 pandas_df = pandas_df.reset_index()
 ```
 This only applies for pandas dataframes, as vaex ones have no row index.
-- Column multi-index can be recorded. Here again vaex has no support for column multi-index. But if your vaex dataframe comes from a pandas one, with column multi-index, you can expand it again at recording.
+- Column multi-index can be recorded. Here again vaex has no support for column multi-index. But if your vaex dataframe comes from a pandas one initially with column multi-index, you can expand it again at recording.
 ```python
 # With 'vaex_df' created from a pandas dataframe with column multi-index.
 ps[idx] = {'cmidx_expand'=True}, vaex_df
