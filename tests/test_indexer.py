@@ -14,6 +14,7 @@ from oups import is_toplevel
 from oups import sublevel
 from oups import toplevel
 from oups.defines import DIR_SEP
+from oups.indexer import DEFAULT_FIELDS_SEP
 
 
 def test_toplevel_is_toplevel():
@@ -171,7 +172,7 @@ def test_toplevel_nested_dataclass_validation():
     with pytest.raises(TypeError, match="^a dataclass instance cannot be"):
         TopLevel("aha", 2, sl1)
 
-    # Test validation with a string embedding a forbidden character (DIR_SEP).
+    # Test validation with a string embedding a forbidden character: DIR_SEP.
     @sublevel
     class SubLevel1:
         pu: int
@@ -179,6 +180,11 @@ def test_toplevel_nested_dataclass_validation():
         iv: SubLevel2
 
     sl1 = SubLevel1(4, f"6{DIR_SEP}2", sl2)
+    with pytest.raises(ValueError, match="^use of a forbidden"):
+        TopLevel("aha", 2, sl1)
+
+    # Test validation with a string embedding a forbidden character: fields_sep.
+    sl1 = SubLevel1(4, f"6{DEFAULT_FIELDS_SEP}2", sl2)
     with pytest.raises(ValueError, match="^use of a forbidden"):
         TopLevel("aha", 2, sl1)
 

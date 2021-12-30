@@ -167,12 +167,9 @@ class ParquetSet:
             Keywords in 'kwargs' are forwarded to `writer.write`.
         """
         if not isinstance(key, self._indexer):
-            raise TypeError(
-                f"{key} is not an instance of \
-{self._indexer.__name__}."
-            )
+            raise TypeError(f"{key} is not an instance of {self._indexer.__name__}.")
         if not isinstance(data, pDataFrame) and not isinstance(data, vDataFrame):
-            raise TypeError("Data should be a pandas or vaex dataframe.")
+            raise TypeError("data should be a pandas or vaex dataframe.")
         dirpath = os_path.join(self._basepath, key.to_path)
         write(dirpath=dirpath, data=data, **kwargs)
         # If no trouble from writing, add key.
@@ -201,7 +198,7 @@ class ParquetSet:
             kwargs, data = data
             if not isinstance(kwargs, dict):
                 raise TypeError(
-                    f"First item {kwargs} should be a dict to "
+                    f"first item {kwargs} should be a dict to "
                     "define parameter setting for "
                     "`writer.write`."
                 )

@@ -134,7 +134,7 @@ def test_exception_config_not_a_dict(tmp_path):
         }
     )
     config = []  # First silly thing that comes to mind.
-    with pytest.raises(TypeError, match="^First item"):
+    with pytest.raises(TypeError, match="^first item"):
         ps[we] = config, df
 
 
@@ -144,7 +144,7 @@ def test_exception_data_not_a_dataframe(tmp_path):
     ps = ParquetSet(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = []  # First silly thing that comes to mind.
-    with pytest.raises(TypeError, match="^Data should"):
+    with pytest.raises(TypeError, match="^data should"):
         ps[we] = df
 
 
