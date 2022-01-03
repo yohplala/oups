@@ -137,6 +137,17 @@ def test_toplevel_nested_dataclass_attributes():
         TopLevel.depth = 4
 
 
+def test_sublevel_with_single_attribute():
+    @sublevel
+    class SubLevel1:
+        pu: str
+
+    sl1 = SubLevel1("oh")
+    tl = TopLevel("ah", 5, sl1)
+    to_str_ref = f"ah{DEFAULT_FIELDS_SEP}5{DIR_SEP}oh"
+    assert tl.to_path == to_str_ref
+
+
 def test_toplevel_nested_dataclass_validation():
     # Test validation with wrong data type (dict).
     @sublevel

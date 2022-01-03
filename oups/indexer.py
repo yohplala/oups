@@ -39,8 +39,8 @@ def _dataclass_instance_to_dict(obj: dataclass) -> dict:
 def _dataclass_instance_to_lists(obj: dataclass) -> Iterator[List[Any]]:
     """Yield items as lists of fields values.
 
-    As a new dataclass instance is found, its fields values are yielded in a
-    next item, and so on...
+    If a new dataclass instance is the last field, its fields values are
+    yielded as next item, and so on...
 
     Parameters
     ----------
@@ -55,9 +55,8 @@ def _dataclass_instance_to_lists(obj: dataclass) -> Iterator[List[Any]]:
     fields = list(_dataclass_instance_to_dict(obj).values())
     if fields:
         yield fields
-        for field in fields:
-            if _is_dataclass_instance(field):
-                yield from _dataclass_instance_to_lists(field)
+        if _is_dataclass_instance(fields[-1]):
+            yield from _dataclass_instance_to_lists(fields[-1])
 
 
 def _validate_toplevel_instance(toplevel: dataclass):
@@ -133,7 +132,10 @@ def _dataclass_instance_to_str(toplevel: dataclass, as_path: bool = False) -> st
     for fields_ in _dataclass_instance_to_lists(toplevel):
         # Relying on the fact that only the tail can be a dataclass instance.
         to_str.append(toplevel.fields_sep.join(map(str, fields_[:-1])))
-    to_str[-1] += f"{toplevel.fields_sep}{str(fields_[-1])}"
+    if to_str[-1]:
+        to_str[-1] += f"{toplevel.fields_sep}{str(fields_[-1])}"
+    else:
+        to_str[-1] = str(fields_[-1])
     return levels_sep.join(to_str)
 
 
@@ -202,7 +204,7 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
                     level_types[:-1], strings_as_list[-level_length:]
                 )
             ] + [level_types[-1](*level)]
-        return cls(*level)
+        return cls(*level, check=False)
     except (TypeError, ValueError):
         # TypeError if the number of arguments for instantiation of a
         # dataclass is not correct (meaning the split has not been done
@@ -298,11 +300,12 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
         # Copy of original __init__ to call it without recursion.
         index_class_init = index_class.__init__
 
-        def __init__(self, *args, **kws):
+        def __init__(self, *args, check: bool = True, **kws):
             #            object.__setattr__(self, "_fields_sep", fields_sep)
             index_class_init(self, *args, **kws)
-            # Validate dataclass instance.
-            _validate_toplevel_instance(self)
+            if check:
+                # Validate dataclass instance.
+                _validate_toplevel_instance(self)
 
         index_class.__init__ = __init__
         index_class.__str__ = _dataclass_instance_to_str
