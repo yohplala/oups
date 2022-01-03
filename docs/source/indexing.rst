@@ -4,12 +4,12 @@ Collection indexing
 Motivation
 ----------
 
-Datasets are gathered within a parent directory as a collection. Each of them materialize as parquet files located in a child directory whose naming is derived from a user-defined index.
+Datasets are gathered in a parent directory as a collection. Each of them materialize as parquet files located in a child directory whose naming is derived from a user-defined index.
 
 By formalizing this index through a *likewise dataclass*, index management (user scope) is dissociated from path management (*oups* scope).
 
-Implementation
---------------
+Proposal
+--------
 
 *oups* provides 2 class decorators for defining an indexing logic.
 
@@ -19,12 +19,7 @@ Implementation
 By splitting indexes into different directory levels, related datasets can be gathered in common directories.
 A first level could for instance specify physical quantities in different places, and a second one could specify the sampling frequency of the measures.
 
-Each of these levels is thus specified by a *likewise dataclass*. Those corresponding to a parent directory necessarily embed as last attribute the sublevel-related class (see example).
-
-Fields separator
-----------------
-
-When decorating with ``@toplevel``, ``fields_sep`` parameter can be modified to a different character than default one ``-``. This separator applies to all *levels*.
+Each of these levels is thus specified by a class. Those corresponding to a parent directory necessarily embed as last attribute the sub-level-related class.
 
 Example
 -------
@@ -78,3 +73,32 @@ Created folders and files ought to be organized then as illustrated below.
              |- _common_metadata
              |- _metadata
              |- part.0.parquet
+
+``@toplevel``
+-------------
+
+``@toplevel`` accepts an optional ``fields_sep`` parameter to define the character separating fields (by default ``-``). This separator applies to all *levels*.
+
+Decorated class can have any number of attributes (also named *fields*), but only of types ``int`` or ``str``.
+
+If an attribute is a ``@sublevel``-decorated class, it is necessarily positioned in last.
+
+
+``@toplevel`` decorator provides attributes and functions which are used by a ``ParquetSet`` instance to
+
+* generate *paths* from attributes values (``__str__`` and ``to_path`` methods, as well as ``fields_sep`` attribute),
+* generate class instance (``from_path`` classmethod, as well as ``fields_sep`` attribute)
+
+It modifies the ``__init__`` method of decorated class so that attributes values are checked at instantiation, and any forbidden character or combination raise a related exception.
+
+Lastly, it calls ``@dataclass`` class decorator, with ``order`` and ``frozen`` parameters set as ``True``. This setting enables equality between class instances with same attributes values.
+
+``@sublevel``
+-------------
+
+Likewise,
+
+* decorated class can have any number of attributes, but only of types ``int`` or ``str``.
+* if yet another deeper *sub-level* is defined (using a ``@sublevel``-decorated class), it necessarily has to be positioned as last attribute.
+
+``@sublevel`` is here only an alias for ``@dataclass``, with ``order`` and ``frozen`` parameters set as ``True``.
