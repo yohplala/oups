@@ -38,8 +38,8 @@ jobs:
 #        run: pip install toml numpydoc sphinx sphinx-rtd-theme
 
       # Build project
-      - name: Build project
-        run: python build.py
+#      - name: Build project
+#        run: python build.py
 
       # Build docs
       - name: Build docs
