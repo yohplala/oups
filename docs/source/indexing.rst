@@ -57,7 +57,7 @@ Example
     ps[berlin_1D] = dummy_data_1D
     ps[berlin_1W] = dummy_data_1W
 
-Created folders and files ought to be organized then as illustrated below.
+Created folders and files are then organized as illustrated below.
 
 .. code-block::
 
@@ -89,7 +89,7 @@ If an attribute is a ``@sublevel``-decorated class, it is necessarily positioned
 * generate *paths* from attributes values (``__str__`` and ``to_path`` methods, as well as ``fields_sep`` attribute),
 * generate class instance (``from_path`` classmethod, as well as ``fields_sep`` attribute)
 
-It modifies the ``__init__`` method of decorated class so that attributes values are checked at instantiation, and any forbidden character or combination raise a related exception.
+It modifies the ``__init__`` method of decorated class so that attributes values are checked at instantiation, and use of any forbidden character or combination raises related exception.
 
 Lastly, it calls ``@dataclass`` class decorator, with ``order`` and ``frozen`` parameters set as ``True``. This setting enables equality between class instances with same attributes values.
 
