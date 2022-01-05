@@ -1,5 +1,4 @@
-Welcome to OUPS!
-================
+# Welcome to OUPS!
 
 ## 1. What is OUPS?
 OUPS stands for Ordered Updatable Parquet Store.
