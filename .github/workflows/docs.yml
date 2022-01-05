@@ -50,8 +50,8 @@ jobs:
         run: touch docs/build/.nojekyll
 
       # Add CNAME
-      - name: Add CNAME
-        run: echo "api.oups.io" >> docs/build/CNAME
+#      - name: Add CNAME
+#        run: echo "api.oups.io" >> docs/build/CNAME
 
       # Publish API docs
       - name: Publish API docs
