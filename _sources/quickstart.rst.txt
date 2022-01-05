@@ -4,7 +4,8 @@ Quickstart
 ParquetSet and indexing
 -----------------------
 
-Gathering a collection of datasets into a *oups* ``ParquetSet`` requires to define a *collection path* and a *dataset indexing logic*.
+An instance of ``ParquetSet`` class gathers a collection of datasets.
+``ParquetSet`` instantiation requires the definition of a *collection path* and a *dataset indexing logic*.
 
 **Collection path**
 
