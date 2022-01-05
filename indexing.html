@@ -128,7 +128,7 @@ A first level could for instance specify physical quantities in different places
 <span class="n">ps</span><span class="p">[</span><span class="n">berlin_1W</span><span class="p">]</span> <span class="o">=</span> <span class="n">dummy_data_1W</span>
 </pre></div>
 </div>
-<p>Created folders and files ought to be organized then as illustrated below.</p>
+<p>Created folders and files are then organized as illustrated below.</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">data</span>
 <span class="o">|-</span> <span class="n">weather_kbase</span>
    <span class="o">|-</span> <span class="n">temperature</span><span class="o">-</span><span class="n">berlin</span>
@@ -154,7 +154,7 @@ A first level could for instance specify physical quantities in different places
 <li><p>generate <em>paths</em> from attributes values (<code class="docutils literal notranslate"><span class="pre">__str__</span></code> and <code class="docutils literal notranslate"><span class="pre">to_path</span></code> methods, as well as <code class="docutils literal notranslate"><span class="pre">fields_sep</span></code> attribute),</p></li>
 <li><p>generate class instance (<code class="docutils literal notranslate"><span class="pre">from_path</span></code> classmethod, as well as <code class="docutils literal notranslate"><span class="pre">fields_sep</span></code> attribute)</p></li>
 </ul>
-<p>It modifies the <code class="docutils literal notranslate"><span class="pre">__init__</span></code> method of decorated class so that attributes values are checked at instantiation, and any forbidden character or combination raise a related exception.</p>
+<p>It modifies the <code class="docutils literal notranslate"><span class="pre">__init__</span></code> method of decorated class so that attributes values are checked at instantiation, and use of any forbidden character or combination raises related exception.</p>
 <p>Lastly, it calls <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> class decorator, with <code class="docutils literal notranslate"><span class="pre">order</span></code> and <code class="docutils literal notranslate"><span class="pre">frozen</span></code> parameters set as <code class="docutils literal notranslate"><span class="pre">True</span></code>. This setting enables equality between class instances with same attributes values.</p>
 </section>
 <section id="sublevel">
