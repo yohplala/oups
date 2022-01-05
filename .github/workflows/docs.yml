@@ -55,7 +55,7 @@ jobs:
 
       # Publish API docs
       - name: Publish API docs
-        uses: s0/git-publish-subdir-action@develop
+        uses: s0/git-publish-subdir-action@main
         env:
           REPO: self
           BRANCH: gh-pages
