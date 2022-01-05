@@ -46,19 +46,19 @@ jobs:
         run: catchsegv sphinx-build docs/source docs/build
 
       # Add nojeckyll
-#      - name: Add nojeckyll
-#        run: touch docs/build/.nojekyll
+      - name: Add nojeckyll
+        run: touch docs/build/.nojekyll
 
       # Add CNAME
-#      - name: Add CNAME
-#        run: echo "api.nautilustrader.io" >> docs/build/CNAME
+      - name: Add CNAME
+        run: echo "api.oups.io" >> docs/build/CNAME
 
       # Publish API docs
-#      - name: Publish API docs
-#        uses: s0/git-publish-subdir-action@develop
-#        env:
-#          REPO: self
-#          BRANCH: gh-pages
-#          FOLDER: docs/build
-#          SQUASH_HISTORY: false
-#          GITHUB_TOKEN: ${{ secrets.GHPAGES_ACCESS }}
+      - name: Publish API docs
+        uses: s0/git-publish-subdir-action@develop
+        env:
+          REPO: self
+          BRANCH: gh-pages
+          FOLDER: docs/build
+          SQUASH_HISTORY: false
+          GITHUB_TOKEN: ${{ secrets.GHPAGES_ACCESS }}
