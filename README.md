@@ -1,81 +1,16 @@
-Welcome to OUPS!
-================
+# Welcome to OUPS!
 
-## 1. What is OUPS?
-OUPS stands for Ordered Updatable Parquet Store.
+## What is OUPS?
+*oups* stands for Ordered Updatable Parquet Store.
 
-OUPS aims primarily at:
-- helping in the organization of parquet datasets,
-- delivering convenience function for updating ordered datasets.
+*oups* Python library provides convenience functions and class to manage a collection of parquet datasets. This includes mostly collection indexing, and ability to update ordered datasets.
 
-### 1.a Organized datasets.
+Please, head to the [documentation](https://yohplala.github.io/oups/) to get acquainted!
 
-#### `@toplevel` and `@sublevel` class decorators.
-In OUPS, datasets are organized in separate folders, which naming follows a user-defined schema.
-This schema is formalized by use of `@toplevel` (and optionally one or several `@sublevel`) class decorator(s).
-A class decorated with `@toplevel` defines necessarily the first directory level (while `@sublevel` has to be used for sub-directories).
- These decorators act in the same way than `@dataclass`. They actually wrap it and force some settings.
 
-```python
-from oups import toplevel
+# WiP
 
-# Define the schema to generate directory path where will be stored the data.
-@toplevel
-class DatasetIndex:
-    country: str
-    city: str
-```
-
-#### `ParquetSet` instance.
-This schema (decorated class) is then used when instantiating a `ParquetSet`, in other words, a collection of parquet datasets.
-
-```python
-from os import path as os_path
-from oups import ParquetSet
-
-# Initialize a parquet store, specifying:
-# - where datasets have to be recorded (or read from);
-# - the schema to be used for deriving path to individual dataset.
-store_path = os_path.expanduser('~/Documents/code/data/parquet_store')
-ps = ParquetSet(store_path, DatasetIndex)
-```
-
-#### OUPS in action.
-All is now set to create a new dataset, from new data.
-```python
-import pandas as pd
-
-# Index of a first dataset, for some temperature records related to Berlin.
-idx1 = DatasetIndex('germany','berlin')
-df1 = pd.DataFrame({'timestamp':pd.date_range('2021/01/01', '2021/01/05', freq='1D'),
-                    'temperature':range(10,15)})
-# Initiate the new parquet dataset.
-ps[idx1] = df1
-```
-
-### 1.b Updating ordered datasets.
-No function yet has been implemented.
-It is however a target to deliver it.
-
-## 2. Install
-[Install poetry](https://python-poetry.org/docs/master/#installation), then `oups`.
-```python
-curl -sSL https://install.python-poetry.org | python3 -
-# From a directory where to clone oups.
-git clone https://github.com/yohplala/oups
-cd oups
-poetry install
-```
-
-Requirements will be taken care of by `poetry`.
-- python (3.9 or higher)
-- pandas (1.3.4 or higher)
-- vaex (4.6.0 or higher)
-- fastparquet, specific branch (PR pending)
-```bash
-git+https://github.com/yohplala/fastparquet@cmidx_write_rg
-```
-- sortedcontainers (2.4.0 or higher)
+Below sections are gradually integrated into the documentation. Just keeping them here at the moment.
 
 ## 3. Why OUPS?
 As a self-taught data wrangler, I have been confronted with managing 'large-size' collections of ordered datasets, more specifically time series.
