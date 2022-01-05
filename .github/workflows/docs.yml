@@ -55,10 +55,11 @@ jobs:
 
       # Publish API docs
       - name: Publish API docs
-        uses: s0/git-publish-subdir-action@main
+        uses: s0/git-publish-subdir-action@develop
         env:
           REPO: self
           BRANCH: gh-pages
           FOLDER: docs/build
           SQUASH_HISTORY: false
-          GITHUB_TOKEN: ${{ secrets.GHPAGES_ACCESS }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#          GITHUB_TOKEN: ${{ secrets.GHPAGES_ACCESS }}
