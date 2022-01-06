@@ -5,11 +5,15 @@ Install
 
 .. code-block:: bash
 
+    # Install poetry.
     curl -sSL https://install.python-poetry.org | python3 -
+    # Clone oups repo.
     git clone https://github.com/yohplala/oups
+    # Install oups.
     cd oups
     poetry install
-
+    # Test.
+    poetry run pytest
 
 Requirements will be taken care of by `poetry`.
 
