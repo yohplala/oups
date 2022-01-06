@@ -82,10 +82,10 @@ repos:
             --ignore=C101 RST210 S101 W503,
             --per-file-ignores=
                 tests/*.py:D103
-                oups/*/__init__.py:C101
-                oups/*/__init__.py:F401
-                oups/*/__init__.py:S101
-                oups/*/__init__.py:W503
+                oups/__init__.py:C101
+                oups/__init__.py:F401
+                oups/__init__.py:S101
+                oups/__init__.py:W503
         ]
 
   - repo: https://github.com/pycqa/pydocstyle
