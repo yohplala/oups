@@ -81,7 +81,7 @@ repos:
             --statistics,
             --ignore=C101 RST210 S101 W503,
             --per-file-ignores=
-                tests/*.py:D103
+                tests/*.py:D103,
                 oups/__init__.py:C101 F401 S101 W503
         ]
 
