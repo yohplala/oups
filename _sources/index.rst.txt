@@ -10,10 +10,6 @@ oups
 
 *oups* Python library provides convenience functions and class to manage a collection of parquet datasets. This includes mostly collection indexing, and ability to update ordered datasets.
 
-**Bug reports**
-
-Please file an issue on `github <https://github.com/yohplala/oups>`_.
-
 Index
 -----
 
