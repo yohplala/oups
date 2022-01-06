@@ -16,6 +16,7 @@ Index
 .. toctree::
     install
     quickstart
+    purpose
     indexing
 
 ..    api

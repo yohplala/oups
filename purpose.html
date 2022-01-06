@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Why oups? &mdash; oups latest documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="Collection indexing" href="indexing.html" />
+    <link rel="prev" title="Quickstart" href="quickstart.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html" class="icon icon-home"> oups
+          </a>
+              <div class="version">
+                latest
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Why <em>oups</em>?</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#alternatives">Alternatives</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="indexing.html">Collection indexing</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">oups</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>Why <em>oups</em>?</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/purpose.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="why-oups">
+<h1>Why <em>oups</em>?<a class="headerlink" href="#why-oups" title="Permalink to this headline"></a></h1>
+<section id="purpose">
+<h2>Purpose<a class="headerlink" href="#purpose" title="Permalink to this headline"></a></h2>
+<p>Being confronted with the management of ‘large-size’ collections of ordered datasets (more specifically time series), I identified the need to handle them ‘easily’ (identification, creation, update, loading).
+These datasets may contain different data (from different channels or feeds) or be the results of different processings of the same raw data.
+To ease their management, i.e. organize how storing these datasets, a first step in <cite>oups</cite> has then been the implementation of <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> and <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code> class decorators.</p>
+</section>
+<section id="alternatives">
+<h2>Alternatives<a class="headerlink" href="#alternatives" title="Permalink to this headline"></a></h2>
+<p>Other libraries out there already exist to manage collections of datasets,</p>
+<ul class="simple">
+<li><p>many that I have not tested, for instance <a class="reference external" href="https://github.com/man-group/arctic">Arctic</a>,</p></li>
+<li><p>one that I have tested, <a class="reference external" href="https://github.com/ranaroussi/pystore">pystore</a>. Being based on Dask, it supports parallelized reading/writing out of the box. Its update logic can be reviewed in <a class="reference external" href="https://github.com/ranaroussi/pystore/blob/ed9beca774312811527c80d199c3cf437623477b/pystore/collection.py#L181">collection.py</a>. Not elaborating about its <a class="reference external" href="https://github.com/ranaroussi/pystore/issues/56">possible performance issues</a>, and only focusing on this logic applicability, current procedure implies that any duplicate rows, considering all columns, but not the index (which is necessarily a <code class="docutils literal notranslate"><span class="pre">Datetimeindex</span></code> as per <em>pystore</em> implementation), be dropped, except last. But this hard-coded logic <a class="reference external" href="https://github.com/ranaroussi/pystore/issues/43">may not suit all dataflows</a>.</p></li>
+</ul>
+<p>In comparison, current version of <em>oups</em>,</p>
+<ul class="simple">
+<li><p>is not based on Dask but directly on <a class="reference external" href="https://fastparquet.readthedocs.io/en/latest/">fastparquet</a>. No parallelized reading/writing is yet possible.</p></li>
+<li><p>only appends new data, without dropping duplicates. It is however a target to propose an <em>update</em> function with a user-defined logic for dropping duplicates.</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="quickstart.html" class="btn btn-neutral float-left" title="Quickstart" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="indexing.html" class="btn btn-neutral float-right" title="Collection indexing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Yohplala.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

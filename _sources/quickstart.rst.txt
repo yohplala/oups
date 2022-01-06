@@ -13,23 +13,26 @@ It is directory path (existing or not) where will be (are) gathered directories 
 
 **Indexing logic**
 
-It is a class whose attributes values define an index for a given dataset, and is declared just as a `dataclass <https://docs.python.org/3/library/dataclasses.html>`_.
-``@toplevel`` is then used as a class decorator (and not ``@dataclass``) so that naming of each dataset directory can be derived appropriately.
+A logic is formalized by use of a decorated class. Index themselves are then materialized by instantiating this class, and more specifically by the instance attributes values.
+
+The class itself is declared just as a `dataclass <https://docs.python.org/3/library/dataclasses.html>`_.
+``@toplevel`` is then used as a class decorator (and not ``@dataclass``).
 
 .. code-block:: python
 
     from os import path as os_path
     from oups import ParquetSet, toplevel
 
-    # Define the indexing logic to generate each individual dataset folder name.
+    # Define an indexing logic to generate each individual dataset folder name.
     @toplevel
     class DatasetIndex:
         country: str
         city: str
 
-    # Initialize a parquet dataset collection,
-    # specifying collection path and indexing logic.
+    # Define a collection path.
     dirpath = os_path.expanduser('~/Documents/code/data/weather_knowledge_base')
+
+    # Initialize a parquet dataset collection.
     ps = ParquetSet(dirpath, DatasetIndex)
 
 Writing new data
@@ -41,12 +44,13 @@ Writing new data
 
     # Index of a first dataset, for some temperature records related to Berlin.
     idx1 = DatasetIndex('germany','berlin')
+    # Data to be recorded.
     df1 = pd.DataFrame({'timestamp':pd.date_range('2021/01/01', '2021/01/05', freq='1D'),
     	                'temperature':range(10,15)})
-    # Initiate the new parquet dataset.
+    # Populate parquet collection with a first dataset.
     ps[idx1] = df1
 
-``weather_knowledge_base`` folder has now been created, and populated with new data.
+``weather_knowledge_base`` folder has now been created with new data.
 
 .. code-block::
 

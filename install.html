@@ -43,6 +43,7 @@
               <ul class="current">
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Install</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="purpose.html">Why <em>oups</em>?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="indexing.html">Collection indexing</a></li>
 </ul>
 
@@ -73,10 +74,15 @@
   <section id="install">
 <h1>Install<a class="headerlink" href="#install" title="Permalink to this headline"></a></h1>
 <p><a class="reference external" href="https://python-poetry.org/docs/master/#installation">Install poetry</a>, then <em>oups</em>, first cloning its repository.</p>
-<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>curl -sSL https://install.python-poetry.org <span class="p">|</span> python3 -
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span><span class="c1"># Install poetry.</span>
+curl -sSL https://install.python-poetry.org <span class="p">|</span> python3 -
+<span class="c1"># Clone oups repo.</span>
 git clone https://github.com/yohplala/oups
+<span class="c1"># Install oups.</span>
 <span class="nb">cd</span> oups
 poetry install
+<span class="c1"># Test.</span>
+poetry run pytest
 </pre></div>
 </div>
 <p>Requirements will be taken care of by <cite>poetry</cite>.</p>
