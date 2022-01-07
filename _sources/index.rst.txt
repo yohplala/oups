@@ -18,8 +18,7 @@ Index
     quickstart
     purpose
     indexing
-
-..    api
+    api
 
 * :ref:`genindex`
 
