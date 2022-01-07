@@ -57,7 +57,7 @@ napoleon_use_rtype = False
 
 # List of modules to be mocked up.
 # (external dependencies not met at build time)
-autodoc_mock_imports = ["fastparquet", "pandas", "vaex"]
+autodoc_mock_imports = ["fastparquet", "pandas", "sortedcontainers", "vaex"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
