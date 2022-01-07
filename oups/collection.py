@@ -97,8 +97,8 @@ class ParquetSet:
 
     Notes
     -----
-    `SortedSet` is the data structure retained for `keys` instead of
-    `SortedList` as `__contains__` appears faster.
+    ``SortedSet`` is the data structure retained for ``keys`` instead of
+    ``SortedList`` as its ``__contains__`` appears faster.
     """
 
     def __init__(self, basepath: str, indexer: Type[dataclass]):
@@ -181,7 +181,7 @@ class ParquetSet:
         key: dataclass,
         data: Union[Tuple[dict, Union[pDataFrame, vDataFrame]], Union[pDataFrame, vDataFrame]],
     ):
-        """Alias for `set`.
+        """Write ``data`` to disk, at location defined by ``key``.
 
         Parameters
         ----------
@@ -219,7 +219,7 @@ class ParquetSet:
         return ParquetHandle(dirpath)
 
     def __getitem__(self, key: dataclass):
-        """Alias for `get`."""
+        """Return the ``ParquetHandle`` instance corresponding to ``key``."""
         return self.get(key)
 
     def __delitem__(self, key: dataclass):

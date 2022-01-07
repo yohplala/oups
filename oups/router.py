@@ -40,15 +40,15 @@ class ParquetHandle:
 
     @property
     def pf(self):
-        """Return parquet file."""
+        """Return handle to data through a parquet file."""
         return ParquetFile(self._dirpath)
 
     @property
     def pdf(self):
-        """Return pandas dataframe."""
+        """Return data as a pandas dataframe."""
         return ParquetFile(self._dirpath).to_pandas()
 
     @property
     def vdf(self):
-        """Return vaex dataframe."""
+        """Return handle to data through a vaex dataframe."""
         return vx_open(self._dirpath)

@@ -245,7 +245,7 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
 
     Decorated class is equipped with methods and attributes to use with a
     ``ParquetSet`` instance.
-    It has to be defined as one would define a class decorated by '@dataclass'.
+    It has to be defined as one would define a class decorated by ``@dataclass``.
 
     Parameters
     ----------
@@ -268,16 +268,16 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
     ``@dataclass`` is actually called when decorating with ``@toplevel`` with
     parameters set to:
 
-        - ``order=True``,
-        - ``frozen=True``
+      - ``order=True``,
+      - ``frozen=True``
 
     When class is instantiated, a validation step is conducted on attributes
     types and values.
 
-      - An instance can only be composed with `int`, 'str' or a dataclass
+      - An instance can only be composed with ``int``, ``str`` or a dataclass
         object coming in last position;
-      - Value of attribute can not incorporate forbidden characters like '/'
-        and 'self.fields_sep'.
+      - Value of attribute can not incorporate forbidden characters like ``/``
+        and ``self.fields_sep``.
     """
 
     def tweak(index_class):
@@ -342,10 +342,10 @@ def is_toplevel(toplevel) -> bool:
 
 
 def sublevel(index_class):
-    """Define a subdirectory for use as a ``@toplevel`` instance attribute.
+    """Define a subdirectory level.
 
-    Decorator really is an alias of ``@dataclass`` decorator, with parameters
-    set to:
+    This decorator really is an alias of ``@dataclass`` decorator, with
+    parameters set to:
 
         - ``order=True``,
         - ``frozen=True``
