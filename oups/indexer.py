@@ -278,6 +278,7 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
         object coming in last position;
       - Value of attribute can not incorporate forbidden characters like '/'
         and 'self.fields_sep'.
+
     """
 
     def tweak(index_class):
