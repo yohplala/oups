@@ -244,7 +244,7 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
     """Turn decorated class into an indexing schema.
 
     Decorated class is equipped with methods and attributes to use with a
-     ``ParquetSet`` instance.
+    ``ParquetSet`` instance.
     It has to be defined as one would define a class decorated by '@dataclass'.
 
     Parameters
@@ -278,7 +278,6 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
         object coming in last position;
       - Value of attribute can not incorporate forbidden characters like '/'
         and 'self.fields_sep'.
-
     """
 
     def tweak(index_class):
