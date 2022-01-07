@@ -55,6 +55,10 @@ napoleon_google_docstring = False
 # Do not show the return type as separate section
 napoleon_use_rtype = False
 
+# List of modules to be mocked up.
+# (external dependencies not met at build time)
+autodoc_mock_imports = ["fastparquet", "pandas", "vaex"]
+
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
