@@ -80,10 +80,10 @@
 </colgroup>
 <tbody>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">toplevel</span></code>([index_class, fields_sep])</p></td>
-<td><p><cite>toplevel</cite> decorator.</p></td>
+<td><p>Turn decorated class into an indexing schema.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sublevel</span></code>(index_class)</p></td>
-<td><p>Alias for <cite>dataclass</cite> decorator with appropriate setting.</p></td>
+<td><p>Define a subdirectory for use as a <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> instance attribute.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParquetSet</span></code>(basepath, indexer)</p></td>
 <td><p>Sorted list of keys (indexes to parquet datasets).</p></td>
@@ -108,11 +108,12 @@
 <dl class="py function">
 <dt class="sig sig-object py" id="oups.indexer.toplevel">
 <span class="sig-name descname"><span class="pre">toplevel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index_class</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fields_sep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'-'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.indexer.toplevel" title="Permalink to this definition"></a></dt>
-<dd><p><cite>toplevel</cite> decorator.</p>
-<p>Decorate a class into a dataclass with methods and attributes to use it
-as a dataset index.
-Decorated class has to be defined as one would define a class decorated by
-<a class="reference external" href="mailto:'&#37;&#52;&#48;dataclass">‘<span>&#64;</span>dataclass</a>’.</p>
+<dd><p>Turn decorated class into an indexing schema.</p>
+<dl class="simple">
+<dt>Decorated class is equipped with methods and attributes to use with a</dt><dd><p><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance.</p>
+</dd>
+</dl>
+<p>It has to be defined as one would define a class decorated by <a class="reference external" href="mailto:'&#37;&#52;&#48;dataclass">‘<span>&#64;</span>dataclass</a>’.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><p><strong>fields_sep</strong> (<em>str</em><em>, </em><em>default '.'</em>) – Character to use as separator between fields of the dataclass.</p>
@@ -144,37 +145,36 @@ Decorated class has to be defined as one would define a class decorated by
 </dd></dl>
 
 <p class="rubric">Notes</p>
-<p><a class="reference external" href="mailto:'&#37;&#52;&#48;dataclass">‘<span>&#64;</span>dataclass</a>’ is actually called when decorating with <a class="reference external" href="mailto:'&#37;&#52;&#48;toplevel">‘<span>&#64;</span>toplevel</a>’ with
+<p><code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> is actually called when decorating with <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> with
 parameters set to:</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>order=True,</p></li>
-<li><p>frozen=True</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">order=True</span></code>,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">frozen=True</span></code></p></li>
 </ul>
 </div></blockquote>
-<p><cite>toplevel</cite> is to be used as a decorator, with or without parameter
-<cite>fields_sep</cite>.</p>
-<dl class="simple">
-<dt>Class instantiation is checked.</dt><dd><ul class="simple">
+<p>When class is instantiated, a validation step is conducted on attributes
+types and values.</p>
+<blockquote>
+<div><ul class="simple">
 <li><p>An instance can only be composed with <cite>int</cite>, ‘str’ or a dataclass
 object coming in last position;</p></li>
 <li><p>Value of attribute can not incorporate forbidden characters like ‘/’
 and ‘self.fields_sep’.</p></li>
 </ul>
-</dd>
-</dl>
+</div></blockquote>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="oups.indexer.sublevel">
 <span class="sig-name descname"><span class="pre">sublevel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.indexer.sublevel" title="Permalink to this definition"></a></dt>
-<dd><p>Alias for <cite>dataclass</cite> decorator with appropriate setting.</p>
-<p>Decorator to be used as an alias of <a class="reference external" href="mailto:'&#37;&#52;&#48;dataclass">‘<span>&#64;</span>dataclass</a>’ decorator, with parameters
+<dd><p>Define a subdirectory for use as a <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> instance attribute.</p>
+<p>Decorator really is an alias of <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> decorator, with parameters
 set to:</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>order=True,</p></li>
-<li><p>frozen=True</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">order=True</span></code>,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">frozen=True</span></code></p></li>
 </ul>
 </div></blockquote>
 </dd></dl>
