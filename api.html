@@ -83,25 +83,25 @@
 <td><p>Turn decorated class into an indexing schema.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sublevel</span></code>(index_class)</p></td>
-<td><p>Define a subdirectory for use as a <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> instance attribute.</p></td>
+<td><p>Define a subdirectory level.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParquetSet</span></code>(basepath, indexer)</p></td>
 <td><p>Sorted list of keys (indexes to parquet datasets).</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParquetSet.__setitem__</span></code>(key, data)</p></td>
-<td><p>Alias for <cite>set</cite>.</p></td>
+<td><p>Write <code class="docutils literal notranslate"><span class="pre">data</span></code> to disk, at location defined by <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParquetSet.__getitem__</span></code>(key)</p></td>
-<td><p>Alias for <cite>get</cite>.</p></td>
+<td><p>Return the <code class="docutils literal notranslate"><span class="pre">ParquetHandle</span></code> instance corresponding to <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">oups.router.ParquetHandle.pf</span></code></p></td>
-<td><p>Return parquet file.</p></td>
+<td><p>Return handle to data through a parquet file.</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">oups.router.ParquetHandle.pdf</span></code></p></td>
-<td><p>Return pandas dataframe.</p></td>
+<td><p>Return data as a pandas dataframe.</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">oups.router.ParquetHandle.vdf</span></code></p></td>
-<td><p>Return vaex dataframe.</p></td>
+<td><p>Return handle to data through a vaex dataframe.</p></td>
 </tr>
 </tbody>
 </table>
@@ -111,7 +111,7 @@
 <dd><p>Turn decorated class into an indexing schema.</p>
 <p>Decorated class is equipped with methods and attributes to use with a
 <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance.
-It has to be defined as one would define a class decorated by <a class="reference external" href="mailto:'&#37;&#52;&#48;dataclass">‘<span>&#64;</span>dataclass</a>’.</p>
+It has to be defined as one would define a class decorated by <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code>.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters</dt>
 <dd class="field-odd"><p><strong>fields_sep</strong> (<em>str</em><em>, </em><em>default '.'</em>) – Character to use as separator between fields of the dataclass.</p>
@@ -155,10 +155,10 @@ parameters set to:</p>
 types and values.</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>An instance can only be composed with <cite>int</cite>, ‘str’ or a dataclass
+<li><p>An instance can only be composed with <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">str</span></code> or a dataclass
 object coming in last position;</p></li>
-<li><p>Value of attribute can not incorporate forbidden characters like ‘/’
-and ‘self.fields_sep’.</p></li>
+<li><p>Value of attribute can not incorporate forbidden characters like <code class="docutils literal notranslate"><span class="pre">/</span></code>
+and <code class="docutils literal notranslate"><span class="pre">self.fields_sep</span></code>.</p></li>
 </ul>
 </div></blockquote>
 </dd></dl>
@@ -166,9 +166,9 @@ and ‘self.fields_sep’.</p></li>
 <dl class="py function">
 <dt class="sig sig-object py" id="oups.indexer.sublevel">
 <span class="sig-name descname"><span class="pre">sublevel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.indexer.sublevel" title="Permalink to this definition"></a></dt>
-<dd><p>Define a subdirectory for use as a <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> instance attribute.</p>
-<p>Decorator really is an alias of <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> decorator, with parameters
-set to:</p>
+<dd><p>Define a subdirectory level.</p>
+<p>This decorator really is an alias of <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> decorator, with
+parameters set to:</p>
 <blockquote>
 <div><ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">order=True</span></code>,</p></li>
@@ -215,8 +215,8 @@ set to:</p>
 </dd></dl>
 
 <p class="rubric">Notes</p>
-<p><cite>SortedSet</cite> is the data structure retained for <cite>keys</cite> instead of
-<cite>SortedList</cite> as <cite>__contains__</cite> appears faster.</p>
+<p><code class="docutils literal notranslate"><span class="pre">SortedSet</span></code> is the data structure retained for <code class="docutils literal notranslate"><span class="pre">keys</span></code> instead of
+<code class="docutils literal notranslate"><span class="pre">SortedList</span></code> as its <code class="docutils literal notranslate"><span class="pre">__contains__</span></code> appears faster.</p>
 </dd></dl>
 
 </section>
