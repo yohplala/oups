@@ -241,12 +241,11 @@ class TopLevel(type):
 
 
 def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
-    """`toplevel` decorator.
+    """Turn decorated class into an indexing schema.
 
-    Decorate a class into a dataclass with methods and attributes to use it
-    as a dataset index.
-    Decorated class has to be defined as one would define a class decorated by
-    '@dataclass'.
+    Decorated class is equipped with methods and attributes to use with a
+     ``ParquetSet`` instance.
+    It has to be defined as one would define a class decorated by '@dataclass'.
 
     Parameters
     ----------
@@ -266,15 +265,15 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
 
     Notes
     -----
-    '@dataclass' is actually called when decorating with '@toplevel' with
+    ``@dataclass`` is actually called when decorating with ``@toplevel`` with
     parameters set to:
-        - order=True,
-        - frozen=True
 
-    `toplevel` is to be used as a decorator, with or without parameter
-    `fields_sep`.
+        - ``order=True``,
+        - ``frozen=True``
 
-    Class instantiation is checked.
+    When class is instantiated, a validation step is conducted on attributes
+    types and values.
+
       - An instance can only be composed with `int`, 'str' or a dataclass
         object coming in last position;
       - Value of attribute can not incorporate forbidden characters like '/'
@@ -343,12 +342,13 @@ def is_toplevel(toplevel) -> bool:
 
 
 def sublevel(index_class):
-    """Alias for `dataclass` decorator with appropriate setting.
+    """Define a subdirectory for use as a ``@toplevel`` instance attribute.
 
-    Decorator to be used as an alias of '@dataclass' decorator, with parameters
+    Decorator really is an alias of ``@dataclass`` decorator, with parameters
     set to:
-        - order=True,
-        - frozen=True
+
+        - ``order=True``,
+        - ``frozen=True``
     """
     # Wrap with `@dataclass`.
     # TODO
