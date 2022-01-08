@@ -54,7 +54,7 @@ Writing
 
 .. code-block:: python
 
-    ps[idx] = {'row_group_size'=5_000_000, compression='BROTLI'}, df
+    ps[idx] = {'row_group_size'=5_000_000, 'compression'='BROTLI'}, df
 
 * New datasets can be added to the same collection, as long as the index used is an instance from the same ``@toplevel``-decorated class as the one used at ``ParquetSet`` instantiation.
 
