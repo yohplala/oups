@@ -130,7 +130,7 @@ def write(
     data : Union[pDataFrame, vDataFrame]
         Data to write.
     row_group_size : int, optional
-        Max row group size. If not set, default to 50_000_000.
+        Max row group size. If not set, default to 5_000_000.
     compression : str, default SNAPPY
         Algorithm to use for compressing data. This parameter is fastparquet
         specific. Please see fastparquet documentation for more information.
