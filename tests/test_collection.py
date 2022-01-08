@@ -266,3 +266,21 @@ def test_dataset_removal(tmp_path):
     # Check paris-winter-related data still exists.
     we1_path = os_path.join(basepath, we1.to_path)
     assert os_path.exists(we1_path)
+
+
+def test_11_rgs_pandas_to_vaex(tmp_path):
+    # With 11 row groups, 'bug' related to the way sort files in lexicographic
+    # order to read them is apparent.
+    ps = ParquetSet(tmp_path, WeatherEntry)
+    we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
+    temp = range(10, 21)
+    df = pDataFrame(
+        {
+            "timestamp": date_range("2021/01/01 08:00", freq="2H", periods=len(temp)),
+            "temperature": temp,
+        }
+    )
+    config = {"row_group_size": 1}
+    ps[we] = config, df
+    vdf = ps[we].vdf
+    assert vdf.to_pandas_df().equals(df)
