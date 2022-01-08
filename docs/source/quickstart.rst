@@ -5,7 +5,7 @@ ParquetSet and indexing
 -----------------------
 
 An instance of ``ParquetSet`` class gathers a collection of datasets.
-``ParquetSet`` instantiation requires the definition of a *collection path* and a *dataset indexing logic*.
+``ParquetSet`` instantiation requires the definition of a *collection path* and a dataset *indexing logic*.
 
 **Collection path**
 
