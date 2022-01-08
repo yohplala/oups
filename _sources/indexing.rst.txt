@@ -40,7 +40,6 @@ Example
     berlin_1D = Measure('temperature', 'berlin', Sampling('1D'))
     berlin_1W = Measure('temperature', 'berlin', Sampling('1W'))
 
-
     # Store data in a new collection
     from os import path as os_path
     import pandas
@@ -86,8 +85,8 @@ If an attribute is a ``@sublevel``-decorated class, it is necessarily positioned
 
 ``@toplevel`` decorator provides attributes and functions which are used by a ``ParquetSet`` instance to
 
-* generate *paths* from attributes values (``__str__`` and ``to_path`` methods, as well as ``fields_sep`` attribute),
-* generate class instance (``from_path`` classmethod, as well as ``fields_sep`` attribute)
+* generate *paths* from attributes values (``__str__`` and ``to_path`` methods),
+* generate class instance (``from_path`` classmethod)
 
 It modifies the ``__init__`` method of decorated class so that attributes values are checked at instantiation, and use of any forbidden character or combination raises related exception.
 

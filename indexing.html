@@ -113,7 +113,6 @@ A first level could for instance specify physical quantities in different places
 <span class="n">berlin_1D</span> <span class="o">=</span> <span class="n">Measure</span><span class="p">(</span><span class="s1">&#39;temperature&#39;</span><span class="p">,</span> <span class="s1">&#39;berlin&#39;</span><span class="p">,</span> <span class="n">Sampling</span><span class="p">(</span><span class="s1">&#39;1D&#39;</span><span class="p">))</span>
 <span class="n">berlin_1W</span> <span class="o">=</span> <span class="n">Measure</span><span class="p">(</span><span class="s1">&#39;temperature&#39;</span><span class="p">,</span> <span class="s1">&#39;berlin&#39;</span><span class="p">,</span> <span class="n">Sampling</span><span class="p">(</span><span class="s1">&#39;1W&#39;</span><span class="p">))</span>
 
-
 <span class="c1"># Store data in a new collection</span>
 <span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span> <span class="k">as</span> <span class="n">os_path</span>
 <span class="kn">import</span> <span class="nn">pandas</span>
@@ -154,8 +153,8 @@ A first level could for instance specify physical quantities in different places
 <p>If an attribute is a <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code>-decorated class, it is necessarily positioned in last.</p>
 <p><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> decorator provides attributes and functions which are used by a <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance to</p>
 <ul class="simple">
-<li><p>generate <em>paths</em> from attributes values (<code class="docutils literal notranslate"><span class="pre">__str__</span></code> and <code class="docutils literal notranslate"><span class="pre">to_path</span></code> methods, as well as <code class="docutils literal notranslate"><span class="pre">fields_sep</span></code> attribute),</p></li>
-<li><p>generate class instance (<code class="docutils literal notranslate"><span class="pre">from_path</span></code> classmethod, as well as <code class="docutils literal notranslate"><span class="pre">fields_sep</span></code> attribute)</p></li>
+<li><p>generate <em>paths</em> from attributes values (<code class="docutils literal notranslate"><span class="pre">__str__</span></code> and <code class="docutils literal notranslate"><span class="pre">to_path</span></code> methods),</p></li>
+<li><p>generate class instance (<code class="docutils literal notranslate"><span class="pre">from_path</span></code> classmethod)</p></li>
 </ul>
 <p>It modifies the <code class="docutils literal notranslate"><span class="pre">__init__</span></code> method of decorated class so that attributes values are checked at instantiation, and use of any forbidden character or combination raises related exception.</p>
 <p>Lastly, it calls <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> class decorator, with <code class="docutils literal notranslate"><span class="pre">order</span></code> and <code class="docutils literal notranslate"><span class="pre">frozen</span></code> parameters set as <code class="docutils literal notranslate"><span class="pre">True</span></code>. This setting enables equality between class instances with same attributes values.</p>
