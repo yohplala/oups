@@ -145,6 +145,7 @@ def write(
     Notes
     -----
     When writing a dataframe with this function,
+
      - index of dataframe is not written to disk.
      - parquet file scheme is 'hive' (one row group per parquet file).
     """
