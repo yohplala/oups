@@ -18,3 +18,5 @@ API reference
 .. autofunction:: oups.indexer.sublevel
 
 .. autoclass:: oups.collection.ParquetSet
+
+.. autofunction:: oups.writer.write

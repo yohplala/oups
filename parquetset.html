@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ParquetSet &mdash; oups latest documentation</title>
+      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  
+        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
+        <script src="_static/jquery.js"></script>
+        <script src="_static/underscore.js"></script>
+        <script src="_static/doctools.js"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API reference" href="api.html" />
+    <link rel="prev" title="Collection indexing" href="indexing.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="index.html" class="icon icon-home"> oups
+          </a>
+              <div class="version">
+                latest
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="purpose.html">Why <em>oups</em>?</a></li>
+<li class="toctree-l1"><a class="reference internal" href="indexing.html">Collection indexing</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#"><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code></a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#purpose-and-creation">Purpose and creation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#usage-notes">Usage notes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#dataframe-format">Dataframe format</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#writing">Writing</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#reading">Reading</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#updating">Updating</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#other-goodies">Other “goodies”</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">oups</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
+      <li><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code></li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/parquetset.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="parquetset">
+<h1><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code><a class="headerlink" href="#parquetset" title="Permalink to this headline"></a></h1>
+<section id="purpose-and-creation">
+<h2>Purpose and creation<a class="headerlink" href="#purpose-and-creation" title="Permalink to this headline"></a></h2>
+<p>An instance of <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> class gathers a collection of datasets.
+<code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instantiation requires the definition of a <em>collection path</em> and a dataset <em>indexing logic</em>.</p>
+<ul class="simple">
+<li><p>A <em>collection path</em> is directory path (existing or not) where will be (are) gathered directories for each dataset.</p></li>
+<li><p>An <em>indexing logic</em> is formalized by use of a <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code>-decorated class as presented in <a class="reference internal" href="indexing.html"><span class="doc">Collection indexing</span></a>.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span> <span class="k">as</span> <span class="n">os_path</span>
+<span class="kn">from</span> <span class="nn">oups</span> <span class="kn">import</span> <span class="n">ParquetSet</span><span class="p">,</span> <span class="n">toplevel</span>
+
+<span class="c1"># Define an indexing logic to generate each individual dataset folder name.</span>
+<span class="nd">@toplevel</span>
+<span class="k">class</span> <span class="nc">DatasetIndex</span><span class="p">:</span>
+    <span class="n">country</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">city</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="c1"># Define a collection path.</span>
+<span class="n">dirpath</span> <span class="o">=</span> <span class="n">os_path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s1">&#39;~/Documents/code/data/weather_knowledge_base&#39;</span><span class="p">)</span>
+
+<span class="c1"># Initialize a parquet dataset collection.</span>
+<span class="n">ps</span> <span class="o">=</span> <span class="n">ParquetSet</span><span class="p">(</span><span class="n">dirpath</span><span class="p">,</span> <span class="n">DatasetIndex</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="usage-notes">
+<h2>Usage notes<a class="headerlink" href="#usage-notes" title="Permalink to this headline"></a></h2>
+<section id="dataframe-format">
+<h3>Dataframe format<a class="headerlink" href="#dataframe-format" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p><em>oups</em> accepts <a class="reference external" href="https://github.com/pandas-dev/pandas">pandas</a> or <a class="reference external" href="https://github.com/vaexio/vaex">vaex</a> dataframes.</p></li>
+<li><p>Row index is dropped when recording. If the index of your dataframe is meaningful, make sure to reset it as a column. This only applies for <em>pandas</em> dataframes, as <em>vaex</em> ones have no row index.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pandas_df</span> <span class="o">=</span> <span class="n">pandas_df</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>Column multi-index can be recorded. Here again <em>vaex</em> has no support for column multi-index. But if your <em>vaex</em> dataframe comes from a <em>pandas</em> one initially with column multi-index, you can expand it again at recording.</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># With &#39;vaex_df&#39; created from a pandas dataframe with column multi-index.</span>
+<span class="n">ps</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;cmidx_expand&#39;</span><span class="o">=</span><span class="kc">True</span><span class="p">},</span> <span class="n">vaex_df</span>
+</pre></div>
+</div>
+</section>
+<section id="writing">
+<h3>Writing<a class="headerlink" href="#writing" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p>When recording data to disk, <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance accepts a <code class="docutils literal notranslate"><span class="pre">tuple</span></code> which first item is then a dict defining recording setting. Parameters accepted are those of <code class="docutils literal notranslate"><span class="pre">oups.writer.write</span></code> function and complementary to <code class="docutils literal notranslate"><span class="pre">dirpath</span></code> and <code class="docutils literal notranslate"><span class="pre">data</span></code> (see <a class="reference internal" href="api.html"><span class="doc">API reference</span></a> for a review).</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">ps</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;row_group_size&#39;</span><span class="o">=</span><span class="mi">5_000_000</span><span class="p">,</span> <span class="n">compression</span><span class="o">=</span><span class="s1">&#39;BROTLI&#39;</span><span class="p">},</span> <span class="n">df</span>
+</pre></div>
+</div>
+<ul class="simple">
+<li><p>New datasets can be added to the same collection, as long as the index used is an instance from the same <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code>-decorated class as the one used at <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instantiation.</p></li>
+</ul>
+</section>
+<section id="reading">
+<h3>Reading<a class="headerlink" href="#reading" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p>A <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance returns a <code class="docutils literal notranslate"><span class="pre">ParquetHandle</span></code> which gives access to data either through ‘handles’ (<em>vaex</em> dataframe or <em>fastparquet</em> parquet file) or directly as a <em>pandas</em> dataframe.</p>
+<ul>
+<li><p><em>fastparquet</em> parquet file <code class="docutils literal notranslate"><span class="pre">ps[idx].pf</span></code>,</p></li>
+<li><p>or <em>pandas</em> dataframe <code class="docutils literal notranslate"><span class="pre">ps[idx].pdf</span></code>,</p></li>
+<li><p>or <em>vaex</em> dataframe <code class="docutils literal notranslate"><span class="pre">ps[idx].vdf</span></code>.</p></li>
+</ul>
+</li>
+</ul>
+</section>
+<section id="updating">
+<h3>Updating<a class="headerlink" href="#updating" title="Permalink to this headline"></a></h3>
+<ul class="simple">
+<li><p>Currently only appending of new data to an existing one is possible, with no additional processing (in particular, no dropping of duplicates, nor re-ordering of data when ‘old’ data is being added).</p></li>
+</ul>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Initiating a new dataset</span>
+<span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="n">df1</span>
+<span class="c1"># Appending the same data.</span>
+<span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="n">df1</span>
+<span class="c1"># Reading.</span>
+<span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span><span class="o">.</span><span class="n">pdf</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">2</span><span class="p">]:</span>
+   <span class="n">timestamp</span>  <span class="n">temperature</span>
+<span class="mi">0</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">01</span>           <span class="mi">10</span>
+<span class="mi">1</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">02</span>           <span class="mi">11</span>
+<span class="mi">2</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">03</span>           <span class="mi">12</span>
+<span class="mi">3</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">04</span>           <span class="mi">13</span>
+<span class="mi">4</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">05</span>           <span class="mi">14</span>
+<span class="mi">5</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">01</span>           <span class="mi">10</span>    <span class="c1"># new appended data</span>
+<span class="mi">6</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">02</span>           <span class="mi">11</span>
+<span class="mi">7</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">03</span>           <span class="mi">12</span>
+<span class="mi">8</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">04</span>           <span class="mi">13</span>
+<span class="mi">9</span> <span class="mi">2021</span><span class="o">-</span><span class="mi">01</span><span class="o">-</span><span class="mi">05</span>           <span class="mi">14</span>
+</pre></div>
+</div>
+</section>
+<section id="other-goodies">
+<h3>Other “goodies”<a class="headerlink" href="#other-goodies" title="Permalink to this headline"></a></h3>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Review store content.</span>
+<span class="n">ps</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">3</span><span class="p">]:</span>
+<span class="n">germany</span><span class="o">-</span><span class="n">berlin</span>
+<span class="n">japan</span><span class="o">-</span><span class="n">tokyo</span>
+
+<span class="c1"># Get number of datasets.</span>
+<span class="nb">len</span><span class="p">(</span><span class="n">ps</span><span class="p">)</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">4</span><span class="p">]:</span> <span class="mi">2</span>
+
+<span class="c1"># Delete a dataset (delete data from disk).</span>
+<span class="k">del</span> <span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span>
+<span class="n">ps</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">5</span><span class="p">]:</span> <span class="n">japan</span><span class="o">-</span><span class="n">tokyo</span>
+
+<span class="c1"># &#39;Discover&#39; an existing dataset collection.</span>
+<span class="c1"># (initial schema definition is needed)</span>
+<span class="n">ps2</span> <span class="o">=</span> <span class="n">ParquetSet</span><span class="p">(</span><span class="n">store_path</span><span class="p">,</span> <span class="n">DatasetIndex</span><span class="p">)</span>
+<span class="n">ps2</span>
+<span class="n">Out</span><span class="p">[</span><span class="mi">6</span><span class="p">]:</span> <span class="n">japan</span><span class="o">-</span><span class="n">tokyo</span>
+</pre></div>
+</div>
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="indexing.html" class="btn btn-neutral float-left" title="Collection indexing" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api.html" class="btn btn-neutral float-right" title="API reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Yohplala.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

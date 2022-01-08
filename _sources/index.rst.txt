@@ -18,6 +18,7 @@ Index
     quickstart
     purpose
     indexing
+    parquetset
     api
 
 * :ref:`genindex`

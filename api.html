@@ -18,7 +18,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="prev" title="Collection indexing" href="indexing.html" /> 
+    <link rel="prev" title="ParquetSet" href="parquetset.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -44,6 +44,7 @@
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l1"><a class="reference internal" href="purpose.html">Why <em>oups</em>?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="indexing.html">Collection indexing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="parquetset.html"><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code></a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">API reference</a></li>
 </ul>
 
@@ -219,13 +220,43 @@ parameters set to:</p>
 <code class="docutils literal notranslate"><span class="pre">SortedList</span></code> as its <code class="docutils literal notranslate"><span class="pre">__contains__</span></code> appears faster.</p>
 </dd></dl>
 
+<dl class="py function">
+<dt class="sig sig-object py" id="oups.writer.write">
+<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dirpath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">pandas.DataFrame</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">vaex.dataframe.DataFrame</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row_group_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compression</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'SNAPPY'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmidx_expand</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmidx_levels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.writer.write" title="Permalink to this definition"></a></dt>
+<dd><p>Write data to disk at location specified by path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dirpath</strong> (<em>str</em>) – Directory where writing pandas dataframe.</p></li>
+<li><p><strong>data</strong> (<em>Union</em><em>[</em><em>pDataFrame</em><em>, </em><em>vDataFrame</em><em>]</em>) – Data to write.</p></li>
+<li><p><strong>row_group_size</strong> (<em>int</em><em>, </em><em>optional</em>) – Max row group size. If not set, default to 50_000_000.</p></li>
+<li><p><strong>compression</strong> (<em>str</em><em>, </em><em>default SNAPPY</em>) – Algorithm to use for compressing data. This parameter is fastparquet
+specific. Please see fastparquet documentation for more information.</p></li>
+<li><p><strong>cmidx_expand</strong> (<em>bool</em><em>, </em><em>default False</em>) – If <cite>True</cite>, expand column index into a column multi-index.
+This parameter is only used at creation of the dataset. Once column
+names are set, they cannot be modified by use of this parameter.</p></li>
+<li><p><strong>cmidx_levels</strong> (<em>List</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – Names of levels to be used when expanding column names into a
+multi-index. If not provided, levels are given names ‘l1’, ‘l2’, …</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<dl class="simple">
+<dt>When writing a dataframe with this function,</dt><dd><ul class="simple">
+<li><p>index of dataframe is not written to disk.</p></li>
+<li><p>parquet file scheme is ‘hive’ (one row group per parquet file).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 
 
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="indexing.html" class="btn btn-neutral float-left" title="Collection indexing" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="parquetset.html" class="btn btn-neutral float-left" title="ParquetSet" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
     </div>
 
   <hr/>
