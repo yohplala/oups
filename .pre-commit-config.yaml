@@ -83,6 +83,7 @@ repos:
             --per-file-ignores=
                 tests/*.py:D103
                 oups/__init__.py:F401
+                oups/writer.py:C901
         ]
 
   - repo: https://github.com/pycqa/pydocstyle
@@ -95,6 +96,7 @@ repos:
 
 # flake8 ignore justifications
 # ----------------------------
+# C901: Function is too complex
 # D103: Missing docstring in public function
 # RST210: Inline strong start-string without end-string (when describing **kwargs parameter)
 # S101: Use of assert detected (use of assert normal for pytest)
