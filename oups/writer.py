@@ -53,7 +53,7 @@ def iter_dataframe(
         Only duplicates within the same row group to be written are identified.
         This option requires a vaex dataframe.
         If not set, default to ``None``.
-        If an empty list ``[]``, all columns are used to identify duplicates
+        If an empty list ``[]``, all columns are used to identify duplicates.
 
     Yields
     ------
@@ -71,8 +71,8 @@ def iter_dataframe(
     if max_row_group_size is None:
         max_row_group_size = MAX_ROW_GROUP_SIZE
     if isinstance(data, vDataFrame):
-        # Drop any possible the lazy indexing, to make the length of data
-        # equals its filtered length
+        # Drop any possible lazy indexing, to make the length of data equals
+        # its filtered length.
         data = data.extract()
     elif ordered_on or duplicates_on:
         raise TypeError("vaex dataframe required when using `ordered_on` and/or `duplicates_on`.")
