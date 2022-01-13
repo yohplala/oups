@@ -80,7 +80,7 @@ Created folders and files are then organized as illustrated below.
 
 Decorated class can have any number of attributes (also named *fields*), but only of types ``int`` or ``str``.
 
-If an attribute is a ``@sublevel``-decorated class, it is necessarily positioned in last.
+If an attribute is a ``@sublevel``-decorated class, it is necessarily positioned last.
 
 
 ``@toplevel`` decorator provides attributes and functions which are used by a ``ParquetSet`` instance to
