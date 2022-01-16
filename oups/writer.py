@@ -11,13 +11,12 @@ from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from fastparquet.api import filter_row_groups
 from numpy import searchsorted as np_searchsorted
+from numpy import unique as np_unique
 from pandas import DataFrame as pDataFrame
 from pandas import Index
 from pandas import MultiIndex
-from vaex import agg as vx_agg
 from vaex import from_pandas
 from vaex import open_many
-from vaex import vrange
 from vaex.dataframe import DataFrame as vDataFrame
 
 
@@ -28,7 +27,7 @@ MAX_ROW_GROUP_SIZE = 6_345_000
 def iter_dataframe(
     data: Union[pDataFrame, vDataFrame],
     max_row_group_size: int = None,
-    ordered_on: str = None,
+    sharp_on: str = None,
     duplicates_on: Union[str, List[str]] = None,
 ):
     """Yield dataframe chunks.
@@ -42,9 +41,9 @@ def iter_dataframe(
         group to be written, hereby reducing the row group size (if
         ``duplicates_on`` parameter is set).
         If not set, default to ``6_345_000``.
-    ordered_on : str, optional
-        If set, ensures that end value of a row group in column ``ordered_on``
-        is not the same than in next row group.
+    sharp_on : str, optional
+        Name of column where to check that ends of bins (which split the data
+        to be written) do not fall in the middle of duplicate values.
         This parameter is recommended when ``duplicates_on`` is used.
         This option requires a vaex dataframe.
         If not set, default to ``None``.
@@ -74,45 +73,43 @@ def iter_dataframe(
         # Drop any possible lazy indexing, to make the length of data equals
         # its filtered length.
         data = data.extract()
-    elif ordered_on or duplicates_on:
-        raise TypeError("vaex dataframe required when using `ordered_on` and/or `duplicates_on`.")
+    elif sharp_on or duplicates_on:
+        raise TypeError("vaex dataframe required when using `sharp_on` and/or `duplicates_on`.")
+    print("vaex dataframe to iterate")
+    print(f"{data}")
     # Define bins to split into row groups.
     # Acknowledging this piece of code to be an extract from fastparquet.
     n_rows = len(data)
     n_parts = (n_rows - 1) // max_row_group_size + 1
     row_group_size = min((n_rows - 1) // n_parts + 1, n_rows)
     starts = list(range(0, n_rows, row_group_size))
-    if ordered_on:
+    if sharp_on:
         # Adjust bins so that they do not end in the middle of duplicate values
-        # in `ordered_on` column.
+        # in `sharp_on` column.
         # TODO: shorten this piece of code the day vaex accepts lists of
         # integers. Line of code currently taken from
         # vaex-core.vaex.dataframe.__getitem__ (L5230)
         val_at_start = [
-            data.evaluate(ordered_on, idx, idx + 1, array_type="python")[0] for idx in starts
+            data.evaluate(sharp_on, idx, idx + 1, array_type="python")[0] for idx in starts
         ]
         # TODO: vaex searchsorted kind of broken. Re-try when solved?
         # https://github.com/vaexio/vaex/issues/1674
         # Doing with numpy.
-        starts = np_searchsorted(data[ordered_on].to_numpy(), val_at_start).tolist()
+        starts = np_unique(np_searchsorted(data[sharp_on].to_numpy(), val_at_start)).tolist()
     ends = starts[1:] + [None]
+    print(f"iter_dataframe - starts: {starts}")
+    print(f"iter_dataframe - ends: {ends}")
     if isinstance(data, vDataFrame):
         if duplicates_on is not None:
             if duplicates_on == []:
-                duplicates_on = data.get_column_names()
-            # TODO: 'drop_duplicates' with vaex, keeping 'last'.
-            # simplify when possible. Used workarounds:
-            # - inverse row index and keep actually first value (which was
-            # last value before), as per
-            # https://github.com/vaexio/vaex/issues/1378
-            data["__row_index"] = vrange(0, len(data))
-            agg_last = vx_agg.first(ordered_on, "-__row_index")
+                columns = data.get_column_names()
+                duplicates_on = columns
             for start, end in zip(starts, ends):
-                # 'drop_duplicates' as per:
+                # TODO: possible 'drop_duplicates' directly in vaex as per:
                 # https://github.com/vaexio/vaex/pull/1623
-                yield data[start:end].groupby(duplicates_on, agg={"__last": agg_last}).drop(
-                    ["__last", "__row_index"]
-                ).to_pandas_df()
+                # check if answer from
+                # https://github.com/vaexio/vaex/issues/1378
+                yield data[start:end].to_pandas_df().drop_duplicates(duplicates_on, keep="last")
         else:
             for start, end in zip(starts, ends):
                 yield data[start:end].to_pandas_df()
@@ -186,7 +183,7 @@ def write(
     cmidx_expand: bool = False,
     cmidx_levels: List[str] = None,
     ordered_on: Union[str, Tuple[str]] = None,
-    duplicates_on: Union[str, List[str]] = None,
+    duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     irgs_max: int = None,
 ):
     """Write data to disk at location specified by path.
@@ -211,8 +208,9 @@ def write(
     cmidx_levels : List[str], optional
         Names of levels to be used when expanding column names into a
         multi-index. If not provided, levels are given names 'l1', 'l2', ...
-    ordered_on : str, optional
+    ordered_on : Union[str, Tuple[str]] optional
         Name of the column with respect to which dataset is in ascending order.
+        If column multi-index, name of the column is a tuple.
         This parameter is optional, and required so that data overlaps between
         new data and existing recorded row groups can be identified.
         This parameter is compulsory when ``duplicates_on`` is used.
@@ -227,7 +225,7 @@ def write(
             be written). This implies that all possible duplicates in
             ``ordered_on`` column will lie in the same row group.
 
-    duplicates_on : Union[str, List[str]], optional
+    duplicates_on : Union[str, List[str], List[Tuple[str]]], optional
         Column names according which 'row duplicates' can be identified (i.e.
         rows sharing same values on these specific columns) so as to drop
         them. Duplicates are only identified in new data, and existing
@@ -265,15 +263,20 @@ def write(
       ``max_row_group_size``). This latter assessment is however only triggered
       if ``irgs_max`` is set. Otherwise, new data is simply appended, without
       prior check.
-    - When ``duplicates_on`` is set, duplicate search is made new row group per
-      new row group and with existing recorded row groups which overlap. For
-      this reason ``ordered_on`` parameter is compulsory when using
-      ``duplicates_on``, so as to be able to position new data with respect to
-      existing row groups and also to cluster this data (new and overlapping
-      recorded) into row group which have distinct values in ``ordered_on``
-      column. If 2 rows are duplicates according values in indicated
-      columns but are not in the same row group, first duplicates will not be
-      dropped.
+    - When ``duplicates_on`` is set, duplicate search is made row group to be
+      written per row group to be written. A `row group to be written` is made
+      from the merge between new data, and existing recorded row groups which
+      overlap. For this reason ``ordered_on`` parameter is compulsory when
+      using ``duplicates_on``, so as to be able to position new data with
+      respect to existing row groups and also to cluster this data (new and
+      overlapping recorded) into row group which have distinct values in
+      ``ordered_on`` column. If 2 rows are duplicates according values in
+      indicated columns but are not in the same row group, first duplicates
+      will not be dropped.
+    - As per logic of previous comment, duplicates need to be gathered by
+      row group to be identified, they need consequently to share the same
+      `index`, defined by the value in ``ordered_on``. Extending this logic,
+      ``ordered_on`` is added to ``duplicates_on`` if not already part of it.
     - For simple data appending, i.e. without need to check where to insert
       data and without need to drop duplicates, it is advised to keep
       ``ordered_on`` and ``duplicates_on`` parameters set to ``None`` as these
@@ -309,43 +312,67 @@ def write(
     # Identify overlaps in row groups between new data and recorded data.
     # Recorded row group start and end indexes.
     rrg_start_idx, rrg_end_idx = None, None
-    num_rrgs = len(pf.row_groups)
+    n_rrgs = len(pf.row_groups)
+    # R
+    print("pf before modification")
+    print(f"{pf.to_pandas()}")
     if duplicates_on is not None:
         if not ordered_on:
             raise ValueError(
                 "not possible to set ``duplicates_on`` without setting ``ordered_on``."
             )
+        # Enforce 'ordered_on' in 'duplicates_on', as per logic of
+        # duplicate identification restricted to the row groups to be
+        # written.
+        if isinstance(duplicates_on, list):
+            if duplicates_on and ordered_on not in duplicates_on:
+                # Case 'not an empty list', and 'ordered_on' not in.
+                duplicates_on.append(ordered_on)
+        elif duplicates_on != ordered_on:
+            # Case 'duplicates_on' is a single column name, but not
+            # 'ordered_on'.
+            duplicates_on = [duplicates_on, ordered_on]
     if ordered_on is not None:
         # Get 'rrg_start_idx' & 'rrg_end_idx'.
         if isinstance(data, pDataFrame):
             # Case 'pandas'.
-            start = data.loc[ordered_on].iloc[0]
-            end = data.loc[ordered_on].iloc[-1]
+            start = data[ordered_on].iloc[0]
+            end = data[ordered_on].iloc[-1]
         else:
             # Case 'vaex'.
             start = data[ordered_on][:0].to_numpy()[0]
             end = data[ordered_on][-1:].to_numpy()[0]
         rrgs_idx = filter_row_groups(
-            pf, [(ordered_on, ">=", start), (ordered_on, "<=", end)], as_idx=True
+            pf, [[(ordered_on, ">=", start), (ordered_on, "<=", end)]], as_idx=True
         )
         if rrgs_idx:
-            rrg_start_idx, rrg_end_idx = rrgs_idx[0], rrgs_idx[-1]
+            if len(rrgs_idx) == 1:
+                rrg_start_idx = rrgs_idx[0]
+            else:
+                rrg_start_idx, rrg_end_idx = rrgs_idx[0], rrgs_idx[-1]
         # R
+        print(f"start: {start} - end: {end}")
         print(f"rrg_start_idx: {rrg_start_idx} - rrg_end_idx: {rrg_end_idx}")
+    print(f"oups - len pf.fmd.row_groups before irgs_max: {len(pf.fmd.row_groups)}")
     if irgs_max is not None:
         # Number of incomplete row groups at end of recorded data.
-        total_rows_in_irgs = 0
-        rrg_start_idx_tmp = num_rrgs - 1
+        # Initialize number of rows with number to be written.
+        total_rows_in_irgs = len(data)
+        rrg_start_idx_tmp = n_rrgs - 1
         min_row_group_size = int(max_row_group_size * 0.9)
         while pf[rrg_start_idx_tmp].count() < min_row_group_size and rrg_start_idx_tmp >= 0:
             total_rows_in_irgs += pf[rrg_start_idx_tmp].count()
             rrg_start_idx_tmp -= 1
+        print(f"oups - len pf.fmd.row_groups after irgs_max: {len(pf.fmd.row_groups)}")
         rrg_start_idx_tmp += 1
-        # Confirm or not coalescing of incomplete row groups.
-        num_irgs = num_rrgs - rrg_start_idx_tmp
+        # Confirm or not coalescing of incomplete row groups.)
+        n_irgs = n_rrgs - rrg_start_idx_tmp
         # R
-        print(f"num_irgs: {num_irgs}")
-        if total_rows_in_irgs >= max_row_group_size or num_irgs > irgs_max:
+        print(f"n_irgs: {n_irgs}")
+        if total_rows_in_irgs >= max_row_group_size or n_irgs >= irgs_max:
+            # R
+            print("coalescing conditions ok")
+            print(f"total_rows_in_irgs: {total_rows_in_irgs}")
             if rrg_end_idx and rrg_start_idx_tmp <= rrg_end_idx:
                 # 1st case checked: case 'ordered_on' is used with potential
                 # insertion of new data in existing one, in row groups not at
@@ -357,6 +384,13 @@ def write(
                 # necessarily appended in this case.
                 rrg_start_idx = rrg_start_idx_tmp
     if rrg_start_idx is None:
+        # R
+        print("case appending - no row group removal")
+        print(f"len(pf) before writing: {len(pf.row_groups)}")
+        print("pf before writing:")
+        print(f"{pf.to_pandas()}")
+        print(f"oups - len pf.row_groups: {len(pf.row_groups)}")
+        print(f"oups - len pf.fmd.row_groups: {len(pf.fmd.row_groups)}")
         # Case 'appending'.
         # 'coalesce' has possibly been requested but not needed, hence no row
         # groups removal in existing ones.
@@ -368,19 +402,38 @@ def write(
             compression=compression,
             write_fmd=True,
         )
+        print("pf after writing:")
+        print(f"{pf.to_pandas()}")
     else:
+        # R
+        print("case updating - with row group removal")
+        print(f"rrg_start_idx: {rrg_start_idx}")
+        print(f"rrg_end_idx: {rrg_end_idx}")
         # Case 'updating' (with existing row groups removal).
         # Read row groups that have impacted data as a vaex dataframe.
+        if rrg_end_idx:
+            # Need to shift the index by 1 for slicing notation.
+            rrg_end_idx += 1
         overlapping_rgs = pf[rrg_start_idx:rrg_end_idx].row_groups
         files = [pf.row_group_filename(rg) for rg in overlapping_rgs]
+        print(f"row group files overlapping: {files}")
         recorded = open_many(files)
+        print("vaex dataframe from recorded")
+        print(f"{recorded}")
         if isinstance(data, pDataFrame):
             # Convert to vaex.
             data = from_pandas(data)
         data = recorded.concat(data)
         if ordered_on:
             data = data.sort(by=ordered_on)
-        iter_data = iter_dataframe(data, max_row_group_size, ordered_on, duplicates_on)
+        print("vaex dataframe concat")
+        print(f"{data}")
+        iter_data = iter_dataframe(
+            data,
+            max_row_group_size=max_row_group_size,
+            sharp_on=ordered_on,
+            duplicates_on=duplicates_on,
+        )
         # Write.
         pf.write_row_groups(
             data=iter_data,
@@ -389,7 +442,18 @@ def write(
             compression=compression,
             write_fmd=False,
         )
+        print(f"len pf after appending: {len(pf.row_groups)}")
+        print(f"len rg after appending: {[rg.num_rows for rg in pf.row_groups]}")
+        print("dataframe before removal")
+        print(f"{pf.to_pandas()}")
         # Remove row groups of data that is overlapping.
         pf.remove_row_groups(overlapping_rgs, write_fmd=False)
+        print("dataframe after removal")
+        print(f"{pf.to_pandas()}")
         # Rename partition files, and write fmd.
         pf._sort_part_names(write_fmd=True)
+
+
+# /!\
+# split update vs insert
+# split iter_dataframe_vaex vs iter_dataframe_pandas
