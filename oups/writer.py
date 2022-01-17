@@ -10,6 +10,7 @@ from typing import List, Tuple, Union
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from fastparquet.api import filter_row_groups
+from fastparquet.api import statistics
 from numpy import searchsorted as np_searchsorted
 from numpy import unique as np_unique
 from pandas import DataFrame as pDataFrame
@@ -75,8 +76,6 @@ def iter_dataframe(
         data = data.extract()
     elif sharp_on or duplicates_on:
         raise TypeError("vaex dataframe required when using `sharp_on` and/or `duplicates_on`.")
-    print("vaex dataframe to iterate")
-    print(f"{data}")
     # Define bins to split into row groups.
     # Acknowledging this piece of code to be an extract from fastparquet.
     n_rows = len(data)
@@ -97,8 +96,6 @@ def iter_dataframe(
         # Doing with numpy.
         starts = np_unique(np_searchsorted(data[sharp_on].to_numpy(), val_at_start)).tolist()
     ends = starts[1:] + [None]
-    print(f"iter_dataframe - starts: {starts}")
-    print(f"iter_dataframe - ends: {ends}")
     if isinstance(data, vDataFrame):
         if duplicates_on is not None:
             if duplicates_on == []:
@@ -313,9 +310,6 @@ def write(
     # Recorded row group start and end indexes.
     rrg_start_idx, rrg_end_idx = None, None
     n_rrgs = len(pf.row_groups)
-    # R
-    print("pf before modification")
-    print(f"{pf.to_pandas()}")
     if duplicates_on is not None:
         if not ordered_on:
             raise ValueError(
@@ -333,6 +327,8 @@ def write(
             # 'ordered_on'.
             duplicates_on = [duplicates_on, ordered_on]
     if ordered_on is not None:
+        if isinstance(ordered_on, tuple):
+            raise TypeError(f"tuple for {ordered_on} not yet supported.")
         # Get 'rrg_start_idx' & 'rrg_end_idx'.
         if isinstance(data, pDataFrame):
             # Case 'pandas'.
@@ -349,31 +345,27 @@ def write(
             if len(rrgs_idx) == 1:
                 rrg_start_idx = rrgs_idx[0]
             else:
-                rrg_start_idx, rrg_end_idx = rrgs_idx[0], rrgs_idx[-1]
-        # R
-        print(f"start: {start} - end: {end}")
-        print(f"rrg_start_idx: {rrg_start_idx} - rrg_end_idx: {rrg_end_idx}")
-    print(f"oups - len pf.fmd.row_groups before irgs_max: {len(pf.fmd.row_groups)}")
+                rrg_start_idx = rrgs_idx[0]
+                # For slicing, 'rrg_end_idx' is increased by 1.
+                rrg_end_idx = rrgs_idx[-1] + 1
+                if rrg_end_idx == n_rrgs:
+                    rrg_end_idx = None
     if irgs_max is not None:
         # Number of incomplete row groups at end of recorded data.
         # Initialize number of rows with number to be written.
         total_rows_in_irgs = len(data)
         rrg_start_idx_tmp = n_rrgs - 1
         min_row_group_size = int(max_row_group_size * 0.9)
-        while pf[rrg_start_idx_tmp].count() < min_row_group_size and rrg_start_idx_tmp >= 0:
+        while pf[rrg_start_idx_tmp].count() <= min_row_group_size and rrg_start_idx_tmp >= 0:
             total_rows_in_irgs += pf[rrg_start_idx_tmp].count()
             rrg_start_idx_tmp -= 1
-        print(f"oups - len pf.fmd.row_groups after irgs_max: {len(pf.fmd.row_groups)}")
         rrg_start_idx_tmp += 1
-        # Confirm or not coalescing of incomplete row groups.)
+        # Confirm or not coalescing of incomplete row groups.
         n_irgs = n_rrgs - rrg_start_idx_tmp
-        # R
-        print(f"n_irgs: {n_irgs}")
         if total_rows_in_irgs >= max_row_group_size or n_irgs >= irgs_max:
-            # R
-            print("coalescing conditions ok")
-            print(f"total_rows_in_irgs: {total_rows_in_irgs}")
-            if rrg_end_idx and rrg_start_idx_tmp <= rrg_end_idx:
+            if rrg_start_idx and (
+                not rrg_end_idx or (rrg_end_idx and rrg_start_idx_tmp < rrg_end_idx)
+            ):
                 # 1st case checked: case 'ordered_on' is used with potential
                 # insertion of new data in existing one, in row groups not at
                 # the tail, in which case coalescing of end data would not be
@@ -384,13 +376,6 @@ def write(
                 # necessarily appended in this case.
                 rrg_start_idx = rrg_start_idx_tmp
     if rrg_start_idx is None:
-        # R
-        print("case appending - no row group removal")
-        print(f"len(pf) before writing: {len(pf.row_groups)}")
-        print("pf before writing:")
-        print(f"{pf.to_pandas()}")
-        print(f"oups - len pf.row_groups: {len(pf.row_groups)}")
-        print(f"oups - len pf.fmd.row_groups: {len(pf.fmd.row_groups)}")
         # Case 'appending'.
         # 'coalesce' has possibly been requested but not needed, hence no row
         # groups removal in existing ones.
@@ -402,32 +387,18 @@ def write(
             compression=compression,
             write_fmd=True,
         )
-        print("pf after writing:")
-        print(f"{pf.to_pandas()}")
     else:
-        # R
-        print("case updating - with row group removal")
-        print(f"rrg_start_idx: {rrg_start_idx}")
-        print(f"rrg_end_idx: {rrg_end_idx}")
         # Case 'updating' (with existing row groups removal).
         # Read row groups that have impacted data as a vaex dataframe.
-        if rrg_end_idx:
-            # Need to shift the index by 1 for slicing notation.
-            rrg_end_idx += 1
         overlapping_rgs = pf[rrg_start_idx:rrg_end_idx].row_groups
         files = [pf.row_group_filename(rg) for rg in overlapping_rgs]
-        print(f"row group files overlapping: {files}")
         recorded = open_many(files)
-        print("vaex dataframe from recorded")
-        print(f"{recorded}")
         if isinstance(data, pDataFrame):
             # Convert to vaex.
             data = from_pandas(data)
         data = recorded.concat(data)
         if ordered_on:
             data = data.sort(by=ordered_on)
-        print("vaex dataframe concat")
-        print(f"{data}")
         iter_data = iter_dataframe(
             data,
             max_row_group_size=max_row_group_size,
@@ -442,18 +413,14 @@ def write(
             compression=compression,
             write_fmd=False,
         )
-        print(f"len pf after appending: {len(pf.row_groups)}")
-        print(f"len rg after appending: {[rg.num_rows for rg in pf.row_groups]}")
-        print("dataframe before removal")
-        print(f"{pf.to_pandas()}")
         # Remove row groups of data that is overlapping.
         pf.remove_row_groups(overlapping_rgs, write_fmd=False)
-        print("dataframe after removal")
-        print(f"{pf.to_pandas()}")
+        if rrg_end_idx is not None:
+            # New data has been inserted in the middle of existing row groups.
+            # Sorting row groups based on 'max' in 'ordered_on'.
+            ordered_on_idx = pf.columns.index(ordered_on)
+            pf.fmd.row_groups = sorted(
+                pf.fmd.row_groups, key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"]
+            )
         # Rename partition files, and write fmd.
         pf._sort_part_names(write_fmd=True)
-
-
-# /!\
-# split update vs insert
-# split iter_dataframe_vaex vs iter_dataframe_pandas
