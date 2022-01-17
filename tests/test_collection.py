@@ -114,7 +114,7 @@ def test_set_parquet_with_config(tmp_path):
         }
     )
     rg_size = 2
-    config = {"row_group_size": rg_size}
+    config = {"max_row_group_size": rg_size}
     ps[we] = config, df
     assert we in ps
     # Load only first row group.
@@ -175,7 +175,7 @@ def test_set_and_get_roundtrip_pandas(tmp_path):
             "temperature": [8.4, 5.3, 2.9, 6.4],
         }
     )
-    config = {"row_group_size": 2}
+    config = {"max_row_group_size": 2}
     ps[we] = config, df
     df_res = ps[we].pdf
     assert df_res.equals(df)
@@ -191,7 +191,7 @@ def test_set_pandas_and_get_vaex(tmp_path):
             "temperature": [8.4, 5.3, 2.9, 6.4],
         }
     )
-    config = {"row_group_size": 2}
+    config = {"max_row_group_size": 2}
     ps[we] = config, df
     vdf = ps[we].vdf
     assert vdf.to_pandas_df().equals(df)
@@ -207,7 +207,7 @@ def test_set_pandas_and_get_parquet_file(tmp_path):
             "temperature": [8.4, 5.3, 2.9, 6.4],
         }
     )
-    config = {"row_group_size": 2}
+    config = {"max_row_group_size": 2}
     ps[we] = config, df
     pf = ps[we].pf
     assert len(pf.row_groups) == 2
@@ -280,7 +280,7 @@ def test_11_rgs_pandas_to_vaex(tmp_path):
             "temperature": temp,
         }
     )
-    config = {"row_group_size": 1}
+    config = {"max_row_group_size": 1}
     ps[we] = config, df
     vdf = ps[we].vdf
     assert vdf.to_pandas_df().equals(df)

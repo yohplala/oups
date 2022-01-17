@@ -4,17 +4,12 @@ Created on Wed Dec 26 22:30:00 2021.
 
 @author: yoh
 """
-import re
 from os import scandir
 
 from fastparquet import ParquetFile
-from sortedcontainers import SortedDict
 from vaex import open_many
 
-
-# Find in names of partition parquet files the integer matching
-# "**part.*.parquet", and make it available with key 'i'.
-PART_ID = re.compile(r".*part.(?P<i>[\d]+).parquet$")
+from oups.defines import DIR_SEP
 
 
 class ParquetHandle:
@@ -62,11 +57,7 @@ class ParquetHandle:
         """Return handle to data through a vaex dataframe."""
         # To circumvent vaex lexicographic filename sorting to order row
         # groups, ordering the list of files is required.
-        files = SortedDict(
-            {
-                int(pid["i"]): file.path
-                for file in scandir(self._dirpath)
-                if (pid := PART_ID.match(file.name))
-            }
-        )
-        return open_many(files.values())
+        files = [file.name for file in scandir(self._dirpath) if file.name[-7:] == "parquet"]
+        files.sort(key=lambda x: int(x[5:-8]))
+        prefix_dirpath = f"{str(self._dirpath)}{DIR_SEP}".__add__
+        return open_many(map(prefix_dirpath, files))
