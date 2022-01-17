@@ -80,28 +80,13 @@
 <col style="width: 90%" />
 </colgroup>
 <tbody>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">toplevel</span></code>([index_class, fields_sep])</p></td>
-<td><p>Turn decorated class into an indexing schema.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">sublevel</span></code>(index_class)</p></td>
-<td><p>Define a subdirectory level.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParquetSet</span></code>(basepath, indexer)</p></td>
-<td><p>Sorted list of keys (indexes to parquet datasets).</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParquetSet.__setitem__</span></code>(key, data)</p></td>
-<td><p>Write <code class="docutils literal notranslate"><span class="pre">data</span></code> to disk, at location defined by <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p></td>
-</tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">ParquetSet.__getitem__</span></code>(key)</p></td>
-<td><p>Return the <code class="docutils literal notranslate"><span class="pre">ParquetHandle</span></code> instance corresponding to <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p></td>
-</tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">oups.router.ParquetHandle.pf</span></code></p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">oups.router.ParquetHandle.pf</span></code></p></td>
 <td><p>Return handle to data through a parquet file.</p></td>
 </tr>
-<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">oups.router.ParquetHandle.pdf</span></code></p></td>
+<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">oups.router.ParquetHandle.pdf</span></code></p></td>
 <td><p>Return data as a pandas dataframe.</p></td>
 </tr>
-<tr class="row-even"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">oups.router.ParquetHandle.vdf</span></code></p></td>
+<tr class="row-odd"><td><p><code class="xref py py-obj docutils literal notranslate"><span class="pre">oups.router.ParquetHandle.vdf</span></code></p></td>
 <td><p>Return handle to data through a vaex dataframe.</p></td>
 </tr>
 </tbody>
@@ -174,78 +159,6 @@ parameters set to:</p>
 <div><ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">order=True</span></code>,</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">frozen=True</span></code></p></li>
-</ul>
-</div></blockquote>
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="oups.collection.ParquetSet">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">ParquetSet</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">basepath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indexer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><span class="pre">dataclasses.dataclass</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.collection.ParquetSet" title="Permalink to this definition"></a></dt>
-<dd><p>Sorted list of keys (indexes to parquet datasets).</p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="oups.collection.ParquetSet.basepath">
-<span class="sig-name descname"><span class="pre">basepath</span></span><a class="headerlink" href="#oups.collection.ParquetSet.basepath" title="Permalink to this definition"></a></dt>
-<dd><p>Directory path to the set of parquet datasets.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>str</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="oups.collection.ParquetSet.indexer">
-<span class="sig-name descname"><span class="pre">indexer</span></span><a class="headerlink" href="#oups.collection.ParquetSet.indexer" title="Permalink to this definition"></a></dt>
-<dd><p>Indexer schema (class) to be used to index parquet datasets.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>Type[dataclass]</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="oups.collection.ParquetSet.keys">
-<span class="sig-name descname"><span class="pre">keys</span></span><a class="headerlink" href="#oups.collection.ParquetSet.keys" title="Permalink to this definition"></a></dt>
-<dd><p>Set of indexes of existing parquet datasets.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type</dt>
-<dd class="field-odd"><p>SortedSet</p>
-</dd>
-</dl>
-</dd></dl>
-
-<p class="rubric">Notes</p>
-<p><code class="docutils literal notranslate"><span class="pre">SortedSet</span></code> is the data structure retained for <code class="docutils literal notranslate"><span class="pre">keys</span></code> instead of
-<code class="docutils literal notranslate"><span class="pre">SortedList</span></code> as its <code class="docutils literal notranslate"><span class="pre">__contains__</span></code> appears faster.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="oups.writer.write">
-<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dirpath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Union</span><span class="p"><span class="pre">[</span></span><span class="pre">pandas.DataFrame</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">vaex.dataframe.DataFrame</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row_group_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">int</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">compression</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'SNAPPY'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmidx_expand</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cmidx_levels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Optional</span><span class="p"><span class="pre">[</span></span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.writer.write" title="Permalink to this definition"></a></dt>
-<dd><p>Write data to disk at location specified by path.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters</dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>dirpath</strong> (<em>str</em>) – Directory where writing pandas dataframe.</p></li>
-<li><p><strong>data</strong> (<em>Union</em><em>[</em><em>pDataFrame</em><em>, </em><em>vDataFrame</em><em>]</em>) – Data to write.</p></li>
-<li><p><strong>row_group_size</strong> (<em>int</em><em>, </em><em>optional</em>) – Max row group size. If not set, default to 5_000_000.</p></li>
-<li><p><strong>compression</strong> (<em>str</em><em>, </em><em>default SNAPPY</em>) – Algorithm to use for compressing data. This parameter is fastparquet
-specific. Please see fastparquet documentation for more information.</p></li>
-<li><p><strong>cmidx_expand</strong> (<em>bool</em><em>, </em><em>default False</em>) – If <cite>True</cite>, expand column index into a column multi-index.
-This parameter is only used at creation of the dataset. Once column
-names are set, they cannot be modified by use of this parameter.</p></li>
-<li><p><strong>cmidx_levels</strong> (<em>List</em><em>[</em><em>str</em><em>]</em><em>, </em><em>optional</em>) – Names of levels to be used when expanding column names into a
-multi-index. If not provided, levels are given names ‘l1’, ‘l2’, …</p></li>
-</ul>
-</dd>
-</dl>
-<p class="rubric">Notes</p>
-<p>When writing a dataframe with this function,</p>
-<blockquote>
-<div><ul class="simple">
-<li><p>index of dataframe is not written to disk.</p></li>
-<li><p>parquet file scheme is ‘hive’ (one row group per parquet file).</p></li>
 </ul>
 </div></blockquote>
 </dd></dl>
