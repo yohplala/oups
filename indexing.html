@@ -149,16 +149,21 @@ A first level could for instance specify physical quantities in different places
 </section>
 <section id="toplevel">
 <h2><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code><a class="headerlink" href="#toplevel" title="Permalink to this headline"></a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> accepts an optional <code class="docutils literal notranslate"><span class="pre">fields_sep</span></code> parameter to define the character separating fields (by default <code class="docutils literal notranslate"><span class="pre">-</span></code>). This separator applies to all <em>levels</em>.</p>
-<p>Decorated class can have any number of attributes (also named <em>fields</em>), but only of types <code class="docutils literal notranslate"><span class="pre">int</span></code> or <code class="docutils literal notranslate"><span class="pre">str</span></code>.</p>
-<p>If an attribute is a <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code>-decorated class, it is necessarily positioned last.</p>
 <p><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> decorator provides attributes and functions which are used by a <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance to</p>
-<ul class="simple">
+<blockquote>
+<div><ul class="simple">
 <li><p>generate <em>paths</em> from attributes values (<code class="docutils literal notranslate"><span class="pre">__str__</span></code> and <code class="docutils literal notranslate"><span class="pre">to_path</span></code> methods),</p></li>
 <li><p>generate class instance (<code class="docutils literal notranslate"><span class="pre">from_path</span></code> classmethod)</p></li>
 </ul>
+</div></blockquote>
 <p>It modifies the <code class="docutils literal notranslate"><span class="pre">__init__</span></code> method of decorated class so that attributes values are checked at instantiation, and use of any forbidden character or combination raises related exception.</p>
-<p>Lastly, it calls <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> class decorator, with <code class="docutils literal notranslate"><span class="pre">order</span></code> and <code class="docutils literal notranslate"><span class="pre">frozen</span></code> parameters set as <code class="docutils literal notranslate"><span class="pre">True</span></code>. This setting enables equality between class instances with same attributes values.</p>
+<p>It also calls <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> class decorator, with <code class="docutils literal notranslate"><span class="pre">order</span></code> and <code class="docutils literal notranslate"><span class="pre">frozen</span></code> parameters set as <code class="docutils literal notranslate"><span class="pre">True</span></code>. This setting enables equality between class instances with same attributes values.</p>
+<p>Some other characteristics are:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> accepts an optional <code class="docutils literal notranslate"><span class="pre">fields_sep</span></code> parameter to define the character separating fields (by default <code class="docutils literal notranslate"><span class="pre">-</span></code>). This separator applies to all <em>levels</em>.</p></li>
+<li><p>Decorated class can have any number of attributes (also named <em>fields</em>), but only of types <code class="docutils literal notranslate"><span class="pre">int</span></code> or <code class="docutils literal notranslate"><span class="pre">str</span></code>.</p></li>
+<li><p>If an attribute is a <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code>-decorated class, it is necessarily positioned last.</p></li>
+</ul>
 </section>
 <section id="sublevel">
 <h2><code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code><a class="headerlink" href="#sublevel" title="Permalink to this headline"></a></h2>

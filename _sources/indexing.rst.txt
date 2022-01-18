@@ -76,21 +76,23 @@ Created folders and files are then organized as illustrated below.
 ``@toplevel``
 -------------
 
-``@toplevel`` accepts an optional ``fields_sep`` parameter to define the character separating fields (by default ``-``). This separator applies to all *levels*.
-
-Decorated class can have any number of attributes (also named *fields*), but only of types ``int`` or ``str``.
-
-If an attribute is a ``@sublevel``-decorated class, it is necessarily positioned last.
-
-
 ``@toplevel`` decorator provides attributes and functions which are used by a ``ParquetSet`` instance to
 
-* generate *paths* from attributes values (``__str__`` and ``to_path`` methods),
-* generate class instance (``from_path`` classmethod)
+  * generate *paths* from attributes values (``__str__`` and ``to_path`` methods),
+  * generate class instance (``from_path`` classmethod)
 
 It modifies the ``__init__`` method of decorated class so that attributes values are checked at instantiation, and use of any forbidden character or combination raises related exception.
 
-Lastly, it calls ``@dataclass`` class decorator, with ``order`` and ``frozen`` parameters set as ``True``. This setting enables equality between class instances with same attributes values.
+It also calls ``@dataclass`` class decorator, with ``order`` and ``frozen`` parameters set as ``True``. This setting enables equality between class instances with same attributes values.
+
+Some other characteristics are:
+
+* ``@toplevel`` accepts an optional ``fields_sep`` parameter to define the character separating fields (by default ``-``). This separator applies to all *levels*.
+
+* Decorated class can have any number of attributes (also named *fields*), but only of types ``int`` or ``str``.
+
+* If an attribute is a ``@sublevel``-decorated class, it is necessarily positioned last.
+
 
 ``@sublevel``
 -------------
