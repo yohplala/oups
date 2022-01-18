@@ -20,5 +20,5 @@ Other libraries out there already exist to manage collections of datasets,
 
 In comparison, current version of *oups*,
 
-* is not based on Dask but directly on `fastparquet <https://fastparquet.readthedocs.io/en/latest/>`_. No parallelized reading/writing is yet possible.
-* provides an *efficient* update function with a user-defined logic for (optionally) dropping duplicates.
+* is not based on Dask but directly on `fastparquet <https://fastparquet.readthedocs.io/en/latest/>`_. No parallelized reading/writing is possible.
+* provides an *efficient* update function with a user-defined logic for optionally dropping duplicates.
