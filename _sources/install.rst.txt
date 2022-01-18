@@ -20,4 +20,4 @@ Requirements will be taken care of by `poetry`.
 * `sortedcontainers <http://www.grantjenks.com/docs/sortedcontainers/>`_
 * `pandas <https://pandas.pydata.org/>`_
 * `vaex <https://vaex.io/docs/index.html>`_
-* `fastparquet <https://github.com/dask/fastparquet>`_)
+* `fastparquet <https://github.com/dask/fastparquet>`_
