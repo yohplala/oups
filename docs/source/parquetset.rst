@@ -77,15 +77,15 @@ If using an *index* already present in ``Parquet`` instance, existing data is up
 This keyword specifies the name of a column according which dataset is ordered (ascending order).
 
   * When specifying it, position of the new data with respect to existing data is checked. It allows data insertion.
-  * It also enforces *sharp* row group boundaries, meaning that a row group will necessarily starts with a new value in column specified by ``ordered_on`` at the expense of ensuring a constant row group size. If used continuously each time data is written, no row group start in the middle of duplicates values. This has two advantages. First, insertion a new row group among existing ones is unambiguous. Second is related to drop of duplicates, discussed below.
+  * It also enforces *sharp* row group boundaries, meaning that a row group will necessarily starts with a new value in column specified by ``ordered_on`` at the expense of ensuring a constant row group size. If used continuously each time data is written, no row group start in the middle of duplicates values. This has two advantages. First, insertion of a new row group among existing ones is unambiguous. Second is related to drop of duplicates, discussed below.
 
 * ``duplicates_on``, default ``None``
 
-This keyword specifies the name of columns to identify duplicates. If an empty list ``[]``, all columns are used.
+This keyword specifies the names of columns to identify duplicates. If it is an empty list ``[]``, all columns are used.
 
 Motivation for dropping duplicates is that new values (from new data) can replace old values (in existing data). Typical use case is that of updating *OHLC* financial datasets, for which the *High*, *Low* and *Close* values of the last candle (in-progress) can change until the candle is completed. When appending newer data, values of this last candle need then to be updated.
 
-The implementation of this logic in a way that it only needs to be carried out row group per row group and not on the full dataset, has most notably 2 implications. Make sure to understand them and check if it applies correctly to your own use case. If not, a solution if for you to prepare the data the way you intend before recording it anew.
+The implementation of this logic in a way that it only needs to be carried out row group per row group and not over the full dataset, has most notably 2 implications. Make sure to understand them and check if it applies correctly to your own use case. If not, a solution for you is to prepare the data the way you intend it to be before recording it anew.
 
   * Duplicates in existing data that is not rewritten are not dropped.
   * ``ordered_on`` column is also a value of the row that contributes to identifying duplicates. ``ordered_on`` column is thus added to the list of columns specified by ``duplicates_on``.
@@ -93,9 +93,9 @@ The implementation of this logic in a way that it only needs to be carried out r
 * ``irgs_max``, default ``None``
 
 This keyword specifies the maximum number allowed of `incomplete` row groups. An `incomplete` row group is one that does not quite reach ``max_row_group_size`` yet (some approximations of this target are managed within the code).
-By using this parameter, you allow a `buffer` of `incomplete` row group. Hence, new data is not systematically merged to existing one, but only appended as new row groups.
+By using this parameter, you allow a `buffer` of trailing `incomplete` row groups. Hence, new data is not systematically merged to existing one, but only appended as new row groups.
 The interest is that an `appending` operation is faster than `merging` with existing row groups, and for adding only few more rows, `merging` seems like a heavy, unjustified operation.
-Setting ``irgs_max`` triggers assessment of 2 conditions to initiate a `merge` (`coalescing` all incomplete row groups in the end of the dataset to try making `complete` ones) Either one or the other has to be met to validate the `merge`.
+Setting ``irgs_max`` triggers assessment of 2 conditions to initiate a `merge` (`coalescing` all incomplete trailing row groups to try making `complete` ones) Either one or the other has to be met to validate a `merge`.
 
   * ``irgs_max`` is reached;
   * The total number of rows within the `incomplete` row groups summed with the number of rows in the new data equals or exceeds `max_row_group_size`.
