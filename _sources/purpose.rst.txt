@@ -7,7 +7,7 @@ Purpose
 Targetting the management of 'large-size' collections of ordered datasets (more specifically time series), *oups* provide convenience class and functions to ease their identification, creation, update, and loading.
 These datasets may contain different data (from different channels or feeds) or be the results of different processings of the same raw data.
 
-* *oups* most notably hides path management, by providing ``@toplevel`` and ``@sublevel`` class decorators.
+* *oups* most notably hides path management. By decorating a likewise ``dataclasss`` with ``@toplevel`` decorator, this class is turned into an index generator, with all attributes and functions so that path to related datasets can be generated.
 * it also provides an *efficient* update logic suited for ordered datasets (low memory footprint).
 
 Alternatives

@@ -84,7 +84,7 @@
 <p>Targetting the management of ‘large-size’ collections of ordered datasets (more specifically time series), <em>oups</em> provide convenience class and functions to ease their identification, creation, update, and loading.
 These datasets may contain different data (from different channels or feeds) or be the results of different processings of the same raw data.</p>
 <ul class="simple">
-<li><p><em>oups</em> most notably hides path management, by providing <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> and <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code> class decorators.</p></li>
+<li><p><em>oups</em> most notably hides path management. By decorating a likewise <code class="docutils literal notranslate"><span class="pre">dataclasss</span></code> with <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> decorator, this class is turned into an index generator, with all attributes and functions so that path to related datasets can be generated.</p></li>
 <li><p>it also provides an <em>efficient</em> update logic suited for ordered datasets (low memory footprint).</p></li>
 </ul>
 </section>
