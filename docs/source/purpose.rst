@@ -4,9 +4,11 @@ Why *oups*?
 Purpose
 -------
 
-Being confronted with the management of 'large-size' collections of ordered datasets (more specifically time series), I identified the need to handle them 'easily' (identification, creation, update, loading).
+Targetting the management of 'large-size' collections of ordered datasets (more specifically time series), *oups* provide convenience class and functions to ease their identification, creation, update, and loading.
 These datasets may contain different data (from different channels or feeds) or be the results of different processings of the same raw data.
-To ease their management, i.e. organize how storing these datasets, a first step in `oups` has then been the implementation of ``@toplevel`` and ``@sublevel`` class decorators.
+
+* *oups* most notably hides path management, by providing ``@toplevel`` and ``@sublevel`` class decorators.
+* it also provides an *efficient* update logic suited for ordered datasets (low memory footprint).
 
 Alternatives
 ------------
@@ -19,4 +21,4 @@ Other libraries out there already exist to manage collections of datasets,
 In comparison, current version of *oups*,
 
 * is not based on Dask but directly on `fastparquet <https://fastparquet.readthedocs.io/en/latest/>`_. No parallelized reading/writing is yet possible.
-* only appends new data, without dropping duplicates. It is however a target to propose an *update* function with a user-defined logic for dropping duplicates.
+* provides an *efficient* update function with a user-defined logic for (optionally) dropping duplicates.
