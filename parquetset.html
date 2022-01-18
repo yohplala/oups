@@ -156,13 +156,46 @@
 </section>
 <section id="updating">
 <h3>Updating<a class="headerlink" href="#updating" title="Permalink to this headline"></a></h3>
+<p>If using an <em>index</em> already present in <code class="docutils literal notranslate"><span class="pre">Parquet</span></code> instance, existing data is updated with new one. Different keywords control data updating logic. These keywords can also be reviewed in <a class="reference internal" href="api.html"><span class="doc">API reference</span></a>, looking at <code class="docutils literal notranslate"><span class="pre">write</span></code> function signature.</p>
 <ul class="simple">
-<li><p>Currently only appending of new data to an existing one is possible, with no additional processing (in particular, no dropping of duplicates, nor re-ordering of data when ‘old’ data is being added).</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ordered_on</span></code>, default <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
 </ul>
+<p>This keyword specifies the name of a column according which dataset is ordered (ascending order).</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>When specifying it, position of the new data with respect to existing data is checked. It allows data insertion.</p></li>
+<li><p>It also enforces <em>sharp</em> row group boundaries, meaning that a row group will necessarily starts with a new value in column specified by <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> at the expense of ensuring a constant row group size. If used continuously each time data is written, no row group start in the middle of duplicates values. This has two advantages. First, insertion a new row group among existing ones is unambiguous. Second is related to drop of duplicates, discussed below.</p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code>, default <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
+</ul>
+<p>This keyword specifies the name of columns to identify duplicates. If an empty list <code class="docutils literal notranslate"><span class="pre">[]</span></code>, all columns are used.</p>
+<p>Motivation for dropping duplicates is that new values (from new data) can replace old values (in existing data). Typical use case is that of updating <em>OHLC</em> financial datasets, for which the <em>High</em>, <em>Low</em> and <em>Close</em> values of the last candle (in-progress) can change until the candle is completed. When appending newer data, values of this last candle need then to be updated.</p>
+<p>The implementation of this logic in a way that it only needs to be carried out row group per row group and not on the full dataset, has most notably 2 implications. Make sure to understand them and check if it applies correctly to your own use case. If not, a solution if for you to prepare the data the way you intend before recording it anew.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>Duplicates in existing data that is not rewritten are not dropped.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> column is also a value of the row that contributes to identifying duplicates. <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> column is thus added to the list of columns specified by <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code>.</p></li>
+</ul>
+</div></blockquote>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">irgs_max</span></code>, default <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
+</ul>
+<p>This keyword specifies the maximum number allowed of <cite>incomplete</cite> row groups. An <cite>incomplete</cite> row group is one that does not quite reach <code class="docutils literal notranslate"><span class="pre">max_row_group_size</span></code> yet (some approximations of this target are managed within the code).
+By using this parameter, you allow a <cite>buffer</cite> of <cite>incomplete</cite> row group. Hence, new data is not systematically merged to existing one, but only appended as new row groups.
+The interest is that an <cite>appending</cite> operation is faster than <cite>merging</cite> with existing row groups, and for adding only few more rows, <cite>merging</cite> seems like a heavy, unjustified operation.
+Setting <code class="docutils literal notranslate"><span class="pre">irgs_max</span></code> triggers assessment of 2 conditions to initiate a <cite>merge</cite> (<cite>coalescing</cite> all incomplete row groups in the end of the dataset to try making <cite>complete</cite> ones) Either one or the other has to be met to validate the <cite>merge</cite>.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">irgs_max</span></code> is reached;</p></li>
+<li><p>The total number of rows within the <cite>incomplete</cite> row groups summed with the number of rows in the new data equals or exceeds <cite>max_row_group_size</cite>.</p></li>
+</ul>
+</div></blockquote>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Initiating a new dataset</span>
 <span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="n">df1</span>
 <span class="c1"># Appending the same data.</span>
-<span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="n">df1</span>
+<span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;irgs_max&#39;</span><span class="p">:</span> <span class="mi">4</span><span class="p">},</span> <span class="n">df1</span>
 <span class="c1"># Reading.</span>
 <span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span><span class="o">.</span><span class="n">pdf</span>
 <span class="n">Out</span><span class="p">[</span><span class="mi">2</span><span class="p">]:</span>
