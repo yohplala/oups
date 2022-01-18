@@ -376,7 +376,7 @@ def write(
                 # necessarily appended in this case.
                 rrg_start_idx = rrg_start_idx_tmp
     if rrg_start_idx is None:
-        # Case 'appending'.
+        # Case 'appending' (no overlap with recorded data identified).
         # 'coalesce' has possibly been requested but not needed, hence no row
         # groups removal in existing ones.
         iter_data = iter_dataframe(data, max_row_group_size)
