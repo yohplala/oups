@@ -81,9 +81,12 @@
 <h1>Why <em>oups</em>?<a class="headerlink" href="#why-oups" title="Permalink to this headline"></a></h1>
 <section id="purpose">
 <h2>Purpose<a class="headerlink" href="#purpose" title="Permalink to this headline"></a></h2>
-<p>Being confronted with the management of ‘large-size’ collections of ordered datasets (more specifically time series), I identified the need to handle them ‘easily’ (identification, creation, update, loading).
-These datasets may contain different data (from different channels or feeds) or be the results of different processings of the same raw data.
-To ease their management, i.e. organize how storing these datasets, a first step in <cite>oups</cite> has then been the implementation of <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> and <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code> class decorators.</p>
+<p>Targetting the management of ‘large-size’ collections of ordered datasets (more specifically time series), <em>oups</em> provide convenience class and functions to ease their identification, creation, update, and loading.
+These datasets may contain different data (from different channels or feeds) or be the results of different processings of the same raw data.</p>
+<ul class="simple">
+<li><p><em>oups</em> most notably hides path management, by providing <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> and <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code> class decorators.</p></li>
+<li><p>it also provides an <em>efficient</em> update logic suited for ordered datasets (low memory footprint).</p></li>
+</ul>
 </section>
 <section id="alternatives">
 <h2>Alternatives<a class="headerlink" href="#alternatives" title="Permalink to this headline"></a></h2>
@@ -95,7 +98,7 @@ To ease their management, i.e. organize how storing these datasets, a first step
 <p>In comparison, current version of <em>oups</em>,</p>
 <ul class="simple">
 <li><p>is not based on Dask but directly on <a class="reference external" href="https://fastparquet.readthedocs.io/en/latest/">fastparquet</a>. No parallelized reading/writing is yet possible.</p></li>
-<li><p>only appends new data, without dropping duplicates. It is however a target to propose an <em>update</em> function with a user-defined logic for dropping duplicates.</p></li>
+<li><p>provides an <em>efficient</em> update function with a user-defined logic for (optionally) dropping duplicates.</p></li>
 </ul>
 </section>
 </section>
