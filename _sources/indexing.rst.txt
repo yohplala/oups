@@ -4,7 +4,7 @@ Collection indexing
 Motivation
 ----------
 
-Datasets are gathered in a parent directory as a collection. Each of them materialize as parquet files located in a child directory whose naming is derived from a user-defined index.
+Datasets are gathered in a parent directory as a collection. Each of them materializes as parquet files located in a child directory whose naming is derived from a user-defined index.
 
 By formalizing this index through a *likewise dataclass*, index management (user scope) is dissociated from path management (*oups* scope).
 
