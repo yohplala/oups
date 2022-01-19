@@ -625,3 +625,44 @@ def test_vaex_appending_as_if_inserting_with_coalesce(tmp_path):
     assert len_rgs_rec == [3, 3, 2, 3]
     df_ref = pdf.append(vdf.to_pandas_df().iloc[1:]).reset_index(drop=True)
     assert pf_rec.to_pandas().equals(df_ref)
+
+
+def test_vaex_duplicates_all_cols(tmp_path):
+    # Validate:
+    # - use of empty list '[]' for 'duplicates_on'.
+    # rgs                  [0, , ,1, , ,2, ]
+    # idx                  [0, , ,3, , ,6, ]
+    # a                    [0,1,2,3,3,3,4,5]
+    # b                    [0, , ,3, , ,6, ]
+    # c                    [0,0,0,0,0,0,0,2]
+    # a (new data, ordered_on)        [3,  5,5,5, 6]
+    # b (new data, duplicates_on)     [7,  7,7,7, 9]
+    # c (new data, check last)        [1,  2,3,2, 5]
+    # 1 duplicates (b & c)                xx,  x
+    # rgs (new)            [0, , ,1, ,,, ,   2, , 3]
+    # idx                  [0, , ,3, ,,, ,   8, ,10]
+    a1 = [0, 1, 2, 3, 3, 3, 4, 5]
+    len_a1 = len(a1)
+    b1 = range(len_a1)
+    c1 = [0] * (len_a1 - 1) + [2]
+    pdf = pDataFrame({"a": a1, "b": b1, "c": c1})
+    dn = os_path.join(tmp_path, "test")
+    fp_write(dn, pdf, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
+    pf = ParquetFile(dn)
+    len_rgs = [rg.num_rows for rg in pf.row_groups]
+    assert len_rgs == [3, 3, 2]
+    max_row_group_size = 3
+    a2 = [3, 5, 5, 5, 6]
+    b2 = [7, 7, 7, 7, 9]
+    c2 = [1, 2, 3, 2, 5]
+    vdf = from_pandas(pDataFrame({"a": a2, "b": b2, "c": c2}))
+    # ordered on 'a', duplicates on 'b' ('a' added implicitly)
+    ps_write(dn, vdf, max_row_group_size=max_row_group_size, ordered_on="a", duplicates_on=[])
+    pf_rec = ParquetFile(dn)
+    len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
+    assert len_rgs_rec == [3, 5, 2, 1]
+    a_ref = [0, 1, 2, 3, 3, 3, 3, 4, 5, 5, 6]
+    b_ref = [0, 1, 2, 3, 4, 5, 7, 6, 7, 7, 9]
+    c_ref = [0, 0, 0, 0, 0, 0, 1, 0, 3, 2, 5]
+    df_ref = pDataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
+    assert pf_rec.to_pandas().equals(df_ref)
