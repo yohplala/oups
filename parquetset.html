@@ -180,22 +180,22 @@
 </ul>
 </div></blockquote>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">irgs_max</span></code>, default <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">max_nirgs</span></code>, default <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
 </ul>
 <p>This keyword specifies the maximum number allowed of <cite>incomplete</cite> row groups. An <cite>incomplete</cite> row group is one that does not quite reach <code class="docutils literal notranslate"><span class="pre">max_row_group_size</span></code> yet (some approximations of this target are managed within the code).
 By using this parameter, you allow a <cite>buffer</cite> of trailing <cite>incomplete</cite> row groups. Hence, new data is not systematically merged to existing one, but only appended as new row groups.
 The interest is that an <cite>appending</cite> operation is faster than <cite>merging</cite> with existing row groups, and for adding only few more rows, <cite>merging</cite> seems like a heavy, unjustified operation.
-Setting <code class="docutils literal notranslate"><span class="pre">irgs_max</span></code> triggers assessment of 2 conditions to initiate a <cite>merge</cite> (<cite>coalescing</cite> all incomplete trailing row groups to try making <cite>complete</cite> ones) Either one or the other has to be met to validate a <cite>merge</cite>.</p>
+Setting <code class="docutils literal notranslate"><span class="pre">max_nirgs</span></code> triggers assessment of 2 conditions to initiate a <cite>merge</cite> (<cite>coalescing</cite> all incomplete trailing row groups to try making <cite>complete</cite> ones) Either one or the other has to be met to validate a <cite>merge</cite>.</p>
 <blockquote>
 <div><ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">irgs_max</span></code> is reached;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">max_nirgs</span></code> is reached;</p></li>
 <li><p>The total number of rows within the <cite>incomplete</cite> row groups summed with the number of rows in the new data equals or exceeds <cite>max_row_group_size</cite>.</p></li>
 </ul>
 </div></blockquote>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Initiating a new dataset</span>
 <span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="n">df1</span>
 <span class="c1"># Appending the same data.</span>
-<span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;irgs_max&#39;</span><span class="p">:</span> <span class="mi">4</span><span class="p">},</span> <span class="n">df1</span>
+<span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;max_nirgs&#39;</span><span class="p">:</span> <span class="mi">4</span><span class="p">},</span> <span class="n">df1</span>
 <span class="c1"># Reading.</span>
 <span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span><span class="o">.</span><span class="n">pdf</span>
 <span class="n">Out</span><span class="p">[</span><span class="mi">2</span><span class="p">]:</span>
