@@ -70,7 +70,7 @@ Reading
 Updating
 ~~~~~~~~
 
-If using an *index* already present in ``Parquet`` instance, existing data is updated with new one. Different keywords control data updating logic. These keywords can also be reviewed in :doc:`api`, looking at ``write`` function signature.
+If using an *index* already present in a ``ParquetSet`` instance, existing data is updated with new one. Different keywords control data updating logic. These keywords can also be reviewed in :doc:`api`, looking at ``write`` function signature.
 
 * ``ordered_on``, default ``None``
 
