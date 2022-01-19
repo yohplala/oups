@@ -90,14 +90,14 @@ The implementation of this logic in a way that it only needs to be carried out r
   * Duplicates in existing data that is not rewritten are not dropped.
   * ``ordered_on`` column is also a value of the row that contributes to identifying duplicates. ``ordered_on`` column is thus added to the list of columns specified by ``duplicates_on``.
 
-* ``irgs_max``, default ``None``
+* ``max_nirgs``, default ``None``
 
 This keyword specifies the maximum number allowed of `incomplete` row groups. An `incomplete` row group is one that does not quite reach ``max_row_group_size`` yet (some approximations of this target are managed within the code).
 By using this parameter, you allow a `buffer` of trailing `incomplete` row groups. Hence, new data is not systematically merged to existing one, but only appended as new row groups.
 The interest is that an `appending` operation is faster than `merging` with existing row groups, and for adding only few more rows, `merging` seems like a heavy, unjustified operation.
-Setting ``irgs_max`` triggers assessment of 2 conditions to initiate a `merge` (`coalescing` all incomplete trailing row groups to try making `complete` ones) Either one or the other has to be met to validate a `merge`.
+Setting ``max_nirgs`` triggers assessment of 2 conditions to initiate a `merge` (`coalescing` all incomplete trailing row groups to try making `complete` ones) Either one or the other has to be met to validate a `merge`.
 
-  * ``irgs_max`` is reached;
+  * ``max_nirgs`` is reached;
   * The total number of rows within the `incomplete` row groups summed with the number of rows in the new data equals or exceeds `max_row_group_size`.
 
 .. code-block:: python
@@ -105,7 +105,7 @@ Setting ``irgs_max`` triggers assessment of 2 conditions to initiate a `merge` (
     # Initiating a new dataset
     ps[idx1] = df1
     # Appending the same data.
-    ps[idx1] = {'irgs_max': 4}, df1
+    ps[idx1] = {'max_nirgs': 4}, df1
     # Reading.
     ps[idx1].pdf
     Out[2]:

@@ -130,9 +130,9 @@ def test_init_and_select_vaex(tmp_path):
 def test_vaex_coalescing_first_rgs(tmp_path):
     # Initialize a parquet dataset directly with fastparquet.
     # Coalescing reaching first row group. Coalescing triggered because
-    # max_row_group_size reached, & also 'irgs_max'.
+    # max_row_group_size reached, & also 'max_nirgs'.
     # max_row_group_size = 2
-    # irgs_max = 2
+    # max_nirgs = 2
     # rgs                          [ 0, 1]
     # idx                          [ 0, 1]
     # a                            [ 0, 1]
@@ -145,9 +145,9 @@ def test_vaex_coalescing_first_rgs(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [2]
     max_row_group_size = 3
-    irgs_max = 2
+    max_nirgs = 2
     vdf = from_pandas(pDataFrame({"a": [20]}))
-    ps_write(dn, vdf, max_row_group_size=max_row_group_size, irgs_max=irgs_max)
+    ps_write(dn, vdf, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
     pf_rec = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
     assert len_rgs == [3]
@@ -159,9 +159,9 @@ def test_pandas_coalescing_simple_irgs(tmp_path):
     # Initialize a parquet dataset directly with fastparquet.
     # max_row_group_size = 4
     # (incomplete row group size: 1 to be 'incomplete')
-    # irgs_max = 2
+    # max_nirgs = 2
 
-    # Case 1, 'irgs_max" not reached yet.
+    # Case 1, 'max_nirgs" not reached yet.
     # (size of new data: 1)
     # One incomplete row group in the middle of otherwise complete row groups.
     # Because there is only 1 irgs (while max is 2), and 2 rows over all irgs
@@ -178,22 +178,22 @@ def test_pandas_coalescing_simple_irgs(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [4, 1, 4, 1]
     max_row_group_size = 4
-    irgs_max = 2
+    max_nirgs = 2
     pdf2 = pDataFrame({"a": [20]})
-    ps_write(dn, pdf2, max_row_group_size=max_row_group_size, irgs_max=irgs_max)
+    ps_write(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
     assert len_rgs == [4, 1, 4, 1, 1]
     df_ref1 = pdf1.append({"a": 20}, ignore_index=True)
     assert pf_rec1.to_pandas().equals(df_ref1)
 
-    # Case 2, 'irgs_max" now reached.
+    # Case 2, 'max_nirgs" now reached.
     # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3, 4]
     # idx                          [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10]
     # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,20]
     # a (new data)                                                  [20]
     # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3,  ,  ]
-    ps_write(dn, pdf2, max_row_group_size=max_row_group_size, irgs_max=irgs_max)
+    ps_write(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
     pf_rec2 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec2.row_groups]
     assert len_rgs == [4, 1, 4, 3]
@@ -205,7 +205,7 @@ def test_pandas_coalescing_simple_max_row_group_size(tmp_path):
     # Initialize a parquet dataset directly with fastparquet.
     # max_row_group_size = 4
     # (incomplete row group size: 1 to be 'incomplete')
-    # irgs_max = 5
+    # max_nirgs = 5
     # Coalescing occurs because 'max_row_group_size' is reached.
     # In initial dataset, there are 3 row groups with a single row.
     # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3, 4, 5]
@@ -222,10 +222,10 @@ def test_pandas_coalescing_simple_max_row_group_size(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [4, 1, 4, 1, 1, 1]
     max_row_group_size = 4
-    irgs_max = 5
+    max_nirgs = 5
     # With additional row of new data, 'max_row_group_size' is reached.
     pdf2 = pDataFrame({"a": [20]})
-    ps_write(dn, pdf2, max_row_group_size=max_row_group_size, irgs_max=irgs_max)
+    ps_write(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
     assert len_rgs == [4, 1, 4, 4]
@@ -605,7 +605,7 @@ def test_vaex_appending_as_if_inserting_with_coalesce(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [3, 3, 2]
     max_row_group_size = 3
-    irgs_max = 2
+    max_nirgs = 2
     a2 = [6, 6, 7, 8]
     len_a2 = len(a2)
     b2 = [9, 9, 10, 10]
@@ -618,7 +618,7 @@ def test_vaex_appending_as_if_inserting_with_coalesce(tmp_path):
         max_row_group_size=max_row_group_size,
         ordered_on="a",
         duplicates_on=["b"],
-        irgs_max=irgs_max,
+        max_nirgs=max_nirgs,
     )
     pf_rec = ParquetFile(dn)
     len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]

@@ -181,7 +181,7 @@ def write(
     cmidx_levels: List[str] = None,
     ordered_on: Union[str, Tuple[str]] = None,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
-    irgs_max: int = None,
+    max_nirgs: int = None,
 ):
     """Write data to disk at location specified by path.
 
@@ -231,7 +231,7 @@ def write(
         To identify row duplicates using all columns, empty list ``[]`` can be
         used instead of all columns names.
         If not set, default to ``None``, meaning no row is dropped.
-    irgs_max : int, optional
+    max_nirgs : int, optional
         Max expected number of 'incomplete' row groups. A 'complete' row group
         is one which size is 'close to' ``max_row_group_size`` (>=90%).
         To evaluate number of 'incomplete' row groups, only those at the end of
@@ -254,11 +254,11 @@ def write(
       - parquet file scheme is 'hive' (one row group per parquet file).
 
     - Coalescing incomplete row groups is triggered depending 2 conditions,
-      either actual number of incomplete row groups is larger than ``irgs_max``
+      either actual number of incomplete row groups is larger than ``max_nirgs``
       or number of rows for all incomplete row groups (at the end of the
       dataset) is enough to make a new complete row group (reaches
       ``max_row_group_size``). This latter assessment is however only triggered
-      if ``irgs_max`` is set. Otherwise, new data is simply appended, without
+      if ``max_nirgs`` is set. Otherwise, new data is simply appended, without
       prior check.
     - When ``duplicates_on`` is set, duplicate search is made row group to be
       written per row group to be written. A `row group to be written` is made
@@ -350,7 +350,7 @@ def write(
                 rrg_end_idx = rrgs_idx[-1] + 1
                 if rrg_end_idx == n_rrgs:
                     rrg_end_idx = None
-    if irgs_max is not None:
+    if max_nirgs is not None:
         # Number of incomplete row groups at end of recorded data.
         # Initialize number of rows with number to be written.
         total_rows_in_irgs = len(data)
@@ -362,7 +362,7 @@ def write(
         rrg_start_idx_tmp += 1
         # Confirm or not coalescing of incomplete row groups.
         n_irgs = n_rrgs - rrg_start_idx_tmp
-        if total_rows_in_irgs >= max_row_group_size or n_irgs >= irgs_max:
+        if total_rows_in_irgs >= max_row_group_size or n_irgs >= max_nirgs:
             if rrg_start_idx and (
                 not rrg_end_idx or (rrg_end_idx and rrg_start_idx_tmp < rrg_end_idx)
             ):
