@@ -114,7 +114,7 @@ class ParquetSet:
             - creating the folders where recording new parquet datasets.
         """
         if not is_toplevel(indexer):
-            raise TypeError(f'{indexer.__name__} has to be "@toplevel" decorated.')
+            raise TypeError(f"{indexer.__name__} has to be '@toplevel' decorated.")
         self._basepath = basepath
         self._indexer = indexer
         self._keys = get_keys(basepath, indexer)
@@ -200,7 +200,7 @@ class ParquetSet:
                 raise TypeError(
                     f"first item {kwargs} should be a dict to "
                     "define parameter setting for "
-                    "`writer.write`."
+                    "'writer.write'."
                 )
             self.set(key, data, **kwargs)
         else:

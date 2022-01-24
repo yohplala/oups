@@ -75,7 +75,7 @@ def iter_dataframe(
         # its filtered length.
         data = data.extract()
     elif sharp_on or isinstance(duplicates_on, list):
-        raise TypeError("vaex dataframe required when using `sharp_on` and/or `duplicates_on`.")
+        raise TypeError("vaex dataframe required when using 'sharp_on' and/or 'duplicates_on'.")
     # TODO: if dropping duplicates over the full dataset with vaex, then remove
     # this exception and subsequent conditional cases. It is not necessary any
     # longer to relate 'sharp_on' and 'duplicates_on'.
@@ -335,7 +335,7 @@ def write(
         if not ordered_on:
             raise ValueError(
                 "duplicates are looked for over the overlap between new data and existing data. "
-                "This overlap being identified thanks to ``ordered_on``, "
+                "This overlap being identified thanks to 'ordered_on', "
                 "it is compulsory to set 'ordered_on' while setting 'duplicates_on'."
             )
         # Enforce 'ordered_on' in 'duplicates_on', as per logic of
