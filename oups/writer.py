@@ -45,7 +45,7 @@ def iter_dataframe(
     sharp_on : str, optional
         Name of column where to check that ends of bins (which split the data
         to be written) do not fall in the middle of duplicate values.
-        This parameter is recommended when ``duplicates_on`` is used.
+        This parameter is required when ``duplicates_on`` is used.
         This option requires a vaex dataframe.
         If not set, default to ``None``.
     duplicates_on : Union[str, List[str]], optional
@@ -63,9 +63,9 @@ def iter_dataframe(
     Notes
     -----
     - Because duplicates are identified within a same row group, it is
-      recommended to set ``ordered_on`` when using ``duplicates_on``, so that
-      duplicates all fall in a same row group. This assumes that duplicates
-      share the same `index` value (i.e. same value in ``ordered_on`` column).
+      required to set ``sharp_on`` when using ``duplicates_on``, so that
+      duplicates all fall in a same row group. This implies that duplicates
+      have to share the same value in ``sharp_on`` column.
     """
     # TODO: implement 'replicate_groups' (use of 'ordered_on' column).
     if max_row_group_size is None:
@@ -74,8 +74,25 @@ def iter_dataframe(
         # Drop any possible lazy indexing, to make the length of data equals
         # its filtered length.
         data = data.extract()
-    elif sharp_on or duplicates_on:
+    elif sharp_on or isinstance(duplicates_on, list):
         raise TypeError("vaex dataframe required when using `sharp_on` and/or `duplicates_on`.")
+    # TODO: if dropping duplicates over the full dataset with vaex, then remove
+    # this exception and subsequent conditional cases. It is not necessary any
+    # longer to relate 'sharp_on' and 'duplicates_on'.
+    if duplicates_on is not None:
+        if not sharp_on:
+            raise ValueError(
+                "duplicates are looked for row group per group. For this reason, "
+                "it is compulsory to set 'sharp_on' while setting 'duplicates_on'."
+            )
+        elif isinstance(duplicates_on, list):
+            if duplicates_on and sharp_on not in duplicates_on:
+                # Case 'not an empty list', and 'ordered_on' not in.
+                duplicates_on.append(sharp_on)
+        elif duplicates_on != sharp_on:
+            # Case 'duplicates_on' is a single column name, but not
+            # 'sharp_on'.
+            duplicates_on = [duplicates_on, sharp_on]
     # Define bins to split into row groups.
     # Acknowledging this piece of code to be an extract from fastparquet.
     n_rows = len(data)
@@ -106,6 +123,10 @@ def iter_dataframe(
                 # https://github.com/vaexio/vaex/pull/1623
                 # check if answer from
                 # https://github.com/vaexio/vaex/issues/1378
+                # If dropping duplicates with vaex, drop before the chunking.
+                # This removes then the constraints to have 'sharp_on' set and
+                # and in 'duplicates_on'. Duplicates are then dropped over the
+                # full dataset to be written.
                 yield data[start:end].to_pandas_df().drop_duplicates(duplicates_on, keep="last")
         else:
             for start, end in zip(starts, ends):
@@ -313,12 +334,17 @@ def write(
     if duplicates_on is not None:
         if not ordered_on:
             raise ValueError(
-                "not possible to set ``duplicates_on`` without setting ``ordered_on``."
+                "duplicates are looked for over the overlap between new data and existing data. "
+                "This overlap being identified thanks to ``ordered_on``, "
+                "it is compulsory to set 'ordered_on' while setting 'duplicates_on'."
             )
         # Enforce 'ordered_on' in 'duplicates_on', as per logic of
-        # duplicate identification restricted to the row groups to be
-        # written.
-        if isinstance(duplicates_on, list):
+        # duplicate identification restricted to the data overlap between new
+        # data and existing data. This overlap being identified thanks to
+        # 'ordered_on', it implies that duplicate rows can be identified being
+        # so at the condition they share the same value in 'ordered_on' (among
+        # other columns).
+        elif isinstance(duplicates_on, list):
             if duplicates_on and ordered_on not in duplicates_on:
                 # Case 'not an empty list', and 'ordered_on' not in.
                 duplicates_on.append(ordered_on)
