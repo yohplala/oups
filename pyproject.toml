@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "oups"
-version = "0.1.0"
+version = "0.1.1"
 description = "Collection of parquet datasets."
 authors = ["Yohplala"]
 license = "Apache-2.0"
@@ -10,9 +10,9 @@ repository = "https://github.com/yohplala/oups"
 python = ">=3.9,<3.10"
 sortedcontainers = "^2.1.0"
 llvmlite = "^0.37.0" # no wheel for python 3.9 if below.
-pandas = "^1.3.4"
+pandas = "^1.4.0"
 cramjam = "^2.5.0"
-fastparquet = {git = "https://github.com/dask/fastparquet.git", rev = "main"}
+fastparquet = "^0.8.0"
 vaex-core = "^4.7.0"
 vaex-server = "^0.8.0"
 blake3 = "^0.2.1" # remove next time upgrading vaex
