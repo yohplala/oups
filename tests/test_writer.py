@@ -11,6 +11,7 @@ from fastparquet import write as fp_write
 from numpy import arange
 from pandas import DataFrame as pDataFrame
 from pandas import MultiIndex
+from pandas import concat
 from vaex import from_pandas
 
 from oups.writer import to_midx
@@ -32,7 +33,7 @@ def test_init_and_append_pandas_std(tmp_path):
     pdf2 = pDataFrame({"a": range(2), "b": ["at", "of"]})
     ps_write(str(tmp_path), pdf2, max_row_group_size=2)
     res2 = ParquetFile(tmp_path).to_pandas()
-    assert pdf1.append(pdf2).reset_index(drop=True).equals(res2)
+    assert concat([pdf1, pdf2]).reset_index(drop=True).equals(res2)
 
 
 def test_init_pandas_no_folder(tmp_path):
@@ -75,7 +76,7 @@ def test_init_and_append_vaex_std(tmp_path):
     vdf2 = from_pandas(pdf2)
     ps_write(str(tmp_path), vdf2, max_row_group_size=2)
     res2 = ParquetFile(tmp_path).to_pandas()
-    assert pdf1.append(pdf2).reset_index(drop=True).equals(res2)
+    assert concat([pdf1, pdf2]).reset_index(drop=True).equals(res2)
 
 
 def test_init_idx_expansion_vaex(tmp_path):
@@ -151,7 +152,7 @@ def test_vaex_coalescing_first_rgs(tmp_path):
     pf_rec = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
     assert len_rgs == [3]
-    df_ref = pdf.append({"a": 20}, ignore_index=True)
+    df_ref = concat([pdf, pDataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -184,7 +185,7 @@ def test_pandas_coalescing_simple_irgs(tmp_path):
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
     assert len_rgs == [4, 1, 4, 1, 1]
-    df_ref1 = pdf1.append({"a": 20}, ignore_index=True)
+    df_ref1 = concat([pdf1, pDataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
     assert pf_rec1.to_pandas().equals(df_ref1)
 
     # Case 2, 'max_nirgs" now reached.
@@ -197,7 +198,7 @@ def test_pandas_coalescing_simple_irgs(tmp_path):
     pf_rec2 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec2.row_groups]
     assert len_rgs == [4, 1, 4, 3]
-    df_ref2 = df_ref1.append({"a": 20}, ignore_index=True)
+    df_ref2 = concat([df_ref1, pDataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
     assert pf_rec2.to_pandas().equals(df_ref2)
 
 
@@ -229,7 +230,7 @@ def test_pandas_coalescing_simple_max_row_group_size(tmp_path):
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
     assert len_rgs == [4, 1, 4, 4]
-    df_ref1 = pdf1.append({"a": 20}, ignore_index=True)
+    df_ref1 = concat([pdf1, pDataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
     assert pf_rec1.to_pandas().equals(df_ref1)
 
 
@@ -256,7 +257,7 @@ def test_pandas_appending_data_with_drop_duplicates(tmp_path):
     len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
     # 'coalesce' mode not requested, so no end row group merging.
     assert len_rgs == [4, 1, 4, 1, 2]
-    df_ref = pdf1.append({"a": 20, "b": 31}, ignore_index=True)
+    df_ref = concat([pdf1, pDataFrame({"a": 20, "b": 31}, index=[0])]).reset_index(drop=True)
     df_ref.iloc[10] = [10, 11]
     assert pf_rec.to_pandas().equals(df_ref)
 
@@ -300,7 +301,7 @@ def test_pandas_appending_data_with_sharp_starts(tmp_path):
     pf_rec = ParquetFile(dn)
     len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
     assert len_rgs_rec == [3, 3, 1, 3, 2, 1]
-    df_ref = pdf1.iloc[:-1].append(pdf2.iloc[1:4]).append(pdf2.iloc[5:]).reset_index(drop=True)
+    df_ref = concat([pdf1.iloc[:-1], pdf2.iloc[1:4], pdf2.iloc[5:]]).reset_index(drop=True)
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -343,7 +344,7 @@ def test_pandas_appending_duplicates_on_a_list(tmp_path):
     pf_rec = ParquetFile(dn)
     len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
     assert len_rgs_rec == [3, 3, 1, 3, 2, 1]
-    df_ref = pdf1.iloc[:-1].append(pdf2.iloc[1:4]).append(pdf2.iloc[5:]).reset_index(drop=True)
+    df_ref = concat([pdf1.iloc[:-1], pdf2.iloc[1:4], pdf2.iloc[5:]]).reset_index(drop=True)
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -572,7 +573,7 @@ def test_vaex_appending_as_if_inserting_no_coalesce(tmp_path):
     pf_rec = ParquetFile(dn)
     len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
     assert len_rgs_rec == [3, 3, 2, 2, 2]
-    df_ref = pdf.append(vdf.to_pandas_df()).reset_index(drop=True)
+    df_ref = concat([pdf, vdf.to_pandas_df()]).reset_index(drop=True)
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -623,7 +624,7 @@ def test_vaex_appending_as_if_inserting_with_coalesce(tmp_path):
     pf_rec = ParquetFile(dn)
     len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
     assert len_rgs_rec == [3, 3, 2, 3]
-    df_ref = pdf.append(vdf.to_pandas_df().iloc[1:]).reset_index(drop=True)
+    df_ref = concat([pdf, vdf.to_pandas_df().iloc[1:]]).reset_index(drop=True)
     assert pf_rec.to_pandas().equals(df_ref)
 
 

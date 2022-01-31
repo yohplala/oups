@@ -9,7 +9,7 @@ repository = "https://github.com/yohplala/oups"
 [tool.poetry.dependencies]
 python = ">=3.9,<3.10"
 sortedcontainers = "^2.1.0"
-llvmlite = "^0.37.0" # no wheel for python 3.9 if below.
+#llvmlite = "^0.37.0" # no wheel for python 3.9 if below.
 pandas = "^1.4.0"
 cramjam = "^2.5.0"
 fastparquet = "^0.8.0"
