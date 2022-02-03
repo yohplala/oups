@@ -110,8 +110,9 @@ class ParquetSet:
             Path of directory containing parquet datasets.
         indexer : Type[dataclass]
             Class (not class instance) of the indexer to be used for:
-            - identifying existing parquet datasets in 'basepath' directory,
-            - creating the folders where recording new parquet datasets.
+
+              - identifying existing parquet datasets in 'basepath' directory,
+              - creating the folders where recording new parquet datasets.
         """
         if not is_toplevel(indexer):
             raise TypeError(f"{indexer.__name__} has to be '@toplevel' decorated.")

@@ -1,6 +1,6 @@
 name: docs
 
-# Build and deploy OUPS API documentation.
+# Build and deploy oups API documentation.
 
 on:
   push:

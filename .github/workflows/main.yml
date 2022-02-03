@@ -1,6 +1,6 @@
 name: test
 
-# Test OUPS.
+# Test oups.
 
 on:
   push:
