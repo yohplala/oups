@@ -10,6 +10,7 @@ repository = "https://github.com/yohplala/oups"
 python = ">=3.9,<3.10"
 sortedcontainers = "^2.4.0"
 #llvmlite = "^0.37.0" # no wheel for python 3.9 if below.
+pyarrow = "6.0.1" # force pyarrow to 6.0.1 as 7.0.0 is available, but no packages yet?
 pandas = "^1.4.0"
 cramjam = "^2.5.0"
 fastparquet = "^0.8.0"
