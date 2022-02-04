@@ -1,6 +1,6 @@
-# Welcome to OUPS!
+# Welcome to oups!
 
-## What is OUPS?
+## What is oups?
 *oups* stands for Ordered Updatable Parquet Store.
 
 *oups* Python library provides convenience functions and class to manage a collection of parquet datasets. This includes mostly collection indexing, and ability to update ordered datasets.
