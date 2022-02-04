@@ -13,7 +13,7 @@ It is directory path (existing or not) where will be (are) gathered directories 
 
 **Indexing logic**
 
-A logic is formalized by use of a decorated class. Index themselves are then materialized by instantiating this class, and more specifically by the instance attributes values.
+A logic is formalized by use of a decorated class. Indices themselves are then materialized by instantiating this class, and more specifically by the instance attributes values.
 
 The class itself is declared just as a `dataclass <https://docs.python.org/3/library/dataclasses.html>`_.
 ``@toplevel`` is then used as a class decorator (and not ``@dataclass``).
