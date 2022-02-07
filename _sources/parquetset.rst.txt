@@ -34,7 +34,7 @@ Dataframe format
 ~~~~~~~~~~~~~~~~
 
 * *oups* accepts `pandas <https://github.com/pandas-dev/pandas>`_ or `vaex <https://github.com/vaexio/vaex>`_ dataframes.
-* Row index is dropped when recording. If the index of your dataframe is meaningful, make sure to reset it as a column. This only applies for *pandas* dataframes, as *vaex* ones have no row index.
+* Row index is dropped when recording. If the index of your dataframe is meaningful, make sure to reset it as a column. This only applies to *pandas* dataframes, as *vaex* ones have no row index.
 
 .. code-block:: python
 

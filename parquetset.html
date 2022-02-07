@@ -117,7 +117,7 @@
 <h3>Dataframe format<a class="headerlink" href="#dataframe-format" title="Permalink to this headline"></a></h3>
 <ul class="simple">
 <li><p><em>oups</em> accepts <a class="reference external" href="https://github.com/pandas-dev/pandas">pandas</a> or <a class="reference external" href="https://github.com/vaexio/vaex">vaex</a> dataframes.</p></li>
-<li><p>Row index is dropped when recording. If the index of your dataframe is meaningful, make sure to reset it as a column. This only applies for <em>pandas</em> dataframes, as <em>vaex</em> ones have no row index.</p></li>
+<li><p>Row index is dropped when recording. If the index of your dataframe is meaningful, make sure to reset it as a column. This only applies to <em>pandas</em> dataframes, as <em>vaex</em> ones have no row index.</p></li>
 </ul>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="n">pandas_df</span> <span class="o">=</span> <span class="n">pandas_df</span><span class="o">.</span><span class="n">reset_index</span><span class="p">()</span>
 </pre></div>
