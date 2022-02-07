@@ -156,15 +156,15 @@
 </section>
 <section id="updating">
 <h3>Updating<a class="headerlink" href="#updating" title="Permalink to this headline"></a></h3>
-<p>If using an <em>index</em> already present in a <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance, existing data is updated with new one. Different keywords control data updating logic. These keywords can also be reviewed in <a class="reference internal" href="api.html"><span class="doc">API reference</span></a>, looking at <code class="docutils literal notranslate"><span class="pre">write</span></code> function signature.</p>
+<p>If using an <em>index</em> already present in a <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance, existing data is updated with new one. Different keywords control data updating logic. These keywords can also be reviewed in <a class="reference internal" href="api.html"><span class="doc">API reference</span></a>, looking at <code class="docutils literal notranslate"><span class="pre">oups.writer.write</span></code> function signature.</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">ordered_on</span></code>, default <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
 </ul>
 <p>This keyword specifies the name of a column according which dataset is ordered (ascending order).</p>
 <blockquote>
 <div><ul class="simple">
-<li><p>When specifying it, position of the new data with respect to existing data is checked. It allows data insertion.</p></li>
-<li><p>It also enforces <em>sharp</em> row group boundaries, meaning that a row group will necessarily starts with a new value in column specified by <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> at the expense of ensuring a constant row group size. If used continuously each time data is written, no row group start in the middle of duplicates values. This has two advantages. First, insertion of a new row group among existing ones is unambiguous. Second is related to drop of duplicates, discussed below.</p></li>
+<li><p>When specified, position of the new data with respect to existing data is checked. It allows data insertion.</p></li>
+<li><p>It also enforces <em>sharp</em> row group boundaries, meaning that a row group will necessarily starts with a new value in column specified by <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> at the expense of ensuring a constant row group size. When used, no newly written row group start in the middle of duplicates values. The main motivation for this feature relates to the need to include <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> column to identify duplicates, as discussed in next section.</p></li>
 </ul>
 </div></blockquote>
 <ul class="simple">
@@ -172,11 +172,11 @@
 </ul>
 <p>This keyword specifies the names of columns to identify duplicates. If it is an empty list <code class="docutils literal notranslate"><span class="pre">[]</span></code>, all columns are used.</p>
 <p>Motivation for dropping duplicates is that new values (from new data) can replace old values (in existing data). Typical use case is that of updating <em>OHLC</em> financial datasets, for which the <em>High</em>, <em>Low</em> and <em>Close</em> values of the last candle (in-progress) can change until the candle is completed. When appending newer data, values of this last candle need then to be updated.</p>
-<p>The implementation of this logic in a way that it only needs to be carried out row group per row group and not over the full dataset, has most notably 2 implications. Make sure to understand them and check if it applies correctly to your own use case. If not, a solution for you is to prepare the data the way you intend it to be before recording it anew.</p>
+<p>The implementation of this logic has been managed as an iterative process on row groups to be written, one row group per one row group (and not over the full dataset). This makes it a low memory footprint operation. This has also 2 important implications. Make sure to understand them and check if it applies correctly to your own use case. If not, a solution for you is to prepare the data the way you intend it to be before recording it anew.</p>
 <blockquote>
 <div><ul class="simple">
 <li><p>Duplicates in existing data that is not rewritten are not dropped.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> column is also a value of the row that contributes to identifying duplicates. <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> column is thus added to the list of columns specified by <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code>.</p></li>
+<li><p>Values in <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> column also contribute to identifying duplicates. If not already present, <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> column is thus forced into the list of columns defined by <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code>.</p></li>
 </ul>
 </div></blockquote>
 <ul class="simple">
