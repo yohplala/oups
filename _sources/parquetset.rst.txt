@@ -22,10 +22,10 @@ An instance of ``ParquetSet`` class gathers a collection of datasets.
         city: str
 
     # Define a collection path.
-    dirpath = os_path.expanduser('~/Documents/code/data/weather_knowledge_base')
+    store_path = os_path.expanduser('~/Documents/data/weather_knowledge_base')
 
     # Initialize a parquet dataset collection.
-    ps = ParquetSet(dirpath, DatasetIndex)
+    ps = ParquetSet(store_path, DatasetIndex)
 
 Usage notes
 -----------
@@ -102,6 +102,7 @@ Setting ``max_nirgs`` triggers assessment of 2 conditions to initiate a `merge` 
 
 .. code-block:: python
 
+    # Re-using previous variables.
     # Initiating a new dataset
     ps[idx1] = df1
     # Appending the same data.
@@ -126,6 +127,7 @@ Other "goodies"
 
 .. code-block:: python
 
+    # Re-using previous variables.
     # Review store content.
     ps
     Out[3]:

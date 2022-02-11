@@ -104,10 +104,10 @@
     <span class="n">city</span><span class="p">:</span> <span class="nb">str</span>
 
 <span class="c1"># Define a collection path.</span>
-<span class="n">dirpath</span> <span class="o">=</span> <span class="n">os_path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s1">&#39;~/Documents/code/data/weather_knowledge_base&#39;</span><span class="p">)</span>
+<span class="n">store_path</span> <span class="o">=</span> <span class="n">os_path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s1">&#39;~/Documents/data/weather_knowledge_base&#39;</span><span class="p">)</span>
 
 <span class="c1"># Initialize a parquet dataset collection.</span>
-<span class="n">ps</span> <span class="o">=</span> <span class="n">ParquetSet</span><span class="p">(</span><span class="n">dirpath</span><span class="p">,</span> <span class="n">DatasetIndex</span><span class="p">)</span>
+<span class="n">ps</span> <span class="o">=</span> <span class="n">ParquetSet</span><span class="p">(</span><span class="n">store_path</span><span class="p">,</span> <span class="n">DatasetIndex</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -192,7 +192,8 @@ Setting <code class="docutils literal notranslate"><span class="pre">max_nirgs</
 <li><p>The total number of rows within the <cite>incomplete</cite> row groups summed with the number of rows in the new data equals or exceeds <cite>max_row_group_size</cite>.</p></li>
 </ul>
 </div></blockquote>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Initiating a new dataset</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Re-using previous variables.</span>
+<span class="c1"># Initiating a new dataset</span>
 <span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="n">df1</span>
 <span class="c1"># Appending the same data.</span>
 <span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;max_nirgs&#39;</span><span class="p">:</span> <span class="mi">4</span><span class="p">},</span> <span class="n">df1</span>
@@ -215,7 +216,8 @@ Setting <code class="docutils literal notranslate"><span class="pre">max_nirgs</
 </section>
 <section id="other-goodies">
 <h3>Other “goodies”<a class="headerlink" href="#other-goodies" title="Permalink to this headline"></a></h3>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Review store content.</span>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Re-using previous variables.</span>
+<span class="c1"># Review store content.</span>
 <span class="n">ps</span>
 <span class="n">Out</span><span class="p">[</span><span class="mi">3</span><span class="p">]:</span>
 <span class="n">germany</span><span class="o">-</span><span class="n">berlin</span>
