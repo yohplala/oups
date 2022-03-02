@@ -91,6 +91,9 @@ ipython_config.py
 #   install all needed dependencies.
 #Pipfile.lock
 
+# poetry
+poetry.lock
+
 # PEP 582; used by e.g. github.com/David-OConnor/pyflow
 __pypackages__/
 
@@ -127,6 +130,3 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
-# poetry
-poetry.lock

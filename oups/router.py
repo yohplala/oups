@@ -13,7 +13,7 @@ from oups.defines import DIR_SEP
 
 
 class ParquetHandle:
-    """Handle to parquet dataset on disk.
+    """Handle to parquet dataset and statistics on disk.
 
     Attributes
     ----------
@@ -25,6 +25,11 @@ class ParquetHandle:
         Dataframe in pandas format.
     vdf : vDataFrame
         Dataframe in vaex format.
+
+    Methods
+    -------
+    min_max(col)
+        Retrieve min and max from statistics for a column.
     """
 
     def __init__(self, dirpath: str):
@@ -61,3 +66,19 @@ class ParquetHandle:
         files.sort(key=lambda x: int(x[5:-8]))
         prefix_dirpath = f"{str(self._dirpath)}{DIR_SEP}".__add__
         return open_many(map(prefix_dirpath, files))
+
+    def min_max(self, col: str) -> tuple:
+        """Return min and max of values of a column.
+
+        Parameters
+        ----------
+        col : str
+            Column name.
+
+        Returns
+        -------
+        tuple
+            Min and max values of column.
+        """
+        pf_stats = ParquetFile(self._dirpath).statistics
+        return (min(pf_stats["min"][col]), max(pf_stats["max"][col]))
