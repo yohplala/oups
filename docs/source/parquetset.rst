@@ -22,10 +22,10 @@ An instance of ``ParquetSet`` class gathers a collection of datasets.
         city: str
 
     # Define a collection path.
-    dirpath = os_path.expanduser('~/Documents/code/data/weather_knowledge_base')
+    store_path = os_path.expanduser('~/Documents/data/weather_knowledge_base')
 
     # Initialize a parquet dataset collection.
-    ps = ParquetSet(dirpath, DatasetIndex)
+    ps = ParquetSet(store_path, DatasetIndex)
 
 Usage notes
 -----------
@@ -34,7 +34,7 @@ Dataframe format
 ~~~~~~~~~~~~~~~~
 
 * *oups* accepts `pandas <https://github.com/pandas-dev/pandas>`_ or `vaex <https://github.com/vaexio/vaex>`_ dataframes.
-* Row index is dropped when recording. If the index of your dataframe is meaningful, make sure to reset it as a column. This only applies for *pandas* dataframes, as *vaex* ones have no row index.
+* Row index is dropped when recording. If the index of your dataframe is meaningful, make sure to reset it as a column. This only applies to *pandas* dataframes, as *vaex* ones have no row index.
 
 .. code-block:: python
 
@@ -70,14 +70,14 @@ Reading
 Updating
 ~~~~~~~~
 
-If using an *index* already present in a ``ParquetSet`` instance, existing data is updated with new one. Different keywords control data updating logic. These keywords can also be reviewed in :doc:`api`, looking at ``write`` function signature.
+If using an *index* already present in a ``ParquetSet`` instance, existing data is updated with new one. Different keywords control data updating logic. These keywords can also be reviewed in :doc:`api`, looking at ``oups.writer.write`` function signature.
 
 * ``ordered_on``, default ``None``
 
 This keyword specifies the name of a column according which dataset is ordered (ascending order).
 
-  * When specifying it, position of the new data with respect to existing data is checked. It allows data insertion.
-  * It also enforces *sharp* row group boundaries, meaning that a row group will necessarily starts with a new value in column specified by ``ordered_on`` at the expense of ensuring a constant row group size. If used continuously each time data is written, no row group start in the middle of duplicates values. This has two advantages. First, insertion of a new row group among existing ones is unambiguous. Second is related to drop of duplicates, discussed below.
+  * When specified, position of the new data with respect to existing data is checked. It allows data insertion.
+  * It also enforces *sharp* row group boundaries, meaning that a row group will necessarily starts with a new value in column specified by ``ordered_on`` at the expense of ensuring a constant row group size. When used, no newly written row group start in the middle of duplicates values. The main motivation for this feature relates to the need to include ``ordered_on`` column to identify duplicates, as discussed in next section.
 
 * ``duplicates_on``, default ``None``
 
@@ -85,10 +85,10 @@ This keyword specifies the names of columns to identify duplicates. If it is an 
 
 Motivation for dropping duplicates is that new values (from new data) can replace old values (in existing data). Typical use case is that of updating *OHLC* financial datasets, for which the *High*, *Low* and *Close* values of the last candle (in-progress) can change until the candle is completed. When appending newer data, values of this last candle need then to be updated.
 
-The implementation of this logic in a way that it only needs to be carried out row group per row group and not over the full dataset, has most notably 2 implications. Make sure to understand them and check if it applies correctly to your own use case. If not, a solution for you is to prepare the data the way you intend it to be before recording it anew.
+The implementation of this logic has been managed as an iterative process on row groups to be written, one row group per one row group (and not over the full dataset). This makes it a low memory footprint operation. This has also 2 important implications. Make sure to understand them and check if it applies correctly to your own use case. If not, a solution for you is to prepare the data the way you intend it to be before recording it anew.
 
   * Duplicates in existing data that is not rewritten are not dropped.
-  * ``ordered_on`` column is also a value of the row that contributes to identifying duplicates. ``ordered_on`` column is thus added to the list of columns specified by ``duplicates_on``.
+  * Values in ``ordered_on`` column also contribute to identifying duplicates. If not already present, ``ordered_on`` column is thus forced into the list of columns defined by ``duplicates_on``.
 
 * ``max_nirgs``, default ``None``
 
@@ -102,6 +102,7 @@ Setting ``max_nirgs`` triggers assessment of 2 conditions to initiate a `merge` 
 
 .. code-block:: python
 
+    # Re-using previous variables.
     # Initiating a new dataset
     ps[idx1] = df1
     # Appending the same data.
@@ -126,6 +127,7 @@ Other "goodies"
 
 .. code-block:: python
 
+    # Re-using previous variables.
     # Review store content.
     ps
     Out[3]:
