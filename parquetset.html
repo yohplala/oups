@@ -237,6 +237,9 @@ Setting <code class="docutils literal notranslate"><span class="pre">max_nirgs</
 <span class="n">ps2</span> <span class="o">=</span> <span class="n">ParquetSet</span><span class="p">(</span><span class="n">store_path</span><span class="p">,</span> <span class="n">DatasetIndex</span><span class="p">)</span>
 <span class="n">ps2</span>
 <span class="n">Out</span><span class="p">[</span><span class="mi">6</span><span class="p">]:</span> <span class="n">japan</span><span class="o">-</span><span class="n">tokyo</span>
+
+<span class="c1"># Get min and max from a column of a given dataset.</span>
+<span class="n">min_</span><span class="p">,</span> <span class="n">max_</span> <span class="o">=</span> <span class="n">ps2</span><span class="p">[</span><span class="n">idx2</span><span class="p">]</span><span class="o">.</span><span class="n">min_max</span><span class="p">(</span><span class="n">col</span><span class="o">=</span><span class="s1">&#39;temperature&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>

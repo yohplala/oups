@@ -148,3 +148,6 @@ Other "goodies"
     ps2 = ParquetSet(store_path, DatasetIndex)
     ps2
     Out[6]: japan-tokyo
+
+    # Get min and max from a column of a given dataset.
+    min_, max_ = ps2[idx2].min_max(col='temperature')
