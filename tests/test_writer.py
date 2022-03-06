@@ -18,6 +18,9 @@ from oups.writer import to_midx
 from oups.writer import write as ps_write
 
 
+# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+
+
 def test_init_and_append_pandas_std(tmp_path):
     # Initialize a parquet dataset from pandas dataframe. Existing folder.
     # (no row index, compression SNAPPY, row group size: 2)
@@ -666,4 +669,51 @@ def test_vaex_duplicates_all_cols(tmp_path):
     b_ref = [0, 1, 2, 3, 4, 5, 7, 6, 7, 7, 9]
     c_ref = [0, 0, 0, 0, 0, 0, 1, 0, 3, 2, 5]
     df_ref = pDataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
+    assert pf_rec.to_pandas().equals(df_ref)
+
+
+def test_pandas_drop_duplicates_wo_coalescing_irgs(tmp_path):
+    # Initialize a parquet dataset directly with fastparquet.
+    # 2 last row groups are incomplete row groups.
+    # But coalescing is not triggered with new data.
+    # However, drop duplicate is requested and new data overlap with last
+    # existing row group.
+    # Targeted result is that one-but-last row group (incomplete one) is not
+    # coalesced.
+    # max_row_group_size = 3 (one row per row group for incomplete rgs)
+    # max_nirgs = 2 (2 incomplete rgs, but drop duplicate with new data, so
+    # after merging new data, only 2 incomplete row groups will remain)
+    # rgs                          [0, , , , ,1,2]
+    # idx                          [0,1,2,3,4,5,6]
+    # a (ordered_on)               [0,1,2,3,4,5,6]
+    # b (keep last)                [0,0,0,0,0,0,0]
+    # a (new data)                               [6]
+    # b (new data)                               [1]
+    # rgs (new)                    [0, , , , ,1,x,2]
+    n_val = 7
+    pdf = pDataFrame({"a": range(n_val), "b": [0] * n_val})
+    dn = os_path.join(tmp_path, "test")
+    fp_write(
+        dn, pdf, row_group_offsets=[0, n_val - 2, n_val - 1], file_scheme="hive", write_index=False
+    )
+    pf = ParquetFile(dn)
+    len_rgs = [rg.num_rows for rg in pf.row_groups]
+    assert len_rgs == [n_val - 2, 1, 1]
+    max_row_group_size = 5
+    max_nirgs = 3
+    pdf2 = pDataFrame({"a": [n_val - 1], "b": [1]})
+    ps_write(
+        dn,
+        pdf2,
+        max_row_group_size=max_row_group_size,
+        max_nirgs=max_nirgs,
+        ordered_on="a",
+        duplicates_on="a",
+    )
+    pf_rec = ParquetFile(dn)
+    len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
+    # Only the last row group has been rewritten, without coalescing
+    # one-but-last incomplete row group.
+    assert len_rgs == [n_val - 2, 1, 1]
+    df_ref = concat([pdf[:-1], pdf2]).reset_index(drop=True)
     assert pf_rec.to_pandas().equals(df_ref)
