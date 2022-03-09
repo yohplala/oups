@@ -176,6 +176,7 @@
 <blockquote>
 <div><ul class="simple">
 <li><p>Duplicates in existing data that is not rewritten are not dropped.</p></li>
+<li><p>Conversely, duplicates in existing data that is rewritten are dropped.</p></li>
 <li><p>Values in <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> column also contribute to identifying duplicates. If not already present, <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> column is thus forced into the list of columns defined by <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code>.</p></li>
 </ul>
 </div></blockquote>
@@ -184,8 +185,8 @@
 </ul>
 <p>This keyword specifies the maximum number allowed of <cite>incomplete</cite> row groups. An <cite>incomplete</cite> row group is one that does not quite reach <code class="docutils literal notranslate"><span class="pre">max_row_group_size</span></code> yet (some approximations of this target are managed within the code).
 By using this parameter, you allow a <cite>buffer</cite> of trailing <cite>incomplete</cite> row groups. Hence, new data is not systematically merged to existing one, but only appended as new row groups.
-The interest is that an <cite>appending</cite> operation is faster than <cite>merging</cite> with existing row groups, and for adding only few more rows, <cite>merging</cite> seems like a heavy, unjustified operation.
-Setting <code class="docutils literal notranslate"><span class="pre">max_nirgs</span></code> triggers assessment of 2 conditions to initiate a <cite>merge</cite> (<cite>coalescing</cite> all incomplete trailing row groups to try making <cite>complete</cite> ones) Either one or the other has to be met to validate a <cite>merge</cite>.</p>
+The interest is that an <cite>appending</cite> operation is faster than <cite>merging</cite> with existing row groups, and for adding only few more rows, <cite>merging</cite> seems like a heavy, unjustified operation. Beware however that if used jointly with <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code>, and if new data overlaps with existing data, overlapping groups are merged together and coalescing will take place.
+Setting <code class="docutils literal notranslate"><span class="pre">max_nirgs</span></code> triggers assessment of 2 conditions to initiate a <cite>merge</cite> (<cite>coalescing</cite> all incomplete trailing row groups to try making <cite>complete</cite> ones). Either one or the other has to be met to validate a <cite>merge</cite>.</p>
 <blockquote>
 <div><ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">max_nirgs</span></code> is reached;</p></li>
