@@ -101,7 +101,7 @@ Setting ``max_nirgs`` triggers assessment of 2 conditions to initiate a `merge` 
   * ``max_nirgs`` is reached;
   * The total number of rows within the `incomplete` row groups summed with the number of rows in the new data equals or exceeds `max_row_group_size`.
 
-Beware that if this feature is used jointly with ``duplicates_on``, and if new data overlaps with existing data, only overlapping groups are merged together. 'Full' coalescing (i.e. with all trailing incomplete row groups) is triggered only if on the abovementionned condition is met.
+Beware that if this feature is used jointly with ``duplicates_on``, and if new data overlaps with existing data, only overlapping groups are merged together. 'Full' coalescing (i.e. with all trailing incomplete row groups) is triggered only if one the abovementionned condition is met.
 
 .. code-block:: python
 
