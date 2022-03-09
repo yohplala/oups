@@ -95,11 +95,13 @@ The implementation of this logic has been managed as an iterative process on row
 
 This keyword specifies the maximum number allowed of `incomplete` row groups. An `incomplete` row group is one that does not quite reach ``max_row_group_size`` yet (some approximations of this target are managed within the code).
 By using this parameter, you allow a `buffer` of trailing `incomplete` row groups. Hence, new data is not systematically merged to existing one, but only appended as new row groups.
-The interest is that an `appending` operation is faster than `merging` with existing row groups, and for adding only few more rows, `merging` seems like a heavy, unjustified operation. Beware however that if used jointly with ``duplicates_on``, and if new data overlaps with existing data, overlapping groups are merged together and coalescing will take place.  
+The interest is that an `appending` operation is faster than `merging` with existing row groups, and for adding only few more rows, `merging` seems like a heavy, unjustified operation.
 Setting ``max_nirgs`` triggers assessment of 2 conditions to initiate a `merge` (`coalescing` all incomplete trailing row groups to try making `complete` ones). Either one or the other has to be met to validate a `merge`.
 
   * ``max_nirgs`` is reached;
   * The total number of rows within the `incomplete` row groups summed with the number of rows in the new data equals or exceeds `max_row_group_size`.
+
+Beware that if this feature is used jointly with ``duplicates_on``, and if new data overlaps with existing data, only overlapping groups are merged together. 'Full' coalescing (i.e. with all trailing incomplete row groups) is triggered only if on the abovementionned condition is met.
 
 .. code-block:: python
 
