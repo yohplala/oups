@@ -681,7 +681,7 @@ def test_pandas_drop_duplicates_wo_coalescing_irgs(tmp_path):
     # Targeted result is that one-but-last row group (incomplete one) is not
     # coalesced.
     # max_row_group_size = 5 (one row per row group for incomplete rgs)
-    # max_nirgs = 3 (2 incomplete rgs, but drop duplicate with new data, so
+    # max_nirgs = 3 (3 incomplete rgs, but drop duplicate with new data, so
     # after merging new data, only 2 incomplete row groups will remain)
     # rgs                          [0, , , , ,1,2]
     # idx                          [0,1,2,3,4,5,6]
