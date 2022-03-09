@@ -193,7 +193,7 @@ Setting <code class="docutils literal notranslate"><span class="pre">max_nirgs</
 <li><p>The total number of rows within the <cite>incomplete</cite> row groups summed with the number of rows in the new data equals or exceeds <cite>max_row_group_size</cite>.</p></li>
 </ul>
 </div></blockquote>
-<p>Beware that if this feature is used jointly with <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code>, and if new data overlaps with existing data, only overlapping groups are merged together. ‘Full’ coalescing (i.e. with all trailing incomplete row groups) is triggered only if on the abovementionned condition is met.</p>
+<p>Beware that if this feature is used jointly with <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code>, and if new data overlaps with existing data, only overlapping groups are merged together. ‘Full’ coalescing (i.e. with all trailing incomplete row groups) is triggered only if one the abovementionned condition is met.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Re-using previous variables.</span>
 <span class="c1"># Initiating a new dataset</span>
 <span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="n">df1</span>
