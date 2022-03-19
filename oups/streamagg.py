@@ -4,6 +4,7 @@ Created on Wed Mar  9 21:30:00 2022.
 
 @author: yoh
 """
+from dataclasses import dataclass
 from typing import Callable, Tuple, Union
 
 from fastparquet import ParquetFile
@@ -12,7 +13,10 @@ from pandas import Series
 from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.collection import ParquetSet
-from oups.indexer import Indexer
+
+
+VDATAFRAME_ROW_GROUP_SIZE = 6_345_000
+METADATA_KEY = "streamagg"
 
 
 def streamagg(
@@ -21,7 +25,8 @@ def streamagg(
     by: Union[Grouper, Callable[[Series, dict], Union[Series, Tuple[Series, dict]]]],
     agg: dict,
     store: ParquetSet,
-    key: Indexer,
+    key: dataclass,
+    write_conf: dict = None,
     post: Callable = None,
     discard_last: bool = True,
 ):
@@ -36,10 +41,16 @@ def streamagg(
 
     Parameters
     ----------
-    seed : Union[vDataFrame, ParquetFile]
+    seed : Union[vDataFrame, Tuple[int, vDataFrame], ParquetFile]
         Seed data over which conducting streamed aggregations.
+        If a tuple made of an `int` and a vaex dataframe, the `int` defines
+        the size of chunks into which is split the dataframe.
+        If purely a vaex dataframe, it is split into chunks of `6_345_000`
+        rows, which for a dataframe with 6 columns of ``float64``/``int64``
+        results in a memory footprint (RAM) of about 290MB.
     ordered_on : str
-        Name of the column with respect to which dataset is in ascending order.
+        Name of the column with respect to which seed dataset is in ascending
+        order. Seed data is necessarily grouped by this column.
     by : Union[pd.Grouper, Callable[[Series, dict], Union[Series, Tuple[Series, dict]]]
         Parameter defining the binning logic.
         If a `Callable`, it is given the column specified by ``ordered_on``
@@ -60,6 +71,9 @@ def streamagg(
         Store to which recording aggregation results.
     key : Indexer
         Key for recording aggregation results.
+    write_conf : dict, default None
+        Settings forwarded to ``oups.writer.pwrite`` when writing aggregation
+        results to store.
     post : Callable, default None
         User-defined function accepting as 1st parameter the pandas dataframe
         resulting from the aggregations defines by ``agg`` parameter, with
@@ -89,7 +103,7 @@ def streamagg(
 
         - It is either the value actually recorded as last index in metadata of
           seed data, if this metadata exists, and `discard_last`` is ``False``;
-        - Or it is the last value from `ordered_on` column.
+        - Or it is the last value from `ordered_on` column in seed data.
 
     - By default, last row group (composed from rows sharing the same value in
       `ordered_on` column), is discarded (parameter ``discard_last`` set
@@ -106,57 +120,106 @@ def streamagg(
           becomes the one-but-last row, as a new row is added).
 
     """
-    # If discard_last is False and no last_index exist in metadata of seed data,
-    # raise ValueError. This use case is unknown and the relevant logic is to be defined
-    # in regard of this use case.
-    # /!\ WiP
+    # Initialize 'iter_dataframe' from seed data, with correct trimming.
+    # Trim start if streamagg data already exists.
+    b_oups = b"oups_streamagg"
+    #    b_slsi = b'streamagg_last_seed_index'
+    if key in store:
+        # Prior streamagg results already in store. Retrieve corresponding
+        # metadata.
+        # /!\ Shortcut to decoded metadata in router.
+        streamagg_md = store[key].pf.key_value_metadata[b_oups].decode()
+        streamagg_md.copy()  # dummy code
+        # Decode
+        # streamagg_md = pickle.loads(codecs.decode(streamagg_md.encode("ascii"), "base64"))
 
-    # last_index =  None
-    # if key in store:
-    # Get "start" from last_index and make sure
-    # last_index = store[key].pf. ... last value
-    # Trim data if data available (made in next step)
+        # if b_oups in kvm and b_slsi in kvm[b_oups]:
+        #    seed_index_start = kvm[b_oups][b_slsi]
 
-    # Retrieve and filter seed data:
-    #  - if existing aggregated data, trim to keep only newer data.
-    #    - retrieve last_index from metadata of **aggregated** data
-    #  - if 'discard_last', discard last row groups (sharing same index).
-    #  - if ParquetFile, load only columns in 'seed' present in 'agg' and 'ordered_on',
-    # if isinstance(seed, vDataFrame):
-    # Trim and iterate
-    # iter_data = seed[ts > start].to_pandas_df(chunk=)
-    # elif isinstance(seed, ParquetFile):
-    # Trim and iterate
-    # iter_data = seed.iter_row_groups(filter=....)
+    seed_index_end = None
+    if isinstance(seed, ParquetFile):
+        # Case seed is 'ParquetFile'.
+        if discard_last:
+            # Last index value is necessarily
+            seed_index_end = seed.statistics["max"][ordered_on][-1]
+        elif not (
+            b"oups" in seed.key_value_metadata
+            and b"streamagg_last_seed_index" in seed.key_value_metadata[b"oups"]
+        ):
+            # Error if 'discard_last' is False and no 'last_seed_index' exists
+            # in seed metadata. This use case is unknown and the relevant logic
+            # is to be defined in regard of this use case.
+            raise ValueError(
+                "`discard_last` cannot be `False` if seed data is"
+                " not itself a 'streamagg' result."
+            )
+    else:
+        # Case seed is vaex dataframe.
+        if isinstance(seed, tuple):
+            vdf_row_group_size = seed[0]
+            seed = seed[1]
+        else:
+            vdf_row_group_size = VDATAFRAME_ROW_GROUP_SIZE
+            vdf_row_group_size.copy()  # dummy code
+        if discard_last:
+            seed_index_end = seed[-1:].to_numpy()[0]
+            seed_index_end.copy()  # dummy code
 
-    # Iterate.
+            # /!\ WiP
 
-    # Apply 'by' if a callable, recording temporary binning data in metadata.
-    # https://pandas.pydata.org/docs/reference/api/pandas.Grouper.html
+            # last_index =  None
+            # if key in store:
+            # Get "start" from last_index and make sure
+            # last_index = store[key].pf. ... last value
+            # Trim data if data available (made in next step)
 
-    # Aggregate.
+            # Retrieve and filter seed data:
+            #  - if existing aggregated data, trim to keep only newer data.
+            #    - retrieve last_index from metadata of **aggregated** data
+            #  - if 'discard_last', discard last row groups (sharing same index).
+            #  - if ParquetFile, load only columns in 'seed' present in 'agg' and 'ordered_on',
+            # if isinstance(seed, vDataFrame):
+            # Trim and iterate
+            # iter_data = seed[ts > start].to_pandas_df(chunk=)
+            # elif isinstance(seed, ParquetFile):
+            # Trim and iterate
+            # iter_data = seed.iter_row_groups(filter=....)
 
-    # Stitch.
-    # Assess need for stitching by comparing 1st aggregation label from new
-    # results with last from existing results. Stitch results if same bin label.
-    # Retrieve result column names from 'agg' for stitching step.
+            # Iterate.
 
-    # Spare (buffer) last aggregation row for next iteration or last recording step,
-    # Trim last row from aggregation result.
+            # Apply 'by' if a callable, recording temporary binning data in metadata.
+            # https://pandas.pydata.org/docs/reference/api/pandas.Grouper.html
 
-    # If not empty aggregation results.
-    # - vectorized post-processing.
-    # - record aggregated chunk.
+            # Aggregate.
 
-    # End of iteration.
+            # Stitch.
+            # Assess need for stitching by comparing 1st aggregation label from new
+            # results with last from existing results. Stitch results if same bin label.
+            # Retrieve result column names from 'agg' for stitching step.
 
-    # Record in metadata:
-    #  - last aggregation row
-    #  - last binning buffer
-    #  - last index
-    #     - either being the last_index recoreded in metadata of seed data
-    #       if existing and 'discard_last' is False
-    #     - else last index value processed from seed data
-    #          (one-but-last value if 'discard_last' is True,
-    #           or last value if discard_last is False)
-    # Record last row.
+            # Spare (buffer) last aggregation row for next iteration or last recording step,
+            # Trim last row from aggregation result.
+
+            # If not empty aggregation results.
+            # - vectorized post-processing.
+            # - record aggregated chunk.
+
+            # End of iteration.
+
+            # Record in metadata:
+            #  - last aggregation row
+            #  - last binning buffer
+            #  - last index
+            #     - either being the last_index recoreded in metadata of seed data
+            #       if existing and 'discard_last' is False
+            #     - else last index value processed from seed data
+            #          (one-but-last value if 'discard_last' is True,
+            #           or last value if discard_last is False)
+
+
+#            encoded = codecs.encode(
+#                pickle.dumps(cols, protocol=pickle.HIGHEST_PROTOCOL), "base64"
+#            ).decode("ascii")
+# Record last row.
+# Record last row of aggregated data as json:
+# https://pandas.pydata.org/docs/user_guide/io.html#table-schema

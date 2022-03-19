@@ -26,7 +26,7 @@ def test_init_and_append_pandas_std(tmp_path):
     # (no row index, compression SNAPPY, row group size: 2)
     pdf1 = pDataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     ps_write(str(tmp_path), pdf1, max_row_group_size=2)
-    pf1 = ParquetFile(tmp_path)
+    pf1 = ParquetFile(str(tmp_path))
     assert len(pf1.row_groups) == 3
     for rg in pf1.row_groups:
         assert rg.num_rows == 2
@@ -35,7 +35,7 @@ def test_init_and_append_pandas_std(tmp_path):
     # Append
     pdf2 = pDataFrame({"a": range(2), "b": ["at", "of"]})
     ps_write(str(tmp_path), pdf2, max_row_group_size=2)
-    res2 = ParquetFile(tmp_path).to_pandas()
+    res2 = ParquetFile(str(tmp_path)).to_pandas()
     assert concat([pdf1, pdf2]).reset_index(drop=True).equals(res2)
 
 
@@ -45,7 +45,7 @@ def test_init_pandas_no_folder(tmp_path):
     tmp_path = os_path.join(tmp_path, "test")
     pdf = pDataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     ps_write(str(tmp_path), pdf, max_row_group_size=2)
-    res = ParquetFile(tmp_path).to_pandas()
+    res = ParquetFile(str(tmp_path)).to_pandas()
     assert pdf.equals(res)
 
 
@@ -68,7 +68,7 @@ def test_init_and_append_vaex_std(tmp_path):
     pdf1 = pDataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     vdf1 = from_pandas(pdf1)
     ps_write(str(tmp_path), vdf1, max_row_group_size=2)
-    pf1 = ParquetFile(tmp_path)
+    pf1 = ParquetFile(str(tmp_path))
     assert len(pf1.row_groups) == 3
     for rg in pf1.row_groups:
         assert rg.num_rows == 2
@@ -78,7 +78,7 @@ def test_init_and_append_vaex_std(tmp_path):
     pdf2 = pDataFrame({"a": range(2), "b": ["at", "of"]})
     vdf2 = from_pandas(pdf2)
     ps_write(str(tmp_path), vdf2, max_row_group_size=2)
-    res2 = ParquetFile(tmp_path).to_pandas()
+    res2 = ParquetFile(str(tmp_path)).to_pandas()
     assert concat([pdf1, pdf2]).reset_index(drop=True).equals(res2)
 
 
@@ -98,7 +98,7 @@ def test_init_idx_expansion_vaex(tmp_path):
     assert res_midx.equals(ref_midx)
     vdf = from_pandas(pdf)
     ps_write(str(tmp_path), vdf, cmidx_expand=True)
-    res = ParquetFile(tmp_path).to_pandas()
+    res = ParquetFile(str(tmp_path)).to_pandas()
     pdf.columns = ref_midx
     assert res.equals(pdf)
 
@@ -127,7 +127,7 @@ def test_init_and_select_vaex(tmp_path):
     # Select
     vdf = vdf[vdf.a > 3]
     ps_write(str(tmp_path), vdf)
-    res = ParquetFile(tmp_path).to_pandas()
+    res = ParquetFile(str(tmp_path)).to_pandas()
     assert pdf.loc[pdf.a > 3].reset_index(drop=True).equals(res)
 
 

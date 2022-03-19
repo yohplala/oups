@@ -13,15 +13,11 @@ sortedcontainers = "^2.4.0"
 pyarrow = "6.0.1" # force pyarrow to 6.0.1 as 7.0.0 is available, but no packages yet?
 pandas = "^1.4.0"
 cramjam = "^2.5.0"
-fastparquet = "^0.8.0"
-vaex-core = "^4.7.0"
+#fastparquet = "^0.8.0"
+fastparquet = {git = "https://github.com/yohplala/fastparquet.git", rev = "kvm_as_property"}
+vaex-core = "^4.8.0"
 vaex-server = "^0.8.0"
 blake3 = "^0.2.1" # remove next time upgrading vaex
-# flake8-bandit giving trouble...
-# https://github.com/tylerwince/flake8-bandit/issues/21
-flake8 = "^4.0.1"
-flake8-bandit = "2.1.2"
-bandit = "1.7.2"
 
 [tool.poetry.dev-dependencies]
 pre-commit = "^2.16.0"
