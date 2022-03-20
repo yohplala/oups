@@ -6,6 +6,8 @@ Created on Wed Dec  6 22:30:00 2021.
 """
 import json
 from ast import literal_eval
+from os import listdir as os_listdir
+from os import path as os_path
 from typing import Dict, List, Tuple, Union
 
 from fastparquet import ParquetFile
@@ -369,48 +371,12 @@ def write(
       ``ordered_on`` and ``duplicates_on`` parameters set to ``None`` as these
       parameters will trigger unnecessary evaluations.
     """
-    rgs_written = False
-    try:
-        # Get parquet file.
-        # If directory not existing, raise 'ValueError'.
-        pf = ParquetFile(dirpath)
-        # Get metadata filename.
-        # If directory existing, but empty, raise 'AttributeError'.
-        pf.fn
-    except (AttributeError, ValueError):
-        # First time writing.
-        iter_data = iter_dataframe(data, max_row_group_size)
-        chunk = next(iter_data)
-        if cmidx_expand:
-            chunk.columns = to_midx(chunk.columns, cmidx_levels)
-        fp_write(
-            dirpath,
-            chunk,
-            row_group_offsets=max_row_group_size,
-            compression=compression,
-            file_scheme="hive",
-            write_index=False,
-            append=False,
-        )
-        # Re-open to write remaining chunks.
-        pf = ParquetFile(dirpath)
-        # Appending
-        # TODO: remove 'sort_pnames=False' when set to False by default in
-        # fastparquet.
-        pf.write_row_groups(
-            data=iter_data,
-            row_group_offsets=None,
-            sort_pnames=False,
-            compression=compression,
-            write_fmd=False,
-        )
-        rgs_written = True
-
-    if not rgs_written:
-        # Not first time writing.
+    if os_path.isdir(dirpath) and os_listdir(dirpath):
+        # Case updating an existing dataset.
         # Identify overlaps in row groups between new data and recorded data.
         # Recorded row group start and end indexes.
         rrg_start_idx, rrg_end_idx = None, None
+        pf = ParquetFile(dirpath)
         n_rrgs = len(pf.row_groups)
         if duplicates_on is not None:
             if not ordered_on:
@@ -531,7 +497,33 @@ def write(
                 )
             # Rename partition files, and write fmd.
             pf._sort_part_names(write_fmd=False)
-
+    else:
+        # Case initiating a new dataset.
+        iter_data = iter_dataframe(data, max_row_group_size)
+        chunk = next(iter_data)
+        if cmidx_expand:
+            chunk.columns = to_midx(chunk.columns, cmidx_levels)
+        fp_write(
+            dirpath,
+            chunk,
+            row_group_offsets=max_row_group_size,
+            compression=compression,
+            file_scheme="hive",
+            write_index=False,
+            append=False,
+        )
+        # Re-open to write remaining chunks.
+        pf = ParquetFile(dirpath)
+        # Appending remaining chunks.
+        pf.write_row_groups(
+            data=iter_data,
+            row_group_offsets=None,
+            sort_pnames=False,
+            compression=compression,
+            write_fmd=False,
+        )
+    # Manage metadata, whatever the case, initiating new dataset or updating
+    # existing one.
     if OUPS_METADATA:
         metadata = _update_metadata(metadata, pf.key_value_metadata)
     if metadata:
