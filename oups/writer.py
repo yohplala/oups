@@ -229,6 +229,7 @@ def _update_metadata(
       - If found in existing, it is updated.
       - If its value is `None`, it is not added, and if found in existing, it
         is removed from existing.
+
     """
     if existing_metadata and OUPS_METADATA_KEY in existing_metadata:
         # Case 'append' to existing metadata.

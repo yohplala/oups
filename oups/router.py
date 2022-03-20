@@ -94,4 +94,8 @@ class ParquetHandle:
     @property
     def _oups_metadata(self) -> dict:
         """Return specific oups metadata."""
-        return json.loads(self.pf.key_value_metadata[OUPS_METADATA_KEY])
+        md = self.pf.key_value_metadata
+        if OUPS_METADATA_KEY in md:
+            return json.loads(md[OUPS_METADATA_KEY])
+        else:
+            return None
