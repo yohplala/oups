@@ -99,6 +99,7 @@ def _post_n_write_agg_chunks(
         agg_res.index.name = index_name
         print("agg_res with updated index name:")
         print(agg_res)
+    # Keep group keys as a columne before post-processing.
     agg_res = agg_res.reset_index(inplace=True)
     # Reset buffer.
     chunks = []
@@ -143,6 +144,15 @@ def streamagg(
         Name of the column with respect to which seed dataset is in ascending
         order. Seed data is not necessarily grouped by this column, in which
         case ``by`` and/or ``bin_on`` parameters have to be set.
+    agg : dict
+        Dict in the form ``{"output_column":("input_col", agg_function)}``
+        where keys are names of output columns into which are recorded
+        results of aggregations, and values describe the aggregations to
+        operate. ``"input_col"`` has to exist in seed data.
+    store : ParquetSet
+        Store to which recording aggregation results.
+    key : Indexer
+        Key for recording aggregation results.
     by : Union[pd.Grouper, Callable[[Series, dict], array-like]], default None
         Parameter defining the binning logic.
         If a `Callable`, it is given
@@ -158,15 +168,6 @@ def streamagg(
         If data are required for re-starting calculation of bins on the next
         data chunk, the buffer has to be modified in place with temporary
         results to record for next-to-come binning iteration.
-    agg : dict
-        Dict in the form ``{"output_column":("input_col", agg_function)}``
-        where keys are names of output columns into which are recorded
-        results of aggregations, and values describe the aggregations to
-        operate. ``"input_col"`` has to exist in seed data.
-    store : ParquetSet
-        Store to which recording aggregation results.
-    key : Indexer
-        Key for recording aggregation results.
     bin_on : str, default None
         Name of the column onto which applying the binning defined by ``by``
         parameter if ``by`` is not ``None``.
@@ -177,7 +178,7 @@ def streamagg(
         be set to an existing column name.
     post : Callable, default None
         User-defined function accepting as a single parameter the pandas
-        dataframe resulting from the aggregations defines by ``agg`` parameter,
+        dataframe resulting from the aggregations defined by ``agg`` parameter,
         with first row already corrected with last row of previous streamed
         aggregation.
         This optional post-processing is intended for use of vectorized
@@ -192,7 +193,8 @@ def streamagg(
     ----------------
     kwargs : dict
         Settings forwarded to ``oups.writer.write`` when writing aggregation
-        results to store.
+        results to store. Can define for instance custom `max_row_group_size`
+        parameter.
 
     Notes
     -----
@@ -243,8 +245,8 @@ def streamagg(
       columns produced by the aggregation step, but not needed afterwards.
       Other formatting operations on the dataframe can also be achieved
       (renaming columns or index, and so on...). To be noticed, group keys are
-      available through the index, and if not reset as a column, it will not be
-      stored (as index is discarded in oups parquet collection).
+      available through a column having same name as initial column from seed
+      data, or defined by 'bin_on' parameter if 'by' is a callable.
     """
     # Initialize 'self_agg', and check if aggregation functions are allowed.
     self_agg = {}
@@ -398,9 +400,13 @@ def streamagg(
     index_name = bin_on if callable(by) else None
     # Buffer to keep aggregation chunks before a concatenation to record.
     agg_chunks_buffer = []
-    # Setting minimal parameters in 'kwargs' if needed.
-    write_config = {"ordered_on": ordered_on, "duplicates_on": bin_on}
-    write_config = write_config | kwargs
+    # Setting 'write_config'.
+    write_config = kwargs
+    write_config["ordered_on"] = ordered_on
+    if "duplicates_on" in write_config and bin_on not in write_config["duplicates_on"]:
+        write_config["duplicates_on"].append(bin_on)
+    else:
+        write_config["duplicates_on"] = bin_on
     agg_res = None
     for i, seed_chunk in enumerate(iter_data):
         print(f"iteration: {i}")
