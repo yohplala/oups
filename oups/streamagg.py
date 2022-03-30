@@ -246,7 +246,7 @@ def streamagg(
       available through the index, and if not reset as a column, it will not be
       stored (as index is discarded in oups parquet collection).
     """
-    # Initialize 'self_agg', and check accepted aggregation functions.
+    # Initialize 'self_agg', and check if aggregation functions are allowed.
     self_agg = {}
     for col_out, (_, agg_func) in agg.items():
         if agg_func.__name__ not in ACCEPTED_AGG_FUNC:
@@ -388,6 +388,7 @@ def streamagg(
         bins = bin_on
     else:
         raise ValueError("one or several among `by` and `bin_on` are " "required.")
+    print(f"bin_on: {bin_on}")
     print(f"seed_index_start: {seed_index_start}")
     print(f"seed_index_end: {seed_index_end}")
     # Number of rows in aggregation result.
@@ -400,7 +401,6 @@ def streamagg(
     # Setting minimal parameters in 'kwargs' if needed.
     write_config = {"ordered_on": ordered_on, "duplicates_on": bin_on}
     write_config = write_config | kwargs
-    print(f"bin_on: {bin_on}")
     agg_res = None
     for i, seed_chunk in enumerate(iter_data):
         print(f"iteration: {i}")
