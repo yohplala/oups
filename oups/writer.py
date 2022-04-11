@@ -14,6 +14,7 @@ from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from fastparquet.api import filter_row_groups
 from fastparquet.api import statistics
+from fastparquet.util import update_custom_metadata
 from numpy import searchsorted as np_searchsorted
 from numpy import unique as np_unique
 from pandas import DataFrame as pDataFrame
@@ -26,9 +27,9 @@ from vaex.dataframe import DataFrame as vDataFrame
 
 COMPRESSION = "SNAPPY"
 MAX_ROW_GROUP_SIZE = 6_345_000
-# For dev:
+# Notes to any dev
 # Store any specific oups metadata in this dict as string.
-# When using, favor appending of data by using 'update()'.
+# When using, append data by using `OUPS_METADATA.update()`.
 OUPS_METADATA = {}
 OUPS_METADATA_KEY = "oups"
 
@@ -255,7 +256,7 @@ def _update_metadata(
         new_metadata[OUPS_METADATA_KEY] = json.dumps(oups_md)
     else:
         new_metadata = {OUPS_METADATA_KEY: json.dumps(oups_md)}
-    # Clear dict of specific oups metadata.
+    # Clear dict of specific oups metadata without deleting the pointer.
     OUPS_METADATA.clear()
     return new_metadata
 
@@ -527,5 +528,5 @@ def write(
     if OUPS_METADATA:
         metadata = _update_metadata(metadata, pf.key_value_metadata)
     if metadata:
-        pf.update_custom_metadata(metadata, write_fmd=False)
+        update_custom_metadata(pf, metadata)
     pf._write_common_metadata()
