@@ -25,13 +25,12 @@ from oups.writer import OUPS_METADATA_KEY
 
 VDATAFRAME_ROW_GROUP_SIZE = 6_345_000
 ACCEPTED_AGG_FUNC = {"min", "max", "sum"}
-# List of metadata keys to information to keep in metadata of aggregation
-# results.
+# List of keys to metadata of aggregation results.
 MD_KEY_STREAMAGG = "streamagg"
 MD_KEY_LAST_COMPLETE_SEED_INDEX = "last_complete_seed_index"
 MD_KEY_BINNING_BUFFER = "binning_buffer"
 MD_KEY_LAST_AGGREGATION_ROW = "last_aggregation_row"
-# Config for pandas dataframe serialization / de-serialization.
+# Config. for pandas dataframe serialization / de-serialization.
 PANDAS_SERIALIZE = {"orient": "table", "date_unit": "ns", "double_precision": 15}
 PANDAS_DESERIALIZE = {"orient": "table", "date_unit": "ns", "precise_float": True}
 
@@ -319,7 +318,9 @@ def streamagg(
           seed data is trimmed to start from last processed value from
           `ordered_on` column (value excluded), these new rows would be
           excluded from the next aggregation, leading to an inaccurate
-          aggregation result.
+          aggregation result. Doing so is a way to identify easily when
+          re-starting the aggregation in a case there can be duplicates in
+          `ordered_on` column.
         - Or if composed of a single row, this last row in seed data is
           temporary (and may get its final values only at a later time, when it
           becomes the one-but-last row, as a new row is added).
@@ -422,8 +423,12 @@ def streamagg(
         if seed_index_end:
             # 'seed_index_end' is excluded if defined.
             filter_seed.append((ordered_on, "<", seed_index_end))
+        print("filters:")
+        print(filter_seed)
+        print("row filters:")
+        print(bool(filter_seed))
         iter_data = seed.iter_row_groups(
-            filters=filter_seed, row_filter=bool(filter_seed), columns=all_cols_in
+            filters=[filter_seed], row_filter=bool(filter_seed), columns=all_cols_in
         )
     else:
         # Case seed is a vaex dataframe.
@@ -516,6 +521,8 @@ def streamagg(
         print("")
         print(f"iteration to fill agg_chunk_buffer: {i}")
         print("")
+        print("loaded cols in seed chunk:")
+        print(seed_chunk.columns)
         if agg_res is not None:
             # If previous results, check if this is write time.
             # Spare last aggregation row as a dataframe for stitching with new
