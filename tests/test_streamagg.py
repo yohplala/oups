@@ -6,12 +6,16 @@ Created on Sun Mar 13 18:00:00 2022.
 """
 from os import path as os_path
 
+import numpy as np
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
 from pandas import Grouper as TimeGrouper
 from pandas import Index as pIndex
+from pandas import Timedelta
+from pandas import Timestamp
+from pandas import concat
 
 from oups import ParquetSet
 from oups import streamagg
@@ -20,7 +24,6 @@ from oups.streamagg import _get_streamagg_md
 
 
 # from pandas.testing import assert_frame_equal
-# from vaex import from_pandas
 
 
 # tmp_path = os_path.expanduser('~/Documents/code/data/oups')
@@ -193,6 +196,101 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     assert binning_buffer_res == binning_buffer_ref
     last_agg_row_ref = pDataFrame(data={agg_col: 1}, index=pIndex([dti_ref[-1]], name=ordered_on))
     assert last_agg_row_res.equals(last_agg_row_ref)
+
+
+def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
+    # Test with parquet seed, time grouper and 'first', 'last', 'min', and
+    # 'max' aggregation. No post, no discard_last. 'Stress test' with appending
+    # new data twice.
+    max_row_group_size = 6
+    start = Timestamp("2020/01/01")
+    rr = np.random.default_rng(1)
+    N = 20
+    rand_ints = rr.integers(100, size=N)
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ordered_on = "ts"
+    seed_df = pDataFrame(
+        {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)}
+    ).sort_values(ordered_on)
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
+    seed = ParquetFile(seed_path)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = TimeGrouper(key=ordered_on, freq="5T", closed="left", label="left")
+    agg = {
+        "first": ("val", "first"),
+        "last": ("val", "last"),
+        "min": ("val", "min"),
+        "max": ("val", "max"),
+    }
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Test results
+    ref_res = seed_df.iloc[:-2].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # 1st append of new data.
+    start = seed_df[ordered_on].iloc[-1]
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed_df2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100}).sort_values(ordered_on)
+    fp_write(
+        seed_path, seed_df2, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+    )
+    seed = ParquetFile(seed_path)
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Test results
+    ref_res = seed_df.append(seed_df2).iloc[:-1].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # 2nd append of new data.
+    start = seed_df2[ordered_on].iloc[-1]
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed_df3 = pDataFrame({ordered_on: ts, "val": rand_ints + 400}).sort_values(ordered_on)
+    fp_write(
+        seed_path, seed_df3, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+    )
+    seed = ParquetFile(seed_path)
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Test results
+    ref_res = concat([seed_df, seed_df2, seed_df3]).iloc[:-1].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key]
+    assert rec_res.pdf.equals(ref_res)
+    n_rows_res = [rg.num_rows for rg in rec_res.pf.row_groups]
+    n_rows_ref = [5, 3, 4, 3, 4, 4, 4, 4, 3, 4, 4, 4, 4, 3, 4]
+    assert n_rows_res == n_rows_ref
 
 
 # WiP

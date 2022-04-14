@@ -24,7 +24,7 @@ from oups.writer import OUPS_METADATA_KEY
 
 
 VDATAFRAME_ROW_GROUP_SIZE = 6_345_000
-ACCEPTED_AGG_FUNC = {"min", "max", "sum"}
+ACCEPTED_AGG_FUNC = {"first", "last", "min", "max", "sum"}
 # List of keys to metadata of aggregation results.
 MD_KEY_STREAMAGG = "streamagg"
 MD_KEY_LAST_COMPLETE_SEED_INDEX = "last_complete_seed_index"
@@ -122,7 +122,11 @@ def _set_streamagg_md(
     # Setup metadata for a future 'streamagg' execution.
     # Store a json serialized pandas series, to keep track of 'whatever
     # the object' the index is.
+    print("last_complete_seed_index")
+    print(last_complete_seed_index)
     last_complete_seed_index = last_complete_seed_index.to_json(**PANDAS_SERIALIZE)
+    print("last_agg_row")
+    print(last_agg_row)
     last_agg_row = last_agg_row.to_json(**PANDAS_SERIALIZE)
     # Set oups metadata.
     metadata = {
@@ -515,20 +519,21 @@ def streamagg(
         # voluntary choice by the user.
     agg_res = None
     len_agg_res = None
-    print("")
+    #    print("")
+    #   /!\ Think to remove i once everything done.
     i = 0
     for seed_chunk in iter_data:
         print("")
         print(f"iteration to fill agg_chunk_buffer: {i}")
         print("")
-        print("loaded cols in seed chunk:")
-        print(seed_chunk.columns)
+        print("seed_chunk:")
+        print(seed_chunk)
         if agg_res is not None:
             # If previous results, check if this is write time.
             # Spare last aggregation row as a dataframe for stitching with new
             # aggregation results from current iteration.
-            print("processing agg_res")
-            print(f"agg_res with length: {len_agg_res}")
+            #            print("processing agg_res")
+            #            print(f"agg_res with length: {len_agg_res}")
             if len_agg_res > 1:
                 # Remove last row that is not recorded from total row number.
                 agg_n_rows += len_agg_res - 1
@@ -537,20 +542,20 @@ def streamagg(
                 agg_chunks_buffer.append(agg_res.iloc[:-1])
                 # Number of iterations to increment 'agg_chunk_buffer'.
                 i += 1
-            print("")
+            #            print("")
             # Keep floor part.
             if agg_n_rows:
                 agg_mean_row_group_size = agg_n_rows // i
-                print(f"agg_n_rows: {agg_n_rows}")
-                print(f"agg_n_rows is supposed to be: {sum([len(df) for df in agg_chunks_buffer])}")
-                print(f"agg_mean_row_group_size: {agg_mean_row_group_size}")
-                print("targeted next number of rows in agg_chunks_buffer at next iteration:")
-                print(agg_n_rows + agg_mean_row_group_size)
-                print(f"limit to equal or exceed to trigger write: {max_agg_row_group_size}")
+                #                print(f"agg_n_rows: {agg_n_rows}")
+                #                print(f"agg_n_rows is supposed to be: {sum([len(df) for df in agg_chunks_buffer])}")
+                #                print(f"agg_mean_row_group_size: {agg_mean_row_group_size}")
+                #                print("targeted next number of rows in agg_chunks_buffer at next iteration:")
+                #                print(agg_n_rows + agg_mean_row_group_size)
+                #                print(f"limit to equal or exceed to trigger write: {max_agg_row_group_size}")
                 if agg_n_rows + agg_mean_row_group_size >= max_agg_row_group_size:
                     # Write results from previous iteration.
-                    print("writing chunk")
-                    print("")
+                    #                    print("writing chunk")
+                    #                    print("")
                     _post_n_write_agg_chunks(
                         chunks=agg_chunks_buffer,
                         store=store,
@@ -563,20 +568,20 @@ def streamagg(
                     # iterations to fill 'agg_chunks_buffer'.
                     agg_n_rows = 0
                     i = 0
-                    print("agg_chunks_buffer is supposed to be empty:")
-            print("agg_chunk_buffer")
-            print(agg_chunks_buffer)
-            print("")
-            print("")
-            print("last agg row after last row setting is:")
-            print(last_agg_row)
-            print("")
-        print("")
-        print("1st row in seed chunk")
-        print(seed_chunk.iloc[:1])
-        print("last row in seed chunk")
-        print(seed_chunk.iloc[-1:])
-        print("")
+        #                    print("agg_chunks_buffer is supposed to be empty:")
+        #            print("agg_chunk_buffer")
+        #            print(agg_chunks_buffer)
+        #            print("")
+        #            print("")
+        #            print("last agg row after last row setting is:")
+        #            print(last_agg_row)
+        #            print("")
+        #        print("")
+        #        print("1st row in seed chunk")
+        #        print(seed_chunk.iloc[:1])
+        #        print("last row in seed chunk")
+        #        print(seed_chunk.iloc[-1:])
+        #        print("")
         if callable(by):
             # Case callable. Bin 'ordered_on'.
             # If 'binning_buffer' is used, it has to be modified in-place, so
@@ -586,35 +591,35 @@ def streamagg(
         # appear. Group keys becomes the index.
         agg_res = seed_chunk.groupby(bins, sort=False).agg(**agg)
         len_agg_res = len(agg_res)
-        print("agg_res after aggregation:")
-        print(agg_res)
-        print("")
+        #        print("agg_res after aggregation:")
+        #        print(agg_res)
+        #        print("")
         # Stitch with last row from *prior* aggregation.
-        print("last row before stitching:")
-        print(last_agg_row)
-        print("")
+        #        print("last row before stitching:")
+        #        print(last_agg_row)
+        #        print("")
         if not last_agg_row.empty:
-            print("last_agg_row is not empty")
+            #            print("last_agg_row is not empty")
             if last_agg_row.index[0] == agg_res.index[0]:
                 # If previous results existing, and if same bin labels shared
                 # between last row of previous aggregation results (meaning same
                 # bin), and first row of new aggregation results, then replay
                 # aggregation between both.
-                print("before aggregation of last row to first row")
-                print(agg_res.iloc[:1])
-                print("concat/agg res:")
-                print(
-                    concat([last_agg_row.iloc[:1], agg_res.iloc[:1]])
-                    .groupby(level=0, sort=False)
-                    .agg(**self_agg)
-                )
+                #                print("before aggregation of last row to first row")
+                #                print(agg_res.iloc[:1])
+                #                print("concat/agg res:")
+                #                print(
+                #                    concat([last_agg_row.iloc[:1], agg_res.iloc[:1]])
+                #                    .groupby(level=0, sort=False)
+                #                    .agg(**self_agg)
+                #                )
                 agg_res.iloc[:1] = (
                     concat([last_agg_row.iloc[:1], agg_res.iloc[:1]])
                     .groupby(level=0, sort=False)
                     .agg(**self_agg)
                 )
-                print("agg_res after aggregation of last row to first row")
-                print(agg_res)
+            #                print("agg_res after aggregation of last row to first row")
+            #                print(agg_res)
             else:
                 # Simply add the last previous row in 'agg_chunk_buffer'
                 # and do nothing with 'agg_res' at this step.
@@ -622,7 +627,7 @@ def streamagg(
                 agg_n_rows += 1
                 # Number of iterations to increment 'agg_chunk_buffer'.
                 i += 1
-                print("last_agg_row has been simply added to list of chunks.")
+        #                print("last_agg_row has been simply added to list of chunks.")
         # Setting 'last_agg_row' from new 'agg_res'.
         last_agg_row = agg_res.iloc[-1:] if len_agg_res > 1 else agg_res
     # Set metadata for a future 'streamagg' execution.
@@ -635,17 +640,17 @@ def streamagg(
     #   - one-but-last value of initial seed data if 'discard_last' is True,
     #   - or last value of initial seed data if 'discard_last' is False.
     if last_complete_seed_index is None:
-        last_complete_seed_index = seed_chunk[ordered_on].iloc[-1:]
-        print("from new streamagg result, last_complete_seed_index:")
-        print(last_complete_seed_index)
+        last_complete_seed_index = seed_chunk[ordered_on].iloc[-1:].reset_index(drop=True)
+    #        print("from new streamagg result, last_complete_seed_index:")
+    #        print(last_complete_seed_index)
     # Set oups metadata.
     _set_streamagg_md(last_complete_seed_index, binning_buffer, last_agg_row)
     # Post-process & write results from last iteration, this time keeping
     # last row, and recording metadata for a future 'streamagg' execution.
     agg_chunks_buffer.append(agg_res)
-    print("writing last chunk")
-    print("agg_chunks_buffer")
-    print(agg_chunks_buffer)
+    #    print("writing last chunk")
+    #    print("agg_chunks_buffer")
+    #    print(agg_chunks_buffer)
     _post_n_write_agg_chunks(
         chunks=agg_chunks_buffer,
         store=store,
