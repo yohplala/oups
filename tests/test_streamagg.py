@@ -262,7 +262,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
         max_row_group_size=max_row_group_size,
     )
     # Test results
-    ref_res = seed_df.append(seed_df2).iloc[:-1].groupby(by).agg(**agg).reset_index()
+    ref_res = concat([seed_df, seed_df2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # 2nd append of new data.
@@ -294,21 +294,18 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
 
 
 # WiP
-# test with first, last, min, max as well, using a dataframe generated with np.random
-# + pursued aggregation
-# test with ParquetFile seed
+# test with ParquetFile seed + 'post' :subtracting 2 columns from agg + removing a column from agg
 # test with vaex seed
+# test with discard_last = False:
+#   - 1st a streamagg that will be used as seed
+#   - then a 2nd streamagg with discard_last = False
+# test with 'by' as callable, with 'buffer_binning' and without 'buffer_binning'.
 
 
 # Test ValueError when not discard_last and not last_seed_index in seed metadata.
 
 # discard_last : seed_index_end correctly taken into account?
 
-
-# from seed data, test with additional columns and check only cols_in to be used are
-# indeed loaded.
-
-# Test with 'by' as callable, with 'buffer_binning' and without 'buffer_binning'.
 
 # Test avec streamagg 1 se terminant exactement sure la bin en cours, & streamagg 2 reprenant sure une nouvelle bin
 # Et quand streamagg est utile. (itération 2 démarrée au milieu de bin 1 par example)
