@@ -13,6 +13,7 @@ from pandas import DataFrame as pDataFrame
 from pandas import Grouper
 from pandas import Series
 from pandas import concat
+from pandas import date_range
 from pandas import read_json
 from vaex.dataframe import DataFrame as vDataFrame
 
@@ -442,19 +443,29 @@ def streamagg(
         else:
             vdf_row_group_size = VDATAFRAME_ROW_GROUP_SIZE
         if discard_last:
-            seed_index_end = seed[-1:].to_numpy()[0]
+            #            seed_index_end = seed[-1:].to_numpy()[0]
+            len_seed = len(seed)
+            seed_index_end = seed.evaluate(ordered_on, len_seed - 1, len_seed, array_type="numpy")[
+                0
+            ]
+            print("seed index end")
+            print(seed_index_end)
+            print(type(seed_index_end))
         if seed_index_restart:
             seed = seed[seed[ordered_on] > seed_index_restart]
         if seed_index_end:
-            seed = seed[seed[ordered_on] < seed_index_restart]
-        if seed_index_restart or seed_index_end:
-            seed = seed.extract()
-        iter_data = seed.to_pandas_df(chunk_size=vdf_row_group_size, column_names=all_cols_in)
+            seed = seed[seed[ordered_on] < seed_index_end]
+        #        if seed_index_restart or seed_index_end:
+        #            seed = seed.extract()
+        iter_data = (
+            tup[2]
+            for tup in seed.to_pandas_df(chunk_size=vdf_row_group_size, column_names=all_cols_in)
+        )
     # Define aggregation result max size before writing to disk.
     max_agg_row_group_size = (
         kwargs["max_row_group_size"] if "max_row_group_size" in kwargs else MAX_ROW_GROUP_SIZE
     )
-    # Ensure 'by' and/or 'bin_on' are set.
+    # Ensure 'by' and 'bin_on' are set.
     if by:
         if callable(by):
             if bin_on is None:
@@ -535,11 +546,11 @@ def streamagg(
             #            print("processing agg_res")
             #            print(f"agg_res with length: {len_agg_res}")
             if len_agg_res > 1:
-                # Remove last row that is not recorded from total row number.
-                agg_n_rows += len_agg_res - 1
                 # Remove last row from 'agg_res' and add to
                 # 'agg_chunks_buffer'.
                 agg_chunks_buffer.append(agg_res.iloc[:-1])
+                # Remove last row that is not recorded from total row number.
+                agg_n_rows += len_agg_res - 1
                 # Number of iterations to increment 'agg_chunk_buffer'.
                 i += 1
             #            print("")
@@ -591,16 +602,16 @@ def streamagg(
         # appear. Group keys becomes the index.
         agg_res = seed_chunk.groupby(bins, sort=False).agg(**agg)
         len_agg_res = len(agg_res)
-        #        print("agg_res after aggregation:")
-        #        print(agg_res)
-        #        print("")
+        print("agg_res after aggregation:")
+        print(agg_res)
+        print("")
         # Stitch with last row from *prior* aggregation.
-        #        print("last row before stitching:")
-        #        print(last_agg_row)
-        #        print("")
+        print("last row before stitching:")
+        print(last_agg_row)
+        print("")
         if not last_agg_row.empty:
             #            print("last_agg_row is not empty")
-            if last_agg_row.index[0] == agg_res.index[0]:
+            if (last := last_agg_row.index[0]) == (first := agg_res.index[0]):
                 # If previous results existing, and if same bin labels shared
                 # between last row of previous aggregation results (meaning same
                 # bin), and first row of new aggregation results, then replay
@@ -614,17 +625,40 @@ def streamagg(
                 #                    .agg(**self_agg)
                 #                )
                 agg_res.iloc[:1] = (
-                    concat([last_agg_row.iloc[:1], agg_res.iloc[:1]])
+                    concat([last_agg_row, agg_res.iloc[:1]])
                     .groupby(level=0, sort=False)
                     .agg(**self_agg)
                 )
             #                print("agg_res after aggregation of last row to first row")
             #                print(agg_res)
             else:
-                # Simply add the last previous row in 'agg_chunk_buffer'
-                # and do nothing with 'agg_res' at this step.
+                n_added_rows = 1
+                # Bin of 'last_agg_row' does not match bin of first row in
+                # 'agg_res'.
+                if isinstance(by, Grouper) and by.freq:
+                    # If bins are defined with pandas time grouper ('freq'
+                    # attribute is not `None`), bins without values from seed
+                    # that could exist at start of chunk will be missing.
+                    # In a classic pandas aggregation, these bins would however
+                    # be present in aggregation results, with `NaN` values in
+                    # columns. These bins are thus added here to maintain
+                    # classic pandas behavior.
+                    missing = date_range(
+                        start=last, end=first, freq=by.freq, inclusive="neither", name=by.key
+                    )
+                    if not missing.empty:
+                        last_agg_row = concat(
+                            [last_agg_row, pDataFrame(index=missing, columns=last_agg_row.columns)]
+                        )
+                        n_added_rows = len(last_agg_row)
+                # Add last previous row (and possibly missing ones if pandas
+                # time grouper) in 'agg_chunk_buffer' and do nothing with
+                # 'agg_res' at this step.
+                print("last_agg_row after possible extension with NaN")
+                print(last_agg_row)
                 agg_chunks_buffer.append(last_agg_row)
-                agg_n_rows += 1
+                agg_n_rows += n_added_rows
+                print(f"Number of rows in agg_chunks_buffer: {agg_n_rows}")
                 # Number of iterations to increment 'agg_chunk_buffer'.
                 i += 1
         #                print("last_agg_row has been simply added to list of chunks.")

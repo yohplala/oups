@@ -115,7 +115,7 @@ def iter_dataframe(
         # integers. Line of code currently taken from
         # vaex-core.vaex.dataframe.__getitem__ (L5230)
         val_at_start = [
-            data.evaluate(sharp_on, idx, idx + 1, array_type="python")[0] for idx in starts
+            data.evaluate(sharp_on, idx, idx + 1, array_type="numpy")[0] for idx in starts
         ]
         # TODO: vaex searchsorted kind of broken. Re-try when solved?
         # https://github.com/vaexio/vaex/issues/1674

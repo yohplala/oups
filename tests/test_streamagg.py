@@ -11,11 +11,12 @@ from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
-from pandas import Grouper as TimeGrouper
+from pandas import Grouper
 from pandas import Index as pIndex
 from pandas import Timedelta
 from pandas import Timestamp
 from pandas import concat
+from vaex import from_pandas
 
 from oups import ParquetSet
 from oups import streamagg
@@ -24,8 +25,6 @@ from oups.streamagg import _get_streamagg_md
 
 
 # from pandas.testing import assert_frame_equal
-
-
 # tmp_path = os_path.expanduser('~/Documents/code/data/oups')
 
 
@@ -106,7 +105,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     store = ParquetSet(store_path, Indexer)
     key = Indexer("seed")
     # Setup aggregation.
-    by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg_col = "sum"
     agg = {agg_col: ("val", "sum")}
     # Setup streamed aggregation.
@@ -200,8 +199,8 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
 
 def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
     # Test with parquet seed, time grouper and 'first', 'last', 'min', and
-    # 'max' aggregation. No post, no discard_last. 'Stress test' with appending
-    # new data twice.
+    # 'max' aggregation. No post, no discard_last.
+    # 'Stress test' with appending new data twice.
     max_row_group_size = 6
     start = Timestamp("2020/01/01")
     rr = np.random.default_rng(1)
@@ -220,7 +219,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
     store = ParquetSet(store_path, Indexer)
     key = Indexer("seed")
     # Setup aggregation.
-    by = TimeGrouper(key=ordered_on, freq="5T", closed="left", label="left")
+    by = Grouper(key=ordered_on, freq="5T", closed="left", label="left")
     agg = {
         "first": ("val", "first"),
         "last": ("val", "last"),
@@ -293,6 +292,56 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
     assert n_rows_res == n_rows_ref
 
 
+def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
+    # Test with vaex seed, time grouper and 'first', 'last', 'min', and
+    # 'max' aggregation. No post, no discard_last. 'Stress test' with appending
+    # new data twice.
+    max_row_group_size = 6
+    start = Timestamp("2020/12/31")
+    rr = np.random.default_rng(2)
+    N = 20
+    rand_ints = rr.integers(100, size=N)
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ordered_on = "ts"
+    seed_pdf = pDataFrame(
+        {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)}
+    ).sort_values(ordered_on)
+    seed_vdf = from_pandas(seed_pdf)
+    #    seed_path = os_path.join(tmp_path, "seed")
+    #    fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
+    #    seed = ParquetFile(seed_path)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="5T", closed="left", label="left")
+    agg = {
+        "first": ("val", "first"),
+        "last": ("val", "last"),
+        "min": ("val", "min"),
+        "max": ("val", "max"),
+    }
+    # Setup streamed aggregation.
+    streamagg(
+        seed=(max_row_group_size, seed_vdf),
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Test results
+    ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    # Forcing dtype of 'rec_res' to float.
+    for col in agg:
+        rec_res[col] = rec_res[col].astype(float)
+    assert rec_res.equals(ref_res)
+
+
 # WiP
 # test with ParquetFile seed + 'post' :subtracting 2 columns from agg + removing a column from agg
 # test with vaex seed
@@ -326,5 +375,4 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
 # test with 'duplicates_on' set, without 'bin_on' to check when result are recorded:
 # no bin_on (to be removed during post') and that it works.
 
-# Test min, max, sum, first, last
 # Test error message agg func is not within above values min, max, sum, first, last
