@@ -8,10 +8,12 @@ import json
 from dataclasses import dataclass
 from typing import Callable, List, Tuple, Union
 
+import numpy as np
 from fastparquet import ParquetFile
 from pandas import DataFrame as pDataFrame
 from pandas import Grouper
 from pandas import Series
+from pandas import Timestamp as pTimestamp
 from pandas import concat
 from pandas import date_range
 from pandas import read_json
@@ -423,7 +425,6 @@ def streamagg(
                 )
         filter_seed = []
         if seed_index_restart:
-            # 'seed_index_restart' is excluded if defined.
             filter_seed.append((ordered_on, ">", seed_index_restart))
         if seed_index_end:
             # 'seed_index_end' is excluded if defined.
@@ -448,15 +449,23 @@ def streamagg(
             seed_index_end = seed.evaluate(ordered_on, len_seed - 1, len_seed, array_type="numpy")[
                 0
             ]
-            print("seed index end")
-            print(seed_index_end)
-            print(type(seed_index_end))
         if seed_index_restart:
+            # 'seed_index_restart' is excluded if defined.
+            if isinstance(seed_index_restart, pTimestamp):
+                # Vaex does not accept pandas timestamp, only numpy or pyarrow
+                # ones.
+                seed_index_restart = np.datetime64(seed_index_restart)
             seed = seed[seed[ordered_on] > seed_index_restart]
         if seed_index_end:
             seed = seed[seed[ordered_on] < seed_index_end]
         #        if seed_index_restart or seed_index_end:
         #            seed = seed.extract()
+        print("seed index restart")
+        print(seed_index_restart)
+        print(type(seed_index_restart))
+        print("seed index end")
+        print(seed_index_end)
+        print(type(seed_index_end))
         iter_data = (
             tup[2]
             for tup in seed.to_pandas_df(chunk_size=vdf_row_group_size, column_names=all_cols_in)

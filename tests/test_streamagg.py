@@ -15,7 +15,8 @@ from pandas import Grouper
 from pandas import Index as pIndex
 from pandas import Timedelta
 from pandas import Timestamp
-from pandas import concat
+from pandas import concat as pconcat
+from vaex import concat as vconcat
 from vaex import from_pandas
 
 from oups import ParquetSet
@@ -261,7 +262,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
         max_row_group_size=max_row_group_size,
     )
     # Test results
-    ref_res = concat([seed_df, seed_df2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
+    ref_res = pconcat([seed_df, seed_df2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # 2nd append of new data.
@@ -284,7 +285,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
         max_row_group_size=max_row_group_size,
     )
     # Test results
-    ref_res = concat([seed_df, seed_df2, seed_df3]).iloc[:-1].groupby(by).agg(**agg).reset_index()
+    ref_res = pconcat([seed_df, seed_df2, seed_df3]).iloc[:-1].groupby(by).agg(**agg).reset_index()
     rec_res = store[key]
     assert rec_res.pdf.equals(ref_res)
     n_rows_res = [rg.num_rows for rg in rec_res.pf.row_groups]
@@ -304,8 +305,10 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     ordered_on = "ts"
     seed_pdf = pDataFrame(
-        {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)}
+        {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)},
     ).sort_values(ordered_on)
+    # Forcing dtype of 'seed_pdf' to float.
+    seed_pdf["val"] = seed_pdf["val"].astype(float)
     seed_vdf = from_pandas(seed_pdf)
     #    seed_path = os_path.join(tmp_path, "seed")
     #    fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
@@ -336,15 +339,56 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
     # Test results
     ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
     rec_res = store[key].pdf
-    # Forcing dtype of 'rec_res' to float.
-    for col in agg:
-        rec_res[col] = rec_res[col].astype(float)
     assert rec_res.equals(ref_res)
+    # 1st append of new data.
+    start = seed_pdf[ordered_on].iloc[-1]
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed_pdf2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100}).sort_values(ordered_on)
+    seed_vdf = vconcat([seed_vdf, from_pandas(seed_pdf2)])
+    # Setup streamed aggregation.
+    streamagg(
+        seed=(max_row_group_size, seed_vdf),
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Test results
+    ref_res = pconcat([seed_pdf, seed_pdf2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # 2nd append of new data.
+    start = seed_pdf2[ordered_on].iloc[-1]
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed_pdf3 = pDataFrame({ordered_on: ts, "val": rand_ints + 400}).sort_values(ordered_on)
+    seed_vdf = vconcat([seed_vdf, from_pandas(seed_pdf3)])
+    # Setup streamed aggregation.
+    streamagg(
+        seed=(max_row_group_size, seed_vdf),
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Test results
+    ref_res = (
+        pconcat([seed_pdf, seed_pdf2, seed_pdf3]).iloc[:-1].groupby(by).agg(**agg).reset_index()
+    )
+    rec_res = store[key]
+    assert rec_res.pdf.equals(ref_res)
+    n_rows_res = [rg.num_rows for rg in rec_res.pf.row_groups]
+    n_rows_ref = [5, 5, 5, 3, 4, 5, 4, 4, 3, 4, 5, 4, 3, 3]
+    assert n_rows_res == n_rows_ref
 
 
 # WiP
 # test with ParquetFile seed + 'post' :subtracting 2 columns from agg + removing a column from agg
-# test with vaex seed
 # test with discard_last = False:
 #   - 1st a streamagg that will be used as seed
 #   - then a 2nd streamagg with discard_last = False
