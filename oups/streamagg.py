@@ -33,6 +33,7 @@ MD_KEY_STREAMAGG = "streamagg"
 MD_KEY_LAST_COMPLETE_SEED_INDEX = "last_complete_seed_index"
 MD_KEY_BINNING_BUFFER = "binning_buffer"
 MD_KEY_LAST_AGGREGATION_ROW = "last_aggregation_row"
+MD_KEY_POST_BUFFER = "post_buffer"
 # Config. for pandas dataframe serialization / de-serialization.
 PANDAS_SERIALIZE = {"orient": "table", "date_unit": "ns", "double_precision": 15}
 PANDAS_DESERIALIZE = {"orient": "table", "date_unit": "ns", "precise_float": True}
@@ -80,6 +81,7 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
             last index of "complete" row or row group from seed data.
           - ``binning_buffer``, a dict to be forwarded to ``by`` if a callable.
           - ``last_agg_row``, last row grom previously aggregated results.
+          - ``post_buffer``, a dict to be forwarded to ``post`` callable.
 
     """
     # Retrieve corresponding metadata to re-start aggregations.
@@ -103,13 +105,21 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
     print("last_agg_row:")
     print(last_agg_row)
     print("")
-    return seed_index_restart, binning_buffer, last_agg_row
+    # Metadata related to post-processing on prior aggregation results, to be
+    # used by 'post'.
+    post_buffer = streamagg_md[MD_KEY_POST_BUFFER]
+    print("post_buffer:")
+    print(post_buffer)
+    return seed_index_restart, binning_buffer, last_agg_row, post_buffer
 
 
 def _set_streamagg_md(
-    last_complete_seed_index: pDataFrame, binning_buffer: dict, last_agg_row: pDataFrame
+    last_complete_seed_index: pDataFrame,
+    binning_buffer: dict,
+    last_agg_row: pDataFrame,
+    post_buffer: dict,
 ):
-    """Serialize and record stremagg metadata from last aggregation.
+    """Serialize and record stremagg metadata from last aggregation and post.
 
     Parameters
     ----------
@@ -121,6 +131,9 @@ def _set_streamagg_md(
     last_agg_row : pDataFrame
         Last row from last aggregation results, required for stitching with
         aggregation results from new seed data.
+    post_buffer : dict
+        Last values from post-processing, that can be required when restarting
+        post-processing of new aggregation results.
     """
     # Setup metadata for a future 'streamagg' execution.
     # Store a json serialized pandas series, to keep track of 'whatever
@@ -137,6 +150,7 @@ def _set_streamagg_md(
             MD_KEY_LAST_COMPLETE_SEED_INDEX: last_complete_seed_index,
             MD_KEY_BINNING_BUFFER: binning_buffer,
             MD_KEY_LAST_AGGREGATION_ROW: last_agg_row,
+            MD_KEY_POST_BUFFER: post_buffer,
         }
     }
     OUPS_METADATA.update(metadata)
@@ -149,6 +163,9 @@ def _post_n_write_agg_chunks(
     write_config: dict,
     index_name: str = None,
     post: Callable = None,
+    isfrn: bool = None,
+    post_buffer: dict = None,
+    metadata: tuple = None,
 ):
     """Write list of aggregation row groups with optional post, then reset it.
 
@@ -165,15 +182,39 @@ def _post_n_write_agg_chunks(
         value.
     write_config : dict
         Settings forwarded to ``oups.writer.write`` when writing aggregation
-        results to store.
+        results to store. Compulsory parameter defining at least `ordered_on`
+        and `duplicates_on` columns.
     post : Callable, default None
-        User-defined function accepting as a single parameter the pandas
-        dataframe resulting from the aggregations defines by ``agg`` parameter,
-        with first row already corrected with last row of previous streamed
-        aggregation.
+        User-defined function accepting 3 parameters.
+
+          - First, the pandas dataframe resulting from the aggregations defined
+            by ``agg`` parameter, with first row already corrected with last
+            row of previous streamed aggregation.
+          - Second, a boolean which indicates if first row of aggregation
+            result is a new row, or is the 'same' that last row of aggregation
+            result. If 'same', all values may not be the same, but the
+            aggregation bin is the same.
+          - Third, a dict to be used as data buffer, that can be necessary for
+            some user-defined post-processing requiring data assessed in
+            previous post-processing iteration.
+
+        It has then to return a pandas dataframe that will be recorded.
         This optional post-processing is intended for use of vectorized
         functions (not mixing rows together, but operating on one or several
         columns), or dataframe formatting before results are finally recorded.
+    isfrn : boolean, default None
+        Boolean indicating if first row of aggregation result is a new row, or
+        is the 'same' that last row of aggregation result. If 'same', all
+        values may not be the same, but the aggregation bin is the same.
+    post_buffer : dict, default None
+        Buffer to keep track of data that can be processed during previous
+        iterations. This pointer should not be re-initialized in 'post' or
+        data from previous iterations will be lost.
+        This dict has to contain data that can be serialized, as data is then
+        kept in parquet file metadata.
+    metadata : dict, default None
+        Metadata to be recorded in parquet file. Data has to be serializable.
+        If `None`, no metadata is recorded.
     """
     print("")
     print("_post_n_write_agg_chunks")
@@ -191,14 +232,17 @@ def _post_n_write_agg_chunks(
     agg_res.reset_index(inplace=True)
     # Reset (in place) buffer.
     chunks.clear()
-    # Post processing if any.
     if post:
+        # Post processing if any.
         print("going to post processing")
         print("")
-        agg_res = post(agg_res)
+        agg_res = post(agg_res, isfrn, post_buffer)
     print("agg_res after post processing, right before writing")
     print(agg_res)
     print("")
+    if metadata:
+        # Set oups metadata.
+        _set_streamagg_md(*metadata, post_buffer)
     # Record data.
     store[key] = write_config, agg_res
 
@@ -270,10 +314,20 @@ def streamagg(
         If ``by`` is ``None`` (or a callable), then ``bin_on`` is expected to
         be set to an existing column name.
     post : Callable, default None
-        User-defined function accepting as a single parameter the pandas
-        dataframe resulting from the aggregations defined by ``agg`` parameter,
-        with first row already corrected with last row of previous streamed
-        aggregation.
+        User-defined function accepting 3 parameters.
+
+          - First, the pandas dataframe resulting from the aggregations defined
+            by ``agg`` parameter, with first row already corrected with last
+            row of previous streamed aggregation.
+          - Second, a boolean which indicates if first row of aggregation
+            result is a new row, or is the 'same' that last row of aggregation
+            result. If 'same', all values may not be the same, but the
+            aggregation bin is the same.
+          - Third, a dict to be used as data buffer, that can be necessary for
+            some user-defined post-processing requiring data assessed in
+            previous post-processing iteration.
+
+        It has then to return a pandas dataframe that will be recorded.
         This optional post-processing is intended for use of vectorized
         functions (not mixing rows together, but operating on one or several
         columns), or dataframe formatting before results are finally recorded.
@@ -374,7 +428,9 @@ def streamagg(
             )
         self_agg[col_out] = (col_out, agg_func)
     # Retrieve lists of input and output columns from 'agg'.
-    all_cols_in = list({val[0] for val in agg.values()}) + [ordered_on]
+    all_cols_in = {val[0] for val in agg.values()}
+    all_cols_in.add(ordered_on)
+    all_cols_in = list(all_cols_in)
     # Initialize 'iter_dataframe' from seed data, with correct trimming.
     seed_index_restart = None
     seed_index_end = None
@@ -382,13 +438,17 @@ def streamagg(
     # Initializing 'last_agg_row' to a pandas dataframe for using 'empty'
     # attribute.
     last_agg_row = pDataFrame()
+    post_buffer = {}
     if key in store:
         print("key is in store")
         # Prior streamagg results already in store.
         # Retrieve corresponding metadata to re-start aggregations.
-        seed_index_restart, binning_buffer_, last_agg_row = _get_streamagg_md(store[key])
+        seed_index_restart, binning_buffer_, last_agg_row, post_buffer_ = _get_streamagg_md(
+            store[key]
+        )
         seed_index_restart = seed_index_restart.iloc[0, 0]
         binning_buffer.update(binning_buffer_)
+        post_buffer.update(post_buffer_)
     # Seed index value to end new aggregation. Depending 'discard_last', it is
     # excluded or not.
     # Reason to discard last seed row (or row group) is twofold.
@@ -539,6 +599,9 @@ def streamagg(
         # voluntary choice by the user.
     agg_res = None
     len_agg_res = None
+    # Initialise 'isfrn': is first row (from aggregation result) a new row?
+    # For 1st iteration it is necessarily a new one.
+    isfrn = True
     #    print("")
     #   /!\ Think to remove i once everything done.
     i = 0
@@ -583,6 +646,9 @@ def streamagg(
                         write_config=write_config,
                         index_name=index_name,
                         post=post,
+                        isfrn=isfrn,
+                        post_buffer=post_buffer,
+                        metadata=None,
                     )
                     # Reset number of rows within chunk list and number of
                     # iterations to fill 'agg_chunks_buffer'.
@@ -620,27 +686,8 @@ def streamagg(
         print("")
         if not last_agg_row.empty:
             #            print("last_agg_row is not empty")
-            if (last := last_agg_row.index[0]) == (first := agg_res.index[0]):
-                # If previous results existing, and if same bin labels shared
-                # between last row of previous aggregation results (meaning same
-                # bin), and first row of new aggregation results, then replay
-                # aggregation between both.
-                #                print("before aggregation of last row to first row")
-                #                print(agg_res.iloc[:1])
-                #                print("concat/agg res:")
-                #                print(
-                #                    concat([last_agg_row.iloc[:1], agg_res.iloc[:1]])
-                #                    .groupby(level=0, sort=False)
-                #                    .agg(**self_agg)
-                #                )
-                agg_res.iloc[:1] = (
-                    concat([last_agg_row, agg_res.iloc[:1]])
-                    .groupby(level=0, sort=False)
-                    .agg(**self_agg)
-                )
-            #                print("agg_res after aggregation of last row to first row")
-            #                print(agg_res)
-            else:
+            isfrn = (first := agg_res.index[0]) != (last := last_agg_row.index[0])
+            if isfrn:
                 n_added_rows = 1
                 # Bin of 'last_agg_row' does not match bin of first row in
                 # 'agg_res'.
@@ -670,9 +717,35 @@ def streamagg(
                 print(f"Number of rows in agg_chunks_buffer: {agg_n_rows}")
                 # Number of iterations to increment 'agg_chunk_buffer'.
                 i += 1
+            else:
+                # If previous results existing, and if same bin labels shared
+                # between last row of previous aggregation results (meaning same
+                # bin), and first row of new aggregation results, then replay
+                # aggregation between both.
+                #                print("before aggregation of last row to first row")
+                #                print(agg_res.iloc[:1])
+                #                print("concat/agg res:")
+                #                print(
+                #                    concat([last_agg_row.iloc[:1], agg_res.iloc[:1]])
+                #                    .groupby(level=0, sort=False)
+                #                    .agg(**self_agg)
+                #                )
+                agg_res.iloc[:1] = (
+                    concat([last_agg_row, agg_res.iloc[:1]])
+                    .groupby(level=0, sort=False)
+                    .agg(**self_agg)
+                )
+            #                print("agg_res after aggregation of last row to first row")
+            #                print(agg_res)
         #                print("last_agg_row has been simply added to list of chunks.")
         # Setting 'last_agg_row' from new 'agg_res'.
         last_agg_row = agg_res.iloc[-1:] if len_agg_res > 1 else agg_res
+    # Post-process & write results from last iteration, this time keeping
+    # last row, and recording metadata for a future 'streamagg' execution.
+    agg_chunks_buffer.append(agg_res)
+    #    print("writing last chunk")
+    #    print("agg_chunks_buffer")
+    #    print(agg_chunks_buffer)
     # Set metadata for a future 'streamagg' execution.
     # Define index of last complete seed 'row'.
     # - Either it is the last index recorded in metadata of seed data if existing
@@ -684,16 +757,6 @@ def streamagg(
     #   - or last value of initial seed data if 'discard_last' is False.
     if last_complete_seed_index is None:
         last_complete_seed_index = seed_chunk[ordered_on].iloc[-1:].reset_index(drop=True)
-    #        print("from new streamagg result, last_complete_seed_index:")
-    #        print(last_complete_seed_index)
-    # Set oups metadata.
-    _set_streamagg_md(last_complete_seed_index, binning_buffer, last_agg_row)
-    # Post-process & write results from last iteration, this time keeping
-    # last row, and recording metadata for a future 'streamagg' execution.
-    agg_chunks_buffer.append(agg_res)
-    #    print("writing last chunk")
-    #    print("agg_chunks_buffer")
-    #    print(agg_chunks_buffer)
     _post_n_write_agg_chunks(
         chunks=agg_chunks_buffer,
         store=store,
@@ -701,4 +764,9 @@ def streamagg(
         write_config=write_config,
         index_name=index_name,
         post=post,
+        isfrn=isfrn,
+        post_buffer=post_buffer,
+        metadata=(last_complete_seed_index, binning_buffer, last_agg_row),
     )
+    #        print("from new streamagg result, last_complete_seed_index:")
+    #        print(last_complete_seed_index)
