@@ -88,6 +88,7 @@ Motivation for dropping duplicates is that new values (from new data) can replac
 The implementation of this logic has been managed as an iterative process on row groups to be written, one row group per one row group (and not over the full dataset). This makes it a low memory footprint operation. This has also 2 important implications. Make sure to understand them and check if it applies correctly to your own use case. If not, a solution for you is to prepare the data the way you intend it to be before recording it anew.
 
   * Duplicates in existing data that is not rewritten are not dropped.
+  * Conversely, duplicates in existing data that is rewritten are dropped.
   * Values in ``ordered_on`` column also contribute to identifying duplicates. If not already present, ``ordered_on`` column is thus forced into the list of columns defined by ``duplicates_on``.
 
 * ``max_nirgs``, default ``None``
@@ -95,10 +96,12 @@ The implementation of this logic has been managed as an iterative process on row
 This keyword specifies the maximum number allowed of `incomplete` row groups. An `incomplete` row group is one that does not quite reach ``max_row_group_size`` yet (some approximations of this target are managed within the code).
 By using this parameter, you allow a `buffer` of trailing `incomplete` row groups. Hence, new data is not systematically merged to existing one, but only appended as new row groups.
 The interest is that an `appending` operation is faster than `merging` with existing row groups, and for adding only few more rows, `merging` seems like a heavy, unjustified operation.
-Setting ``max_nirgs`` triggers assessment of 2 conditions to initiate a `merge` (`coalescing` all incomplete trailing row groups to try making `complete` ones) Either one or the other has to be met to validate a `merge`.
+Setting ``max_nirgs`` triggers assessment of 2 conditions to initiate a `merge` (`coalescing` all incomplete trailing row groups to try making `complete` ones). Either one or the other has to be met to validate a `merge`.
 
   * ``max_nirgs`` is reached;
   * The total number of rows within the `incomplete` row groups summed with the number of rows in the new data equals or exceeds `max_row_group_size`.
+
+Beware that if this feature is used jointly with ``duplicates_on``, and if new data overlaps with existing data, only overlapping groups are merged together. 'Full' coalescing (i.e. with all trailing incomplete row groups) is triggered only if one the abovementionned condition is met.
 
 .. code-block:: python
 
