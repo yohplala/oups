@@ -275,7 +275,7 @@ def streamagg(
         If a tuple made of an `int` and a vaex dataframe, the `int` defines
         the size of chunks into which is split the dataframe.
         If purely a vaex dataframe, it is split into chunks of `6_345_000`
-        rows, which for a dataframe with 6 columns of ``float64``/``int64``
+        rows, which for a dataframe with 6 columns of ``float64`` or ``int64``,
         results in a memory footprint (RAM) of about 290MB.
     ordered_on : str
         Name of the column with respect to which seed dataset is in ascending

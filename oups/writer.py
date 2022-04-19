@@ -283,8 +283,8 @@ def write(
         Data to write.
     max_row_group_size : int, optional
         Max row group size. If not set, default to ``6_345_000``, which for a
-        dataframe with 6 columns of ``float64``/``int64`` results in a memory
-        footprint (RAM) of about 290MB.
+        dataframe with 6 columns of ``float64`` or ``int64`` results in a
+        memory footprint (RAM) of about 290MB.
     compression : str, default SNAPPY
         Algorithm to use for compressing data. This parameter is fastparquet
         specific. Please see fastparquet documentation for more information.
@@ -470,6 +470,8 @@ def write(
             if isinstance(data, pDataFrame):
                 # Convert to vaex.
                 data = from_pandas(data)
+            # For concatenation of numpy 'timedelta64' to arrow 'time64', check
+            # https://github.com/vaexio/vaex/issues/2024
             data = recorded.concat(data)
             if ordered_on:
                 data = data.sort(by=ordered_on)

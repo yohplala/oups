@@ -322,11 +322,8 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
         {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)},
     ).sort_values(ordered_on)
     # Forcing dtype of 'seed_pdf' to float.
-    seed_pdf["val"] = seed_pdf["val"].astype(float)
+    seed_pdf["val"] = seed_pdf["val"].astype("float64")
     seed_vdf = from_pandas(seed_pdf)
-    #    seed_path = os_path.join(tmp_path, "seed")
-    #    fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
-    #    seed = ParquetFile(seed_path)
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
@@ -401,11 +398,11 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
     assert n_rows_res == n_rows_ref
 
 
-def test_parquet_seed_duration_from_post(tmp_path):
+def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     # Test with parquet seed, time grouper and assess with 'post':
     #  - assess a 'duration' with 'first' and 'last' aggregation,
     #  - assess a 'weighted mean' by using 'sum' aggregation,
-    #  - keep previous complete value in a specific column,
+    #  - keep previous weighted mean in a specific column,
     #  - remove all columns from aggregation
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
@@ -479,7 +476,7 @@ def test_parquet_seed_duration_from_post(tmp_path):
     def post(agg_res: pDataFrame, isfrn: bool, post_buffer: dict):
         """Compute duration, weighted mean and keep track of data to buffer."""
         # Compute 'duration'.
-        agg_res["last"] = agg_res["last"] - agg_res["first"]
+        agg_res["last"] = (agg_res["last"] - agg_res["first"]).view("int64")
         # Compute 'weighted_mean'.
         agg_res["sum_weighted_val"] = agg_res["sum_weighted_val"] / agg_res["sum_weight"]
         # Keep weighted_mean from previous row and update 'post_buffer'.
@@ -503,8 +500,6 @@ def test_parquet_seed_duration_from_post(tmp_path):
         # Update for next iteration.
         post_buffer["prev_last_weighted_mean"] = agg_res["prev_weighted_mean"].iloc[-1]
         post_buffer["last_weighted_mean"] = agg_res["weighted_mean"].iloc[-1]
-        print("post_buffer - last_weighted_mean")
-        print(post_buffer["last_weighted_mean"])
         # Remove un-used columns.
         agg_res.drop(columns=["sum_weight"], inplace=True)
         return agg_res
@@ -521,10 +516,10 @@ def test_parquet_seed_duration_from_post(tmp_path):
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
-    # Check reulting dataframe.
+    # Check resulting dataframe.
     # Get reference results, discarding last row, because of 'discard_last'.
-    ref_res_agg = seed_df.iloc[:-1, :].groupby(by).agg(**agg)
-    ref_res_post = post(ref_res_agg, None, {}).reset_index()
+    ref_res_agg = seed_df.iloc[:-1, :].groupby(by).agg(**agg).reset_index()
+    ref_res_post = post(ref_res_agg, None, {})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res_post)
     # Check number of rows of each row groups in aggregated results.
@@ -550,10 +545,41 @@ def test_parquet_seed_duration_from_post(tmp_path):
     assert last_agg_row_res.equals(last_agg_row_ref)
     post_buffer_ref = {"prev_last_weighted_mean": 13.5, "last_weighted_mean": 16.0}
     assert post_buffer_res == post_buffer_ref
+    # 1st append of new data.
+    start = seed_df[ordered_on].iloc[-1]
+    rr = np.random.default_rng(3)
+    N = 30
+    rand_ints = rr.integers(600, size=N)
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed_df2 = pDataFrame(
+        {ordered_on: ts, "val": rand_ints + 100, "weight": rand_ints}
+    ).sort_values(ordered_on)
+    # Setup weighted mean: need 'weight' x 'val'.
+    seed_df2["weighted_val"] = seed_df2["weight"] * seed_df2["val"]
+    fp_write(
+        seed_path, seed_df2, row_group_offsets=row_group_offsets, file_scheme="hive", append=True
+    )
+    seed = ParquetFile(seed_path)
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        post=post,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Test results
+    ref_res_agg = pconcat([seed_df, seed_df2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
+    ref_res_post = post(ref_res_agg, None, {})
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res_post)
 
 
 # WiP
-# test with ParquetFile seed + 'post' :subtracting 2 columns from agg + removing a column from agg
 # test with 'by' as callable, with 'buffer_binning' and without 'buffer_binning'.
 # test with discard_last = False:
 #   - 1st a streamagg that will be used as seed
