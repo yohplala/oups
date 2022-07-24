@@ -349,42 +349,47 @@ def streamagg(
       ``ParquetSet``. ``streamagg`` actually relies on the `advanced` update
       feature from oups.
     - If aggregation results already exist in the instantiated oups
-      ``ParquetSet``, index of last aggregation is retrieved, and new data is
-      trimmed starting from this index. With this approach, a ``sum``
-      aggregation will return the correct result, as same data is not accounted
-      for twice.
-    - This last index is recorded in the metadata.
+      ``ParquetSet``, last 'complete' index from previous aggregation is
+      retrieved, and seed data is trimmed starting from this index.
+    - Aggregation is by default processed up to this last 'complete' index
+      (included), and subsequent aggregation will start from this index
+      (excluded).
+      If `discard_last` is set `False, then aggregation is process up to the
+      last data.
+    - This index is either
 
-        - It is either the value actually recorded as last index in metadata of
+        - the one-but-last value from `ordered_on` column in seed data (default
+          use case).
+        - the value actually recorded as last 'complete' index in metadata of
           seed data, if this metadata exists, and `discard_last`` is ``False``;
-        - Or it is the last value from `ordered_on` column in seed data.
 
-    - In the case binning is operated on a column different than `ordered_on`,
-      then it may be that some bin edges fall in the middle of same values in
-      `ordered_on`. In this case, because aggregation index used to trim head
-      of new seed data stems from `ordered_on`, some values may be omitted from
-      aggregation. To prevent this, user has to consider the following.
-
-        - Either to ensure that the binning logic defined in ``by`` ends bins
-          in-between different values in `ordered_on` column.
-        - Or have unique values in `ordered_on` column coming from seed data.
-
-    - By default, last row group (composed from rows sharing the same value in
-      `ordered_on` column), is discarded (parameter ``discard_last`` set
-      ``True``).
+    - By default, with parameter `discard_last`` set ``True``, the last row
+      group (composed from rows sharing the same value in `ordered_on` column),
+      is discarded.
 
         - It may be for instance that this row group is not complete yet and
           should therefore not be accounted for. More precisely, new rows with
           same value in `ordered_on` may appear in seed data later on. Because
           seed data is trimmed to start from last processed value from
-          `ordered_on` column (value excluded), these new rows would be
+          `ordered_on` column (value included), these new rows would be
           excluded from the next aggregation, leading to an inaccurate
           aggregation result. Doing so is a way to identify easily when
           re-starting the aggregation in a case there can be duplicates in
-          `ordered_on` column.
+          `ordered_on` column. A ``sum`` aggregation will then return the
+          correct result for instance, as no data is accounted for twice.
         - Or if composed of a single row, this last row in seed data is
           temporary (and may get its final values only at a later time, when it
           becomes the one-but-last row, as a new row is added).
+
+    - In the case binning is operated on a column different than `ordered_on`,
+      then it may be that some bin edges fall in the middle of same values in
+      `ordered_on`. In this case, to prevent omitting new values that would
+      have same index value as was processed last, `discard_last` should remain
+      set `True`. If not, user has to consider the following options.
+
+        - Either to ensure that the binning logic defined in ``by`` ends bins
+          in-between different values in `ordered_on` column.
+        - Or have unique values in `ordered_on` column coming from seed data.
 
     - If ``kwargs`` defines a maximum row group size to write to disk, this
       value is also used to define a maximum size of aggregation results before
@@ -410,8 +415,8 @@ def streamagg(
           'ordered_on') and 'bin_on' column is then removed during user
           post-processing. To allow this case, if the user is setting
           ``duplicates_on`` as additional parameter to ``streamagg``, it is not
-          modified. It means omission of 'bin_on' column when it is set is
-          a voluntary user choice.
+          modified. It means omission of 'bin_on' column when it is set
+          voluntary by the user.
 
     """
     # TODO: implement 'precise restart' as defined in ticket 7.

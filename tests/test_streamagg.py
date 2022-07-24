@@ -41,7 +41,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
     # 1 hour binning
-    # RG    TS   VAL ROW BIN LABEL | comments
+    # RGS   TS   VAL ROW BIN LABEL | comments
     #  1   8:00   1    0   1  8:00 | 2 aggregated rows from same row group.
     #      8:30   2                |
     #      9:00   3        2  9:00 |
@@ -407,7 +407,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
     # 1 hour binning
-    # RG    TS   VAL WEIGHT ROW BIN LABEL | comments
+    # RGS   TS   VAL WEIGHT ROW BIN LABEL | comments
     #  1   8:00   1       1   0   1  8:00 | 2 aggregated rows from same row group.
     #      8:30   2       2               |
     #      9:00   3       1       2  9:00 |
@@ -579,8 +579,74 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     assert rec_res.equals(ref_res_post)
 
 
+def test_vaex_seed_by_callable(tmp_path):
+    # Test with vaex seed, binning every 4 rows with 'first', and 'max'
+    # aggregation. No post, `discard_last` set `True`. 'Stress test' with
+    # appending new data twice.
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for agg, BIN: bins
+    # RG    TS   VAL       ROW BIN LABEL | comments
+    #  1   8:00   1          0   1     1 |
+    #      8:30   2                      |
+    #      9:00   3                      |
+    #      9:30   4                      |
+    #     10:00   5          4   2     2 |
+    #  2  10:20   6                      |
+    #  3  10:40   7                      |
+    #     11:00   8                      |
+    #     11:30   9          8   3     3 |
+    #     12:00  10                      |
+    #  4  12:20  11                      |
+    #     12:40  12                      |
+    #  5  13:00  13         12   4     4 |
+    #     -------------------------------- write data (max_row_group_size = 4)
+    #  6  13:20  14                      |
+    #     13:40  15                      |
+    #  7  14:00  16                      |
+    #     14:20  17         16   5     5 | buffer_binning = {nrows : 1}
+    # Setup seed data.
+
+    max_row_group_size = 4
+    start = Timestamp("2020/12/31")
+    rr = np.random.default_rng(2)
+    N = 20
+    rand_ints = rr.integers(100, size=N)
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ordered_on = "ts"
+    seed_pdf = pDataFrame(
+        {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)},
+    ).sort_values(ordered_on)
+    # Forcing dtype of 'seed_pdf' to float.
+    seed_pdf["val"] = seed_pdf["val"].astype("float64")
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="5T", closed="left", label="left")
+    agg = {
+        "first": ("val", "first"),
+        "last": ("val", "last"),
+        "min": ("val", "min"),
+        "max": ("val", "max"),
+    }
+    # Setup streamed aggregation.
+    streamagg(
+        seed=(max_row_group_size, seed_vdf),
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+
+
 # WiP
-# test with 'by' as callable, with 'buffer_binning' and without 'buffer_binning'.
+# test with 'by' as callable, with 'buffer_binning' without 'bin_on' : every " rows for instance
+# and without 'buffer_binning' and with 'bin_on': every time value is 1 in column 'flag'.
 # test with discard_last = False:
 #   - 1st a streamagg that will be used as seed
 #   - then a 2nd streamagg with discard_last = False
