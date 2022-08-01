@@ -97,7 +97,10 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
     print(seed_index_restart)
     # Metadata related to binning process from past binnings on prior data.
     # It is used in cased 'by' is a callable.
-    binning_buffer = streamagg_md[MD_KEY_BINNING_BUFFER]
+    #    binning_buffer = streamagg_md[MD_KEY_BINNING_BUFFER]
+    binning_buffer = (
+        read_json(streamagg_md[MD_KEY_BINNING_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+    )
     print("binning_buffer:")
     print(binning_buffer)
     # 'last_agg_row' for stitching with new aggregation results.
@@ -144,6 +147,9 @@ def _set_streamagg_md(
     print("last_agg_row")
     print(last_agg_row)
     last_agg_row = last_agg_row.to_json(**PANDAS_SERIALIZE)
+    binning_buffer = pDataFrame(binning_buffer, index=[0]).to_json(**PANDAS_SERIALIZE)
+    print("binning_buffer")
+    print(binning_buffer)
     # Set oups metadata.
     metadata = {
         MD_KEY_STREAMAGG: {
@@ -212,7 +218,7 @@ def _post_n_write_agg_chunks(
         data from previous iterations will be lost.
         This dict has to contain data that can be serialized, as data is then
         kept in parquet file metadata.
-    metadata : dict, default None
+    metadata : tuple, default None
         Metadata to be recorded in parquet file. Data has to be serializable.
         If `None`, no metadata is recorded.
     """
@@ -224,7 +230,7 @@ def _post_n_write_agg_chunks(
     else:
         agg_res = chunks[0]
     if index_name:
-        # In case 'by' is a callable, index has no name.
+        # In case 'by' is a callable, index may have no name.
         agg_res.index.name = index_name
         print("agg_res with updated index name:")
         print(agg_res)
@@ -241,6 +247,8 @@ def _post_n_write_agg_chunks(
     print(agg_res)
     print("")
     if metadata:
+        print("last_agg_row again within post_n_write")
+        print(metadata[2])
         # Set oups metadata.
         _set_streamagg_md(*metadata, post_buffer)
     # Record data.
@@ -263,7 +271,7 @@ def streamagg(
 
     This function conducts 'streamed aggregation' iteratively (out-of core)
     with optional post-processing of aggregation results (by use of vectorized
-    functions or dataframe formatting).
+    functions or for dataframe formatting).
     No (too much) attention is then required about how stitching new
     aggregation results (from new seed data) to prior aggregation results (from
     past seed data).
@@ -290,12 +298,14 @@ def streamagg(
         Store to which recording aggregation results.
     key : Indexer
         Key for recording aggregation results.
-    by : Union[pd.Grouper, Callable[[Series, dict], array-like]], default None
+    by : Union[pd.Grouper, Callable[[pd.DataFrame, dict], array-like]], default
+         None
         Parameter defining the binning logic.
         If a `Callable`, it is given
 
-          - a ``data`` parameter, corresponding to a dataframe made of 2
-            columns: ``ordered_on`` and ``bin_on``;
+          - a ``data`` parameter, corresponding to a dataframe made of
+            column ``ordered_on``, and column ``bin_on`` if different than
+            ``ordered_on``;
           - a ``buffer`` parameter, corresponding to a dict that can be used as
             a buffer for storing temporary results from one chunk processing to
             the next.
@@ -306,13 +316,19 @@ def streamagg(
         data chunk, the buffer has to be modified in place with temporary
         results to record for next-to-come binning iteration.
     bin_on : str, default None
-        Name of the column onto which applying the binning defined by ``by``
-        parameter if ``by`` is not ``None``.
-        Its value is then carried over as  name for the column containing the
-        group keys. It is further used when writing results for defining
-        ``duplicates_on`` parameter (see ``oups.writer.write``).
-        If ``by`` is ``None`` (or a callable), then ``bin_on`` is expected to
-        be set to an existing column name.
+        If ``by`` is ``None`` then ``bin_on`` is expected to be set to an
+        existing column name, which values are directly used for binning.
+        If ``by`` is a callable, then ``bin_on`` can have different values.
+
+          - None, the default.
+          - The name of an existing column onto which applying the binning
+            defined by ``by`` parameter. Its value is then carried over as name
+            for the column containing the group keys.
+          - Or the name of an unexisting column, to be used to store group
+            keys.
+
+        It is further used when writing results for defining ``duplicates_on``
+        parameter (see ``oups.writer.write``).
     post : Callable, default None
         User-defined function accepting 3 parameters.
 
@@ -440,8 +456,8 @@ def streamagg(
     seed_index_restart = None
     seed_index_end = None
     binning_buffer = {}
-    # Initializing 'last_agg_row' to a pandas dataframe for using 'empty'
-    # attribute.
+    # Initializing 'last_agg_row' to a pandas dataframe, to allow using 'empty'
+    # attribute in subsequent loop.
     last_agg_row = pDataFrame()
     post_buffer = {}
     if key in store:
@@ -542,19 +558,20 @@ def streamagg(
     # Ensure 'by' and 'bin_on' are set.
     if by:
         if callable(by):
-            if bin_on is None:
-                raise ValueError(
-                    "not possible to have `bin_on` set to `None " "while `by` is a callable."
-                )
-            elif bin_on in agg:
+            #            if bin_on is None:
+            #                raise ValueError(
+            #                    "not possible to have `bin_on` set to `None` while `by` is a callable."
+            #                )
+            #            elif bin_on in agg:
+            if bin_on in agg:
                 # Check that this name is not already that of an output column
                 # from aggregation.
                 raise ValueError(
                     "not possible to have `bin_on` with value "
-                    f"{bin_on} as it one of the output column "
+                    f"{bin_on} as it is one of the output column "
                     "names from aggregation."
                 )
-            elif bin_on == ordered_on:
+            elif bin_on == ordered_on or not bin_on:
                 # Define columns forwarded to 'by'.
                 cols_to_by = [ordered_on]
             else:
@@ -577,7 +594,7 @@ def streamagg(
         # Case name of an existing column.
         bins = bin_on
     else:
-        raise ValueError("one or several among `by` and `bin_on` are " "required.")
+        raise ValueError("one or several among `by` and `bin_on` are required.")
     print(f"bin_on: {bin_on}")
     print(f"seed_index_restart: {seed_index_restart}")
     print(f"seed_index_end: {seed_index_end}")
@@ -585,7 +602,7 @@ def streamagg(
     agg_n_rows = 0
     agg_mean_row_group_size = 0
     # Define 'index_name' of 'agg_res' if needed (to be used in 'post').
-    index_name = bin_on if callable(by) else None
+    index_name = bin_on if bin_on and callable(by) else None
     # Buffer to keep aggregation chunks before a concatenation to record.
     agg_chunks_buffer = []
     # Setting 'write_config'.
@@ -597,8 +614,11 @@ def streamagg(
     # understood as a voluntary user choice to not have 'bin_on' in
     # 'duplicates_on'.
     if "duplicates_on" not in write_config or write_config["duplicates_on"] is None:
-        # Force 'bin_on'.
-        write_config["duplicates_on"] = bin_on
+        if bin_on:
+            # Force 'bin_on'.
+            write_config["duplicates_on"] = bin_on
+        else:
+            write_config["duplicates_on"] = ordered_on
         # For all other cases, 'duplicates_on' has been set by user.
         # If 'bin_on' is not in 'duplicates_on', it is understood as a
         # voluntary choice by the user.
@@ -629,6 +649,7 @@ def streamagg(
                 # Remove last row that is not recorded from total row number.
                 agg_n_rows += len_agg_res - 1
                 # Number of iterations to increment 'agg_chunk_buffer'.
+                # Check if 'i' can be removed when all prints are removed.
                 i += 1
             #            print("")
             # Keep floor part.
@@ -644,6 +665,12 @@ def streamagg(
                     # Write results from previous iteration.
                     #                    print("writing chunk")
                     #                    print("")
+                    print("OUPS_METADATA_KEY")
+                    print(OUPS_METADATA_KEY)
+                    print("OUPS_METADATA")
+                    print(OUPS_METADATA)
+                    print("write_config during loop")
+                    print(write_config)
                     _post_n_write_agg_chunks(
                         chunks=agg_chunks_buffer,
                         store=store,
@@ -762,6 +789,15 @@ def streamagg(
     #   - or last value of initial seed data if 'discard_last' is False.
     if last_complete_seed_index is None:
         last_complete_seed_index = seed_chunk[ordered_on].iloc[-1:].reset_index(drop=True)
+    print("last_agg_row before sending to post_n_write")
+    print(last_agg_row)
+    # A deep copy is made for 'last_agg_row' to prevent a specific case where
+    # 'agg_chuks_buffer' is a list of a single 'agg_res' dataframe of a single
+    # row. In this very specific case, both 'agg_res' and 'last_agg_row' points
+    # toward the same dataframe, but 'agg_res' gets modified in '_post_n_write'
+    # while 'last_agg_row' should not be. The deep copy prevents this.
+    print("write_config before last write")
+    print(write_config)
     _post_n_write_agg_chunks(
         chunks=agg_chunks_buffer,
         store=store,
@@ -771,7 +807,7 @@ def streamagg(
         post=post,
         isfrn=isfrn,
         post_buffer=post_buffer,
-        metadata=(last_complete_seed_index, binning_buffer, last_agg_row),
+        metadata=(last_complete_seed_index, binning_buffer, last_agg_row.copy()),
     )
     #        print("from new streamagg result, last_complete_seed_index:")
     #        print(last_complete_seed_index)

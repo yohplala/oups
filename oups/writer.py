@@ -255,6 +255,8 @@ def _update_metadata(
     if new_metadata:
         new_metadata[OUPS_METADATA_KEY] = json.dumps(oups_md)
     else:
+        print("new metadata")
+        print(oups_md)
         new_metadata = {OUPS_METADATA_KEY: json.dumps(oups_md)}
     # Clear dict of specific oups metadata without deleting the pointer.
     OUPS_METADATA.clear()
