@@ -408,11 +408,17 @@ def write(
             # Get 'rrg_start_idx' & 'rrg_end_idx'.
             if isinstance(data, pDataFrame):
                 # Case 'pandas'.
-                start = data[ordered_on].iloc[0]
+                try:
+                    start = data[ordered_on].iloc[0]
+                except KeyError:
+                    raise ValueError(f"column '{ordered_on}' does not exist in" " input data.")
                 end = data[ordered_on].iloc[-1]
             else:
                 # Case 'vaex'.
-                start = data[ordered_on][:0].to_numpy()[0]
+                try:
+                    start = data[ordered_on][:0].to_numpy()[0]
+                except NameError:
+                    raise ValueError(f"column '{ordered_on}' does not exist in" " input data.")
                 end = data[ordered_on][-1:].to_numpy()[0]
             rrgs_idx = filter_row_groups(
                 pf, [[(ordered_on, ">=", start), (ordered_on, "<=", end)]], as_idx=True

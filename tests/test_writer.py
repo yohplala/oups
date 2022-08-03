@@ -6,6 +6,7 @@ Created on Sat Dec 18 15:00:00 2021.
 """
 from os import path as os_path
 
+import pytest
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from numpy import arange
@@ -717,3 +718,20 @@ def test_pandas_drop_duplicates_wo_coalescing_irgs(tmp_path):
     assert len_rgs == [n_val - 2, 1, 1]
     df_ref = concat([pdf[:-1], pdf2]).reset_index(drop=True)
     assert pf_rec.to_pandas().equals(df_ref)
+
+
+def test_ordered_on_not_existing(tmp_path):
+    # While 'ordered_on' is defined, it is not in seed data.
+    n_val = 5
+    pdf = pDataFrame({"a": range(n_val), "b": [0] * n_val})
+    dn = os_path.join(tmp_path, "test")
+    # Write a 1st set of data.
+    fp_write(
+        dn, pdf, row_group_offsets=[0, n_val - 2, n_val - 1], file_scheme="hive", write_index=False
+    )
+    # Append with oups same set of data, pandas dataframe.
+    with pytest.raises(ValueError, match="^column 'ts'"):
+        ps_write(dn, pdf, ordered_on="ts")
+    # Append with oups same set of data, vaex dataframe.
+    with pytest.raises(ValueError, match="^column 'ts'"):
+        ps_write(dn, from_pandas(pdf), ordered_on="ts")

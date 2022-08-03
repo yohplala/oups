@@ -771,14 +771,16 @@ def test_vaex_seed_by_callable(tmp_path):
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
-# do a test case without 'ordrerd_on' when writing results, to test try/except when
-# writing aggregation results that ordered_on column is in agg results.
-
-
 # WiP
+
+# change last_complete_index in single value, not dataframe (check how it is done for binning buffer)
+# change post_buffer into dict? (same as binning_buffer?)
+
 # test with 'by' as callable,
 # - and without 'buffer_binning' and with 'bin_on': every time value is 1 in column 'flag'.
 # test with discard_last = False and trim_seed = False
+
+# add test in writer to check ordered_on column exists in column dataset when using this parameter.
 
 
 # Test ValueError when not discard_last and not last_seed_index in seed metadata.
