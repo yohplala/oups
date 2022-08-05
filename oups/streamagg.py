@@ -98,9 +98,12 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
     # Metadata related to binning process from past binnings on prior data.
     # It is used in cased 'by' is a callable.
     #    binning_buffer = streamagg_md[MD_KEY_BINNING_BUFFER]
-    binning_buffer = (
-        read_json(streamagg_md[MD_KEY_BINNING_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
-    )
+    if streamagg_md[MD_KEY_BINNING_BUFFER]:
+        binning_buffer = (
+            read_json(streamagg_md[MD_KEY_BINNING_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+        )
+    else:
+        binning_buffer = {}
     print("binning_buffer:")
     print(binning_buffer)
     # 'last_agg_row' for stitching with new aggregation results.
@@ -110,7 +113,12 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
     print("")
     # Metadata related to post-processing on prior aggregation results, to be
     # used by 'post'.
-    post_buffer = streamagg_md[MD_KEY_POST_BUFFER]
+    if streamagg_md[MD_KEY_POST_BUFFER]:
+        post_buffer = (
+            read_json(streamagg_md[MD_KEY_POST_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+        )
+    else:
+        post_buffer = {}
     print("post_buffer:")
     print(post_buffer)
     return seed_index_restart, binning_buffer, last_agg_row, post_buffer
@@ -147,7 +155,10 @@ def _set_streamagg_md(
     print("last_agg_row")
     print(last_agg_row)
     last_agg_row = last_agg_row.to_json(**PANDAS_SERIALIZE)
-    binning_buffer = pDataFrame(binning_buffer, index=[0]).to_json(**PANDAS_SERIALIZE)
+    if binning_buffer:
+        binning_buffer = pDataFrame(binning_buffer, index=[0]).to_json(**PANDAS_SERIALIZE)
+    if post_buffer:
+        post_buffer = pDataFrame(post_buffer, index=[0]).to_json(**PANDAS_SERIALIZE)
     print("binning_buffer")
     print(binning_buffer)
     # Set oups metadata.
@@ -232,8 +243,9 @@ def _post_n_write_agg_chunks(
     if index_name:
         # In case 'by' is a callable, index may have no name.
         agg_res.index.name = index_name
-        print("agg_res with updated index name:")
-        print(agg_res)
+    #    agg_res.index.name = index_name
+    print("agg_res with updated index name:")
+    print(agg_res)
     # Keep group keys as a column before post-processing.
     agg_res.reset_index(inplace=True)
     # Reset (in place) buffer.
@@ -262,7 +274,7 @@ def streamagg(
     store: ParquetSet,
     key: dataclass,
     by: Union[Grouper, Callable[[Series, dict], Union[Series, Tuple[Series, dict]]]] = None,
-    bin_on: str = None,
+    bin_on: Union[str, Tuple[str, str]] = None,
     post: Callable = None,
     discard_last: bool = True,
     **kwargs,
@@ -287,8 +299,10 @@ def streamagg(
         results in a memory footprint (RAM) of about 290MB.
     ordered_on : str
         Name of the column with respect to which seed dataset is in ascending
-        order. Seed data is not necessarily grouped by this column, in which
-        case ``by`` and/or ``bin_on`` parameters have to be set.
+        order. While this parameter is compulsory (most notably to manage
+        duplicates when writing new aggregated results to existing ones), seed
+        data is not necessarily grouped by this column, in which case ``by``
+        and/or ``bin_on`` parameters have to be set.
     agg : dict
         Dict in the form ``{"output_col":("input_col", "agg_function_name")}``
         where keys are names of output columns into which are recorded
@@ -301,12 +315,12 @@ def streamagg(
     by : Union[pd.Grouper, Callable[[pd.DataFrame, dict], array-like]], default
          None
         Parameter defining the binning logic.
-        If a `Callable`, it is given
+        If a `Callable`, it is given following parameters.
 
-          - a ``data`` parameter, corresponding to a dataframe made of
+          - A ``data`` parameter, corresponding to a dataframe made of
             column ``ordered_on``, and column ``bin_on`` if different than
-            ``ordered_on``;
-          - a ``buffer`` parameter, corresponding to a dict that can be used as
+            ``ordered_on``.
+          - A ``buffer`` parameter, corresponding to a dict that can be used as
             a buffer for storing temporary results from one chunk processing to
             the next.
 
@@ -315,17 +329,24 @@ def streamagg(
         If data are required for re-starting calculation of bins on the next
         data chunk, the buffer has to be modified in place with temporary
         results to record for next-to-come binning iteration.
-    bin_on : str, default None
-        If ``by`` is ``None`` then ``bin_on`` is expected to be set to an
-        existing column name, which values are directly used for binning.
-        If ``by`` is a callable, then ``bin_on`` can have different values.
+    bin_on : Union[str, Tuple[str, str]], default None
+        ``bin_on`` may either be a string or a tuple of 2 string. When a
+        string, it refers to an existing column in seed data. When a tuple,
+        the 1st string refers to an existing column in seed data, the 2nd the
+        name to use for the column which values will be the group keys in
+        aggregation results.
+        Moreover, setting of ``bin_on`` should be adapted depending how is
+        defined ``by`` parameter. In all the cases mentioned below, ``bin_on``
+        can either be a string or a tuple of 2 string.
 
-          - None, the default.
-          - The name of an existing column onto which applying the binning
-            defined by ``by`` parameter. Its value is then carried over as name
-            for the column containing the group keys.
-          - Or the name of an unexisting column, to be used to store group
-            keys.
+          - if ``by`` is ``None`` then ``bin_on`` is expected to be set to an
+            existing column name, which values are directly used for binning.
+          - if ``by`` is a callable, then ``bin_on`` can have different values.
+
+            - ``None``, the default.
+            - the name of an existing column onto which applying the binning
+              defined by ``by`` parameter. Its value is then carried over as
+              name for the column containing the group keys.
 
         It is further used when writing results for defining ``duplicates_on``
         parameter (see ``oups.writer.write``).
@@ -374,9 +395,9 @@ def streamagg(
       last data.
     - This index is either
 
-        - the one-but-last value from `ordered_on` column in seed data (default
+        - The one-but-last value from `ordered_on` column in seed data (default
           use case).
-        - the value actually recorded as last 'complete' index in metadata of
+        - The value actually recorded as last 'complete' index in metadata of
           seed data, if this metadata exists, and `discard_last`` is ``False``;
 
     - By default, with parameter `discard_last`` set ``True``, the last row
@@ -422,17 +443,18 @@ def streamagg(
       by the user, some checks are made.
 
         - 'ordered_on' is forced to 'streamagg' ``ordered_on`` parameter.
-        - if 'duplicates_on' is not set by the user or is `None`, then it is
-          set to `bin_on`. The rational for this is that `bin_on` is the name
-          of the column that will have bin labels. It should allow identifying
-          uniquely each bin, and so is a relevant column to identify
-          duplicates. But then, there might be case for which 'ordered_on'
-          column does this job already (if there are unique values in
-          'ordered_on') and 'bin_on' column is then removed during user
-          post-processing. To allow this case, if the user is setting
-          ``duplicates_on`` as additional parameter to ``streamagg``, it is not
-          modified. It means omission of 'bin_on' column when it is set
-          voluntary by the user.
+        - If 'duplicates_on' is not set by the user or is `None`, then it is
+          set to the name of the output column for group keys defined by
+          `bin_on`. The rational is that this column identifies uniquely each
+          bin, and so is a relevant column to identify duplicates. But then,
+          there might be case for which 'ordered_on' column does this job
+          already (if there are unique values in 'ordered_on') and the column
+          containing group keys is then removed during user post-processing.
+          To allow this case, if the user is setting ``duplicates_on`` as
+          additional parameter to ``streamagg``, it is not
+          modified. It means omission of the column name containing the group
+          keys, as defined by 'bin_on' parameter when it is set, is a
+          voluntary choice from the user.
 
     """
     # TODO: implement 'precise restart' as defined in ticket 7.
@@ -448,18 +470,14 @@ def streamagg(
                 "Consider testing it before actually using it."
             )
         self_agg[col_out] = (col_out, agg_func)
-    # Retrieve lists of input and output columns from 'agg'.
-    all_cols_in = {val[0] for val in agg.values()}
-    all_cols_in.add(ordered_on)
-    all_cols_in = list(all_cols_in)
     # Initialize 'iter_dataframe' from seed data, with correct trimming.
     seed_index_restart = None
     seed_index_end = None
     binning_buffer = {}
+    post_buffer = {}
     # Initializing 'last_agg_row' to a pandas dataframe, to allow using 'empty'
     # attribute in subsequent loop.
     last_agg_row = pDataFrame()
-    post_buffer = {}
     if key in store:
         print("key is in store")
         # Prior streamagg results already in store.
@@ -468,8 +486,73 @@ def streamagg(
             store[key]
         )
         seed_index_restart = seed_index_restart.iloc[0, 0]
-        binning_buffer.update(binning_buffer_)
-        post_buffer.update(post_buffer_)
+        if binning_buffer_:
+            binning_buffer.update(binning_buffer_)
+        if post_buffer_:
+            post_buffer.update(post_buffer_)
+    # Define aggregation result max size before writing to disk.
+    max_agg_row_group_size = (
+        kwargs["max_row_group_size"] if "max_row_group_size" in kwargs else MAX_ROW_GROUP_SIZE
+    )
+    # Ensure 'by' and 'bin_on' are set.
+    if bin_on:
+        if isinstance(bin_on, tuple):
+            # 'bin_col_name': name of column containing group keys in agg res.
+            bin_on, bin_col_name = bin_on
+        else:
+            bin_col_name = bin_on
+        all
+    else:
+        bin_col_name = None
+    if by:
+        if callable(by):
+            #            if bin_on is None:
+            #                raise ValueError(
+            #                    "not possible to have `bin_on` set to `None` while `by` is a callable."
+            #                )
+            #            elif bin_on in agg:
+            if bin_col_name in agg:
+                # Check that this name is not already that of an output column
+                # from aggregation.
+                raise ValueError(
+                    f"not possible to have {bin_on} as column name for group"
+                    " keys in aggregated result as it is also the name of one "
+                    " of the output column names from aggregation."
+                )
+            elif bin_on == ordered_on or not bin_on:
+                # Define columns forwarded to 'by'.
+                cols_to_by = [ordered_on]
+            else:
+                cols_to_by = [ordered_on, bin_on]
+        elif isinstance(by, Grouper):
+            # Case pandas grouper.
+            # https://pandas.pydata.org/docs/reference/api/pandas.Grouper.html
+            bins = by
+            by_key = by.key
+            if bin_on and by_key and bin_on != by_key:
+                raise ValueError(
+                    "two different columns are defined for "
+                    "achieving binning, both by `bin_on` and `by`"
+                    f" parameters, pointing to '{bin_on}' and "
+                    f"'{by_key}' columns respectively."
+                )
+            elif by_key and not bin_on:
+                bin_on = by_key
+    elif bin_on:
+        # Case of using values of an existing column directly for binning.
+        bins = bin_on
+    else:
+        raise ValueError("one or several among `by` and `bin_on` are required.")
+    print(f"bin_on: {bin_on}")
+    print(f"seed_index_restart: {seed_index_restart}")
+    print(f"seed_index_end: {seed_index_end}")
+    # Retrieve lists of input and output columns from 'agg'.
+    all_cols_in = {val[0] for val in agg.values()}
+    if bin_on and bin_on != ordered_on:
+        all_cols_in = all_cols_in.union({ordered_on, bin_on})
+    else:
+        all_cols_in.add(ordered_on)
+    all_cols_in = list(all_cols_in)
     # Seed index value to end new aggregation. Depending 'discard_last', it is
     # excluded or not.
     # Reason to discard last seed row (or row group) is twofold.
@@ -551,76 +634,29 @@ def streamagg(
             tup[2]
             for tup in seed.to_pandas_df(chunk_size=vdf_row_group_size, column_names=all_cols_in)
         )
-    # Define aggregation result max size before writing to disk.
-    max_agg_row_group_size = (
-        kwargs["max_row_group_size"] if "max_row_group_size" in kwargs else MAX_ROW_GROUP_SIZE
-    )
-    # Ensure 'by' and 'bin_on' are set.
-    if by:
-        if callable(by):
-            #            if bin_on is None:
-            #                raise ValueError(
-            #                    "not possible to have `bin_on` set to `None` while `by` is a callable."
-            #                )
-            #            elif bin_on in agg:
-            if bin_on in agg:
-                # Check that this name is not already that of an output column
-                # from aggregation.
-                raise ValueError(
-                    "not possible to have `bin_on` with value "
-                    f"{bin_on} as it is one of the output column "
-                    "names from aggregation."
-                )
-            elif bin_on == ordered_on or not bin_on:
-                # Define columns forwarded to 'by'.
-                cols_to_by = [ordered_on]
-            else:
-                cols_to_by = [ordered_on, bin_on]
-        elif isinstance(by, Grouper):
-            # Case pandas grouper.
-            # https://pandas.pydata.org/docs/reference/api/pandas.Grouper.html
-            bins = by
-            by_key = by.key
-            if bin_on and by_key and bin_on != by_key:
-                raise ValueError(
-                    "two different columns are defined for "
-                    "achieving binning, both by `bin_on` and `by`"
-                    f" parameters, pointing to {bin_on} and "
-                    f"{by_key} parameters."
-                )
-            elif by_key and bin_on is None:
-                bin_on = by_key
-    elif bin_on:
-        # Case name of an existing column.
-        bins = bin_on
-    else:
-        raise ValueError("one or several among `by` and `bin_on` are required.")
-    print(f"bin_on: {bin_on}")
-    print(f"seed_index_restart: {seed_index_restart}")
-    print(f"seed_index_end: {seed_index_end}")
     # Number of rows in aggregation result.
     agg_n_rows = 0
     agg_mean_row_group_size = 0
-    # Define 'index_name' of 'agg_res' if needed (to be used in 'post').
-    index_name = bin_on if bin_on and callable(by) else None
+    #    # Define 'index_name' of 'agg_res' if needed (to be used in 'post').
+    #    index_name = bin_col_name
     # Buffer to keep aggregation chunks before a concatenation to record.
     agg_chunks_buffer = []
     # Setting 'write_config'.
     write_config = kwargs
     # Forcing 'ordered_on' for write.
     write_config["ordered_on"] = ordered_on
-    # Adding 'bin_on' to 'duplicates_on' except if 'duplicates_on' is set
-    # already. In this case, if 'bin_on' is not in 'duplicates_on', it is
+    # Adding 'bin_col_name' to 'duplicates_on' except if 'duplicates_on' is set
+    # already. In this case, if 'bin_col_name' is not in 'duplicates_on', it is
     # understood as a voluntary user choice to not have 'bin_on' in
     # 'duplicates_on'.
     if "duplicates_on" not in write_config or write_config["duplicates_on"] is None:
-        if bin_on:
-            # Force 'bin_on'.
-            write_config["duplicates_on"] = bin_on
+        if bin_col_name:
+            # Force 'bin_col_name'.
+            write_config["duplicates_on"] = bin_col_name
         else:
             write_config["duplicates_on"] = ordered_on
         # For all other cases, 'duplicates_on' has been set by user.
-        # If 'bin_on' is not in 'duplicates_on', it is understood as a
+        # If 'bin_col_name' is not in 'duplicates_on', it is understood as a
         # voluntary choice by the user.
     agg_res = None
     len_agg_res = None
@@ -676,7 +712,8 @@ def streamagg(
                         store=store,
                         key=key,
                         write_config=write_config,
-                        index_name=index_name,
+                        #                        index_name=index_name,
+                        index_name=bin_col_name,
                         post=post,
                         isfrn=isfrn,
                         post_buffer=post_buffer,
@@ -803,7 +840,8 @@ def streamagg(
         store=store,
         key=key,
         write_config=write_config,
-        index_name=index_name,
+        #        index_name=index_name,
+        index_name=bin_col_name,
         post=post,
         isfrn=isfrn,
         post_buffer=post_buffer,
