@@ -547,7 +547,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     assert last_agg_row_res.equals(last_agg_row_ref)
     post_buffer_ref = {"prev_last_weighted_mean": 13.5, "last_weighted_mean": 16.0}
     assert post_buffer_res == post_buffer_ref
-    # 1st append of new data.
+    # Append of new data.
     start = seed_df[ordered_on].iloc[-1]
     rr = np.random.default_rng(3)
     N = 30
@@ -579,200 +579,6 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     ref_res_post = post(ref_res_agg, None, {})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res_post)
-
-
-def test_vaex_seed_by_callable_wo_bin_on_with_binning_vuffer(tmp_path):
-    # Test with vaex seed, binning every 4 rows with 'first', and 'max'
-    # aggregation. No post, `discard_last` set `True`.
-    # Additionally, shows an example of how 'by' as callable can output a
-    # pandas series which name is re-used straight away in aggregation results.
-    # (is re-used as 'ordered_on' column)
-    # 'Stress test' with appending new data twice.
-    # Seed data
-    # RGS: row groups, TS: 'ordered_on', VAL: values for agg, BIN: bins
-    # RG    TS   VAL       ROW BIN LABEL | comments
-    #      8:00   1          0   1  8:00 |
-    #      8:30   2                      |
-    #      9:00   3                      |
-    #      9:30   4                      |
-    #     10:00   5          4   2 10:00 |
-    #     10:20   6                      |
-    #     10:40   7                      |
-    #     11:00   8                      |
-    #     11:30   9          8   3 11:30 |
-    #     12:00  10                      |
-    #     12:20  11                      |
-    #     12:40  12                      |
-    #     13:00  13         12   4 13:00 |
-    #     -------------------------------- write data (max_row_group_size = 4)
-    #  2  13:20  14                      | buffer_binning = {nrows : 1}
-    #     13:40  15                      |
-    #     14:00  16                      |
-    #     14:20  17         16   5 14:20 | not in 1st agg results because of
-    #     14:20  18                      | 'discard_last' True
-    max_row_group_size = 4
-    # Setup seed data.
-    max_vdf_chunk_size = 13
-    date = "2020/01/01 "
-    ts = DatetimeIndex(
-        [
-            date + "08:00",
-            date + "08:30",
-            date + "09:00",
-            date + "09:30",
-            date + "10:00",
-            date + "10:20",
-            date + "10:40",
-            date + "11:00",
-            date + "11:30",
-            date + "12:00",
-            date + "12:20",
-            date + "12:40",
-            date + "13:00",
-            date + "13:20",
-            date + "13:40",
-            date + "14:00",
-            date + "14:20",
-            date + "14:20",
-        ]
-    )
-    ordered_on = "ts"
-    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
-    # Forcing dtype of 'seed_pdf' to float.
-    seed_pdf["val"] = seed_pdf["val"].astype("float64")
-    seed_vdf = from_pandas(seed_pdf)
-    # Setup oups parquet collection and key.
-    store_path = os_path.join(tmp_path, "store")
-    store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
-
-    # Setup aggregation.
-    def by(data: pDataFrame, buffer: dict):
-        """Bin by group of 4 rows. Label for bins are values from `ordered_on`."""
-        # A pandas Series is returned, with name being that of the 'ordered_on'
-        # column. Because of pandas magic, this column will then be in aggregation
-        # results, and oups will be able to use it for writing data.
-        # With actual setting, without this trick, 'streamagg' could not write
-        # the results (no 'ordered_on' columnin results).
-        ordered_on = data.columns[0]
-        group_keys = data.copy()
-        # Setup 1st key of groups from previous binning.
-        row_offset = 4 - buffer["row_offset"] if "row_offset" in buffer else 0
-        group_keys["tmp"] = data.iloc[row_offset::4]
-        if row_offset and "first_key" in buffer:
-            # Initialize 1st row if row_offset is not 0.
-            group_keys.iloc[0, group_keys.columns.get_loc("tmp")] = buffer["first_key"]
-        group_keys[ordered_on] = group_keys["tmp"].ffill()
-        group_keys = Series(group_keys[ordered_on], name=ordered_on)
-        keys, counts = np.unique(group_keys, return_counts=True)
-        # Update buffer in-place for next binning.
-        if "row_offset" in buffer and buffer["row_offset"] != 4:
-            buffer["row_offset"] = counts[-1] + buffer["row_offset"]
-        else:
-            buffer["row_offset"] = counts[-1]
-        buffer["first_key"] = keys[-1]
-        return group_keys
-
-    agg = {
-        "first": ("val", "first"),
-        "max": ("val", "max"),
-    }
-
-    # Setup streamed aggregation.
-    streamagg(
-        seed=(max_vdf_chunk_size, seed_vdf),
-        ordered_on=ordered_on,
-        agg=agg,
-        store=store,
-        key=key,
-        by=by,
-        discard_last=True,
-        max_row_group_size=max_row_group_size,
-    )
-    # Get reference results, discarding last row, because of 'discard_last'.
-    trimmed_seed = seed_pdf.iloc[:-2, :]
-    bins = by(trimmed_seed[[ordered_on]], {})
-    ref_res_agg = seed_pdf.iloc[:-2, :].groupby(bins).agg(**agg).reset_index()
-    # Test results
-    rec_res = store[key].pdf
-    assert rec_res.equals(ref_res_agg)
-    # Check metadata.
-    (
-        last_complete_index_res,
-        binning_buffer_res,
-        last_agg_row_res,
-        post_buffer_res,
-    ) = _get_streamagg_md(store[key])
-    last_complete_index_ref = pDataFrame({ordered_on: [ts[-3]]})
-    assert last_complete_index_res.equals(last_complete_index_ref)
-    binning_buffer_ref = {"row_offset": 4, "first_key": ts[-6]}
-    assert binning_buffer_res == binning_buffer_ref
-    last_agg_row_ref = pDataFrame(
-        data={"first": 13.0, "max": 16.0},
-        index=pIndex([ts[-6]], name=ordered_on),
-    )
-    assert last_agg_row_res.equals(last_agg_row_ref)
-    post_buffer_ref = {}
-    assert post_buffer_res == post_buffer_ref
-
-    # Append of new data.
-    # RG    TS   VAL       ROW BIN LABEL | comments
-    #  2  14:20  17         16   5 14:20 | previous data
-    #     14:20  18                      |
-
-    #     14:20   1          1           | new data
-    #     14:30   2                      |
-    #     15:00   3          3   6 15:00 |
-    #     15:30   4                      |
-    #     16:00   5                      |
-    #     16:40   6                      | not in agg results because of
-    #     16:40   7          7   7 16:40 | 'discard_last' True
-    ts2 = DatetimeIndex(
-        [
-            date + "14:20",
-            date + "14:30",
-            date + "15:00",
-            date + "15:30",
-            date + "16:00",
-            date + "16:40",
-            date + "16:40",
-        ]
-    )
-    seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
-    # Forcing dtype of 'seed_pdf' to float.
-    seed_pdf2["val"] = seed_pdf2["val"].astype("float64")
-    seed_pdf2 = pconcat([seed_pdf, seed_pdf2], ignore_index=True)
-    seed_vdf2 = from_pandas(seed_pdf2)
-    # Setup streamed aggregation.
-    streamagg(
-        seed=(max_vdf_chunk_size, seed_vdf2),
-        ordered_on=ordered_on,
-        agg=agg,
-        store=store,
-        key=key,
-        by=by,
-        discard_last=True,
-        max_row_group_size=max_row_group_size,
-    )
-
-    # Get reference results, discarding last row, because of 'discard_last'.
-    trimmed_seed2 = seed_pdf2.iloc[:-2, :]
-    bins = by(trimmed_seed2[[ordered_on]], {})
-    ref_res_agg2 = seed_pdf2.iloc[:-1, :].groupby(bins).agg(**agg).reset_index()
-    # Test results
-    rec_res2 = store[key].pdf
-    assert rec_res2.equals(ref_res_agg2)
-    # Check binning buffer stored in metadata.
-    (
-        last_complete_index_res2,
-        binning_buffer_res2,
-        _,
-        _,
-    ) = _get_streamagg_md(store[key])
-    last_complete_index_ref2 = pDataFrame({ordered_on: [ts2[-3]]})
-    assert last_complete_index_res2.equals(last_complete_index_ref2)
-    binning_buffer_ref2 = {"row_offset": 3, "first_key": Timestamp("2020-01-01 15:00:00")}
-    assert binning_buffer_res2 == binning_buffer_ref2
 
 
 def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
@@ -877,33 +683,33 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
     assert rec_res.equals(ref_res)
 
 
-def truc_vaex_seed_by_callable_with_bin_on_wo_binning_buffer(tmp_path):
-    # Test with vaex seed, binning every time a '1' appear in column 'val'.
-    # `discard_last` set `True`.
-    # Additionally, show an example of how 'by' as callable can output a pandas
-    # series which name is re-used straight away in aggregation results.
-    # 'Stress test' with appending new data twice.
+def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
+    # Test with vaex seed, binning every 4 rows with 'first', and 'max'
+    # aggregation. No post, `discard_last` set `True`.
+    # Additionally, shows an example of how 'by' as callable can output a
+    # pandas series which name is re-used straight away in aggregation results.
+    # (is re-used as 'ordered_on' column)
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for agg, BIN: bins
     # RG    TS   VAL       ROW BIN LABEL | comments
-    #  1   8:00   1          0   1  8:00 |
+    #      8:00   1          0   1  8:00 |
     #      8:30   2                      |
     #      9:00   3                      |
-    #      9:30   1          3   2  9:30 |
-    #     10:00   5                      |
+    #      9:30   4                      |
+    #     10:00   5          4   2 10:00 |
     #     10:20   6                      |
     #     10:40   7                      |
     #     11:00   8                      |
-    #     11:30   1          8   3 11:30 |
+    #     11:30   9          8   3 11:30 |
     #     12:00  10                      |
     #     12:20  11                      |
     #     12:40  12                      |
-    #     13:00   1         12   4 13:00 |
+    #     13:00  13         12   4 13:00 |
     #     -------------------------------- write data (max_row_group_size = 4)
-    #  2  13:20   1                      | buffer_binning = {nrows : 1}
+    #  2  13:20  14                      | buffer_binning = {nrows : 1}
     #     13:40  15                      |
     #     14:00  16                      |
-    #     14:20   1         16   5 14:20 | not in 1st agg results because of
+    #     14:20  17         16   5 14:20 | not in 1st agg results because of
     #     14:20  18                      | 'discard_last' True
     max_row_group_size = 4
     # Setup seed data.
@@ -932,12 +738,205 @@ def truc_vaex_seed_by_callable_with_bin_on_wo_binning_buffer(tmp_path):
         ]
     )
     ordered_on = "ts"
+    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    # Forcing dtype of 'seed_pdf' to float.
+    seed_pdf["val"] = seed_pdf["val"].astype("float64")
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+
+    # Setup aggregation.
+    def by(data: pDataFrame, buffer: dict):
+        """Bin by group of 4 rows. Label for bins are values from `ordered_on`."""
+        # A pandas Series is returned, with name being that of the 'ordered_on'
+        # column. Because of pandas magic, this column will then be in aggregation
+        # results, and oups will be able to use it for writing data.
+        # With actual setting, without this trick, 'streamagg' could not write
+        # the results (no 'ordered_on' columnin results).
+        ordered_on = data.columns[0]
+        group_keys = data.copy()
+        # Setup 1st key of groups from previous binning.
+        row_offset = 4 - buffer["row_offset"] if "row_offset" in buffer else 0
+        group_keys["tmp"] = data.iloc[row_offset::4]
+        if row_offset and "last_key" in buffer:
+            # Initialize 1st row if row_offset is not 0.
+            group_keys.iloc[0, group_keys.columns.get_loc("tmp")] = buffer["last_key"]
+        group_keys[ordered_on] = group_keys["tmp"].ffill()
+        group_keys = Series(group_keys[ordered_on], name=ordered_on)
+        keys, counts = np.unique(group_keys, return_counts=True)
+        # Update buffer in-place for next binning.
+        if "row_offset" in buffer and buffer["row_offset"] != 4:
+            buffer["row_offset"] = counts[-1] + buffer["row_offset"]
+        else:
+            buffer["row_offset"] = counts[-1]
+        buffer["last_key"] = keys[-1]
+        return group_keys
+
+    agg = {
+        "first": ("val", "first"),
+        "max": ("val", "max"),
+    }
+
+    # Setup streamed aggregation.
+    streamagg(
+        seed=(max_vdf_chunk_size, seed_vdf),
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Get reference results, discarding last row, because of 'discard_last'.
+    trimmed_seed = seed_pdf.iloc[:-2, :]
+    bins = by(trimmed_seed[[ordered_on]], {})
+    ref_res_agg = seed_pdf.iloc[:-2, :].groupby(bins).agg(**agg).reset_index()
+    # Test results
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res_agg)
+    # Check metadata.
+    (
+        last_complete_index_res,
+        binning_buffer_res,
+        last_agg_row_res,
+        post_buffer_res,
+    ) = _get_streamagg_md(store[key])
+    last_complete_index_ref = pDataFrame({ordered_on: [ts[-3]]})
+    assert last_complete_index_res.equals(last_complete_index_ref)
+    binning_buffer_ref = {"row_offset": 4, "last_key": ts[-6]}
+    assert binning_buffer_res == binning_buffer_ref
+    last_agg_row_ref = pDataFrame(
+        data={"first": 13.0, "max": 16.0},
+        index=pIndex([ts[-6]], name=ordered_on),
+    )
+    assert last_agg_row_res.equals(last_agg_row_ref)
+    post_buffer_ref = {}
+    assert post_buffer_res == post_buffer_ref
+
+    # Append of new data.
+    # RG    TS   VAL       ROW BIN LABEL | comments
+    #  2  14:20  17         16   5 14:20 | previous data
+    #     14:20  18                      |
+
+    #     14:20   1          1           | new data
+    #     14:30   2                      |
+    #     15:00   3          3   6 15:00 |
+    #     15:30   4                      |
+    #     16:00   5                      |
+    #     16:40   6                      | not in agg results because of
+    #     16:40   7          7   7 16:40 | 'discard_last' True
+    ts2 = DatetimeIndex(
+        [
+            date + "14:20",
+            date + "14:30",
+            date + "15:00",
+            date + "15:30",
+            date + "16:00",
+            date + "16:40",
+            date + "16:40",
+        ]
+    )
+    seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
+    # Forcing dtype of 'seed_pdf' to float.
+    seed_pdf2["val"] = seed_pdf2["val"].astype("float64")
+    seed_pdf2 = pconcat([seed_pdf, seed_pdf2], ignore_index=True)
+    seed_vdf2 = from_pandas(seed_pdf2)
+    # Setup streamed aggregation.
+    streamagg(
+        seed=(max_vdf_chunk_size, seed_vdf2),
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+
+    # Get reference results, discarding last row, because of 'discard_last'.
+    trimmed_seed2 = seed_pdf2.iloc[:-2, :]
+    bins = by(trimmed_seed2[[ordered_on]], {})
+    ref_res_agg2 = seed_pdf2.iloc[:-1, :].groupby(bins).agg(**agg).reset_index()
+    # Test results
+    rec_res2 = store[key].pdf
+    assert rec_res2.equals(ref_res_agg2)
+    # Check binning buffer stored in metadata.
+    (
+        last_complete_index_res2,
+        binning_buffer_res2,
+        _,
+        _,
+    ) = _get_streamagg_md(store[key])
+    last_complete_index_ref2 = pDataFrame({ordered_on: [ts2[-3]]})
+    assert last_complete_index_res2.equals(last_complete_index_ref2)
+    binning_buffer_ref2 = {"row_offset": 3, "last_key": Timestamp("2020-01-01 15:00:00")}
+    assert binning_buffer_res2 == binning_buffer_ref2
+
+
+def test_vaex_seed_by_callable_with_bin_on(tmp_path):
+    # Test with vaex seed, binning every time a '1' appear in column 'val'.
+    # `discard_last` set `True`.
+    # Additionally, show an example of how 'bin_on' as a tuple is used to
+    # rename column of group keys.
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for agg, BIN: bins
+    # RG    TS   VAL       ROW BIN LABEL | comments
+    #  1   8:00   1          0   1     1 |
+    #      8:30   2                      |
+    #      9:00   3                      |
+    #      9:30   1          3   2     2 |
+    #     10:00   5                      |
+    #     10:20   6                      |
+    #     10:40   7                      |
+    #     11:00   8                      |
+    #     11:30   1          8   3     3 |
+    #     12:00  10                      |
+    #     12:20  11                      |
+    #     12:40  12                      |
+    #     13:00   1         12   4     4 |
+    #     -------------------------------- write data (max_row_group_size = 4)
+    #  2  13:20  14                      | buffer_binning = {last_key : 4}
+    #     13:40  15                      |
+    #     14:00  16                      |
+    #     14:20   1         16   5     5 | not in 1st agg results because of
+    #     14:20  18                      | 'discard_last' True
+    max_row_group_size = 4
+    # Setup seed data.
+    max_vdf_chunk_size = 13
+    date = "2020/01/01 "
+    ts = DatetimeIndex(
+        [
+            date + "08:00",
+            date + "08:30",
+            date + "09:00",
+            date + "09:30",
+            date + "10:00",
+            date + "10:20",
+            date + "10:40",
+            date + "11:00",
+            date + "11:30",
+            date + "12:00",
+            date + "12:20",
+            date + "12:40",
+            date + "13:00",
+            date + "13:20",
+            date + "13:40",
+            date + "14:00",
+            date + "14:20",
+            date + "14:20",
+        ]
+    )
+    ordered_on = "ts"
+    bin_on = "val"
     val = np.arange(1, len(ts) + 1)
     val[3] = 1
     val[8] = 1
     val[12] = 1
     val[16] = 1
-    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_pdf = pDataFrame({ordered_on: ts, bin_on: val})
     seed_vdf = from_pandas(seed_pdf)
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
@@ -947,34 +946,28 @@ def truc_vaex_seed_by_callable_with_bin_on_wo_binning_buffer(tmp_path):
     # Setup aggregation.
     def by(data: pDataFrame, buffer: dict):
         """Start a new bin each time a 1 is spot."""
-        # A pandas Series is returned, with name being that of the 'ordered_on'
-        # column. Because of pandas magic, this column will then be in aggregation
-        # results, and oups will be able to use it for writing data.
-        ordered_on = data.columns[0]
-        group_keys = data.copy()
+        # A pandas Series is returned.
+        # Its name does not matter as 'bin_on' in streamagg is a tuple which
+        # 2nd item will define the column name for group keys.
+        group_on = data.columns[1]
         # Setup 1st key of groups from previous binning.
-        row_offset = 4 - buffer["row_offset"] if "row_offset" in buffer else 0
-        group_keys["tmp"] = data.iloc[row_offset::4]
-        if row_offset and "first_key" in buffer:
-            # Initialize 1st row if row_offset is not 0.
-            group_keys.iloc[0, group_keys.columns.get_loc("tmp")] = buffer["first_key"]
-        group_keys[ordered_on] = group_keys["tmp"].ffill()
-        group_keys = Series(group_keys[ordered_on], name=ordered_on)
-        keys, counts = np.unique(group_keys, return_counts=True)
-        # Update buffer in-place for next binning.
-        if "row_offset" in buffer and buffer["row_offset"] != 4:
-            buffer["row_offset"] = counts[-1] + buffer["row_offset"]
+        if "last_key" not in buffer:
+            offset = 0
         else:
-            buffer["row_offset"] = counts[-1]
-        buffer["first_key"] = keys[-1]
+            offset = buffer["last_key"]
+        group_keys = Series(np.zeros(len(data)), dtype=int)
+        group_keys.loc[data[group_on] == 1] = 1
+        group_keys = group_keys.cumsum() + offset
+        buffer["last_key"] = group_keys.iloc[-1]
         return group_keys
 
     agg = {
-        "first": ("val", "first"),
+        "ts": ("ts", "first"),
         "max": ("val", "max"),
     }
-    bin_on = ("val", ordered_on)
+    bin_out_col = "group_keys"
 
+    # Setup streamed aggregation.
     streamagg(
         seed=(max_vdf_chunk_size, seed_vdf),
         ordered_on=ordered_on,
@@ -982,23 +975,90 @@ def truc_vaex_seed_by_callable_with_bin_on_wo_binning_buffer(tmp_path):
         store=store,
         key=key,
         by=by,
-        bin_on=bin_on,
+        bin_on=(bin_on, bin_out_col),
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Get reference results, discarding last row, because of 'discard_last'.
+    trimmed_seed = seed_pdf.iloc[:-2, :]
+    bins = by(trimmed_seed[[ordered_on, bin_on]], {})
+    ref_res_agg = seed_pdf.iloc[:-2, :].groupby(bins).agg(**agg)
+    ref_res_agg.index.name = bin_out_col
+    ref_res_agg.reset_index(inplace=True)
+    # Test results
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res_agg)
+
+    # Append of new data.
+    # RG    TS   VAL       ROW BIN LABEL | comments
+    #  2  14:20  17         16   5     5 | previous data
+    #     14:20  18                      |
+
+    #     14:20   1          1   6     6 | new data
+    #     14:30   2                      |
+    #     15:00   3                      |
+    #     15:30   1          4   7     7 |
+    #     16:00   5                      |
+    #     16:40   6                      | not in agg results because of
+    #     16:40   7                      | 'discard_last' True
+    ts2 = DatetimeIndex(
+        [
+            date + "14:20",
+            date + "14:30",
+            date + "15:00",
+            date + "15:30",
+            date + "16:00",
+            date + "16:40",
+            date + "16:40",
+        ]
+    )
+    val = np.arange(1, len(ts2) + 1)
+    val[3] = 1
+    seed_pdf2 = pDataFrame({ordered_on: ts2, bin_on: val})
+    seed_pdf2 = pconcat([seed_pdf, seed_pdf2], ignore_index=True)
+    seed_vdf2 = from_pandas(seed_pdf2)
+    # Setup streamed aggregation.
+    streamagg(
+        seed=(max_vdf_chunk_size, seed_vdf2),
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        bin_on=(bin_on, bin_out_col),
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
 
-
-# /!\ bin_on parameter should accept a tuple : seed column name / resulting aggregated column name
-# Test bin_on as tuple + modify docstring
+    # Get reference results, discarding last row, because of 'discard_last'.
+    trimmed_seed2 = seed_pdf2.iloc[:-2, :]
+    bins = by(trimmed_seed2[[ordered_on, bin_on]], {})
+    ref_res_agg2 = seed_pdf2.iloc[:-1, :].groupby(bins).agg(**agg)
+    ref_res_agg2.index.name = bin_out_col
+    ref_res_agg2.reset_index(inplace=True)
+    ref_res_agg2[bin_out_col] = ref_res_agg2[bin_out_col].astype(int)
+    # Test results
+    rec_res2 = store[key].pdf
+    assert rec_res2.equals(ref_res_agg2)
+    # Check binning buffer stored in metadata.
+    (
+        last_complete_index_res2,
+        binning_buffer_res2,
+        _,
+        _,
+    ) = _get_streamagg_md(store[key])
+    last_complete_index_ref2 = pDataFrame({ordered_on: [ts2[-3]]})
+    assert last_complete_index_res2.equals(last_complete_index_ref2)
+    binning_buffer_ref2 = {"last_key": 7}
+    assert binning_buffer_res2 == binning_buffer_ref2
 
 
 # WiP
 
-# change last_complete_index in single value, not dataframe (check how it is done for binning buffer)
+# change last_complete_index in single value when it is used, not dataframe (check how it is done for binning buffer)
 # change post_buffer into dict? (same as binning_buffer?)
 
 # test with 'by' as callable,
-# without 'buffer_binning' and with 'bin_on': every time value is 1 in column 'flag'.
 # test with discard_last = False and trim_seed = False
 
 # check correct functioning with/without "discard_last"

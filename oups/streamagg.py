@@ -457,8 +457,6 @@ def streamagg(
           voluntary choice from the user.
 
     """
-    # TODO: implement 'precise restart' as defined in ticket 7.
-    # https://github.com/yohplala/oups/issues/7
     print("")
     print("setup streamagg")
     # Initialize 'self_agg', and check if aggregation functions are allowed.
@@ -497,13 +495,13 @@ def streamagg(
     # Ensure 'by' and 'bin_on' are set.
     if bin_on:
         if isinstance(bin_on, tuple):
-            # 'bin_col_name': name of column containing group keys in agg res.
-            bin_on, bin_col_name = bin_on
+            # 'bin_out_col': name of column containing group keys in agg res.
+            bin_on, bin_out_col = bin_on
         else:
-            bin_col_name = bin_on
+            bin_out_col = bin_on
         all
     else:
-        bin_col_name = None
+        bin_out_col = None
     if by:
         if callable(by):
             #            if bin_on is None:
@@ -511,7 +509,7 @@ def streamagg(
             #                    "not possible to have `bin_on` set to `None` while `by` is a callable."
             #                )
             #            elif bin_on in agg:
-            if bin_col_name in agg:
+            if bin_out_col in agg:
                 # Check that this name is not already that of an output column
                 # from aggregation.
                 raise ValueError(
@@ -638,25 +636,25 @@ def streamagg(
     agg_n_rows = 0
     agg_mean_row_group_size = 0
     #    # Define 'index_name' of 'agg_res' if needed (to be used in 'post').
-    #    index_name = bin_col_name
+    #    index_name = bin_out_col
     # Buffer to keep aggregation chunks before a concatenation to record.
     agg_chunks_buffer = []
     # Setting 'write_config'.
     write_config = kwargs
     # Forcing 'ordered_on' for write.
     write_config["ordered_on"] = ordered_on
-    # Adding 'bin_col_name' to 'duplicates_on' except if 'duplicates_on' is set
-    # already. In this case, if 'bin_col_name' is not in 'duplicates_on', it is
+    # Adding 'bin_out_col' to 'duplicates_on' except if 'duplicates_on' is set
+    # already. In this case, if 'bin_out_col' is not in 'duplicates_on', it is
     # understood as a voluntary user choice to not have 'bin_on' in
     # 'duplicates_on'.
     if "duplicates_on" not in write_config or write_config["duplicates_on"] is None:
-        if bin_col_name:
-            # Force 'bin_col_name'.
-            write_config["duplicates_on"] = bin_col_name
+        if bin_out_col:
+            # Force 'bin_out_col'.
+            write_config["duplicates_on"] = bin_out_col
         else:
             write_config["duplicates_on"] = ordered_on
         # For all other cases, 'duplicates_on' has been set by user.
-        # If 'bin_col_name' is not in 'duplicates_on', it is understood as a
+        # If 'bin_out_col' is not in 'duplicates_on', it is understood as a
         # voluntary choice by the user.
     agg_res = None
     len_agg_res = None
@@ -713,7 +711,7 @@ def streamagg(
                         key=key,
                         write_config=write_config,
                         #                        index_name=index_name,
-                        index_name=bin_col_name,
+                        index_name=bin_out_col,
                         post=post,
                         isfrn=isfrn,
                         post_buffer=post_buffer,
@@ -841,7 +839,7 @@ def streamagg(
         key=key,
         write_config=write_config,
         #        index_name=index_name,
-        index_name=bin_col_name,
+        index_name=bin_out_col,
         post=post,
         isfrn=isfrn,
         post_buffer=post_buffer,
