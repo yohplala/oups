@@ -88,9 +88,12 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
     # It is a value to be excluded when filtering seed data.
     # Trim accordingly head of seed data in this case.
     streamagg_md = handle._oups_metadata[MD_KEY_STREAMAGG]
-    last_seed_index = streamagg_md[MD_KEY_LAST_SEED_INDEX]
-    # De-serialize 'seed_index_restart'.
-    last_seed_index = read_json(last_seed_index, **PANDAS_DESERIALIZE).iloc[0, 0]
+    if streamagg_md[MD_KEY_LAST_SEED_INDEX]:
+        last_seed_index = streamagg_md[MD_KEY_LAST_SEED_INDEX]
+        # De-serialize 'last_seed_index'.
+        last_seed_index = read_json(last_seed_index, **PANDAS_DESERIALIZE).iloc[0, 0]
+    else:
+        last_seed_index = None
     print("_get_streamagg_md")
     print("seed_index_restart:")
     print(last_seed_index)
@@ -124,10 +127,10 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
 
 
 def _set_streamagg_md(
-    last_seed_index: pDataFrame,
-    binning_buffer: dict,
-    last_agg_row: pDataFrame,
-    post_buffer: dict,
+    last_seed_index: pDataFrame = None,
+    binning_buffer: dict = None,
+    last_agg_row: pDataFrame = None,
+    post_buffer: dict = None,
 ):
     """Serialize and record stremagg metadata from last aggregation and post.
 
@@ -148,11 +151,13 @@ def _set_streamagg_md(
     # Setup metadata for a future 'streamagg' execution.
     # Store a json serialized pandas series, to keep track of 'whatever
     # the object' the index is.
+    print("within set_metadata")
     print("last_seed_index")
     print(last_seed_index)
-    last_seed_index = pDataFrame({MD_KEY_LAST_SEED_INDEX: [last_seed_index]}).to_json(
-        **PANDAS_SERIALIZE
-    )
+    if last_seed_index:
+        last_seed_index = pDataFrame({MD_KEY_LAST_SEED_INDEX: [last_seed_index]}).to_json(
+            **PANDAS_SERIALIZE
+        )
     print("last_agg_row")
     print(last_agg_row)
     last_agg_row = last_agg_row.to_json(**PANDAS_SERIALIZE)
@@ -471,7 +476,7 @@ def streamagg(
         self_agg[col_out] = (col_out, agg_func)
     # Initialize 'iter_dataframe' from seed data, with correct trimming.
     seed_index_restart = None
-    seed_index_end = None
+    #    seed_index_end = None
     binning_buffer = {}
     post_buffer = {}
     # Initializing 'last_agg_row' to a pandas dataframe, to allow using 'empty'
@@ -544,7 +549,6 @@ def streamagg(
         raise ValueError("one or several among `by` and `bin_on` are required.")
     print(f"bin_on: {bin_on}")
     print(f"seed_index_restart: {seed_index_restart}")
-    print(f"seed_index_end: {seed_index_end}")
     # Retrieve lists of input and output columns from 'agg'.
     all_cols_in = {val[0] for val in agg.values()}
     if bin_on and bin_on != ordered_on:
@@ -562,10 +566,9 @@ def streamagg(
     #    last_complete_seed_index = None
     if isinstance(seed, ParquetFile):
         # Case seed is a parquet file.
-        if discard_last:
-            # 'ordered_on' being necessarily in ascending order, last index
-            # value is its max value.
-            seed_index_end = seed.statistics["max"][ordered_on][-1]
+        # 'ordered_on' being necessarily in ascending order, last index
+        # value is its max value.
+        last_seed_index = seed.statistics["max"][ordered_on][-1]
         #        else:
         #            if _is_stremagg_result(seed):
         #                # If 'seed' is itself a 'streamagg' result, carry over the
@@ -589,16 +592,18 @@ def streamagg(
         filter_seed = []
         if seed_index_restart:
             filter_seed.append((ordered_on, ">=", seed_index_restart))
-        if seed_index_end:
-            # 'seed_index_end' is excluded if defined.
-            filter_seed.append((ordered_on, "<", seed_index_end))
+        if discard_last:
+            filter_seed.append((ordered_on, "<", last_seed_index))
         print("filters:")
         print(filter_seed)
         print("row filters:")
         print(bool(filter_seed))
-        iter_data = seed.iter_row_groups(
-            filters=[filter_seed], row_filter=bool(filter_seed), columns=all_cols_in
-        )
+        if filter_seed:
+            iter_data = seed.iter_row_groups(
+                filters=[filter_seed], row_filter=True, columns=all_cols_in
+            )
+        else:
+            iter_data = seed.iter_row_groups(columns=all_cols_in)
     else:
         # Case seed is a vaex dataframe.
         if isinstance(seed, tuple):
@@ -606,13 +611,11 @@ def streamagg(
             seed = seed[1]
         else:
             vdf_row_group_size = VDATAFRAME_ROW_GROUP_SIZE
-        if discard_last:
             #            seed_index_end = seed[-1:].to_numpy()[0]
-            len_seed = len(seed)
-            seed_index_end = seed.evaluate(ordered_on, len_seed - 1, len_seed, array_type="numpy")[
-                0
-            ]
-            seed = seed[seed[ordered_on] < seed_index_end]
+        len_seed = len(seed)
+        last_seed_index = seed.evaluate(ordered_on, len_seed - 1, len_seed, array_type="numpy")[0]
+        if discard_last:
+            seed = seed[seed[ordered_on] < last_seed_index]
         if seed_index_restart:
             # 'seed_index_restart' is excluded if defined.
             if isinstance(seed_index_restart, pTimestamp):
@@ -628,8 +631,8 @@ def streamagg(
         print(seed_index_restart)
         print(type(seed_index_restart))
         print("seed index end")
-        print(seed_index_end)
-        print(type(seed_index_end))
+        print(last_seed_index)
+        print(type(last_seed_index))
         iter_data = (
             tup[2]
             for tup in seed.to_pandas_df(chunk_size=vdf_row_group_size, column_names=all_cols_in)
@@ -824,10 +827,10 @@ def streamagg(
     # set as:
     #   - one-but-last value of initial seed data if 'discard_last' is True,
     #   - or last value of initial seed data if 'discard_last' is False.
-    if not discard_last:
-        #    if last_complete_seed_index is None:
-        #        last_complete_seed_index = seed_chunk[ordered_on].iloc[-1:].reset_index(drop=True)
-        seed_index_end = None
+    #    if not discard_last:
+    #    if last_complete_seed_index is None:
+    #        last_complete_seed_index = seed_chunk[ordered_on].iloc[-1:].reset_index(drop=True)
+    #        seed_index_end = None
     print("last_agg_row before sending to post_n_write")
     print(last_agg_row)
     # A deep copy is made for 'last_agg_row' to prevent a specific case where
@@ -847,7 +850,7 @@ def streamagg(
         post=post,
         isfrn=isfrn,
         post_buffer=post_buffer,
-        metadata=(seed_index_end, binning_buffer, last_agg_row.copy()),
+        metadata=(last_seed_index, binning_buffer, last_agg_row.copy()),
     )
     #        print("from new streamagg result, last_complete_seed_index:")
     #        print(last_complete_seed_index)

@@ -38,7 +38,9 @@ class Indexer:
 
 def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Test with parquet seed, time grouper and 'sum' aggregation.
-    # No post, 'discard_last=True'.
+    # No post.
+    # The 1st & 2nd append, 'discard_last=True',
+    # 3rd append, 'discard_last=False'.
     #
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
@@ -60,7 +62,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     #     -------------------------- write data (max_row_group_size = 6)
     #  6  13:20  14   13           | stitching, 1 aggregated row.
     #     13:40  15                |
-    #  7  14:00  16   15   7 14:00 | no stitching, 1 aggrgated row.
+    #  7  14:00  16   15   7 14:00 | no stitching, 1 aggregated row.
     #     14:20  17                |
     # Setup seed data.
     max_row_group_size = 6
@@ -84,17 +86,6 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
             date + "13:40",
             date + "14:00",
             date + "14:20",
-        ]
-    )
-    dti_ref = DatetimeIndex(
-        [
-            date + "08:00",
-            date + "09:00",
-            date + "10:00",
-            date + "11:00",
-            date + "12:00",
-            date + "13:00",
-            date + "14:00",
         ]
     )
     ordered_on = "ts"
@@ -130,11 +121,21 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
     agg_sum_ref = [3, 7, 18, 17, 33, 42, 16]
+    dti_ref = DatetimeIndex(
+        [
+            date + "08:00",
+            date + "09:00",
+            date + "10:00",
+            date + "11:00",
+            date + "12:00",
+            date + "13:00",
+            date + "14:00",
+        ]
+    )
     ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
-    # Check 'last_complete_index' is last-but-one timestamp (because of
-    # 'discard_last').
+    # Check 'last_seed_index' is last timestamp.
     (
         last_seed_index_res,
         binning_buffer_res,
@@ -196,7 +197,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
-    # Check 'last_seed_index' is last timestamp (because of 'discard_last').
+    # Check 'last_seed_index' is last timestamp.
     (
         last_seed_index_res,
         binning_buffer_res,
@@ -211,6 +212,200 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     assert last_agg_row_res.equals(last_agg_row_ref)
     post_buffer_ref = {}
     assert post_buffer_res == post_buffer_ref
+
+    # Append a 2nd time, with 'discard_last=False'.
+    # Check aggregation till the end of seed data.
+    # Check no 'last_seed_index' in metadata of aggregated results.
+    ts = DatetimeIndex([date + "15:20", date + "15:21"])
+    seed_df = pDataFrame({ordered_on: ts, "val": [11, 12]})
+    fp_write(seed_path, seed_df, file_scheme="hive", append=True)
+    seed = ParquetFile(seed_path)
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=False,
+        max_row_group_size=max_row_group_size,
+    )
+    # Test results (not trimming seed data).
+    ref_res = seed.to_pandas().groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # Check 'last_seed_index' is last timestamp.
+    (
+        last_seed_index_res,
+        _,
+        _,
+        _,
+    ) = _get_streamagg_md(store[key])
+    assert last_seed_index_res == ts[-1]
+
+
+def test_vaex_seed_time_grouper_sum_agg(tmp_path):
+    # Test with parquet seed, time grouper and 'sum' aggregation.
+    # No post.
+    # The 1st append, 'discard_last=True', 2nd append, 'discard_last=False'.
+    #
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
+    # 1 hour binning
+    # RGS   TS   VAL ROW BIN LABEL | comments
+    #  1   8:00   1    0   1  8:00 | 2 aggregated rows from same row group.
+    #      8:30   2                |
+    #      9:00   3        2  9:00 |
+    #      9:30   4                |
+    #  2  10:00   5    4   3 10:00 | no stitching with previous.
+    #     10:20   6                | 1 aggregated row.
+    #  3  10:40   7    6           | stitching with previous (same bin).
+    #     11:00   8        4 11:00 | 2 aggregated rows, not incl. stitching
+    #     11:30   9                | with prev agg row.
+    #     12:00  10        5 12:00 |
+    #  4  12:20  11   10           | stitching with previous (same bin).
+    #     12:40  12                | 0 aggregated row, not incl stitching.
+    #  5  13:00  13   12   6 13:00 |
+    #  6  13:20  14   13           |
+    #     13:40  15                |
+    #  7  14:00  16   15   7 14:00 | no stitching, 1 aggregated row.
+    #     14:20  17                |
+    # Setup seed data.
+    max_row_group_size = 6
+    date = "2020/01/01 "
+    ts = DatetimeIndex(
+        [
+            date + "08:00",
+            date + "08:30",
+            date + "09:00",
+            date + "09:30",
+            date + "10:00",
+            date + "10:20",
+            date + "10:40",
+            date + "11:00",
+            date + "11:30",
+            date + "12:00",
+            date + "12:20",
+            date + "12:40",
+            date + "13:00",
+            date + "13:20",
+            date + "13:40",
+            date + "14:00",
+            date + "14:20",
+        ]
+    )
+    ordered_on = "ts"
+    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg_col = "sum"
+    agg = {agg_col: ("val", "sum")}
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Check number of rows of each row groups in aggregated results.
+    pf_res = store[key].pf
+    n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
+    n_rows_ref = [4, 3]
+    assert n_rows_res == n_rows_ref
+    # Check aggregated results: last row has been discarded with 'discard_last'
+    # `True`.
+    dti_ref = DatetimeIndex(
+        [
+            date + "08:00",
+            date + "09:00",
+            date + "10:00",
+            date + "11:00",
+            date + "12:00",
+            date + "13:00",
+            date + "14:00",
+        ]
+    )
+    agg_sum_ref = [3, 7, 18, 17, 33, 42, 16]
+    ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # Check 'last_complete_index' is last-but-one timestamp (because of
+    # 'discard_last').
+    (
+        last_seed_index_res,
+        binning_buffer_res,
+        last_agg_row_res,
+        post_buffer_res,
+    ) = _get_streamagg_md(store[key])
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref
+    binning_buffer_ref = {}
+    assert binning_buffer_res == binning_buffer_ref
+    last_agg_row_ref = pDataFrame(data={agg_col: 16}, index=pIndex([ts[-2]], name=ordered_on))
+    assert last_agg_row_res.equals(last_agg_row_ref)
+    post_buffer_ref = {}
+    assert post_buffer_res == post_buffer_ref
+    # Complete seed_df with new data and continue aggregation.
+    # 'discard_last=False'
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
+    # 1 hour binning
+    # RG    TS   VAL ROW BIN LABEL | comments
+    #     14:00  16        1 14:00 | one-but-last row from prev seed data
+    #     14:20  17                | last row from previous seed data
+    #     15:10   1        2 15:00 | no stitching
+    #     15:11   2        2 15:00 |
+    ts = DatetimeIndex([date + "15:10", date + "15:11"])
+    seed_pdf2 = pDataFrame({ordered_on: ts, "val": [1, 2]})
+    seed_vdf = seed_vdf.concat(from_pandas(seed_pdf2))
+
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        discard_last=False,
+        max_row_group_size=max_row_group_size,
+    )
+    # Check aggregated results: last row has not been discarded.
+    agg_sum_ref = [3, 7, 18, 17, 33, 42, 33, 3]
+    dti_ref = DatetimeIndex(
+        [
+            date + "08:00",
+            date + "09:00",
+            date + "10:00",
+            date + "11:00",
+            date + "12:00",
+            date + "13:00",
+            date + "14:00",
+            date + "15:00",
+        ]
+    )
+    ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # Check 'last_seed_index' is last timestamp (because of 'discard_last').
+    (
+        last_seed_index_res,
+        _,
+        _,
+        _,
+    ) = _get_streamagg_md(store[key])
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref
 
 
 def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
@@ -1054,25 +1249,17 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
 
 # WiP
 
-# check after appending data, if not discard_last, seed_index is removed
-# test with discard_last = False and trim_seed = False
+# test with trim_seed = False
 
-# check correct functioning with/without "discard_last"
 # check correct functioning with/without "trim_seed" (to be implemented:
 #      to enable use of trim_seed=True, check if agg data is already existing, it has a last_complete_index metadata
 #      when discard_last_False, and if 'last_complete_index' exist in metadata, make sure to remove it
-# Test ValueError when trim_seed and not last_seed_index in seed metadata.
-
-# discard_last : seed_index_end correctly taken into account?
-
 
 # Test avec streamagg 1 se terminant exactement sure la bin en cours, & streamagg 2 reprenant sure une nouvelle bin
 # Et quand streamagg est utile. (itération 2 démarrée au milieu de bin 1 par example)
 
-# test with a single new rowin seed data.
+# test with a single new rowin seed data + discard_last = True & discard_last = False
 
-
-# Test error bin_on not defined, but 'by' is a callable
 
 # Test error message if 'bin_on' is already used as an output column name from aggregation
 
