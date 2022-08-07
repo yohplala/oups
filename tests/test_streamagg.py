@@ -38,7 +38,7 @@ class Indexer:
 
 def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Test with parquet seed, time grouper and 'sum' aggregation.
-    # No post, no discard_last.
+    # No post, 'discard_last=True'.
     #
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
@@ -136,13 +136,13 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Check 'last_complete_index' is last-but-one timestamp (because of
     # 'discard_last').
     (
-        last_complete_index_res,
+        last_seed_index_res,
         binning_buffer_res,
         last_agg_row_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
-    last_complete_index_ref = pDataFrame({ordered_on: [ts[-2]]})
-    assert last_complete_index_res.equals(last_complete_index_ref)
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref
     binning_buffer_ref = {}
     assert binning_buffer_res == binning_buffer_ref
     last_agg_row_ref = pDataFrame(data={agg_col: 16}, index=pIndex([ts[-2]], name=ordered_on))
@@ -196,16 +196,15 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
-    # Check 'last_complete_index' is last-but-one timestamp (because of
-    # 'discard_last').
+    # Check 'last_seed_index' is last timestamp (because of 'discard_last').
     (
-        last_complete_index_res,
+        last_seed_index_res,
         binning_buffer_res,
         last_agg_row_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
-    last_complete_index_ref = pDataFrame({ordered_on: [ts[-2]]})
-    assert last_complete_index_res.equals(last_complete_index_ref)
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref
     binning_buffer_ref = {}
     assert binning_buffer_res == binning_buffer_ref
     last_agg_row_ref = pDataFrame(data={agg_col: 1}, index=pIndex([dti_ref[-1]], name=ordered_on))
@@ -311,8 +310,8 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
 
 def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
     # Test with vaex seed, time grouper and 'first', 'last', 'min', and
-    # 'max' aggregation. No post, no discard_last. 'Stress test' with appending
-    # new data twice.
+    # 'max' aggregation. No post, 'discard_last=True'. 'Stress test' with
+    # appending new data twice.
     max_row_group_size = 6
     start = Timestamp("2020/12/31")
     rr = np.random.default_rng(2)
@@ -531,13 +530,13 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     assert n_rows_res == n_rows_ref
     # Check metadata.
     (
-        last_complete_index_res,
+        last_seed_index_res,
         binning_buffer_res,
         last_agg_row_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
-    last_complete_index_ref = pDataFrame({ordered_on: [ts[-2]]})
-    assert last_complete_index_res.equals(last_complete_index_ref)
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref
     binning_buffer_ref = {}
     assert binning_buffer_res == binning_buffer_ref
     last_agg_row_ref = pDataFrame(
@@ -799,13 +798,13 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     assert rec_res.equals(ref_res_agg)
     # Check metadata.
     (
-        last_complete_index_res,
+        last_seed_index_res,
         binning_buffer_res,
         last_agg_row_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
-    last_complete_index_ref = pDataFrame({ordered_on: [ts[-3]]})
-    assert last_complete_index_res.equals(last_complete_index_ref)
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref
     binning_buffer_ref = {"row_offset": 4, "last_key": ts[-6]}
     assert binning_buffer_res == binning_buffer_ref
     last_agg_row_ref = pDataFrame(
@@ -865,13 +864,13 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     assert rec_res2.equals(ref_res_agg2)
     # Check binning buffer stored in metadata.
     (
-        last_complete_index_res2,
+        last_seed_index_res2,
         binning_buffer_res2,
         _,
         _,
     ) = _get_streamagg_md(store[key])
-    last_complete_index_ref2 = pDataFrame({ordered_on: [ts2[-3]]})
-    assert last_complete_index_res2.equals(last_complete_index_ref2)
+    last_seed_index_ref2 = ts2[-1]
+    assert last_seed_index_res2 == last_seed_index_ref2
     binning_buffer_ref2 = {"row_offset": 3, "last_key": Timestamp("2020-01-01 15:00:00")}
     assert binning_buffer_res2 == binning_buffer_ref2
 
@@ -1042,23 +1041,20 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     assert rec_res2.equals(ref_res_agg2)
     # Check binning buffer stored in metadata.
     (
-        last_complete_index_res2,
+        last_seed_index_res2,
         binning_buffer_res2,
         _,
         _,
     ) = _get_streamagg_md(store[key])
-    last_complete_index_ref2 = pDataFrame({ordered_on: [ts2[-3]]})
-    assert last_complete_index_res2.equals(last_complete_index_ref2)
+    last_seed_index_ref2 = ts2[-1]
+    assert last_seed_index_res2 == last_seed_index_ref2
     binning_buffer_ref2 = {"last_key": 7}
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
 # WiP
 
-# change last_complete_index in single value when it is used, not dataframe (check how it is done for binning buffer)
-# change post_buffer into dict? (same as binning_buffer?)
-
-# test with 'by' as callable,
+# check after appending data, if not discard_last, seed_index is removed
 # test with discard_last = False and trim_seed = False
 
 # check correct functioning with/without "discard_last"

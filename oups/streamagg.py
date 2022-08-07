@@ -4,7 +4,6 @@ Created on Wed Mar  9 21:30:00 2022.
 
 @author: yoh
 """
-import json
 from dataclasses import dataclass
 from typing import Callable, List, Tuple, Union
 
@@ -30,7 +29,7 @@ VDATAFRAME_ROW_GROUP_SIZE = 6_345_000
 ACCEPTED_AGG_FUNC = {"first", "last", "min", "max", "sum"}
 # List of keys to metadata of aggregation results.
 MD_KEY_STREAMAGG = "streamagg"
-MD_KEY_LAST_COMPLETE_SEED_INDEX = "last_complete_seed_index"
+MD_KEY_LAST_SEED_INDEX = "last_seed_index"
 MD_KEY_BINNING_BUFFER = "binning_buffer"
 MD_KEY_LAST_AGGREGATION_ROW = "last_aggregation_row"
 MD_KEY_POST_BUFFER = "post_buffer"
@@ -77,8 +76,8 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
         Data recorded from previous aggregation to allow pursuing it with
         new seed data. 3 variables are returned, in order.
 
-          - ``seed_index_restart``, pandas dataframe with unique value being
-            last index of "complete" row or row group from seed data.
+          - ``last_seed_index``, pandas dataframe with unique value being last
+            index from seed data.
           - ``binning_buffer``, a dict to be forwarded to ``by`` if a callable.
           - ``last_agg_row``, last row grom previously aggregated results.
           - ``post_buffer``, a dict to be forwarded to ``post`` callable.
@@ -89,12 +88,12 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
     # It is a value to be excluded when filtering seed data.
     # Trim accordingly head of seed data in this case.
     streamagg_md = handle._oups_metadata[MD_KEY_STREAMAGG]
-    seed_index_restart = streamagg_md[MD_KEY_LAST_COMPLETE_SEED_INDEX]
+    last_seed_index = streamagg_md[MD_KEY_LAST_SEED_INDEX]
     # De-serialize 'seed_index_restart'.
-    seed_index_restart = read_json(seed_index_restart, **PANDAS_DESERIALIZE)
+    last_seed_index = read_json(last_seed_index, **PANDAS_DESERIALIZE).iloc[0, 0]
     print("_get_streamagg_md")
     print("seed_index_restart:")
-    print(seed_index_restart)
+    print(last_seed_index)
     # Metadata related to binning process from past binnings on prior data.
     # It is used in cased 'by' is a callable.
     #    binning_buffer = streamagg_md[MD_KEY_BINNING_BUFFER]
@@ -121,11 +120,11 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
         post_buffer = {}
     print("post_buffer:")
     print(post_buffer)
-    return seed_index_restart, binning_buffer, last_agg_row, post_buffer
+    return last_seed_index, binning_buffer, last_agg_row, post_buffer
 
 
 def _set_streamagg_md(
-    last_complete_seed_index: pDataFrame,
+    last_seed_index: pDataFrame,
     binning_buffer: dict,
     last_agg_row: pDataFrame,
     post_buffer: dict,
@@ -134,8 +133,8 @@ def _set_streamagg_md(
 
     Parameters
     ----------
-    last_complete_seed_index : pDataFrame
-        Last index of complete row or row group in seed data.
+    last_seed_index : pDataFrame
+        Last index in seed data.
     binning_buffer : dict
         Last values from binning process, that can be required when restarting
         the binning process with new seed data.
@@ -149,9 +148,11 @@ def _set_streamagg_md(
     # Setup metadata for a future 'streamagg' execution.
     # Store a json serialized pandas series, to keep track of 'whatever
     # the object' the index is.
-    print("last_complete_seed_index")
-    print(last_complete_seed_index)
-    last_complete_seed_index = last_complete_seed_index.to_json(**PANDAS_SERIALIZE)
+    print("last_seed_index")
+    print(last_seed_index)
+    last_seed_index = pDataFrame({MD_KEY_LAST_SEED_INDEX: [last_seed_index]}).to_json(
+        **PANDAS_SERIALIZE
+    )
     print("last_agg_row")
     print(last_agg_row)
     last_agg_row = last_agg_row.to_json(**PANDAS_SERIALIZE)
@@ -164,7 +165,7 @@ def _set_streamagg_md(
     # Set oups metadata.
     metadata = {
         MD_KEY_STREAMAGG: {
-            MD_KEY_LAST_COMPLETE_SEED_INDEX: last_complete_seed_index,
+            MD_KEY_LAST_SEED_INDEX: last_seed_index,
             MD_KEY_BINNING_BUFFER: binning_buffer,
             MD_KEY_LAST_AGGREGATION_ROW: last_agg_row,
             MD_KEY_POST_BUFFER: post_buffer,
@@ -483,7 +484,7 @@ def streamagg(
         seed_index_restart, binning_buffer_, last_agg_row, post_buffer_ = _get_streamagg_md(
             store[key]
         )
-        seed_index_restart = seed_index_restart.iloc[0, 0]
+        #        seed_index_restart = seed_index_restart.iloc[0, 0]
         if binning_buffer_:
             binning_buffer.update(binning_buffer_)
         if post_buffer_:
@@ -558,36 +559,36 @@ def streamagg(
     #   yet completed),
     # - last rows are part of a single row group not yet complete itself (new
     #   rows part of this row group to be expected).
-    last_complete_seed_index = None
+    #    last_complete_seed_index = None
     if isinstance(seed, ParquetFile):
         # Case seed is a parquet file.
         if discard_last:
             # 'ordered_on' being necessarily in ascending order, last index
             # value is its max value.
             seed_index_end = seed.statistics["max"][ordered_on][-1]
-        else:
-            if _is_stremagg_result(seed):
-                # If 'seed' is itself a 'streamagg' result, carry over the
-                # 'last_complete_seed_index' to upcoming results from this
-                # 'streamagg' execution.
-                # 'last_complete_seed_index' is not de-serialized as it will be
-                # ported as it is in metadata of upcoming results from this
-                # 'streamagg' execution.
-                last_complete_seed_index = json.loads(seed.key_value_metadata[OUPS_METADATA_KEY])[
-                    MD_KEY_STREAMAGG
-                ][MD_KEY_LAST_COMPLETE_SEED_INDEX]
-                print(f"from seed data, last_complete_seed_index: {last_complete_seed_index}")
-            else:
-                # Error if 'discard_last' is False and seed data is not a streamagg
-                # result. This use case is unknown and if relevant, the expected
-                # processing logic is yet to be defined in regard of this use case.
-                raise ValueError(
-                    "`discard_last` cannot be `False` if seed data is not itself "
-                    "a 'streamagg' result."
-                )
+        #        else:
+        #            if _is_stremagg_result(seed):
+        #                # If 'seed' is itself a 'streamagg' result, carry over the
+        #                # 'last_complete_seed_index' to upcoming results from this
+        #                # 'streamagg' execution.
+        #                # 'last_complete_seed_index' is not de-serialized as it will be
+        #                # ported as it is in metadata of upcoming results from this
+        #                # 'streamagg' execution.
+        #                last_complete_seed_index = json.loads(seed.key_value_metadata[OUPS_METADATA_KEY])[
+        #                    MD_KEY_STREAMAGG
+        #                ][MD_KEY_LAST_COMPLETE_SEED_INDEX]
+        #                print(f"from seed data, last_complete_seed_index: {last_complete_seed_index}")
+        #            else:
+        #                # Error if 'discard_last' is False and seed data is not a streamagg
+        #                # result. This use case is unknown and if relevant, the expected
+        #                # processing logic is yet to be defined in regard of this use case.
+        #                raise ValueError(
+        #                    "`discard_last` cannot be `False` if seed data is not itself "
+        #                    "a 'streamagg' result."
+        #                )
         filter_seed = []
         if seed_index_restart:
-            filter_seed.append((ordered_on, ">", seed_index_restart))
+            filter_seed.append((ordered_on, ">=", seed_index_restart))
         if seed_index_end:
             # 'seed_index_end' is excluded if defined.
             filter_seed.append((ordered_on, "<", seed_index_end))
@@ -611,17 +612,18 @@ def streamagg(
             seed_index_end = seed.evaluate(ordered_on, len_seed - 1, len_seed, array_type="numpy")[
                 0
             ]
+            seed = seed[seed[ordered_on] < seed_index_end]
         if seed_index_restart:
             # 'seed_index_restart' is excluded if defined.
             if isinstance(seed_index_restart, pTimestamp):
                 # Vaex does not accept pandas timestamp, only numpy or pyarrow
                 # ones.
                 seed_index_restart = np.datetime64(seed_index_restart)
-            seed = seed[seed[ordered_on] > seed_index_restart]
-        if seed_index_end:
-            seed = seed[seed[ordered_on] < seed_index_end]
-        #        if seed_index_restart or seed_index_end:
-        #            seed = seed.extract()
+            seed = seed[seed[ordered_on] >= seed_index_restart]
+        #        if seed_index_end:
+        #            seed = seed[seed[ordered_on] < seed_index_end]
+        if seed_index_restart or discard_last:
+            seed = seed.extract()
         print("seed index restart")
         print(seed_index_restart)
         print(type(seed_index_restart))
@@ -822,8 +824,10 @@ def streamagg(
     # set as:
     #   - one-but-last value of initial seed data if 'discard_last' is True,
     #   - or last value of initial seed data if 'discard_last' is False.
-    if last_complete_seed_index is None:
-        last_complete_seed_index = seed_chunk[ordered_on].iloc[-1:].reset_index(drop=True)
+    if not discard_last:
+        #    if last_complete_seed_index is None:
+        #        last_complete_seed_index = seed_chunk[ordered_on].iloc[-1:].reset_index(drop=True)
+        seed_index_end = None
     print("last_agg_row before sending to post_n_write")
     print(last_agg_row)
     # A deep copy is made for 'last_agg_row' to prevent a specific case where
@@ -843,7 +847,7 @@ def streamagg(
         post=post,
         isfrn=isfrn,
         post_buffer=post_buffer,
-        metadata=(last_complete_seed_index, binning_buffer, last_agg_row.copy()),
+        metadata=(seed_index_end, binning_buffer, last_agg_row.copy()),
     )
     #        print("from new streamagg result, last_complete_seed_index:")
     #        print(last_complete_seed_index)
