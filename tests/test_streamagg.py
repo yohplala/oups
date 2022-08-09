@@ -714,7 +714,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     )
     # Check resulting dataframe.
     # Get reference results, discarding last row, because of 'discard_last'.
-    ref_res_agg = seed_df.iloc[:-1, :].groupby(by).agg(**agg).reset_index()
+    ref_res_agg = seed_df.iloc[:-1].groupby(by).agg(**agg).reset_index()
     ref_res_post = post(ref_res_agg, None, {})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res_post)
@@ -777,8 +777,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
 
 def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
     # Test with parquet seed, time grouper and 'first' aggregation.
-    # No post, 'discard_last=True'. 'Stress test' with appending
-    # new data twice.
+    # No post, 'discard_last=True'.
     # Change group keys column name with 'bin_on' set as a tuple.
     max_row_group_size = 4
     date = "2020/01/01 "
@@ -810,10 +809,6 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
     # Setup aggregation.
     by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
     agg = {ordered_on: (ordered_on, "last"), "sum": ("val", "sum")}
-    # Setup oups parquet collection and key.
-    store_path = os_path.join(tmp_path, "store")
-    store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
 
     # Streamed aggregation.
     # Test error message as name of column to use for binning defined with 'by'
@@ -866,6 +861,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
         key=key,
         by=by,
         bin_on=(bin_on, ts_open),
+        trim_start=True,
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
@@ -985,9 +981,9 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
         max_row_group_size=max_row_group_size,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
-    trimmed_seed = seed_pdf.iloc[:-2, :]
+    trimmed_seed = seed_pdf.iloc[:-2]
     bins = by(trimmed_seed[[ordered_on]], {})
-    ref_res_agg = seed_pdf.iloc[:-2, :].groupby(bins).agg(**agg).reset_index()
+    ref_res_agg = seed_pdf.iloc[:-2].groupby(bins).agg(**agg).reset_index()
     # Test results
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res_agg)
@@ -1051,9 +1047,9 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     )
 
     # Get reference results, discarding last row, because of 'discard_last'.
-    trimmed_seed2 = seed_pdf2.iloc[:-2, :]
+    trimmed_seed2 = seed_pdf2.iloc[:-2]
     bins = by(trimmed_seed2[[ordered_on]], {})
-    ref_res_agg2 = seed_pdf2.iloc[:-1, :].groupby(bins).agg(**agg).reset_index()
+    ref_res_agg2 = seed_pdf2.iloc[:-1].groupby(bins).agg(**agg).reset_index()
     # Test results
     rec_res2 = store[key].pdf
     assert rec_res2.equals(ref_res_agg2)
@@ -1174,9 +1170,9 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
         max_row_group_size=max_row_group_size,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
-    trimmed_seed = seed_pdf.iloc[:-2, :]
+    trimmed_seed = seed_pdf.iloc[:-2]
     bins = by(trimmed_seed[[ordered_on, bin_on]], {})
-    ref_res_agg = seed_pdf.iloc[:-2, :].groupby(bins).agg(**agg)
+    ref_res_agg = seed_pdf.iloc[:-2].groupby(bins).agg(**agg)
     ref_res_agg.index.name = bin_out_col
     ref_res_agg.reset_index(inplace=True)
     # Test results
@@ -1225,9 +1221,9 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     )
 
     # Get reference results, discarding last row, because of 'discard_last'.
-    trimmed_seed2 = seed_pdf2.iloc[:-2, :]
+    trimmed_seed2 = seed_pdf2.iloc[:-2]
     bins = by(trimmed_seed2[[ordered_on, bin_on]], {})
-    ref_res_agg2 = seed_pdf2.iloc[:-1, :].groupby(bins).agg(**agg)
+    ref_res_agg2 = seed_pdf2.iloc[:-1].groupby(bins).agg(**agg)
     ref_res_agg2.index.name = bin_out_col
     ref_res_agg2.reset_index(inplace=True)
     ref_res_agg2[bin_out_col] = ref_res_agg2[bin_out_col].astype(int)
@@ -1247,13 +1243,73 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
+def test_parquet_seed_time_grouper_trim_start(tmp_path):
+    # Test with parquet seed, time grouper and 'first' aggregation.
+    # No post, 'discard_last=True'.
+    # Test 'trim_start=False' in 2nd append.
+    # Change group keys column name with 'bin_on' set as a tuple.
+    date = "2020/01/01 "
+    ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "09:30"])
+    ordered_on = "ts"
+    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_pdf, file_scheme="hive")
+    seed = ParquetFile(seed_path)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "sum")}
+
+    # Streamed aggregation.
+    streamagg(
+        seed=seed,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        trim_start=True,
+        discard_last=True,
+    )
+    # Test results.
+    ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # Check 'last_seed_index'.
+    last_seed_index_ref = ts[-1]
+    last_seed_index_res, _, _, _ = _get_streamagg_md(store[key])
+    assert last_seed_index_res == last_seed_index_ref
+
+    # 2nd stremagg with 'trim_start=False'.
+    ts2 = DatetimeIndex([date + "09:00", date + "09:30", date + "10:00", date + "10:30"])
+    seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts) + 1)})
+    seed_path2 = os_path.join(tmp_path, "seed2")
+    fp_write(seed_path2, seed_pdf2, file_scheme="hive")
+    seed2 = ParquetFile(seed_path2)
+    # Streamed aggregation.
+    streamagg(
+        seed=seed2,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        trim_start=False,
+        discard_last=True,
+    )
+    # Test results.
+    seed_pdf_ref = pconcat([seed_pdf.iloc[:-1], seed_pdf2])
+    ref_res = seed_pdf_ref.iloc[:-1].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+
+
 # WiP
 
-# test with trim_seed = False
-
-# check correct functioning with/without "trim_seed" (to be implemented:
-#      to enable use of trim_seed=True, check if agg data is already existing, it has a last_complete_index metadata
-#      when discard_last_False, and if 'last_complete_index' exist in metadata, make sure to remove it
+# test with trim_seed = False, seed data in vaex format
 
 # Test avec streamagg 1 se terminant exactement sure la bin en cours, & streamagg 2 reprenant sure une nouvelle bin
 # Et quand streamagg est utile. (itération 2 démarrée au milieu de bin 1 par example)
@@ -1273,3 +1329,5 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
 # no bin_on (to be removed during post') and that it works.
 
 # Test error message agg func is not within above values min, max, sum, first, last
+
+# tester erreur message en fournissant uen clé d'un dataset qu in'est pas un résultat de streamagg

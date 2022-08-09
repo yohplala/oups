@@ -38,13 +38,13 @@ PANDAS_SERIALIZE = {"orient": "table", "date_unit": "ns", "double_precision": 15
 PANDAS_DESERIALIZE = {"orient": "table", "date_unit": "ns", "precise_float": True}
 
 
-def _is_stremagg_result(seed: ParquetFile) -> bool:
-    """Check if input parquet file is that of a dataset produced by streamaag.
+def _is_stremagg_result(handle: ParquetHandle) -> bool:
+    """Check if input handle is that of a dataset produced by streamaag.
 
     Parameters
     ----------
-    seed : ParquetFile
-        Parquet file to check.
+    handle : ParquetHandle
+        Handle to parquet file to check.
 
     Returns
     -------
@@ -56,9 +56,10 @@ def _is_stremagg_result(seed: ParquetFile) -> bool:
     # As oups specific metadata are a string produced by json library, the last
     # 'in' condition is checking if the set of characters defined by
     # 'MD_KEY_STREAMAGG' is in a string.
+    pf = handle.pf
     return (
-        OUPS_METADATA_KEY in seed.key_value_metadata
-        and MD_KEY_STREAMAGG in seed.key_value_metadata[OUPS_METADATA_KEY]
+        OUPS_METADATA_KEY in pf.key_value_metadata
+        and MD_KEY_STREAMAGG in pf.key_value_metadata[OUPS_METADATA_KEY]
     )
 
 
@@ -127,7 +128,7 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
 
 
 def _set_streamagg_md(
-    last_seed_index: pDataFrame = None,
+    last_seed_index=None,
     binning_buffer: dict = None,
     last_agg_row: pDataFrame = None,
     post_buffer: dict = None,
@@ -136,8 +137,8 @@ def _set_streamagg_md(
 
     Parameters
     ----------
-    last_seed_index : pDataFrame
-        Last index in seed data.
+    last_seed_index : default None
+        Last index in seed data. Can be numeric type, timestamp...
     binning_buffer : dict
         Last values from binning process, that can be required when restarting
         the binning process with new seed data.
@@ -282,6 +283,7 @@ def streamagg(
     by: Union[Grouper, Callable[[Series, dict], Union[Series, Tuple[Series, dict]]]] = None,
     bin_on: Union[str, Tuple[str, str]] = None,
     post: Callable = None,
+    trim_start: bool = True,
     discard_last: bool = True,
     **kwargs,
 ):
@@ -374,6 +376,11 @@ def streamagg(
         This optional post-processing is intended for use of vectorized
         functions (not mixing rows together, but operating on one or several
         columns), or dataframe formatting before results are finally recorded.
+    trim_start : bool, default True
+        If ``True``, and if aggregated results already existing, then retrieves
+        the first index from seed data not processed yet (recorded in metadata
+        of existing aggregated results), and trim all seed data before this
+        index (index excluded from trim).
     discard_last : bool, default True
         If ``True``, last row group in seed data (sharing the same value in
         `ordered_on` column) is removed from the aggregation step. See below
@@ -470,8 +477,8 @@ def streamagg(
     for col_out, (_, agg_func) in agg.items():
         if agg_func not in ACCEPTED_AGG_FUNC:
             raise ValueError(
-                f"{agg_func} has not been tested so far. "
-                "Consider testing it before actually using it."
+                f"{agg_func} has not been tested so far."
+                " Consider testing it to proceed to its implementation."
             )
         self_agg[col_out] = (col_out, agg_func)
     # Initialize 'iter_dataframe' from seed data, with correct trimming.
@@ -483,17 +490,28 @@ def streamagg(
     # attribute in subsequent loop.
     last_agg_row = pDataFrame()
     if key in store:
-        print("key is in store")
-        # Prior streamagg results already in store.
-        # Retrieve corresponding metadata to re-start aggregations.
-        seed_index_restart, binning_buffer_, last_agg_row, post_buffer_ = _get_streamagg_md(
-            store[key]
-        )
-        #        seed_index_restart = seed_index_restart.iloc[0, 0]
-        if binning_buffer_:
-            binning_buffer.update(binning_buffer_)
-        if post_buffer_:
-            post_buffer.update(post_buffer_)
+        prev_agg_res = store[key]
+        if _is_stremagg_result(prev_agg_res):
+            print("key is in store")
+            # Prior streamagg results already in store.
+            # Retrieve corresponding metadata to re-start aggregations.
+            seed_index_restart, binning_buffer_, last_agg_row, post_buffer_ = _get_streamagg_md(
+                prev_agg_res
+            )
+            #        seed_index_restart = seed_index_restart.iloc[0, 0]
+            if binning_buffer_:
+                binning_buffer.update(binning_buffer_)
+            if post_buffer_:
+                post_buffer.update(post_buffer_)
+        else:
+            raise ValueError(
+                f"provided key {key} is not that of aggregated results as" " issued by 'streamagg'."
+            )
+    else:
+        # Results not existing yet. Whatever 'trim_start' value, no trimming
+        # is possible yet.
+        trim_start = False
+
     # Define aggregation result max size before writing to disk.
     max_agg_row_group_size = (
         kwargs["max_row_group_size"] if "max_row_group_size" in kwargs else MAX_ROW_GROUP_SIZE
@@ -590,7 +608,7 @@ def streamagg(
         #                    "a 'streamagg' result."
         #                )
         filter_seed = []
-        if seed_index_restart:
+        if trim_start:
             filter_seed.append((ordered_on, ">=", seed_index_restart))
         if discard_last:
             filter_seed.append((ordered_on, "<", last_seed_index))
@@ -616,7 +634,7 @@ def streamagg(
         last_seed_index = seed.evaluate(ordered_on, len_seed - 1, len_seed, array_type="numpy")[0]
         if discard_last:
             seed = seed[seed[ordered_on] < last_seed_index]
-        if seed_index_restart:
+        if trim_start:
             # 'seed_index_restart' is excluded if defined.
             if isinstance(seed_index_restart, pTimestamp):
                 # Vaex does not accept pandas timestamp, only numpy or pyarrow
@@ -625,7 +643,7 @@ def streamagg(
             seed = seed[seed[ordered_on] >= seed_index_restart]
         #        if seed_index_end:
         #            seed = seed[seed[ordered_on] < seed_index_end]
-        if seed_index_restart or discard_last:
+        if trim_start or discard_last:
             seed = seed.extract()
         print("seed index restart")
         print(seed_index_restart)
