@@ -1359,21 +1359,116 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
     assert rec_res.equals(ref_res)
 
 
+def test_vaex_seed_time_grouper_agg_first(tmp_path):
+    # Test with vaex seed, time grouper and 'first' aggregation.
+    # No post, 'discard_last=True'.
+    # 1st agg ends on a full bin (no stitching required when re-starting).
+    # For such a use case, streamagg is actually no needed.
+    date = "2020/01/01 "
+    ordered_on = "ts"
+    ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "10:00"])
+    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "sum")}
+    # Streamed aggregation.
+    streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    # Test results.
+    ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # 1st append, starting a new bin.
+    ts2 = DatetimeIndex([date + "10:20", date + "10:40", date + "11:00", date + "11:30"])
+    seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
+    seed_pdf2 = pconcat([seed_pdf, seed_pdf2])
+    seed_vdf2 = from_pandas(seed_pdf2)
+    # Streamed aggregation.
+    streamagg(seed=seed_vdf2, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    # Test results.
+    ref_res = seed_pdf2.iloc[:-1].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+
+
+def test_vaex_seed_single_row(tmp_path):
+    # Test with vaex seed, time grouper and 'first' aggregation.
+    # Single row.
+    # No post, 'discard_last=True'.
+    date = "2020/01/01 "
+    ordered_on = "ts"
+    ts = DatetimeIndex([date + "08:00"])
+    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "sum")}
+    # Streamed aggregation: no aggregation, but no error message.
+    streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    # Test results.
+    assert key not in store
+
+
+def test_parquet_seed_single_row(tmp_path):
+    # Test with parquet seed, time grouper and 'first' aggregation.
+    # Single row.
+    # No post, 'discard_last=True'.
+    date = "2020/01/01 "
+    ordered_on = "ts"
+    ts = DatetimeIndex([date + "08:00"])
+    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_pdf, file_scheme="hive")
+    seed = ParquetFile(seed_path)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "sum")}
+    # Streamed aggregation: no aggregation, but no error message.
+    streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    # Test results.
+    assert key not in store
+
+
+def test_bin_on_exception(tmp_path):
+    # Test error message when 'bin_on' is also a name for an output aggregation
+    # column.
+    date = "2020/01/01 "
+    ordered_on = "ts"
+    ts = DatetimeIndex([date + "08:00"])
+    bin_on = "ts2"
+    seed_pdf = pDataFrame({ordered_on: ts, bin_on: ts, "val": range(1, len(ts) + 1)})
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_pdf, file_scheme="hive")
+    seed = ParquetFile(seed_path)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
+    agg = {bin_on: ("val", "sum")}
+    # Streamed aggregation, check error message.
+    with pytest.raises(ValueError, match="^not possible to have"):
+        streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+
+
 # WiP
-
-# Test avec streamagg 1 se terminant exactement sure la bin en cours, & streamagg 2 reprenant sure une nouvelle bin
-# Et quand streamagg est utile. (itération 2 démarrée au milieu de bin 1 par example)
-
-# test with a single new rowin seed data + discard_last = True & discard_last = False
-
-
-# Test error message if 'bin_on' is already used as an output column name from aggregation
 
 # test case when one aggregation chunk is a single line and is not agged with next aggregation result (for instance
 # in row groups of seed data, a single bin / single row, and next row group of seed data is a new bin)
-
-# test with "last_complete_seed_index": use a streamagg result within the store
-# does jsonification work with a Timestamp?
+# use parquet file with row groups of one line (parquet files)
 
 # test with 'duplicates_on' set, without 'bin_on' to check when result are recorded:
 # no bin_on (to be removed during post') and that it works.

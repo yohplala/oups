@@ -533,15 +533,7 @@ def streamagg(
             #                    "not possible to have `bin_on` set to `None` while `by` is a callable."
             #                )
             #            elif bin_on in agg:
-            if bin_out_col in agg:
-                # Check that this name is not already that of an output column
-                # from aggregation.
-                raise ValueError(
-                    f"not possible to have {bin_on} as column name for group"
-                    " keys in aggregated result as it is also the name of one "
-                    " of the output column names from aggregation."
-                )
-            elif bin_on == ordered_on or not bin_on:
+            if bin_on == ordered_on or not bin_on:
                 # Define columns forwarded to 'by'.
                 cols_to_by = [ordered_on]
             else:
@@ -560,11 +552,19 @@ def streamagg(
                 )
             elif by_key and not bin_on:
                 bin_on = by_key
+                bin_out_col = by_key
     elif bin_on:
         # Case of using values of an existing column directly for binning.
         bins = bin_on
     else:
         raise ValueError("one or several among `by` and `bin_on` are required.")
+    if bin_out_col in agg:
+        # Check that this name is not already that of an output column
+        # from aggregation.
+        raise ValueError(
+            f"not possible to have {bin_on} as column name in aggregated"
+            " results as it is also for column containing group keys."
+        )
     print(f"bin_on: {bin_on}")
     print(f"seed_index_restart: {seed_index_restart}")
     # Retrieve lists of input and output columns from 'agg'.
@@ -830,6 +830,11 @@ def streamagg(
         #                print("last_agg_row has been simply added to list of chunks.")
         # Setting 'last_agg_row' from new 'agg_res'.
         last_agg_row = agg_res.iloc[-1:] if len_agg_res > 1 else agg_res
+    print("agg_res")
+    print(agg_res)
+    if agg_res is None:
+        # No iteration has been achieved, as no data.
+        return
     # Post-process & write results from last iteration, this time keeping
     # last row, and recording metadata for a future 'streamagg' execution.
     agg_chunks_buffer.append(agg_res)
