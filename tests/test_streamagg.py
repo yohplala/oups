@@ -1246,8 +1246,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
 def test_parquet_seed_time_grouper_trim_start(tmp_path):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
-    # Test 'trim_start=False' in 2nd append.
-    # Change group keys column name with 'bin_on' set as a tuple.
+    # Test 'trim_start=False' when appending.
     date = "2020/01/01 "
     ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "09:30"])
     ordered_on = "ts"
@@ -1307,9 +1306,66 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
     assert rec_res.equals(ref_res)
 
 
-# WiP
+def test_vaex_seed_time_grouper_trim_start(tmp_path):
+    # Test with vaex seed, time grouper and 'first' aggregation.
+    # No post, 'discard_last=True'.
+    # Test 'trim_start=False' when appending.
+    date = "2020/01/01 "
+    ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "09:30"])
+    ordered_on = "ts"
+    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "sum")}
 
-# test with trim_seed = False, seed data in vaex format
+    # Streamed aggregation.
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        trim_start=True,
+        discard_last=True,
+    )
+    # Test results.
+    ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # Check 'last_seed_index'.
+    last_seed_index_ref = ts[-1]
+    last_seed_index_res, _, _, _ = _get_streamagg_md(store[key])
+    assert last_seed_index_res == last_seed_index_ref
+
+    # 2nd stremagg with 'trim_start=False'.
+    ts2 = DatetimeIndex([date + "09:00", date + "09:30", date + "10:00", date + "10:30"])
+    seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts) + 1)})
+    seed_vdf2 = from_pandas(seed_pdf2)
+    # Streamed aggregation.
+    streamagg(
+        seed=seed_vdf2,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        trim_start=False,
+        discard_last=True,
+    )
+    # Test results.
+    seed_pdf_ref = pconcat([seed_pdf.iloc[:-1], seed_pdf2])
+    ref_res = seed_pdf_ref.iloc[:-1].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+
+
+# WiP
 
 # Test avec streamagg 1 se terminant exactement sure la bin en cours, & streamagg 2 reprenant sure une nouvelle bin
 # Et quand streamagg est utile. (itération 2 démarrée au milieu de bin 1 par example)
