@@ -39,8 +39,8 @@ class Indexer:
 def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Test with parquet seed, time grouper and 'sum' aggregation.
     # No post.
-    # The 1st & 2nd append, 'discard_last=True',
-    # 3rd append, 'discard_last=False'.
+    # Creation & 1st append, 'discard_last=True',
+    # 2nd append, 'discard_last=False'.
     #
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
@@ -64,6 +64,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     #     13:40  15                |
     #  7  14:00  16   15   7 14:00 | no stitching, 1 aggregated row.
     #     14:20  17                |
+    #
     # Setup seed data.
     max_row_group_size = 6
     date = "2020/01/01 "
@@ -150,6 +151,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     assert last_agg_row_res.equals(last_agg_row_ref)
     post_buffer_ref = {}
     assert post_buffer_res == post_buffer_ref
+    # 1st append.
     # Complete seed_df with new data and continue aggregation.
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
@@ -212,8 +214,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     assert last_agg_row_res.equals(last_agg_row_ref)
     post_buffer_ref = {}
     assert post_buffer_res == post_buffer_ref
-
-    # Append a 2nd time, with 'discard_last=False'.
+    # 2nd append, with 'discard_last=False'.
     # Check aggregation till the end of seed data.
     # Check no 'last_seed_index' in metadata of aggregated results.
     ts = DatetimeIndex([date + "15:20", date + "15:21"])
@@ -271,6 +272,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
     #     13:40  15                |
     #  7  14:00  16   15   7 14:00 | no stitching, 1 aggregated row.
     #     14:20  17                |
+    #
     # Setup seed data.
     max_row_group_size = 6
     date = "2020/01/01 "
@@ -355,6 +357,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
     assert last_agg_row_res.equals(last_agg_row_ref)
     post_buffer_ref = {}
     assert post_buffer_res == post_buffer_ref
+    # 1st append.
     # Complete seed_df with new data and continue aggregation.
     # 'discard_last=False'
     # Seed data
@@ -368,7 +371,6 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
     ts = DatetimeIndex([date + "15:10", date + "15:11"])
     seed_pdf2 = pDataFrame({ordered_on: ts, "val": [1, 2]})
     seed_vdf = seed_vdf.concat(from_pandas(seed_pdf2))
-
     # Setup streamed aggregation.
     streamagg(
         seed=seed_vdf,
@@ -410,7 +412,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
 
 def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
     # Test with parquet seed, time grouper and 'first', 'last', 'min', and
-    # 'max' aggregation. No post, no discard_last.
+    # 'max' aggregation. No post, 'discard_last=True'.
     # 'Stress test' with appending new data twice.
     max_row_group_size = 6
     start = Timestamp("2020/01/01")
@@ -622,6 +624,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     #     13:40  15       1               |
     #  7  14:00  16       2  15   7 14:00 | no stitching, 1 aggregated row.
     #     14:20  17       1               |
+    #
     # Setup seed data.
     max_row_group_size = 6
     date = "2020/01/01 "
@@ -741,7 +744,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     assert last_agg_row_res.equals(last_agg_row_ref)
     post_buffer_ref = {"prev_last_weighted_mean": 13.5, "last_weighted_mean": 16.0}
     assert post_buffer_res == post_buffer_ref
-    # Append of new data.
+    # 1st append of new data.
     start = seed_df[ordered_on].iloc[-1]
     rr = np.random.default_rng(3)
     N = 30
@@ -809,7 +812,6 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
     # Setup aggregation.
     by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
     agg = {ordered_on: (ordered_on, "last"), "sum": ("val", "sum")}
-
     # Streamed aggregation.
     # Test error message as name of column to use for binning defined with 'by'
     # and with 'bin_on' is not the same.
@@ -838,21 +840,20 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
-
     # Test results
     ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg)
     ref_res.index.name = ts_open
     ref_res.reset_index(inplace=True)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
-    # Append of new data.
+    # 1st append of new data.
     ts2 = DatetimeIndex([date + "12:30", date + "13:00", date + "13:30", date + "14:00"])
     seed_pdf2 = pDataFrame(
         {ordered_on: ts2, bin_on: ts2, "val": range(len(ts) + 1, len(ts) + len(ts2) + 1)}
     )
     fp_write(seed_path, seed_pdf2, file_scheme="hive", append=True)
     seed = ParquetFile(seed_path)
-    # Setup 2nd streamed aggregation.
+    # 2nd streamed aggregation.
     streamagg(
         seed=seed,
         ordered_on=ordered_on,
@@ -901,7 +902,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     #     14:00  16                      |
     #     14:20  17         16   5 14:20 | not in 1st agg results because of
     #     14:20  18                      | 'discard_last' True
-    max_row_group_size = 4
+    #
     # Setup seed data.
     max_vdf_chunk_size = 13
     date = "2020/01/01 "
@@ -937,7 +938,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     store = ParquetSet(store_path, Indexer)
     key = Indexer("seed")
 
-    # Setup aggregation.
+    # Setup binning.
     def by(data: pDataFrame, buffer: dict):
         """Bin by group of 4 rows. Label for bins are values from `ordered_on`."""
         # A pandas Series is returned, with name being that of the 'ordered_on'
@@ -964,12 +965,12 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
         buffer["last_key"] = keys[-1]
         return group_keys
 
+    # Setup streamed aggregation.
     agg = {
         "first": ("val", "first"),
         "max": ("val", "max"),
     }
-
-    # Setup streamed aggregation.
+    max_row_group_size = 4
     streamagg(
         seed=(max_vdf_chunk_size, seed_vdf),
         ordered_on=ordered_on,
@@ -1006,7 +1007,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     post_buffer_ref = {}
     assert post_buffer_res == post_buffer_ref
 
-    # Append of new data.
+    # 1st append of new data.
     # RG    TS   VAL       ROW BIN LABEL | comments
     #  2  14:20  17         16   5 14:20 | previous data
     #     14:20  18                      |
@@ -1045,7 +1046,6 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
-
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
     bins = by(trimmed_seed2[[ordered_on]], {})
@@ -1093,7 +1093,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     #     14:00  16                      |
     #     14:20   1         16   5     5 | not in 1st agg results because of
     #     14:20  18                      | 'discard_last' True
-    max_row_group_size = 4
+    #
     # Setup seed data.
     max_vdf_chunk_size = 13
     date = "2020/01/01 "
@@ -1133,7 +1133,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     store = ParquetSet(store_path, Indexer)
     key = Indexer("seed")
 
-    # Setup aggregation.
+    # Setup binning.
     def by(data: pDataFrame, buffer: dict):
         """Start a new bin each time a 1 is spot."""
         # A pandas Series is returned.
@@ -1151,13 +1151,13 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
         buffer["last_key"] = group_keys.iloc[-1]
         return group_keys
 
+    # Setup streamed aggregation.
+    max_row_group_size = 4
     agg = {
         "ts": ("ts", "first"),
         "max": ("val", "max"),
     }
     bin_out_col = "group_keys"
-
-    # Setup streamed aggregation.
     streamagg(
         seed=(max_vdf_chunk_size, seed_vdf),
         ordered_on=ordered_on,
@@ -1178,8 +1178,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     # Test results
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res_agg)
-
-    # Append of new data.
+    # 1st append of new data.
     # RG    TS   VAL       ROW BIN LABEL | comments
     #  2  14:20  17         16   5     5 | previous data
     #     14:20  18                      |
@@ -1219,7 +1218,6 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
-
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
     bins = by(trimmed_seed2[[ordered_on, bin_on]], {})
@@ -1261,7 +1259,6 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
-
     # Streamed aggregation.
     streamagg(
         seed=seed,
@@ -1281,8 +1278,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
     last_seed_index_ref = ts[-1]
     last_seed_index_res, _, _, _ = _get_streamagg_md(store[key])
     assert last_seed_index_res == last_seed_index_ref
-
-    # 2nd stremagg with 'trim_start=False'.
+    # 1st append. 2nd stremagg with 'trim_start=False'.
     ts2 = DatetimeIndex([date + "09:00", date + "09:30", date + "10:00", date + "10:30"])
     seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts) + 1)})
     seed_path2 = os_path.join(tmp_path, "seed2")
@@ -1322,7 +1318,6 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
-
     # Streamed aggregation.
     streamagg(
         seed=seed_vdf,
@@ -1342,8 +1337,7 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
     last_seed_index_ref = ts[-1]
     last_seed_index_res, _, _, _ = _get_streamagg_md(store[key])
     assert last_seed_index_res == last_seed_index_ref
-
-    # 2nd stremagg with 'trim_start=False'.
+    # 1st append. 2nd stremagg with 'trim_start=False'.
     ts2 = DatetimeIndex([date + "09:00", date + "09:30", date + "10:00", date + "10:30"])
     seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts) + 1)})
     seed_vdf2 = from_pandas(seed_pdf2)
