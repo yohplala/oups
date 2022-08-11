@@ -4,13 +4,17 @@ Created on Wed Dec  6 22:30:00 2021.
 
 @author: yoh
 """
+import json
 from ast import literal_eval
-from typing import List, Tuple, Union
+from os import listdir as os_listdir
+from os import path as os_path
+from typing import Dict, List, Tuple, Union
 
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from fastparquet.api import filter_row_groups
 from fastparquet.api import statistics
+from fastparquet.util import update_custom_metadata
 from numpy import searchsorted as np_searchsorted
 from numpy import unique as np_unique
 from pandas import DataFrame as pDataFrame
@@ -23,6 +27,11 @@ from vaex.dataframe import DataFrame as vDataFrame
 
 COMPRESSION = "SNAPPY"
 MAX_ROW_GROUP_SIZE = 6_345_000
+# Notes to any dev
+# Store any specific oups metadata in this dict as string.
+# When using, append data by using `OUPS_METADATA.update()`.
+OUPS_METADATA = {}
+OUPS_METADATA_KEY = "oups"
 
 
 def iter_dataframe(
@@ -106,7 +115,7 @@ def iter_dataframe(
         # integers. Line of code currently taken from
         # vaex-core.vaex.dataframe.__getitem__ (L5230)
         val_at_start = [
-            data.evaluate(sharp_on, idx, idx + 1, array_type="python")[0] for idx in starts
+            data.evaluate(sharp_on, idx, idx + 1, array_type="numpy")[0] for idx in starts
         ]
         # TODO: vaex searchsorted kind of broken. Re-try when solved?
         # https://github.com/vaexio/vaex/issues/1674
@@ -193,6 +202,67 @@ def to_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
     return MultiIndex.from_tuples(tuples, names=levels)
 
 
+def _update_metadata(
+    new_metadata: Dict[str, str], existing_metadata: Dict[str, str] = None
+) -> Dict[str, str]:
+    """Update oups specific metadata and merge to user-defined metadata.
+
+    Parameters
+    ----------
+    new_metadata : Dict[str, str]
+        User-defined key-value metadata to write, or update in dataset.
+    existing_metadata : Dict[str, str], optional
+        Metadata from existing parquet dataset, if already existing (case of
+        appending data).
+
+    Returns
+    -------
+    Dict[str, str]
+        User-defined metadata, embedding specific oups metadata.
+
+    Notes
+    -----
+    - Specific oups metadata are available in global variable ``OUPS_METADATA``.
+    - Once merged to ``new_metadata``, ``OUPS_METADATA`` is reset.
+    - Update strategy of oups specific metadata depends if key found in
+      ``OUPS_METADATA``metadata` is also found in already existing metadata,
+      as well as its value.
+
+      - If not found in existing, it is added.
+      - If found in existing, it is updated.
+      - If its value is `None`, it is not added, and if found in existing, it
+        is removed from existing.
+
+    """
+    if existing_metadata and OUPS_METADATA_KEY in existing_metadata:
+        # Case 'append' to existing metadata.
+        # oups specific metadata is expected to be a dict itself.
+        oups_md = json.loads(existing_metadata[OUPS_METADATA_KEY])
+        for key, value in OUPS_METADATA.items():
+            if key in oups_md:
+                if value is None:
+                    # Case 'remove'.
+                    del oups_md[key]
+                else:
+                    # Case 'update'.
+                    oups_md[key] = value
+            elif value:
+                # Case 'add'.
+                oups_md[key] = value
+    else:
+        oups_md = OUPS_METADATA.copy()
+
+    if new_metadata:
+        new_metadata[OUPS_METADATA_KEY] = json.dumps(oups_md)
+    else:
+        print("new metadata")
+        print(oups_md)
+        new_metadata = {OUPS_METADATA_KEY: json.dumps(oups_md)}
+    # Clear dict of specific oups metadata without deleting the pointer.
+    OUPS_METADATA.clear()
+    return new_metadata
+
+
 def write(
     dirpath: str,
     data: Union[pDataFrame, vDataFrame],
@@ -203,6 +273,7 @@ def write(
     ordered_on: Union[str, Tuple[str]] = None,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_nirgs: int = None,
+    metadata: Dict[str, str] = None,
 ):
     """Write data to disk at location specified by path.
 
@@ -214,8 +285,8 @@ def write(
         Data to write.
     max_row_group_size : int, optional
         Max row group size. If not set, default to ``6_345_000``, which for a
-        dataframe with 6 columns of ``float64``/``int64`` results in a memory
-        footprint (RAM) of about 290MB.
+        dataframe with 6 columns of ``float64`` or ``int64`` results in a
+        memory footprint (RAM) of about 290MB.
     compression : str, default SNAPPY
         Algorithm to use for compressing data. This parameter is fastparquet
         specific. Please see fastparquet documentation for more information.
@@ -266,6 +337,9 @@ def write(
           - A value of ``0`` or ``1`` means that new data should systematically
             be merged to the last existing one to 'complete' it (if it is not
             'complete' already).
+    metadata : Dict[str, str], optional
+        Key-value metadata to write, or update in dataset. Please see
+        fastparquet for updating logic in case of `None` value being used.
 
     Notes
     -----
@@ -300,10 +374,146 @@ def write(
       ``ordered_on`` and ``duplicates_on`` parameters set to ``None`` as these
       parameters will trigger unnecessary evaluations.
     """
-    try:
+    if ordered_on is not None:
+        if isinstance(ordered_on, tuple):
+            raise TypeError(f"tuple for {ordered_on} not yet supported.")
+        # Check 'ordered_on' column is within input dataframe.
+        if isinstance(data, pDataFrame):
+            # pandas case
+            all_cols = data.columns
+        else:
+            # vaex case
+            all_cols = data.get_column_names()
+        if ordered_on not in all_cols:
+            raise ValueError(f"column '{ordered_on}' does not exist in input data.")
+    if os_path.isdir(dirpath) and os_listdir(dirpath):
+        # Case updating an existing dataset.
+        # Identify overlaps in row groups between new data and recorded data.
+        # Recorded row group start and end indexes.
+        rrg_start_idx, rrg_end_idx = None, None
         pf = ParquetFile(dirpath)
-    except (FileNotFoundError, ValueError):
-        # First time writing.
+        n_rrgs = len(pf.row_groups)
+        if duplicates_on is not None:
+            if not ordered_on:
+                raise ValueError(
+                    "duplicates are looked for over the overlap between new data and existing data. "
+                    "This overlap being identified thanks to 'ordered_on', "
+                    "it is compulsory to set 'ordered_on' while setting 'duplicates_on'."
+                )
+            # Enforce 'ordered_on' in 'duplicates_on', as per logic of
+            # duplicate identification restricted to the data overlap between new
+            # data and existing data. This overlap being identified thanks to
+            # 'ordered_on', it implies that duplicate rows can be identified being
+            # so at the condition they share the same value in 'ordered_on' (among
+            # other columns).
+            elif isinstance(duplicates_on, list):
+                if duplicates_on and ordered_on not in duplicates_on:
+                    # Case 'not an empty list', and 'ordered_on' not in.
+                    duplicates_on.append(ordered_on)
+            elif duplicates_on != ordered_on:
+                # Case 'duplicates_on' is a single column name, but not
+                # 'ordered_on'.
+                duplicates_on = [duplicates_on, ordered_on]
+        if ordered_on is not None:
+            # Get 'rrg_start_idx' & 'rrg_end_idx'.
+            if isinstance(data, pDataFrame):
+                # Case 'pandas'.
+                start = data[ordered_on].iloc[0]
+                end = data[ordered_on].iloc[-1]
+            else:
+                # Case 'vaex'.
+                start = data[ordered_on][:0].to_numpy()[0]
+                end = data[ordered_on][-1:].to_numpy()[0]
+            rrgs_idx = filter_row_groups(
+                pf, [[(ordered_on, ">=", start), (ordered_on, "<=", end)]], as_idx=True
+            )
+            if rrgs_idx:
+                if len(rrgs_idx) == 1:
+                    rrg_start_idx = rrgs_idx[0]
+                else:
+                    rrg_start_idx = rrgs_idx[0]
+                    # For slicing, 'rrg_end_idx' is increased by 1.
+                    rrg_end_idx = rrgs_idx[-1] + 1
+                    if rrg_end_idx == n_rrgs:
+                        rrg_end_idx = None
+        if max_nirgs is not None:
+            # Number of incomplete row groups at end of recorded data.
+            # Initialize number of rows with number to be written.
+            total_rows_in_irgs = len(data)
+            rrg_start_idx_tmp = n_rrgs - 1
+            min_row_group_size = int(max_row_group_size * 0.9)
+            while pf[rrg_start_idx_tmp].count() <= min_row_group_size and rrg_start_idx_tmp >= 0:
+                total_rows_in_irgs += pf[rrg_start_idx_tmp].count()
+                rrg_start_idx_tmp -= 1
+            rrg_start_idx_tmp += 1
+            # Confirm or not coalescing of incomplete row groups.
+            n_irgs = n_rrgs - rrg_start_idx_tmp
+            if total_rows_in_irgs >= max_row_group_size or n_irgs >= max_nirgs:
+                if rrg_start_idx and (
+                    not rrg_end_idx or (rrg_end_idx and rrg_start_idx_tmp < rrg_end_idx)
+                ):
+                    # 1st case checked: case 'ordered_on' is used with potential
+                    # insertion of new data in existing one, in row groups not at
+                    # the tail, in which case coalescing of end data would not be
+                    # performed.
+                    rrg_start_idx = min(rrg_start_idx_tmp, rrg_start_idx)
+                elif not rrg_end_idx:
+                    # 2nd case checked: case 'ordered_on' is not used. New data is
+                    # necessarily appended in this case.
+                    rrg_start_idx = rrg_start_idx_tmp
+        if rrg_start_idx is None:
+            # Case 'appending' (no overlap with recorded data identified).
+            # 'coalesce' has possibly been requested but not needed, hence no row
+            # groups removal in existing ones.
+            iter_data = iter_dataframe(data, max_row_group_size)
+            pf.write_row_groups(
+                data=iter_data,
+                row_group_offsets=None,
+                sort_pnames=False,
+                compression=compression,
+                write_fmd=False,
+            )
+        else:
+            # Case 'updating' (with existing row groups removal).
+            # Read row groups that have impacted data as a vaex dataframe.
+            overlapping_rgs = pf[rrg_start_idx:rrg_end_idx].row_groups
+            files = [pf.row_group_filename(rg) for rg in overlapping_rgs]
+            recorded = open_many(files)
+            if isinstance(data, pDataFrame):
+                # Convert to vaex.
+                data = from_pandas(data)
+            # For concatenation of numpy 'timedelta64' to arrow 'time64', check
+            # https://github.com/vaexio/vaex/issues/2024
+            data = recorded.concat(data)
+            if ordered_on:
+                data = data.sort(by=ordered_on)
+            iter_data = iter_dataframe(
+                data,
+                max_row_group_size=max_row_group_size,
+                sharp_on=ordered_on,
+                duplicates_on=duplicates_on,
+            )
+            # Write.
+            pf.write_row_groups(
+                data=iter_data,
+                row_group_offsets=None,
+                sort_pnames=False,
+                compression=compression,
+                write_fmd=False,
+            )
+            # Remove row groups of data that is overlapping.
+            pf.remove_row_groups(overlapping_rgs, write_fmd=False)
+            if rrg_end_idx is not None:
+                # New data has been inserted in the middle of existing row groups.
+                # Sorting row groups based on 'max' in 'ordered_on'.
+                ordered_on_idx = pf.columns.index(ordered_on)
+                pf.fmd.row_groups = sorted(
+                    pf.fmd.row_groups, key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"]
+                )
+            # Rename partition files, and write fmd.
+            pf._sort_part_names(write_fmd=False)
+    else:
+        # Case initiating a new dataset.
         iter_data = iter_dataframe(data, max_row_group_size)
         chunk = next(iter_data)
         if cmidx_expand:
@@ -319,119 +529,7 @@ def write(
         )
         # Re-open to write remaining chunks.
         pf = ParquetFile(dirpath)
-        # Appending
-        # TODO: remove 'sort_pnames=False' when set to False by default in
-        # fastparquet.
-        pf.write_row_groups(
-            data=iter_data, row_group_offsets=None, sort_pnames=False, compression=compression
-        )
-        return
-    # Not first time writing.
-    # Identify overlaps in row groups between new data and recorded data.
-    # Recorded row group start and end indexes.
-    rrg_start_idx, rrg_end_idx = None, None
-    n_rrgs = len(pf.row_groups)
-    if duplicates_on is not None:
-        if not ordered_on:
-            raise ValueError(
-                "duplicates are looked for over the overlap between new data and existing data. "
-                "This overlap being identified thanks to 'ordered_on', "
-                "it is compulsory to set 'ordered_on' while setting 'duplicates_on'."
-            )
-        # Enforce 'ordered_on' in 'duplicates_on', as per logic of
-        # duplicate identification restricted to the data overlap between new
-        # data and existing data. This overlap being identified thanks to
-        # 'ordered_on', it implies that duplicate rows can be identified being
-        # so at the condition they share the same value in 'ordered_on' (among
-        # other columns).
-        elif isinstance(duplicates_on, list):
-            if duplicates_on and ordered_on not in duplicates_on:
-                # Case 'not an empty list', and 'ordered_on' not in.
-                duplicates_on.append(ordered_on)
-        elif duplicates_on != ordered_on:
-            # Case 'duplicates_on' is a single column name, but not
-            # 'ordered_on'.
-            duplicates_on = [duplicates_on, ordered_on]
-    if ordered_on is not None:
-        if isinstance(ordered_on, tuple):
-            raise TypeError(f"tuple for {ordered_on} not yet supported.")
-        # Get 'rrg_start_idx' & 'rrg_end_idx'.
-        if isinstance(data, pDataFrame):
-            # Case 'pandas'.
-            start = data[ordered_on].iloc[0]
-            end = data[ordered_on].iloc[-1]
-        else:
-            # Case 'vaex'.
-            start = data[ordered_on][:0].to_numpy()[0]
-            end = data[ordered_on][-1:].to_numpy()[0]
-        rrgs_idx = filter_row_groups(
-            pf, [[(ordered_on, ">=", start), (ordered_on, "<=", end)]], as_idx=True
-        )
-        if rrgs_idx:
-            if len(rrgs_idx) == 1:
-                rrg_start_idx = rrgs_idx[0]
-            else:
-                rrg_start_idx = rrgs_idx[0]
-                # For slicing, 'rrg_end_idx' is increased by 1.
-                rrg_end_idx = rrgs_idx[-1] + 1
-                if rrg_end_idx == n_rrgs:
-                    rrg_end_idx = None
-    if max_nirgs is not None:
-        # Number of incomplete row groups at end of recorded data.
-        # Initialize number of rows with number to be written.
-        total_rows_in_irgs = len(data)
-        rrg_start_idx_tmp = n_rrgs - 1
-        min_row_group_size = int(max_row_group_size * 0.9)
-        while pf[rrg_start_idx_tmp].count() <= min_row_group_size and rrg_start_idx_tmp >= 0:
-            total_rows_in_irgs += pf[rrg_start_idx_tmp].count()
-            rrg_start_idx_tmp -= 1
-        rrg_start_idx_tmp += 1
-        # Confirm or not coalescing of incomplete row groups.
-        n_irgs = n_rrgs - rrg_start_idx_tmp
-        if total_rows_in_irgs >= max_row_group_size or n_irgs >= max_nirgs:
-            if rrg_start_idx and (
-                not rrg_end_idx or (rrg_end_idx and rrg_start_idx_tmp < rrg_end_idx)
-            ):
-                # 1st case checked: case 'ordered_on' is used with potential
-                # insertion of new data in existing one, in row groups not at
-                # the tail, in which case coalescing of end data would not be
-                # performed.
-                rrg_start_idx = min(rrg_start_idx_tmp, rrg_start_idx)
-            elif not rrg_end_idx:
-                # 2nd case checked: case 'ordered_on' is not used. New data is
-                # necessarily appended in this case.
-                rrg_start_idx = rrg_start_idx_tmp
-    if rrg_start_idx is None:
-        # Case 'appending' (no overlap with recorded data identified).
-        # 'coalesce' has possibly been requested but not needed, hence no row
-        # groups removal in existing ones.
-        iter_data = iter_dataframe(data, max_row_group_size)
-        pf.write_row_groups(
-            data=iter_data,
-            row_group_offsets=None,
-            sort_pnames=False,
-            compression=compression,
-            write_fmd=True,
-        )
-    else:
-        # Case 'updating' (with existing row groups removal).
-        # Read row groups that have impacted data as a vaex dataframe.
-        overlapping_rgs = pf[rrg_start_idx:rrg_end_idx].row_groups
-        files = [pf.row_group_filename(rg) for rg in overlapping_rgs]
-        recorded = open_many(files)
-        if isinstance(data, pDataFrame):
-            # Convert to vaex.
-            data = from_pandas(data)
-        data = recorded.concat(data)
-        if ordered_on:
-            data = data.sort(by=ordered_on)
-        iter_data = iter_dataframe(
-            data,
-            max_row_group_size=max_row_group_size,
-            sharp_on=ordered_on,
-            duplicates_on=duplicates_on,
-        )
-        # Write.
+        # Appending remaining chunks.
         pf.write_row_groups(
             data=iter_data,
             row_group_offsets=None,
@@ -439,14 +537,10 @@ def write(
             compression=compression,
             write_fmd=False,
         )
-        # Remove row groups of data that is overlapping.
-        pf.remove_row_groups(overlapping_rgs, write_fmd=False)
-        if rrg_end_idx is not None:
-            # New data has been inserted in the middle of existing row groups.
-            # Sorting row groups based on 'max' in 'ordered_on'.
-            ordered_on_idx = pf.columns.index(ordered_on)
-            pf.fmd.row_groups = sorted(
-                pf.fmd.row_groups, key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"]
-            )
-        # Rename partition files, and write fmd.
-        pf._sort_part_names(write_fmd=True)
+    # Manage metadata, whatever the case, initiating new dataset or updating
+    # existing one.
+    if OUPS_METADATA:
+        metadata = _update_metadata(metadata, pf.key_value_metadata)
+    if metadata:
+        update_custom_metadata(pf, metadata)
+    pf._write_common_metadata()

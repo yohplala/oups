@@ -183,7 +183,7 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
     types = _dataclass_fields_types_to_lists(cls)
     # Split string depending 'fields_sep' and 'DIR_SEP', into different fields.
     fields_sep = cls.fields_sep
-    strings_as_list = re.split(fr"{DIR_SEP}|\{fields_sep}", string)
+    strings_as_list = re.split(rf"{DIR_SEP}|\{fields_sep}", string)
     # Manages last level first.
     level_types = types.pop()  # remove last element
     level_length = len(level_types)

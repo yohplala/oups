@@ -4,12 +4,15 @@ Created on Wed Dec 26 22:30:00 2021.
 
 @author: yoh
 """
+import json
+from functools import cached_property
 from os import scandir
 
 from fastparquet import ParquetFile
 from vaex import open_many
 
 from oups.defines import DIR_SEP
+from oups.writer import OUPS_METADATA_KEY
 
 
 class ParquetHandle:
@@ -47,7 +50,7 @@ class ParquetHandle:
         """Return dirpath."""
         return self._dirpath
 
-    @property
+    @cached_property
     def pf(self):
         """Return handle to data through a parquet file."""
         return ParquetFile(self._dirpath)
@@ -82,3 +85,17 @@ class ParquetHandle:
         """
         pf_stats = ParquetFile(self._dirpath).statistics
         return (min(pf_stats["min"][col]), max(pf_stats["max"][col]))
+
+    @property
+    def metadata(self) -> dict:
+        """Return metadata stored when using `oups.writer.write()`."""
+        return self.pf.key_value_metadata
+
+    @property
+    def _oups_metadata(self) -> dict:
+        """Return specific oups metadata."""
+        md = self.pf.key_value_metadata
+        if OUPS_METADATA_KEY in md:
+            return json.loads(md[OUPS_METADATA_KEY])
+        else:
+            return None

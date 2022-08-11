@@ -7,21 +7,18 @@ license = "Apache-2.0"
 repository = "https://github.com/yohplala/oups"
 
 [tool.poetry.dependencies]
-python = ">=3.9,<3.10"
+python = ">=3.9, <3.10"
 sortedcontainers = "^2.4.0"
 #llvmlite = "^0.37.0" # no wheel for python 3.9 if below.
-pyarrow = "6.0.1" # force pyarrow to 6.0.1 as 7.0.0 is available, but no packages yet?
-pandas = "^1.4.0"
+#pyarrow = "7.0.0" # force pyarrow to 6.0.1 as 7.0.0 is available, but no packages yet?
+pandas = "^1.4.2"
 cramjam = "^2.5.0"
-fastparquet = "^0.8.0"
-vaex-core = "^4.7.0"
-vaex-server = "^0.8.0"
-blake3 = "^0.2.1" # remove next time upgrading vaex
-# flake8-bandit giving trouble...
-# https://github.com/tylerwince/flake8-bandit/issues/21
-flake8 = "^4.0.1"
-flake8-bandit = "2.1.2"
-bandit = "1.7.2"
+#fastparquet = "^0.8.1"
+#fastparquet = {git = "https://github.com/yohplala/fastparquet.git", rev = "update_custom_md"}
+fastparquet = {git = "https://github.com/dask/fastparquet.git", rev="main"}
+vaex-core = "^4.9.1"
+vaex-server = "^0.8.1"
+#blake3 = "^0.2.1" # remove next time upgrading vaex
 
 [tool.poetry.dev-dependencies]
 pre-commit = "^2.16.0"
