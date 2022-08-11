@@ -672,7 +672,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     }
 
     # Setup 'post'.
-    def post(agg_res: pDataFrame, isfrn: bool, post_buffer: dict):
+    def post(agg_res: pDataFrame, isfbn: bool, post_buffer: dict):
         """Compute duration, weighted mean and keep track of data to buffer."""
         # Compute 'duration'.
         agg_res["last"] = (agg_res["last"] - agg_res["first"]).view("int64")
@@ -680,7 +680,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
         agg_res["sum_weighted_val"] = agg_res["sum_weighted_val"] / agg_res["sum_weight"]
         # Keep 'weighted_mean' from previous row and update 'post_buffer'.
         if post_buffer:
-            if isfrn:
+            if isfbn:
                 first = post_buffer["last_weighted_mean"]
             else:
                 first = post_buffer["prev_last_weighted_mean"]
@@ -1441,6 +1441,77 @@ def test_parquet_seed_single_row(tmp_path):
     assert key not in store
 
 
+def test_parquet_seed_single_row_within_seed(tmp_path):
+    # Test with parquet seed, time grouper and 'first' aggregation.
+    # Single row in the middle of otherwise larger chunks.
+    # No post, 'discard_last=True'.
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for agg, BIN: bins
+    # RG    TS   VAL       ROW BIN LABEL | comments
+    #  1   8:00   1          0           |
+    #      8:30   2                      |
+    #      9:00   3                      |
+    #      9:30   4          3           |
+    #     10:00   5                      |
+    #     --------------------------------
+    #  2  10:20   6                      | right in the middle of a bin
+    #     --------------------------------
+    #  3  10:40   7          6           |
+    #     11:00   8                      |
+    #     11:30   9          8           |
+    #     12:00  10                      |
+    #     12:20  11                      |
+    #     12:40  12                      |
+    #     13:00  13         12           |
+    #     13:20  14                      |
+    #     13:40  15                      |
+    #     14:00  16                      |
+    #     14:20  15         16           |
+    #     14:20  18                      |
+    date = "2020/01/01 "
+    ts = DatetimeIndex(
+        [
+            date + "08:00",
+            date + "08:30",
+            date + "09:00",
+            date + "09:30",
+            date + "10:00",
+            date + "10:20",
+            date + "10:40",
+            date + "11:00",
+            date + "11:30",
+            date + "12:00",
+            date + "12:20",
+            date + "12:40",
+            date + "13:00",
+            date + "13:20",
+            date + "13:40",
+            date + "14:00",
+            date + "14:20",
+            date + "14:20",
+        ]
+    )
+    ordered_on = "ts"
+    val = np.arange(1, len(ts) + 1)
+    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_pdf, row_group_offsets=[0, 5, 6], file_scheme="hive")
+    seed = ParquetFile(seed_path)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "sum")}
+    # Streamed aggregation: no aggregation, but no error message.
+    streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    # Test results.
+    ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+
+
 def test_bin_on_exception(tmp_path):
     # Test error message when 'bin_on' is also a name for an output aggregation
     # column.
@@ -1464,15 +1535,57 @@ def test_bin_on_exception(tmp_path):
         streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
 
 
+def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
+    # Test with vaex seed, time grouper and 'first' aggregation.
+    # No post, 'discard_last=True'.
+    # Test 'duplicates_on=[ordered_on]' (without 'bin_on')
+    # and removing 'bin_on' during post.
+    date = "2020/01/01 "
+    ts_order = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "09:30"])
+    ts_bin = ts_order + +Timedelta("40T")
+    ordered_on = "ts_order"
+    val = range(1, len(ts_order) + 1)
+    bin_on = "ts_bin"
+    seed_pdf = pDataFrame({ordered_on: ts_order, bin_on: ts_bin, "val": val})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "sum")}
+
+    def post(agg_res: pDataFrame, isfbn: bool, post_buffer: dict):
+        """Remove 'bin_on' column."""
+        # Rename column 'bin_on' into 'ordered_on' to have an 'ordered_on'
+        # column, while 'removing' 'bin_on' one.
+        agg_res.rename(
+            columns={bin_on: ordered_on},
+            inplace=True,
+        )
+        return agg_res
+
+    # Streamed aggregation.
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        post=post,
+        discard_last=True,
+        duplicates_on=[],
+    )
+    # Test results.
+    ref_res = (
+        seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index().rename(columns={bin_on: ordered_on})
+    )
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+
+
 # WiP
-
-# test case when one aggregation chunk is a single line and is not agged with next aggregation result (for instance
-# in row groups of seed data, a single bin / single row, and next row group of seed data is a new bin)
-# use parquet file with row groups of one line (parquet files)
-
-# test with 'duplicates_on' set, without 'bin_on' to check when result are recorded:
-# no bin_on (to be removed during post') and that it works.
-
 # Test error message agg func is not within above values min, max, sum, first, last
-
 # tester erreur message en fournissant uen clé d'un dataset qu in'est pas un résultat de streamagg

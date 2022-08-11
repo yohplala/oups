@@ -187,7 +187,7 @@ def _post_n_write_agg_chunks(
     write_config: dict,
     index_name: str = None,
     post: Callable = None,
-    isfrn: bool = None,
+    isfbn: bool = None,
     post_buffer: dict = None,
     metadata: tuple = None,
 ):
@@ -226,10 +226,12 @@ def _post_n_write_agg_chunks(
         This optional post-processing is intended for use of vectorized
         functions (not mixing rows together, but operating on one or several
         columns), or dataframe formatting before results are finally recorded.
-    isfrn : boolean, default None
-        Boolean indicating if first row of aggregation result is a new row, or
-        is the 'same' that last row of aggregation result. If 'same', all
-        values may not be the same, but the aggregation bin is the same.
+    isfbn : boolean, default None
+        Boolean indicating if first row of aggregation result is that of a new
+        bin, or is the same bin started from yet earlier iteration of
+        aggregation. If 'same', aggregation results (values in aggregation
+        columns) may have been updated with last aggregation iteration, but the
+        aggregation bin (group key) is the same.
     post_buffer : dict, default None
         Buffer to keep track of data that can be processed during previous
         iterations. This pointer should not be re-initialized in 'post' or
@@ -261,7 +263,7 @@ def _post_n_write_agg_chunks(
         # Post processing if any.
         print("going to post processing")
         print("")
-        agg_res = post(agg_res, isfrn, post_buffer)
+        agg_res = post(agg_res, isfbn, post_buffer)
     print("agg_res after post processing, right before writing")
     print(agg_res)
     print("")
@@ -365,9 +367,9 @@ def streamagg(
             by ``agg`` parameter, with first row already corrected with last
             row of previous streamed aggregation.
           - Second, a boolean which indicates if first row of aggregation
-            result is a new row, or is the 'same' that last row of aggregation
-            result. If 'same', all values may not be the same, but the
-            aggregation bin is the same.
+            result is a new bin, or is the 'same' that last bin of aggregation
+            result. If 'same', all values may not be the same (updated), but
+            the aggregation bin is the same.
           - Third, a dict to be used as data buffer, that can be necessary for
             some user-defined post-processing requiring data assessed in
             previous post-processing iteration.
@@ -681,9 +683,9 @@ def streamagg(
         # voluntary choice by the user.
     agg_res = None
     len_agg_res = None
-    # Initialise 'isfrn': is first row (from aggregation result) a new row?
+    # Initialise 'isfbn': is first row (from aggregation result) a new bin?
     # For 1st iteration it is necessarily a new one.
-    isfrn = True
+    isfbn = True
     #    print("")
     #   /!\ Think to remove i once everything done.
     i = 0
@@ -736,7 +738,7 @@ def streamagg(
                         #                        index_name=index_name,
                         index_name=bin_out_col,
                         post=post,
-                        isfrn=isfrn,
+                        isfbn=isfbn,
                         post_buffer=post_buffer,
                         metadata=None,
                     )
@@ -776,8 +778,8 @@ def streamagg(
         print("")
         if not last_agg_row.empty:
             #            print("last_agg_row is not empty")
-            isfrn = (first := agg_res.index[0]) != (last := last_agg_row.index[0])
-            if isfrn:
+            isfbn = (first := agg_res.index[0]) != (last := last_agg_row.index[0])
+            if isfbn:
                 n_added_rows = 1
                 # Bin of 'last_agg_row' does not match bin of first row in
                 # 'agg_res'.
@@ -871,7 +873,7 @@ def streamagg(
         #        index_name=index_name,
         index_name=bin_out_col,
         post=post,
-        isfrn=isfrn,
+        isfbn=isfbn,
         post_buffer=post_buffer,
         metadata=(last_seed_index, binning_buffer, last_agg_row.copy()),
     )

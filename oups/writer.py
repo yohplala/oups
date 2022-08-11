@@ -374,6 +374,18 @@ def write(
       ``ordered_on`` and ``duplicates_on`` parameters set to ``None`` as these
       parameters will trigger unnecessary evaluations.
     """
+    if ordered_on is not None:
+        if isinstance(ordered_on, tuple):
+            raise TypeError(f"tuple for {ordered_on} not yet supported.")
+        # Check 'ordered_on' column is within input dataframe.
+        if isinstance(data, pDataFrame):
+            # pandas case
+            all_cols = data.columns
+        else:
+            # vaex case
+            all_cols = data.get_column_names()
+        if ordered_on not in all_cols:
+            raise ValueError(f"column '{ordered_on}' does not exist in input data.")
     if os_path.isdir(dirpath) and os_listdir(dirpath):
         # Case updating an existing dataset.
         # Identify overlaps in row groups between new data and recorded data.
@@ -403,22 +415,14 @@ def write(
                 # 'ordered_on'.
                 duplicates_on = [duplicates_on, ordered_on]
         if ordered_on is not None:
-            if isinstance(ordered_on, tuple):
-                raise TypeError(f"tuple for {ordered_on} not yet supported.")
             # Get 'rrg_start_idx' & 'rrg_end_idx'.
             if isinstance(data, pDataFrame):
                 # Case 'pandas'.
-                try:
-                    start = data[ordered_on].iloc[0]
-                except KeyError:
-                    raise ValueError(f"column '{ordered_on}' does not exist in" " input data.")
+                start = data[ordered_on].iloc[0]
                 end = data[ordered_on].iloc[-1]
             else:
                 # Case 'vaex'.
-                try:
-                    start = data[ordered_on][:0].to_numpy()[0]
-                except NameError:
-                    raise ValueError(f"column '{ordered_on}' does not exist in" " input data.")
+                start = data[ordered_on][:0].to_numpy()[0]
                 end = data[ordered_on][-1:].to_numpy()[0]
             rrgs_idx = filter_row_groups(
                 pf, [[(ordered_on, ">=", start), (ordered_on, "<=", end)]], as_idx=True

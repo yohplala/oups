@@ -720,7 +720,7 @@ def test_pandas_drop_duplicates_wo_coalescing_irgs(tmp_path):
     assert pf_rec.to_pandas().equals(df_ref)
 
 
-def test_ordered_on_not_existing(tmp_path):
+def test_ordered_on_not_existing_pandas_vaex(tmp_path):
     # While 'ordered_on' is defined, it is not in seed data.
     n_val = 5
     pdf = pDataFrame({"a": range(n_val), "b": [0] * n_val})
