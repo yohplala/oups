@@ -478,10 +478,7 @@ def streamagg(
     self_agg = {}
     for col_out, (_, agg_func) in agg.items():
         if agg_func not in ACCEPTED_AGG_FUNC:
-            raise ValueError(
-                f"{agg_func} has not been tested so far."
-                " Consider testing it to proceed to its implementation."
-            )
+            raise ValueError(f"aggregation function '{agg_func}' is not tested yet.")
         self_agg[col_out] = (col_out, agg_func)
     # Initialize 'iter_dataframe' from seed data, with correct trimming.
     seed_index_restart = None
@@ -506,9 +503,7 @@ def streamagg(
             if post_buffer_:
                 post_buffer.update(post_buffer_)
         else:
-            raise ValueError(
-                f"provided key {key} is not that of aggregated results as" " issued by 'streamagg'."
-            )
+            raise ValueError(f"provided key '{key}' is not that of 'streamagg' results.")
     else:
         # Results not existing yet. Whatever 'trim_start' value, no trimming
         # is possible yet.

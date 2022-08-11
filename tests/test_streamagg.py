@@ -1586,6 +1586,41 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
     assert rec_res.equals(ref_res)
 
 
-# WiP
-# Test error message agg func is not within above values min, max, sum, first, last
-# tester erreur message en fournissant uen clé d'un dataset qu in'est pas un résultat de streamagg
+def test_exception_unknown_agg_function(tmp_path):
+    # Test error message when agg func is not within those allowed.
+    date = "2020/01/01 "
+    ts = DatetimeIndex([date + "08:00", date + "08:30"])
+    ordered_on = "ts_order"
+    val = range(1, len(ts) + 1)
+    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "unknown")}
+    with pytest.raises(ValueError, match="^aggregation function"):
+        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+
+
+def test_exception_not_key_of_streamagg_results(tmp_path):
+    # Test error message provided key is not that of streamagg results.
+    date = "2020/01/01 "
+    ts = DatetimeIndex([date + "08:00", date + "08:30"])
+    ordered_on = "ts_order"
+    val = range(1, len(ts) + 1)
+    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Store some data using 'key'.
+    store[key] = seed_vdf
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "sum")}
+    with pytest.raises(ValueError, match="^provided key"):
+        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
