@@ -14,6 +14,7 @@
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
@@ -81,14 +82,14 @@
            <div itemprop="articleBody">
              
   <section id="collection-indexing">
-<h1>Collection indexing<a class="headerlink" href="#collection-indexing" title="Permalink to this headline"></a></h1>
+<h1>Collection indexing<a class="headerlink" href="#collection-indexing" title="Permalink to this heading"></a></h1>
 <section id="motivation">
-<h2>Motivation<a class="headerlink" href="#motivation" title="Permalink to this headline"></a></h2>
+<h2>Motivation<a class="headerlink" href="#motivation" title="Permalink to this heading"></a></h2>
 <p>Datasets are gathered in a parent directory as a collection. Each of them materializes as parquet files located in a child directory whose naming is derived from a user-defined index.</p>
 <p>By formalizing this index through a likewise <em>dataclass</em>, index management (user scope) is dissociated from path management (<em>oups</em> scope).</p>
 </section>
 <section id="proposal">
-<h2>Proposal<a class="headerlink" href="#proposal" title="Permalink to this headline"></a></h2>
+<h2>Proposal<a class="headerlink" href="#proposal" title="Permalink to this heading"></a></h2>
 <p><em>oups</em> provides 2 class decorators for defining an indexing logic.</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> is compulsory, and defines naming logic of the first directory level,</p></li>
@@ -99,7 +100,7 @@ A first level could for instance specify physical quantities in different places
 <p>Each of these levels is thus specified by a class. Those corresponding to a parent directory necessarily embed as last attribute the sub-level-related class.</p>
 </section>
 <section id="example">
-<h2>Example<a class="headerlink" href="#example" title="Permalink to this headline"></a></h2>
+<h2>Example<a class="headerlink" href="#example" title="Permalink to this heading"></a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">oups</span> <span class="kn">import</span> <span class="n">sublevel</span><span class="p">,</span> <span class="n">toplevel</span>
 
 <span class="nd">@sublevel</span>
@@ -148,7 +149,7 @@ A first level could for instance specify physical quantities in different places
 </div>
 </section>
 <section id="toplevel">
-<h2><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code><a class="headerlink" href="#toplevel" title="Permalink to this headline"></a></h2>
+<h2><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code><a class="headerlink" href="#toplevel" title="Permalink to this heading"></a></h2>
 <p><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> decorator provides attributes and functions which are used by a <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance to</p>
 <blockquote>
 <div><ul class="simple">
@@ -166,7 +167,7 @@ A first level could for instance specify physical quantities in different places
 </ul>
 </section>
 <section id="sublevel">
-<h2><code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code><a class="headerlink" href="#sublevel" title="Permalink to this headline"></a></h2>
+<h2><code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code><a class="headerlink" href="#sublevel" title="Permalink to this heading"></a></h2>
 <p>Likewise,</p>
 <ul class="simple">
 <li><p>decorated class can have any number of attributes, but only of types <code class="docutils literal notranslate"><span class="pre">int</span></code> or <code class="docutils literal notranslate"><span class="pre">str</span></code>.</p></li>

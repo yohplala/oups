@@ -14,6 +14,7 @@
         <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
         <script src="_static/jquery.js"></script>
         <script src="_static/underscore.js"></script>
+        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
         <script src="_static/doctools.js"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
@@ -85,9 +86,9 @@
            <div itemprop="articleBody">
              
   <section id="parquetset">
-<h1><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code><a class="headerlink" href="#parquetset" title="Permalink to this headline"></a></h1>
+<h1><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code><a class="headerlink" href="#parquetset" title="Permalink to this heading"></a></h1>
 <section id="purpose-and-creation">
-<h2>Purpose and creation<a class="headerlink" href="#purpose-and-creation" title="Permalink to this headline"></a></h2>
+<h2>Purpose and creation<a class="headerlink" href="#purpose-and-creation" title="Permalink to this heading"></a></h2>
 <p>An instance of <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> class gathers a collection of datasets.
 <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instantiation requires the definition of a <em>collection path</em> and a dataset <em>indexing logic</em>.</p>
 <ul class="simple">
@@ -112,9 +113,9 @@
 </div>
 </section>
 <section id="usage-notes">
-<h2>Usage notes<a class="headerlink" href="#usage-notes" title="Permalink to this headline"></a></h2>
+<h2>Usage notes<a class="headerlink" href="#usage-notes" title="Permalink to this heading"></a></h2>
 <section id="dataframe-format">
-<h3>Dataframe format<a class="headerlink" href="#dataframe-format" title="Permalink to this headline"></a></h3>
+<h3>Dataframe format<a class="headerlink" href="#dataframe-format" title="Permalink to this heading"></a></h3>
 <ul class="simple">
 <li><p><em>oups</em> accepts <a class="reference external" href="https://github.com/pandas-dev/pandas">pandas</a> or <a class="reference external" href="https://github.com/vaexio/vaex">vaex</a> dataframes.</p></li>
 <li><p>Row index is dropped when recording. If the index of your dataframe is meaningful, make sure to reset it as a column. This only applies to <em>pandas</em> dataframes, as <em>vaex</em> ones have no row index.</p></li>
@@ -131,7 +132,7 @@
 </div>
 </section>
 <section id="writing">
-<h3>Writing<a class="headerlink" href="#writing" title="Permalink to this headline"></a></h3>
+<h3>Writing<a class="headerlink" href="#writing" title="Permalink to this heading"></a></h3>
 <ul class="simple">
 <li><p>When recording data to disk, <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance accepts a <code class="docutils literal notranslate"><span class="pre">tuple</span></code> which first item is then a dict defining recording setting. Parameters accepted are those of <code class="docutils literal notranslate"><span class="pre">oups.writer.write</span></code> function and complementary to <code class="docutils literal notranslate"><span class="pre">dirpath</span></code> and <code class="docutils literal notranslate"><span class="pre">data</span></code> (see <a class="reference internal" href="api.html"><span class="doc">API reference</span></a> for a review).</p></li>
 </ul>
@@ -143,7 +144,7 @@
 </ul>
 </section>
 <section id="reading">
-<h3>Reading<a class="headerlink" href="#reading" title="Permalink to this headline"></a></h3>
+<h3>Reading<a class="headerlink" href="#reading" title="Permalink to this heading"></a></h3>
 <ul class="simple">
 <li><p>A <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance returns a <code class="docutils literal notranslate"><span class="pre">ParquetHandle</span></code> which gives access to data either through ‘handles’ (<em>vaex</em> dataframe or <em>fastparquet</em> parquet file) or directly as a <em>pandas</em> dataframe.</p>
 <ul>
@@ -155,7 +156,7 @@
 </ul>
 </section>
 <section id="updating">
-<h3>Updating<a class="headerlink" href="#updating" title="Permalink to this headline"></a></h3>
+<h3>Updating<a class="headerlink" href="#updating" title="Permalink to this heading"></a></h3>
 <p>If using an <em>index</em> already present in a <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance, existing data is updated with new one. Different keywords control data updating logic. These keywords can also be reviewed in <a class="reference internal" href="api.html"><span class="doc">API reference</span></a>, looking at <code class="docutils literal notranslate"><span class="pre">oups.writer.write</span></code> function signature.</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">ordered_on</span></code>, default <code class="docutils literal notranslate"><span class="pre">None</span></code></p></li>
@@ -217,7 +218,7 @@ Setting <code class="docutils literal notranslate"><span class="pre">max_nirgs</
 </div>
 </section>
 <section id="other-goodies">
-<h3>Other “goodies”<a class="headerlink" href="#other-goodies" title="Permalink to this headline"></a></h3>
+<h3>Other “goodies”<a class="headerlink" href="#other-goodies" title="Permalink to this heading"></a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Re-using previous variables.</span>
 <span class="c1"># Review store content.</span>
 <span class="n">ps</span>
