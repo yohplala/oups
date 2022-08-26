@@ -116,6 +116,7 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
 
 
 def _set_streamagg_md(
+    key: dataclass,
     last_seed_index=None,
     binning_buffer: dict = None,
     last_agg_row: pDataFrame = None,
@@ -125,6 +126,8 @@ def _set_streamagg_md(
 
     Parameters
     ----------
+    key : dataclass
+        Key of data in oups stor for which metadata is to be written.
     last_seed_index : default None
         Last index in seed data. Can be numeric type, timestamp...
     binning_buffer : dict
@@ -158,7 +161,7 @@ def _set_streamagg_md(
             MD_KEY_POST_BUFFER: post_buffer,
         }
     }
-    OUPS_METADATA.update(metadata)
+    OUPS_METADATA[key] = metadata
 
 
 def _post_n_write_agg_chunks(
@@ -243,7 +246,7 @@ def _post_n_write_agg_chunks(
         agg_res = post(agg_res, isfbn, post_buffer)
     if other_metadata:
         # Set oups metadata.
-        _set_streamagg_md(*other_metadata, post_buffer)
+        _set_streamagg_md(key, *other_metadata, post_buffer)
     # Record data.
     store[key] = write_config, agg_res
 
@@ -1115,8 +1118,8 @@ def streamagg(
         #        print("main loop")
         #        print("bins")
         #        print(bins)
-        for key, conf in bins_n_conf:
-            keys_config[key].update(conf)
+        for key, config in bins_n_conf:
+            keys_config[key].update(config)
         #        print("keys_config")
         #        print(keys_config)
 
@@ -1145,8 +1148,8 @@ def streamagg(
             _group_n_stitch(seed_chunk=seed_chunk, key=key, **config)
             for key, config in keys_config.items()
         ]
-        for key, conf in agg_res_n_conf:
-            keys_config[key].update(conf)
+        for key, config in agg_res_n_conf:
+            keys_config[key].update(config)
         # WiP here to keep group of workers for next step (post and bin or last post).
 
     # /!\ WiP /!\ here use result from reduction step to check if something done.

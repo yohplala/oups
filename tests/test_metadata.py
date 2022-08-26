@@ -51,9 +51,9 @@ def test_oups_metadata_wo_custom_metadata(tmp_path):
     # Step 1: write.
     pdf = pDataFrame({"a": [1], "b": [2]})
     metadata = {"md1": "step1", "md2": "step1", "md3": "step1"}
-    OUPS_METADATA.update(metadata)
     store = ParquetSet(tmp_path, ShortIndexer)
     sidx = ShortIndexer("sidx")
+    OUPS_METADATA[sidx] = metadata
     store[sidx] = pdf
     # Retrieve oups metadata.
     md_rec = store[sidx]._oups_metadata
@@ -62,7 +62,7 @@ def test_oups_metadata_wo_custom_metadata(tmp_path):
     assert not OUPS_METADATA
     # Step 2: update.
     metadata = {"md1": None, "md2": "step2", "md4": "step2"}
-    OUPS_METADATA.update(metadata)
+    OUPS_METADATA[sidx] = metadata
     store[sidx] = pdf
     # Retrieve oups metadata.
     md_rec = store[sidx]._oups_metadata
@@ -76,10 +76,10 @@ def test_oups_metadata_with_custom_metadata(tmp_path):
     # with user-defined metadata.
     # Step 1: write.
     pdf = pDataFrame({"a": [1], "b": [2]})
-    metadata = {"md1": "step1", "md2": "step1", "md3": "step1"}
-    OUPS_METADATA.update(metadata)
     store = ParquetSet(tmp_path, ShortIndexer)
     sidx = ShortIndexer("sidx")
+    metadata = {"md1": "step1", "md2": "step1", "md3": "step1"}
+    OUPS_METADATA[sidx] = metadata
     store[sidx] = {"metadata": metadata.copy()}, pdf
     # Retrieve oups metadata.
     md_rec = store[sidx]._oups_metadata
@@ -94,7 +94,7 @@ def test_oups_metadata_with_custom_metadata(tmp_path):
     assert md_rec == metadata
     # Step 2: update.
     metadata = {"md1": None, "md2": "step2", "md4": "step2"}
-    OUPS_METADATA.update(metadata)
+    OUPS_METADATA[sidx] = metadata
     store[sidx] = {"metadata": metadata.copy()}, pdf
     # Retrieve oups metadata.
     md_rec = store[sidx]._oups_metadata

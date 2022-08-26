@@ -8,7 +8,7 @@ import json
 from ast import literal_eval
 from os import listdir as os_listdir
 from os import path as os_path
-from typing import Dict, List, Tuple, Union
+from typing import Dict, Hashable, List, Tuple, Union
 
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
@@ -27,7 +27,7 @@ from vaex.dataframe import DataFrame as vDataFrame
 
 COMPRESSION = "SNAPPY"
 MAX_ROW_GROUP_SIZE = 6_345_000
-# Notes to any dev
+# Notes to any dev.
 # Store any specific oups metadata in this dict as string.
 # When using, append data by using `OUPS_METADATA.update()`.
 OUPS_METADATA = {}
@@ -203,7 +203,7 @@ def to_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
 
 
 def _update_metadata(
-    new_metadata: Dict[str, str], existing_metadata: Dict[str, str] = None
+    new_metadata: Dict[str, str], existing_metadata: Dict[str, str] = None, md_key: Hashable = None
 ) -> Dict[str, str]:
     """Update oups specific metadata and merge to user-defined metadata.
 
@@ -214,6 +214,10 @@ def _update_metadata(
     existing_metadata : Dict[str, str], optional
         Metadata from existing parquet dataset, if already existing (case of
         appending data).
+    md_key: Hashable, optional
+        Key to retrieve data in ``OUPS_METADATA`` dict, and write it as
+        specific oups metadata in parquet file. If not provided, all data
+        in ``OUPS_METADATA`` dict are retrieved to be written.
 
     Returns
     -------
@@ -234,32 +238,36 @@ def _update_metadata(
         is removed from existing.
 
     """
+    # `OUPS_METADATA` is assumed to be not an empty dict.
+    spec_oups_md = OUPS_METADATA[md_key] if md_key else OUPS_METADATA
     if existing_metadata and OUPS_METADATA_KEY in existing_metadata:
         # Case 'append' to existing metadata.
         # oups specific metadata is expected to be a dict itself.
-        oups_md = json.loads(existing_metadata[OUPS_METADATA_KEY])
-        for key, value in OUPS_METADATA.items():
-            if key in oups_md:
+        consolidated_md = json.loads(existing_metadata[OUPS_METADATA_KEY])
+        for key, value in spec_oups_md.items():
+            if key in consolidated_md:
                 if value is None:
                     # Case 'remove'.
-                    del oups_md[key]
+                    del consolidated_md[key]
                 else:
                     # Case 'update'.
-                    oups_md[key] = value
+                    consolidated_md[key] = value
             elif value:
                 # Case 'add'.
-                oups_md[key] = value
+                consolidated_md[key] = value
     else:
-        oups_md = OUPS_METADATA.copy()
+        #        oups_md = OUPS_METADATA.copy()
+        consolidated_md = spec_oups_md
 
     if new_metadata:
-        new_metadata[OUPS_METADATA_KEY] = json.dumps(oups_md)
+        new_metadata[OUPS_METADATA_KEY] = json.dumps(consolidated_md)
     else:
-        print("new metadata")
-        print(oups_md)
-        new_metadata = {OUPS_METADATA_KEY: json.dumps(oups_md)}
-    # Clear dict of specific oups metadata without deleting the pointer.
-    OUPS_METADATA.clear()
+        new_metadata = {OUPS_METADATA_KEY: json.dumps(consolidated_md)}
+    if md_key:
+        del OUPS_METADATA[md_key]
+    else:
+        # Clear dict of specific oups metadata without deleting the pointer.
+        OUPS_METADATA.clear()
     return new_metadata
 
 
@@ -274,6 +282,7 @@ def write(
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_nirgs: int = None,
     metadata: Dict[str, str] = None,
+    md_key: Hashable = None,
 ):
     """Write data to disk at location specified by path.
 
@@ -340,6 +349,10 @@ def write(
     metadata : Dict[str, str], optional
         Key-value metadata to write, or update in dataset. Please see
         fastparquet for updating logic in case of `None` value being used.
+    md_key: Hashable, optional
+        Key to retrieve data in ``OUPS_METADATA`` dict, and write it as
+        specific oups metadata in parquet file. If not provided, all data
+        in ``OUPS_METADATA`` dict are retrieved to be written.
 
     Notes
     -----
@@ -540,7 +553,8 @@ def write(
     # Manage metadata, whatever the case, initiating new dataset or updating
     # existing one.
     if OUPS_METADATA:
-        metadata = _update_metadata(metadata, pf.key_value_metadata)
+        if md_key and OUPS_METADATA[md_key] or md_key is None:
+            metadata = _update_metadata(metadata, pf.key_value_metadata, md_key)
     if metadata:
         update_custom_metadata(pf, metadata)
     pf._write_common_metadata()
