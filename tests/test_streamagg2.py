@@ -165,7 +165,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "agg_res_len": None,
             "isfbn": True,
             "cols_to_by": None,
-            "by": None,
+            "by": ordered_on_spec,
             "bins": ordered_on_spec,
             "bin_out_col": ordered_on_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
@@ -326,7 +326,7 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "agg_res_len": None,
             "isfbn": True,
             "cols_to_by": None,
-            "by": None,
+            "by": ordered_on_spec,
             "bins": ordered_on_spec,
             "bin_out_col": ordered_on_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
@@ -373,6 +373,28 @@ def test_setup_exception_no_bin_on_nor_by(tmp_path):
     }
     # Test.
     with pytest.raises(ValueError, match="^at least one among"):
+        (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config_res) = _setup(
+            **parameter_in
+        )
+
+
+def test_setup_exception_no_bin_on_nor_by_key_when_grouper(tmp_path):
+    ordered_on = "ts"
+    key = Indexer("agg_res")
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    keys_config = {key: {"agg": {"out_spec": ("in_spec", "first")}, "by": Grouper(freq="1H")}}
+    parameter_in = {
+        "store": store,
+        "keys": keys_config,
+        "ordered_on": ordered_on,
+        "trim_start": True,
+        "agg": None,
+        "post": None,
+        "reduction": True,
+    }
+    # Test.
+    with pytest.raises(ValueError, match="^no column name defined to bin"):
         (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config_res) = _setup(
             **parameter_in
         )

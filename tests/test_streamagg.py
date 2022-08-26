@@ -139,8 +139,8 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Check 'last_seed_index' is last timestamp.
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -202,8 +202,8 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Check 'last_seed_index' is last timestamp.
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -345,8 +345,8 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
     # 'discard_last').
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -729,8 +729,8 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     # Check metadata.
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -991,8 +991,8 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     # Check metadata.
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -1056,8 +1056,8 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     # Check binning buffer stored in metadata.
     (
         last_seed_index_res2,
-        binning_buffer_res2,
         _,
+        binning_buffer_res2,
         _,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref2 = ts2[-1]
@@ -1231,8 +1231,8 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     # Check binning buffer stored in metadata.
     (
         last_seed_index_res2,
-        binning_buffer_res2,
         _,
+        binning_buffer_res2,
         _,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref2 = ts2[-1]

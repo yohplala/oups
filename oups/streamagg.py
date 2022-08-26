@@ -20,6 +20,7 @@ from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.collection import ParquetSet
 from oups.router import ParquetHandle
+from oups.utils import tcut
 from oups.writer import MAX_ROW_GROUP_SIZE
 from oups.writer import OUPS_METADATA
 from oups.writer import OUPS_METADATA_KEY
@@ -78,8 +79,8 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
         new seed data. 3 variables are returned.
 
           - ``last_seed_index``, last value in 'ordered-on' column in seed data.
-          - ``binning_buffer``, a dict to be forwarded to ``by`` if a callable.
           - ``last_agg_row``, last row from previously aggregated results.
+          - ``binning_buffer``, a dict to be forwarded to ``by`` if a callable.
           - ``post_buffer``, a dict to be forwarded to ``post`` callable.
 
     """
@@ -88,12 +89,11 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
     # It is a value to be included when filtering seed data.
     # Trim accordingly head of seed data in this case.
     streamagg_md = handle._oups_metadata[MD_KEY_STREAMAGG]
-    if streamagg_md[MD_KEY_LAST_SEED_INDEX]:
-        last_seed_index = streamagg_md[MD_KEY_LAST_SEED_INDEX]
-        # De-serialize 'last_seed_index'.
-        last_seed_index = read_json(last_seed_index, **PANDAS_DESERIALIZE).iloc[0, 0]
-    else:
-        last_seed_index = None
+    # De-serialize 'last_seed_index'.
+    last_seed_index = streamagg_md[MD_KEY_LAST_SEED_INDEX]
+    last_seed_index = read_json(last_seed_index, **PANDAS_DESERIALIZE).iloc[0, 0]
+    # 'last_agg_row' for stitching with new aggregation results.
+    last_agg_row = read_json(streamagg_md[MD_KEY_LAST_AGGREGATION_ROW], **PANDAS_DESERIALIZE)
     # Metadata related to binning process from past binnings on prior data.
     # It is used in case 'by' is a callable.
     if streamagg_md[MD_KEY_BINNING_BUFFER]:
@@ -102,8 +102,6 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
         )
     else:
         binning_buffer = {}
-    # 'last_agg_row' for stitching with new aggregation results.
-    last_agg_row = read_json(streamagg_md[MD_KEY_LAST_AGGREGATION_ROW], **PANDAS_DESERIALIZE)
     # Metadata related to post-processing of prior aggregation results, to be
     # used by 'post'.
     if streamagg_md[MD_KEY_POST_BUFFER]:
@@ -112,14 +110,14 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
         )
     else:
         post_buffer = {}
-    return last_seed_index, binning_buffer, last_agg_row, post_buffer
+    return last_seed_index, last_agg_row, binning_buffer, post_buffer
 
 
 def _set_streamagg_md(
     key: dataclass,
-    last_seed_index=None,
+    last_seed_index,
+    last_agg_row: pDataFrame,
     binning_buffer: dict = None,
-    last_agg_row: pDataFrame = None,
     post_buffer: dict = None,
 ):
     """Serialize and record stremagg metadata from last aggregation and post.
@@ -127,26 +125,25 @@ def _set_streamagg_md(
     Parameters
     ----------
     key : dataclass
-        Key of data in oups stor for which metadata is to be written.
+        Key of data in oups store for which metadata is to be written.
     last_seed_index : default None
         Last index in seed data. Can be numeric type, timestamp...
-    binning_buffer : dict
-        Last values from binning process, that can be required when restarting
-        the binning process with new seed data.
     last_agg_row : pDataFrame
         Last row from last aggregation results, required for stitching with
         aggregation results from new seed data.
+    binning_buffer : dict
+        Last values from binning process, that can be required when restarting
+        the binning process with new seed data.
     post_buffer : dict
         Last values from post-processing, that can be required when restarting
         post-processing of new aggregation results.
     """
     # Setup metadata for a future 'streamagg' execution.
-    # Store a json serialized pandas series, to keep track of 'whatever
-    # the object' the index is.
-    if last_seed_index:
-        last_seed_index = pDataFrame({MD_KEY_LAST_SEED_INDEX: [last_seed_index]}).to_json(
-            **PANDAS_SERIALIZE
-        )
+    # Store a json serialized pandas series, to keep track of 'whatever the
+    # object' the index is.
+    last_seed_index = pDataFrame({MD_KEY_LAST_SEED_INDEX: [last_seed_index]}).to_json(
+        **PANDAS_SERIALIZE
+    )
     last_agg_row = last_agg_row.to_json(**PANDAS_SERIALIZE)
     if binning_buffer:
         binning_buffer = pDataFrame(binning_buffer, index=[0]).to_json(**PANDAS_SERIALIZE)
@@ -234,7 +231,8 @@ def _post_n_write_agg_chunks(
     else:
         agg_res = chunks[0]
     if index_name:
-        # In case 'by' is a callable, index may have no name.
+        # In case 'by' is a callable, index may have no name, but user may have
+        # defined one with 'bin_on' parameter.
         agg_res.index.name = index_name
     # Keep group keys as a column before post-processing.
     agg_res.reset_index(inplace=True)
@@ -312,7 +310,7 @@ def _setup(
                      'agg_res' : None,
                      'agg_res_len' : None,
                      'isfbn' : True,
-           !! WiP  'by' : pandas grouper or callable, # WiP here: change to callable only
+                     'by' : pandas grouper or callable,
                      'bins' : pandas grouper or str (column name),
                      'cols_to_by' : list or None,
                      'bin_out_col' : str,
@@ -365,8 +363,6 @@ def _setup(
         # Parameters in 'key_conf_in' take precedence over those in 'kwargs'.
         key_conf_in = kwargs | key_conf_in
         # Initialize 'key_conf_out' with default values.
-        print("key_conf_in")
-        print(key_conf_in)
         key_conf_out = key_default.copy()
         # Step 1 / Process parameters.
         # Step 1.1 / 'by' and 'bin_on'.
@@ -387,7 +383,6 @@ def _setup(
         else:
             bin_out_col = None
         if by:
-            key_conf_out["by"] = by
             if callable(by):
                 if bin_on == ordered_on or not bin_on:
                     # Define columns forwarded to 'by'.
@@ -397,7 +392,6 @@ def _setup(
             elif isinstance(by, Grouper):
                 # Case pandas grouper.
                 # https://pandas.pydata.org/docs/reference/api/pandas.Grouper.html
-                key_conf_out["bins"] = by
                 by_key = by.key
                 if bin_on and by_key and bin_on != by_key:
                     raise ValueError(
@@ -409,8 +403,21 @@ def _setup(
                 elif by_key and not bin_on:
                     bin_on = by_key
                     bin_out_col = by_key
+                elif bin_on and not by_key:
+                    by.key = bin_on
+                elif not (bin_on or by_key):
+                    # Nor 'by.key', nor 'bin_on' defined.
+                    raise ValueError(
+                        "no column name defined to bin with provided pandas"
+                        f" grouper for key '{key}'."
+                    )
+                key_conf_out["bins"] = by
+            else:
+                raise TypeError(f"not possible to have 'by' of type {type(by)}.")
+            key_conf_out["by"] = by
         elif bin_on:
             # Case of using values of an existing column directly for binning.
+            key_conf_out["by"] = bin_on
             key_conf_out["bins"] = bin_on
         else:
             raise ValueError("at least one among `by` and `bin_on` is required.")
@@ -487,12 +494,12 @@ def _setup(
             if _is_stremagg_result(prev_agg_res):
                 # Prior streamagg results already in store.
                 # Retrieve corresponding metadata to re-start aggregations.
-                seed_index_restart, binning_buffer, last_agg_row, post_buffer = _get_streamagg_md(
+                seed_index_restart, last_agg_row, binning_buffer, post_buffer = _get_streamagg_md(
                     prev_agg_res
                 )
                 seed_index_restart_set.add(seed_index_restart)
-                key_conf_out["binning_buffer"] = binning_buffer
                 key_conf_out["last_agg_row"] = last_agg_row
+                key_conf_out["binning_buffer"] = binning_buffer
                 key_conf_out["post_buffer"] = post_buffer
             else:
                 raise ValueError(f"provided key '{key}' is not that of 'streamagg' results.")
@@ -603,6 +610,7 @@ def _iter_data(
 
 def _post_n_bin(
     seed_chunk: pDataFrame,
+    reduction: bool,
     store: ParquetSet,
     key: dataclass,
     agg_res: Union[pDataFrame, None],
@@ -617,7 +625,7 @@ def _post_n_bin(
     isfbn: bool,
     post_buffer: dict,
     bins: Union[str, Series],
-    by: Union[Grouper, Callable, None],
+    by: Union[Grouper, Callable, str],
     cols_to_by: List[str],
     binning_buffer: dict,
     **kwargs,
@@ -628,6 +636,8 @@ def _post_n_bin(
     ----------
     seed_chunk : pDataFrame
         Chunk of seed data.
+    reduction : bool
+        If the reduction step is to be performed.
     store : ParquetSet
         Store to which recording aggregation results.
     key : dataclass
@@ -647,6 +657,7 @@ def _post_n_bin(
         - ``updated_config``, dict with modified parameters.
 
     """
+    # /!\ REMOVE /!\
     print("")
     print("_post_n_bin")
     if agg_res is not None:
@@ -680,17 +691,29 @@ def _post_n_bin(
                 # Reset number of rows within chunk list and number of
                 # iterations to fill 'agg_chunks_buffer'.
                 agg_n_rows = 0
-    # /!\ WiP here /!\
-    # for tgrouper, use tcut
-    # for bin_on as str, directly return said column?
-    # or leave 'bins' as a string which is then the column name?
-    if callable(by):
-        # Case callable. Bin 'ordered_on'.
-        # If 'binning_buffer' is used, it has to be modified in-place, so
-        # as to ship values from iteration N to iteration N+1.
-        bins = by(data=seed_chunk.loc[:, cols_to_by], buffer=binning_buffer)
-        print("bins")
-        print(bins)
+    if reduction:
+        # In case reduction step is requested, 'bins' has to be an 1D
+        # array-like.
+        if callable(by):
+            reduction_bins = by(data=seed_chunk.loc[:, cols_to_by], buffer=binning_buffer)
+        elif isinstance(by, Grouper):
+            reduction_bins = tcut(data=seed_chunk.loc[:, by.key], grouper=by).astype("datetime64")
+        else:
+            # 'by' is column name to use for binning.
+            reduction_bins = seed_chunk.loc[:, by]
+    else:
+        # No reduction step.
+        reduction_bins = None
+        if callable(by):
+            # Case callable. Bin 'ordered_on'.
+            # If 'binning_buffer' is used, it has to be modified in-place, so
+            # as to ship values from iteration N to iteration N+1.
+            bins = by(data=seed_chunk.loc[:, cols_to_by], buffer=binning_buffer)
+    # /!\ REMOVE /!\
+    print("reduction_bins")
+    print(reduction_bins)
+    print("bins")
+    print(bins)
     # Updating key settings.
     updated_conf = {
         "agg_chunks_buffer": agg_chunks_buffer,
@@ -698,6 +721,7 @@ def _post_n_bin(
         "agg_mean_row_group_size": agg_mean_row_group_size,
         "post_buffer": post_buffer,
         "binning_buffer": binning_buffer,
+        "reduction_bins": reduction_bins,
         "bins": bins,
     }
     return key, updated_conf
@@ -746,6 +770,10 @@ def _group_n_stitch(
     print(seed_chunk)
     print("bins")
     print(bins)
+    # /!\ WiP here: renam binning column with correctly expected name
+    # if 'bins' grouper: value of 'grouper.ky'
+    # if bin_on: key etc...
+    # if by callable: 'bins' name expected by user
     agg_res = seed_chunk.groupby(bins, sort=False).agg(**agg)
     agg_res_len = len(agg_res)
     # Stitch with last row from *prior* aggregation.
@@ -853,7 +881,7 @@ def _last_post(
         post=post,
         isfbn=isfbn,
         post_buffer=post_buffer,
-        other_metadata=(last_seed_index, binning_buffer, last_agg_row.copy()),
+        other_metadata=(last_seed_index, last_agg_row.copy(), binning_buffer),
     )
 
 
@@ -868,6 +896,7 @@ def streamagg(
     post: Callable = None,
     trim_start: bool = True,
     discard_last: bool = True,
+    reduction: bool = False,
     **kwargs,
 ):
     """Aggregate sequentially on successive chunks (stream) of ordered data.
@@ -986,6 +1015,13 @@ def streamagg(
         If ``True``, last row group in seed data (sharing the same value in
         `ordered_on` column) is removed from the aggregation step. See below
         notes.
+    reduction : bool, default False
+        If `True`, perform a 1st multi-groupby and aggregation on seed data.
+        This 1st step (common to all keys) reduces then the side of seed data
+        before it is used for each individual groupby and aggregation of each
+        key.
+        The more the number of keys, the more the reduction step ought to bring
+        performance improvement.
 
     Other parameters
     ----------------
@@ -1061,9 +1097,6 @@ def streamagg(
                 "not possible to use a single key without" " specifying parameter 'agg'."
             )
         key = {key: {"agg": agg, "by": by, "bin_on": bin_on, "post": post}}
-        reduction = False
-    else:
-        reduction = True
     (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config) = _setup(
         ordered_on=ordered_on,
         store=store,
@@ -1107,7 +1140,7 @@ def streamagg(
         # https://stackoverflow.com/questions/61215938/joblib-parallelization-of-function-with-multiple-keyword-arguments
         # Work with memmap: needs to define each column as a separate memmap (for 'ordered_on' and 'bin_on')
         bins_n_conf = [
-            _post_n_bin(seed_chunk=seed_chunk, store=store, key=key, **config)
+            _post_n_bin(seed_chunk=seed_chunk, reduction=reduction, store=store, key=key, **config)
             for key, config in keys_config.items()
         ]
         # Comment to be removed:
