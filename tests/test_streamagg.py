@@ -939,15 +939,15 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     key = Indexer("seed")
 
     # Setup binning.
-    def by(data: pDataFrame, buffer: dict):
+    def by(data: Series, buffer: dict):
         """Bin by group of 4 rows. Label for bins are values from `ordered_on`."""
         # A pandas Series is returned, with name being that of the 'ordered_on'
         # column. Because of pandas magic, this column will then be in aggregation
         # results, and oups will be able to use it for writing data.
         # With actual setting, without this trick, 'streamagg' could not write
-        # the results (no 'ordered_on' columnin results).
-        ordered_on = data.columns[0]
-        group_keys = data.copy()
+        # the results (no 'ordered_on' column in results).
+        ordered_on = data.name
+        group_keys = pDataFrame(data)
         # Setup 1st key of groups from previous binning.
         row_offset = 4 - buffer["row_offset"] if "row_offset" in buffer else 0
         group_keys["tmp"] = data.iloc[row_offset::4]
@@ -983,7 +983,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed = seed_pdf.iloc[:-2]
-    bins = by(trimmed_seed[[ordered_on]], {})
+    bins = by(trimmed_seed[ordered_on], {})
     ref_res_agg = seed_pdf.iloc[:-2].groupby(bins).agg(**agg).reset_index()
     # Test results
     rec_res = store[key].pdf
@@ -1048,7 +1048,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
-    bins = by(trimmed_seed2[[ordered_on]], {})
+    bins = by(trimmed_seed2[ordered_on], {})
     ref_res_agg2 = seed_pdf2.iloc[:-1].groupby(bins).agg(**agg).reset_index()
     # Test results
     rec_res2 = store[key].pdf
