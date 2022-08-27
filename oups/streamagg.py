@@ -290,10 +290,6 @@ def _setup_binning(
             default by pandas when resetting an index without name).
 
     """
-    print("")
-    print("_setup_binning")
-    print("reduction")
-    print(reduction)
     generic_bin_col = f"key_{key_idx}" if reduction else None
     if bin_on:
         if isinstance(bin_on, tuple):
@@ -418,21 +414,21 @@ def _setup(
                      'agg_res_len' : None,
                      'isfbn' : True,
                      'by' : pandas Grouper, Callable or str (column name),
-                     'bins' : pandas grouper or str (column name),
                      'cols_to_by' : list or None,
-                     'bin_out_col' : str,
-                     'self_agg' : dict,
+                     'bins' : pandas grouper or str (column name),
                      'agg' : dict,
+                     'self_agg' : dict,
+                     'bin_out_col' : str,
                      'post' : Callable or None,
                      'max_agg_row_group_size' : int,
+                     'agg_chunk_buffer' : agg_chunk_buffer,
+                     'last_agg_row' : empty pandas dataframe,
+                     'binning_buffer' : dict, possibly empty,
+                     'post_buffer' : dict, possibly empty,
                      'write_config' : {'ordered_on' : str,
                                        'duplicates_on' : str or list,
                                        ...
                                        },
-                     'binning_buffer' : dict, possibly empty,
-                     'last_agg_row' : empty pandas dataframe,
-                     'post_buffer' : dict, possibly empty,
-                     'agg_chunk_buffer' : agg_chunk_buffer,
                      },
                }``
             To be noticed:
@@ -521,10 +517,10 @@ def _setup(
                 # Modify consequently 'agg' so that it can operate on agg results from
                 # reduction step.
                 key_agg[col_out] = (generic_agg_col, agg_func)
-            else:
-                key_agg = agg
             # Update 'self_agg', required for stitching step.
             self_agg[col_out] = (col_out, agg_func)
+        if not reduction:
+            key_agg = agg
         # Initialize 'post'.
         post = key_conf_in.pop("post")
         # Step 1.3 / 'max_agg_row_group' and 'write_config'.
@@ -575,13 +571,13 @@ def _setup(
         # before a concatenation to record. Because it is appended in-place
         # for each key, it is created separately for each key.
         keys_config[key] = key_default | {
-            "post": post,
-            "self_agg": self_agg,
-            "agg": key_agg,
-            "bin_out_col": bin_out_col,
-            "cols_to_by": cols_to_by,
             "by": by,
+            "cols_to_by": cols_to_by,
             "bins": bins,
+            "agg": key_agg,
+            "self_agg": self_agg,
+            "bin_out_col": bin_out_col,
+            "post": post,
             "max_agg_row_group_size": max_agg_row_group_size,
             "agg_chunks_buffer": [],
             "last_agg_row": last_agg_row,
