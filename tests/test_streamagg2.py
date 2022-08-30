@@ -13,6 +13,7 @@ from pandas import Grouper
 
 from oups import ParquetSet
 from oups import toplevel
+from oups.streamagg import REDUCTION_BIN_COL_PREFIX
 from oups.streamagg import _setup
 from oups.writer import MAX_ROW_GROUP_SIZE
 
@@ -95,6 +96,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "isfbn": True,
             "cols_to_by": [ordered_on_dflt, ordered_on_alt],
             "by": tgrouper,
+            "reduction_bin_col": None,
             "bins": tgrouper,
             "bin_out_col": ordered_on_alt,
             "self_agg": {"out_spec": ("out_spec", "first")},
@@ -119,6 +121,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "isfbn": True,
             "cols_to_by": ordered_on_dflt,
             "by": dummy_by,
+            "reduction_bin_col": None,
             "bins": None,
             "bin_out_col": None,
             "self_agg": {"out_spec": ("out_spec", "first")},
@@ -143,6 +146,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "isfbn": True,
             "cols_to_by": ordered_on_dflt,
             "by": dummy_by,
+            "reduction_bin_col": None,
             "bins": None,
             "bin_out_col": None,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
@@ -167,6 +171,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "isfbn": True,
             "cols_to_by": [ordered_on_dflt, ordered_on_spec],
             "by": None,
+            "reduction_bin_col": None,
             "bins": ordered_on_spec,
             "bin_out_col": ordered_on_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
@@ -268,6 +273,7 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "isfbn": True,
             "cols_to_by": [ordered_on_dflt, ordered_on_alt],
             "by": tgrouper,
+            "reduction_bin_col": None,
             "bins": tgrouper,
             "bin_out_col": ordered_on_alt,
             "self_agg": {"out_spec": ("out_spec", "first")},
@@ -287,6 +293,7 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "isfbn": True,
             "cols_to_by": ordered_on_dflt,
             "by": dummy_by,
+            "reduction_bin_col": None,
             "bins": None,
             "bin_out_col": None,
             "self_agg": {"out_spec": ("out_spec", "first")},
@@ -310,6 +317,7 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "isfbn": True,
             "cols_to_by": ordered_on_dflt,
             "by": dummy_by,
+            "reduction_bin_col": None,
             "bins": None,
             "bin_out_col": None,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
@@ -329,6 +337,7 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "isfbn": True,
             "cols_to_by": [ordered_on_dflt, ordered_on_spec],
             "by": None,
+            "reduction_bin_col": None,
             "bins": ordered_on_spec,
             "bin_out_col": ordered_on_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
@@ -420,8 +429,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
         **parameter_in
     )
     # Reference results.
-    key1_tgrouper = copy(tgrouper)
-    key1_tgrouper.key = "key_0"
+    tgrouper_key1_ref = copy(tgrouper)
+    tgrouper_key1_ref.key = f"{REDUCTION_BIN_COL_PREFIX}0"
     keys_config_ref = {
         key1: {
             "agg_n_rows": 0,
@@ -431,6 +440,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "isfbn": True,
             "cols_to_by": [ordered_on_dflt, ordered_on_alt],
             "by": tgrouper,
+            "reduction_bin_col": f"{REDUCTION_BIN_COL_PREFIX}0",
+            "bins": tgrouper_key1_ref,
             "bin_out_col": ordered_on_alt,
             "self_agg": {"out_spec": ("out_spec", "first")},
             "agg": {"out_spec": ("in_spec__first", "first")},
@@ -454,7 +465,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "isfbn": True,
             "cols_to_by": ordered_on_dflt,
             "by": dummy_by,
-            "bins": "key_1",
+            "reduction_bin_col": f"{REDUCTION_BIN_COL_PREFIX}1",
+            "bins": f"{REDUCTION_BIN_COL_PREFIX}1",
             "bin_out_col": None,
             "self_agg": {"out_spec": ("out_spec", "first")},
             "agg": {"out_spec": ("in_spec__first", "first")},
@@ -478,7 +490,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "isfbn": True,
             "cols_to_by": ordered_on_dflt,
             "by": dummy_by,
-            "bins": "key_2",
+            "reduction_bin_col": f"{REDUCTION_BIN_COL_PREFIX}2",
+            "bins": f"{REDUCTION_BIN_COL_PREFIX}2",
             "bin_out_col": None,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
             "agg": {"out_dflt": ("in_dflt__last", "last")},
@@ -502,7 +515,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "isfbn": True,
             "cols_to_by": [ordered_on_dflt, ordered_on_spec],
             "by": ordered_on_spec,
-            "bins": "key_3",
+            "reduction_bin_col": f"{REDUCTION_BIN_COL_PREFIX}3",
+            "bins": f"{REDUCTION_BIN_COL_PREFIX}3",
             "bin_out_col": ordered_on_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
             "agg": {"out_dflt": ("in_dflt__last", "last")},
@@ -527,8 +541,9 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
     # Check.
     key1_last_agg_row = keys_config_res[key1].pop("last_agg_row")
     assert key1_last_agg_row.equals(pDataFrame())
-    key1_bins = keys_config_res[key1].pop("bins")
-    assert key1_bins.__dict__ == key1_tgrouper.__dict__
+    key1_bins_res = keys_config_res[key1].pop("bins")
+    key1_bins_ref = keys_config_ref[key1].pop("bins")
+    assert key1_bins_res.__dict__ == key1_bins_ref.__dict__
     assert keys_config_ref[key1] == keys_config_res[key1]
     key2_last_agg_row = keys_config_res[key2].pop("last_agg_row")
     assert key2_last_agg_row.equals(pDataFrame())
@@ -598,6 +613,9 @@ def test_setup_exception_no_bin_on_nor_by_key_when_grouper(tmp_path):
 # Tester que 'bins' si reduction
 #  - si 'by' est callable, récupère nom générique de colonne
 #  - si 'by' est grouper, récupère nolm générique dans attribute 'by'
+
+# Test avec 2 keys (sampler) réalisés séparemment puis ensemble: vérifier que chainagg
+# réalise le changement de nom de l'index dans 'last_agg_row' pour redémarrer.
 
 
 # Test exception when calling streamagg with agg = None & key not a dict: not possible.
