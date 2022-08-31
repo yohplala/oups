@@ -33,12 +33,15 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
     # 'max_row_group_size' and 'max_nirgs' are default parameters for writing.
     # 'post' also has a default value.
     # Key 1 has mostly parameters defined by default values.
+    #       'by' is a pd.Grouper.
     # Key 2 has mostly parameters defined by specific values.
     # Keys 3 & 4 have only default parameters, except minimally compulsory
     # specific parameters.
+    # 'reduction' is `False`.
     ordered_on_alt = "ts_alt"
-    ordered_on_spec = "ts_spec"
     ordered_on_dflt = "ts_dflt"
+    bin_on_spec = "bin_on_spec"
+    bin_out_spec = "bin_out_spec"
     key1 = Indexer("some_default")
     key2 = Indexer("only_specific")
     key3 = Indexer("only_default1")
@@ -67,8 +70,8 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "post": None,
             "max_row_group_size": 3000,
         },
-        key3: {"by": dummy_by},
-        key4: {"bin_on": ordered_on_spec},
+        key3: {"by": dummy_by, "bin_on": (bin_on_spec, bin_out_spec)},
+        key4: {"bin_on": bin_on_spec},
     }
     trim_start = True
     parameter_in = {
@@ -83,9 +86,14 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
         "max_nirgs": 4,
     }
     # Test.
-    (all_cols_in, trim_start, seed_index_restart_set, reduction_agg_res, keys_config_res) = _setup(
-        **parameter_in
-    )
+    (
+        all_cols_in_res,
+        trim_start,
+        seed_index_restart_set,
+        reduction_seed_chunk_cols_res,
+        reduction_agg_res,
+        keys_config_res,
+    ) = _setup(**parameter_in)
     # Reference results.
     keys_config_ref = {
         key1: {
@@ -94,8 +102,8 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "agg_res": None,
             "agg_res_len": None,
             "isfbn": True,
-            "cols_to_by": [ordered_on_dflt, ordered_on_alt],
-            "by": tgrouper,
+            "cols_to_by": None,
+            "by": None,
             "reduction_bin_col": None,
             "bins": tgrouper,
             "bin_out_col": ordered_on_alt,
@@ -144,11 +152,11 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "agg_res": None,
             "agg_res_len": None,
             "isfbn": True,
-            "cols_to_by": ordered_on_dflt,
+            "cols_to_by": [ordered_on_dflt, bin_on_spec],
             "by": dummy_by,
             "reduction_bin_col": None,
             "bins": None,
-            "bin_out_col": None,
+            "bin_out_col": bin_out_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
             "agg": {"out_dflt": ("in_dflt", "last")},
             "post": dummy_post_dflt,
@@ -157,7 +165,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
                 "max_row_group_size": 1000,
                 "max_nirgs": 4,
                 "ordered_on": ordered_on_dflt,
-                "duplicates_on": ordered_on_dflt,
+                "duplicates_on": bin_out_spec,
             },
             "binning_buffer": {},
             "post_buffer": {},
@@ -169,11 +177,11 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "agg_res": None,
             "agg_res_len": None,
             "isfbn": True,
-            "cols_to_by": [ordered_on_dflt, ordered_on_spec],
+            "cols_to_by": None,
             "by": None,
             "reduction_bin_col": None,
-            "bins": ordered_on_spec,
-            "bin_out_col": ordered_on_spec,
+            "bins": bin_on_spec,
+            "bin_out_col": bin_on_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
             "agg": {"out_dflt": ("in_dflt", "last")},
             "post": dummy_post_dflt,
@@ -182,7 +190,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
                 "max_row_group_size": 1000,
                 "max_nirgs": 4,
                 "ordered_on": ordered_on_dflt,
-                "duplicates_on": ordered_on_spec,
+                "duplicates_on": bin_on_spec,
             },
             "binning_buffer": {},
             "post_buffer": {},
@@ -202,8 +210,12 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
     key4_last_agg_row = keys_config_res[key4].pop("last_agg_row")
     assert key4_last_agg_row.equals(pDataFrame())
     assert keys_config_ref[key4] == keys_config_res[key4]
-    assert not seed_index_restart_set
+    #
+    all_cols_in_ref = {"in_spec", ordered_on_dflt, bin_on_spec, ordered_on_alt, "in_dflt"}
+    assert set(all_cols_in_res) == all_cols_in_ref
     assert not trim_start
+    assert not seed_index_restart_set
+    assert not reduction_seed_chunk_cols_res
     assert not reduction_agg_res
 
 
@@ -217,8 +229,9 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
     # Keys 3 & 4 have only default parameters, except minimally compulsory
     # specific parameters.
     ordered_on_alt = "ts_alt"
-    ordered_on_spec = "ts_spec"
     ordered_on_dflt = "ts_dflt"
+    bin_on_spec = "bin_on_spec"
+    bin_out_spec = "bin_out_spec"
     key1 = Indexer("some_default")
     key2 = Indexer("only_specific")
     key3 = Indexer("only_default1")
@@ -246,8 +259,8 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "by": dummy_by,
             "max_row_group_size": 3000,
         },
-        key3: {"by": dummy_by},
-        key4: {"bin_on": ordered_on_spec},
+        key3: {"by": dummy_by, "bin_on": (bin_on_spec, bin_out_spec)},
+        key4: {"bin_on": bin_on_spec},
     }
     trim_start = True
     parameter_in = {
@@ -260,9 +273,14 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
         "post": None,
     }
     # Test.
-    (all_cols_in, trim_start, seed_index_restart_set, reduction_agg_res, keys_config_res) = _setup(
-        **parameter_in
-    )
+    (
+        all_cols_in_res,
+        trim_start,
+        seed_index_restart_set,
+        reduction_seed_chunk_cols_res,
+        reduction_agg_res,
+        keys_config_res,
+    ) = _setup(**parameter_in)
     # Reference results.
     keys_config_ref = {
         key1: {
@@ -271,8 +289,8 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "agg_res": None,
             "agg_res_len": None,
             "isfbn": True,
-            "cols_to_by": [ordered_on_dflt, ordered_on_alt],
-            "by": tgrouper,
+            "cols_to_by": None,
+            "by": None,
             "reduction_bin_col": None,
             "bins": tgrouper,
             "bin_out_col": ordered_on_alt,
@@ -315,16 +333,16 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "agg_res": None,
             "agg_res_len": None,
             "isfbn": True,
-            "cols_to_by": ordered_on_dflt,
+            "cols_to_by": [ordered_on_dflt, bin_on_spec],
             "by": dummy_by,
             "reduction_bin_col": None,
             "bins": None,
-            "bin_out_col": None,
+            "bin_out_col": bin_out_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
             "agg": {"out_dflt": ("in_dflt", "last")},
             "post": None,
             "max_agg_row_group_size": MAX_ROW_GROUP_SIZE,
-            "write_config": {"ordered_on": ordered_on_dflt, "duplicates_on": ordered_on_dflt},
+            "write_config": {"ordered_on": ordered_on_dflt, "duplicates_on": bin_out_spec},
             "binning_buffer": {},
             "post_buffer": {},
             "agg_chunks_buffer": [],
@@ -335,16 +353,16 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "agg_res": None,
             "agg_res_len": None,
             "isfbn": True,
-            "cols_to_by": [ordered_on_dflt, ordered_on_spec],
+            "cols_to_by": None,
             "by": None,
             "reduction_bin_col": None,
-            "bins": ordered_on_spec,
-            "bin_out_col": ordered_on_spec,
+            "bins": bin_on_spec,
+            "bin_out_col": bin_on_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
             "agg": {"out_dflt": ("in_dflt", "last")},
             "post": None,
             "max_agg_row_group_size": MAX_ROW_GROUP_SIZE,
-            "write_config": {"ordered_on": ordered_on_dflt, "duplicates_on": ordered_on_spec},
+            "write_config": {"ordered_on": ordered_on_dflt, "duplicates_on": bin_on_spec},
             "binning_buffer": {},
             "post_buffer": {},
             "agg_chunks_buffer": [],
@@ -363,8 +381,12 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
     key4_last_agg_row = keys_config_res[key4].pop("last_agg_row")
     assert key4_last_agg_row.equals(pDataFrame())
     assert keys_config_ref[key4] == keys_config_res[key4]
-    assert not seed_index_restart_set
+    #
+    all_cols_in_ref = {"in_spec", ordered_on_dflt, bin_on_spec, ordered_on_alt, "in_dflt"}
+    assert set(all_cols_in_res) == all_cols_in_ref
     assert not trim_start
+    assert not seed_index_restart_set
+    assert not reduction_seed_chunk_cols_res
     assert not reduction_agg_res
 
 
@@ -379,8 +401,9 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
     # Keys 3 & 4 have only default parameters, except minimally compulsory
     # specific parameters.
     ordered_on_alt = "ts_alt"
-    ordered_on_spec = "ts_spec"
     ordered_on_dflt = "ts_dflt"
+    bin_on_spec = "bin_on_spec"
+    bin_out_spec = "bin_out_spec"
     key1 = Indexer("some_default")
     key2 = Indexer("only_specific")
     key3 = Indexer("only_default1")
@@ -409,8 +432,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "post": None,
             "max_row_group_size": 3000,
         },
-        key3: {"by": dummy_by},
-        key4: {"bin_on": ordered_on_spec},
+        key3: {"by": dummy_by, "bin_on": (bin_on_spec, bin_out_spec)},
+        key4: {"bin_on": bin_on_spec},
     }
     trim_start = True
     parameter_in = {
@@ -425,9 +448,14 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
         "max_nirgs": 4,
     }
     # Test.
-    (all_cols_in, trim_start, seed_index_restart_set, reduction_agg_res, keys_config_res) = _setup(
-        **parameter_in
-    )
+    (
+        all_cols_in_res,
+        trim_start,
+        seed_index_restart_set,
+        reduction_seed_chunk_cols_res,
+        reduction_agg_res,
+        keys_config_res,
+    ) = _setup(**parameter_in)
     # Reference results.
     tgrouper_key1_ref = copy(tgrouper)
     tgrouper_key1_ref.key = f"{REDUCTION_BIN_COL_PREFIX}0"
@@ -438,7 +466,7 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "agg_res": None,
             "agg_res_len": None,
             "isfbn": True,
-            "cols_to_by": [ordered_on_dflt, ordered_on_alt],
+            "cols_to_by": None,
             "by": tgrouper,
             "reduction_bin_col": f"{REDUCTION_BIN_COL_PREFIX}0",
             "bins": tgrouper_key1_ref,
@@ -488,11 +516,11 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "agg_res": None,
             "agg_res_len": None,
             "isfbn": True,
-            "cols_to_by": ordered_on_dflt,
+            "cols_to_by": [ordered_on_dflt, bin_on_spec],
             "by": dummy_by,
             "reduction_bin_col": f"{REDUCTION_BIN_COL_PREFIX}2",
             "bins": f"{REDUCTION_BIN_COL_PREFIX}2",
-            "bin_out_col": None,
+            "bin_out_col": bin_out_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
             "agg": {"out_dflt": ("in_dflt__last", "last")},
             "post": dummy_post_dflt,
@@ -501,7 +529,7 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
                 "max_row_group_size": 1000,
                 "max_nirgs": 4,
                 "ordered_on": ordered_on_dflt,
-                "duplicates_on": ordered_on_dflt,
+                "duplicates_on": bin_out_spec,
             },
             "binning_buffer": {},
             "post_buffer": {},
@@ -513,11 +541,11 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "agg_res": None,
             "agg_res_len": None,
             "isfbn": True,
-            "cols_to_by": [ordered_on_dflt, ordered_on_spec],
-            "by": ordered_on_spec,
-            "reduction_bin_col": f"{REDUCTION_BIN_COL_PREFIX}3",
-            "bins": f"{REDUCTION_BIN_COL_PREFIX}3",
-            "bin_out_col": ordered_on_spec,
+            "cols_to_by": None,
+            "by": None,
+            "reduction_bin_col": bin_on_spec,
+            "bins": bin_on_spec,
+            "bin_out_col": bin_on_spec,
             "self_agg": {"out_dflt": ("out_dflt", "last")},
             "agg": {"out_dflt": ("in_dflt__last", "last")},
             "post": dummy_post_dflt,
@@ -526,7 +554,7 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
                 "max_row_group_size": 1000,
                 "max_nirgs": 4,
                 "ordered_on": ordered_on_dflt,
-                "duplicates_on": ordered_on_spec,
+                "duplicates_on": bin_on_spec,
             },
             "binning_buffer": {},
             "post_buffer": {},
@@ -537,7 +565,6 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
         "in_spec__first": ("in_spec", "first"),
         "in_dflt__last": ("in_dflt", "last"),
     }
-
     # Check.
     key1_last_agg_row = keys_config_res[key1].pop("last_agg_row")
     assert key1_last_agg_row.equals(pDataFrame())
@@ -554,16 +581,14 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
     key4_last_agg_row = keys_config_res[key4].pop("last_agg_row")
     assert key4_last_agg_row.equals(pDataFrame())
     assert keys_config_ref[key4] == keys_config_res[key4]
-    assert set(all_cols_in) == {
-        ordered_on_dflt,
-        ordered_on_spec,
-        "in_dflt",
-        "in_spec",
-        ordered_on_alt,
-    }
+    #
+    all_cols_in_ref = {"in_spec", ordered_on_dflt, bin_on_spec, ordered_on_alt, "in_dflt"}
+    assert set(all_cols_in_res) == all_cols_in_ref
     assert reduction_agg_res == reduction_agg_ref
-    assert not seed_index_restart_set
     assert not trim_start
+    assert not seed_index_restart_set
+    reduction_seed_chunk_cols_ref = {"in_dflt", "in_spec", bin_on_spec}
+    assert set(reduction_seed_chunk_cols_res) == reduction_seed_chunk_cols_ref
 
 
 def test_setup_exception_no_bin_on_nor_by(tmp_path):

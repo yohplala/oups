@@ -257,7 +257,9 @@ def _post_n_write_agg_chunks(
 
 
 def _setup_binning(
+    ordered_on: str,
     reduction: bool,
+    key_idx: int,
     by: Union[Callable, Grouper, None] = None,
     bin_on: Union[str, Tuple[str, str]] = None,
     reduction_bin_col: Union[str, None] = None,
@@ -266,9 +268,13 @@ def _setup_binning(
 
     Parameters
     ----------
+    ordered_on : str
+        Name of column according which seed dataset is ordered.
     reduction : bool
         Flag indicating if reduction step will be performed on seed chunk or
         not.
+    key_idx : int
+        Index of key.
     by : Callable, pd.Grouper or str, default None
         Defines the binning logic.
     bin_on : str, or Tuple[str, str], default None
@@ -281,69 +287,136 @@ def _setup_binning(
     -------
     by, cols_to_by, bins, bin_out_col
 
-          - ``by`` Callable, pandas Grouper, or str. It becomes a string if
-            set to ``None`` by the user and ``bin_on`` is defined. It is used
-            to define the bins either for the reduction step, or if not, the
-            bin array when is a Callable for the individual binning.
+          - ``by`` Callable, or pandas Grouper, or `None`. It is used to define
+            the bins for the reduction step, or if no reduction step, it still
+            defines a bin array when is a Callable for the individual binning.
           - ``cols_to_by`` str, column name required for ``by`` is ``by`` is a
-            Callable or pandas Grouper.
+            Callable.
+          - ``reduction_bin_col``, str. Name of column to be used for this key
+            for binning at reduction step.
           -  ``bins`` str or pandas Grouper. It is the parameter used to
-            achieve the individual binning for each key.
+            achieve the individual binning for each key, that there is a
+            reduction step or not.
           - ``bin_out_col`` str. Bin column is renamed to this value when
             writing results. If no value is defined, and ``bin_on`` itself is
-            ``None``, then the default value it takes is `index` (set by
+            ``None``, then the default value it takes is 'index' (set by
             default by pandas when resetting an index without name).
 
     """
+    # Case 1 / Bin according an existing column.
+    # 'reduction' is `False`
+    # Before setup   'by'                : None
+    #                'bin_on'            : str (existing column name)
+    #                'reduction_bin_col' : None
+    # After setup    'by'                : None
+    #                'cols_to_by'        : None
+    #                'reduction_bin_col' : None
+    #                'bins'              : str (existing column name)
+    # 'reduction' is `True`
+    # Before setup   'by'                : None
+    #                'bin_on'            : str (existing column name)
+    #                'reduction_bin_col' : 'key_xx'
+    # After setup    'by'                : None
+    #                'cols_to_by'        : None
+    #                'reduction_bin_col' : str (existing column name)
+    #                'bins'              : str (existing column name)
+    #
+    # Case 2 / 'by' is a Callable.
+    # 'reduction' is `False`
+    # Before setup   'by'                : callable
+    #                'bin_on'            : None or str (column name)
+    #                'reduction_bin_col' : None
+    # After setup    'by'                : callable
+    #                'cols_to_by'        : None or str ('bin_on')
+    #                'reduction_bin_col' : None
+    #                'bins'              : None (array-like defined on-the-fly)
+    # 'reduction' is `True`
+    # Before setup   'by'                : callable
+    #                'bin_on'            : None or str ('bin_on')
+    #                'reduction_bin_col' : 'key_xx'
+    # After setup    'by'                : callable
+    #                'cols_to_by'        : str (existing column name)
+    #                'reduction_bin_col' : 'key_xx'
+    #                'bins'              : 'key_xx'
+    #
+    # Case 3 / 'by' is a pd.Grouper.
+    # 'reduction' is `False`
+    # Before setup   'by'                : pd.Grouper
+    #                'bin_on'            : None or str (column name)
+    #                'reduction_bin_col' : None
+    # After setup    'by'                : None
+    #                'cols_to_by'        : None
+    #                'bin_on'            : str (existing column name)
+    #                'reduction_bin_col' : None
+    #                'bins'              : pd.Grouper
+    # 'reduction' is `True`
+    # Before setup   'by'                : pd.Grouper
+    #                'bin_on'            : None or str (column name)
+    #                'reduction_bin_col' : 'key_xx'
+    # After setup    'by'                : pd.Grouper
+    #                'cols_to_by'        : None
+    #                'bin_on'            : str (existing column name)
+    #                'reduction_bin_col' : 'key_xx'
+    #                'bins'              : pd.Grouper ('key' modified)
     if bin_on:
         if isinstance(bin_on, tuple):
             # 'bin_out_col' is name of column containing group keys in 'agg_res'.
             bin_on, bin_out_col = bin_on
         else:
             bin_out_col = bin_on
-        # If 'bin_on' defined, it defines the column to be loaded for binning.
-        cols_to_by = bin_on
     else:
-        cols_to_by = None
         bin_out_col = None
+    if reduction:
+        if by is None:
+            # Case bin on existing column.
+            reduction_bin_col = bin_on
+        else:
+            reduction_bin_col = f"{REDUCTION_BIN_COL_PREFIX}{key_idx}"
+    else:
+        reduction_bin_col = None
     if isinstance(by, Grouper):
         # Case pandas Grouper.
         # https://pandas.pydata.org/docs/reference/api/pandas.Grouper.html
-        by_key = by.key
-        if bin_on and by_key and bin_on != by_key:
+        cols_to_by = None
+        if bin_on and not by.key:
+            by.key = bin_on
+        elif bin_on and by.key and bin_on != by.key:
             raise ValueError(
                 "two different columns are defined for achieving binning,"
                 " both by `bin_on` and `by` parameters, pointing to"
-                f" '{bin_on}' and '{by_key}' columns respectively."
+                f" '{bin_on}' and '{by.key}' columns respectively."
             )
-        elif by_key and not bin_on:
-            bin_out_col = by_key
-        elif bin_on and not by_key:
-            by.key = bin_on
-        elif not (bin_on or by_key):
+        elif not bin_on and by.key:
+            bin_on = by.key
+            bin_out_col = bin_on
+        elif not (bin_on or by.key):
             # Nor 'by.key', nor 'bin_on' defined.
             raise ValueError(f"no column name defined to bin with provided pandas grouper '{by}'.")
-        # If 'by' a pandas Grouper, its 'key' attribute defines the column to
-        # be loaded for binning.
-        cols_to_by = by.key
+        if not bin_out_col:
+            bin_out_col = by.key
         if reduction:
-            # When 'by' is a Grouper, reduction or not reduction, 'bins' is
-            # same Grouper, except its key value.
+            # When 'by' is a Grouper, 'bins' is a modified Grouper, with a
+            # different key value.
             bins = copy(by)
             bins.key = reduction_bin_col
         else:
             bins = by
+            by = None
     elif callable(by):
         # Case Callable.
+        if bin_on:
+            cols_to_by = [ordered_on, bin_on]
+        else:
+            cols_to_by = ordered_on
         # If no reduction, 'bins' is updated on the fly within the loop
         # with bin label for each row.
         # Otherwise 'bins' is column name that will get the bin labels.
         bins = reduction_bin_col if reduction else None
     elif by is None and bin_on:
         # Case 'bin_on' is a column name, and 'by' is undefined.
+        cols_to_by = None
         if reduction:
             # 'bins' is column name that will get the bin labels.
-            by = bin_on
             bins = reduction_bin_col
         else:
             bins = bin_on
@@ -351,7 +424,7 @@ def _setup_binning(
         raise TypeError(f"not possible to have `by` of type {type(by)}.")
     else:
         raise ValueError("at least one among `by` and `bin_on` is required.")
-    return by, cols_to_by, bins, bin_out_col
+    return by, cols_to_by, bin_on, reduction_bin_col, bins, bin_out_col
 
 
 def _setup(
@@ -403,6 +476,8 @@ def _setup(
             not.
           - ``seed_index_restart_set``, set of ``seed_index_restart`` from each
             keys, if aggregation results are already available.
+          - ``reduction_seed_chunk_cols``, list of columns already in seed, to
+            be kept in 'seed_chunk' for reduction step.
           - ``reduction_agg``, dict specifying the minimal config to perform
             the reduction aggregation step, still containing all required
             aggregation functions. It is in the form:
@@ -417,11 +492,11 @@ def _setup(
                      'isfbn' : True,
                      'by' : pandas Grouper, Callable or str (column name),
                      'cols_to_by' : list or None,
-                     'bins' : pandas grouper or str (column name),
                      'reduction_bin_col' : str, col name of bins for reduction,
+                     'bins' : pandas grouper or str (column name),
+                     'bin_out_col' : str,
                      'agg' : dict,
                      'self_agg' : dict,
-                     'bin_out_col' : str,
                      'post' : Callable or None,
                      'max_agg_row_group_size' : int,
                      'agg_chunk_buffer' : agg_chunk_buffer,
@@ -436,8 +511,8 @@ def _setup(
                }``
             To be noticed:
 
-              - 'agg' is modified to use as input column generic names from
-                reduction aggregation.
+              - in case of a reduction step, 'agg' is modified to use as input
+                column generic names from reduction aggregation.
               - 'self_agg' is the aggregation step required for stitching
                 aggregations.
 
@@ -446,6 +521,7 @@ def _setup(
     seed_index_restart_set = set()
     all_cols_in = {ordered_on}
     reduction_agg = {}
+    reduction_seed_chunk_cols = set()
     # Some default values for keys.
     # 'agg_n_rows' : number of rows in aggregation result.
     # 'isfbn': is first row (from aggregation result) a new bin?
@@ -470,19 +546,22 @@ def _setup(
         # Initialize 'bins' and 'bin_out_col' from 'by' and 'bin_on'.
         bin_on = key_conf_in.pop("bin_on", None)
         by = key_conf_in.pop("by", None)
-        reduction_bin_col = f"{REDUCTION_BIN_COL_PREFIX}{i}" if reduction else None
-        (by, cols_to_by, bins, bin_out_col) = _setup_binning(
-            reduction=reduction, by=by, bin_on=bin_on, reduction_bin_col=reduction_bin_col
+        (by, cols_to_by, bin_on, reduction_bin_col, bins, bin_out_col) = _setup_binning(
+            ordered_on=ordered_on, reduction=reduction, key_idx=i, by=by, bin_on=bin_on
         )
         # 'cols_to_by' defines columns to be loaded and sent to 'by' when 'by'
-        # is a Callable of pandas Grouper. It has to be completed with
-        # 'ordered_on'.
-        if cols_to_by:
+        # is a Callable. It has to be completed with 'ordered_on'.
+        #        print(f"key: {i}")
+        #        print("cols_to_by")
+        #        print(cols_to_by)
+        #        print("bins")
+        #        print(bins)
+        if bin_on:
             # Make sure it is in the columns to be loaded in seed.
-            all_cols_in.add(cols_to_by)
-            cols_to_by = [ordered_on, cols_to_by]
-        else:
-            cols_to_by = ordered_on
+            all_cols_in.add(bin_on)
+        if by is None and reduction:
+            # Binning is achieved on 'bin_on' column directly.
+            reduction_seed_chunk_cols.add(bin_on)
         # 'agg' required right at this step.
         # Making a copy as 'agg' may possibly be a dict coming from default
         # config. Because it get modified in below code, it is necessary to
@@ -512,12 +591,15 @@ def _setup(
                 # Update 'reduction_agg', required for reduction step.
                 # 'reduction_agg' is in the form:
                 # {("input_col_name__agg_function_name") : ("input_col", "agg_function_name")}
-                generic_agg_col = f"{col_in}__{agg_func}"
-                if generic_agg_col not in reduction_agg:
-                    reduction_agg[generic_agg_col] = (col_in, agg_func)
+                reduction_agg_col = f"{col_in}__{agg_func}"
+                if reduction_agg_col not in reduction_agg:
+                    reduction_agg[reduction_agg_col] = (col_in, agg_func)
                 # Modify consequently 'agg' so that it can operate on agg results from
                 # reduction step.
-                key_agg[col_out] = (generic_agg_col, agg_func)
+                key_agg[col_out] = (reduction_agg_col, agg_func)
+                # Update list of columns to keep in seed chunk for reduction
+                # step.
+                reduction_seed_chunk_cols.add(col_in)
             # Update 'self_agg', required for stitching step.
             self_agg[col_out] = (col_out, agg_func)
         if not reduction:
@@ -594,7 +676,14 @@ def _setup(
         # No aggrgation result existing yet. Whatever 'trim_start' value, no
         # trimming is possible.
         trim_start = False
-    return (list(all_cols_in), trim_start, seed_index_restart_set, reduction_agg, keys_config)
+    return (
+        list(all_cols_in),
+        trim_start,
+        seed_index_restart_set,
+        list(reduction_seed_chunk_cols),
+        reduction_agg,
+        keys_config,
+    )
 
 
 def _iter_data(
@@ -799,10 +888,10 @@ def _post_n_bin(
             # as to ship values from iteration N to iteration N+1.
             bins = by(data=seed_chunk.loc[:, cols_to_by], buffer=binning_buffer)
     # /!\ REMOVE /!\
-    print("reduction_bins")
-    print(reduction_bins)
-    print("bins")
-    print(bins)
+    #    print("reduction_bins")
+    #    print(reduction_bins)
+    #    print("bins")
+    #    print(bins)
     # Updating key settings.
     updated_conf = {
         "agg_chunks_buffer": agg_chunks_buffer,
@@ -824,7 +913,6 @@ def _group_n_stitch(
     bins: str,
     agg: dict,
     last_agg_row: pDataFrame,
-    by: Union[Grouper, Callable, None],
     agg_chunks_buffer: List[pDataFrame],
     agg_n_rows: int,
     self_agg: dict,
@@ -858,11 +946,13 @@ def _group_n_stitch(
     # Bin and aggregate. Do not sort to keep order of groups as they
     # appear. Group keys becomes the index.
     print("_group_n_stitch")
-    print("seed_chunk")
-    print(seed_chunk)
+    #    print("seed_chunk")
+    #    print(seed_chunk)
     print("bins")
     print(bins)
     agg_res = seed_chunk.groupby(bins, sort=False).agg(**agg)
+    #    print("agg_res")
+    #    print(agg_res)
     #    if reduction:
     # Rename index as it is expected, possibly `None`.
     #        agg_res.index.name = bin_exp_col
@@ -874,7 +964,7 @@ def _group_n_stitch(
             n_added_rows = 1
             # Bin of 'last_agg_row' does not match bin of first row in
             # 'agg_res'.
-            if isinstance(by, Grouper) and by.freq:
+            if isinstance(bins, Grouper) and bins.freq:
                 # If bins are defined with pandas time grouper ('freq'
                 # attribute is not `None`), bins without values from seed
                 # that could exist at start of chunk will be missing.
@@ -883,7 +973,7 @@ def _group_n_stitch(
                 # columns. These bins are thus added here to maintain
                 # usual pandas behavior.
                 missing = date_range(
-                    start=last, end=first, freq=by.freq, inclusive="neither", name=by.key
+                    start=last, end=first, freq=bins.freq, inclusive="neither", name=bins.key
                 )
                 if not missing.empty:
                     last_agg_row = concat(
@@ -1192,7 +1282,14 @@ def streamagg(
                 "not possible to use a single key without" " specifying parameter 'agg'."
             )
         key = {key: {"agg": agg, "by": by, "bin_on": bin_on, "post": post}}
-    (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config) = _setup(
+    (
+        all_cols_in,
+        trim_start,
+        seed_index_restart_set,
+        reduction_seed_chunk_cols,
+        reduction_agg,
+        keys_config,
+    ) = _setup(
         ordered_on=ordered_on,
         store=store,
         keys=key,
@@ -1217,8 +1314,8 @@ def streamagg(
     )
     for seed_chunk in iter_data:
         print("start of loop")
-        print("seed_chunk")
-        print(seed_chunk)
+        #        print("seed_chunk")
+        #        print(seed_chunk)
         # To be parallelized "_post_n_bin".
         # For using joblib here, check (+ memap for seed_chunk binning)
         # https://stackoverflow.com/questions/61215938/joblib-parallelization-of-function-with-multiple-keyword-arguments
@@ -1232,6 +1329,7 @@ def streamagg(
         # Note that the 'loky' backend now used by default for process-based parallelism automatically
         # tries to maintain and reuse a pool of workers by it-self even for calls without the context manager.
         if reduction:
+            print("case reduction")
             # Consolidate results only, sparing 'reduction_bins'.
             reduction_bin_cols = []
             reduction_bins = []
@@ -1239,6 +1337,7 @@ def streamagg(
                 # 'bins' is generic bin column name.
                 # /!\ WiP here: 'bins' cannot be 'generic_col_name' if a pd.Grouper,
                 # so new variaible 'generic_bin_col' has to be added in dict.
+                # /!\ does not work if bin directly on a column. should test if by is None to append.
                 reduction_bin_cols.append(config["reduction_bin_col"])
                 # Pop 'reduction_bins' so that it is not serialized/copy in
                 # next parallel run.
@@ -1247,8 +1346,10 @@ def streamagg(
                     reduction_bins.append(config.pop("reduction_bins"))
                 keys_config[key].update(config)
             # Re-create a seed_chunk with new 'bins' columns.
+            # /!\ WiP /!\ in list of columns to be kepts, include list of columns to use directly as bins
+            # if by is None initially -> create this list from setup: 'reduction_bin_cols'
             seed_chunk = concat(
-                [*reduction_bins, seed_chunk[list(reduction_agg.keys())]], axis=1, copy=False
+                [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]], axis=1, copy=False
             )
             seed_chunk.rename(
                 columns={
