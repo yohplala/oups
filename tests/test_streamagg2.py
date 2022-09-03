@@ -90,6 +90,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
         all_cols_in_res,
         trim_start,
         seed_index_restart_set,
+        reduction_bin_cols_res,
         reduction_seed_chunk_cols_res,
         reduction_agg_res,
         keys_config_res,
@@ -215,6 +216,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
     assert set(all_cols_in_res) == all_cols_in_ref
     assert not trim_start
     assert not seed_index_restart_set
+    assert not reduction_bin_cols_res
     assert not reduction_seed_chunk_cols_res
     assert not reduction_agg_res
 
@@ -277,6 +279,7 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
         all_cols_in_res,
         trim_start,
         seed_index_restart_set,
+        reduction_bin_cols_res,
         reduction_seed_chunk_cols_res,
         reduction_agg_res,
         keys_config_res,
@@ -386,6 +389,7 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
     assert set(all_cols_in_res) == all_cols_in_ref
     assert not trim_start
     assert not seed_index_restart_set
+    assert not reduction_bin_cols_res
     assert not reduction_seed_chunk_cols_res
     assert not reduction_agg_res
 
@@ -452,6 +456,7 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
         all_cols_in_res,
         trim_start,
         seed_index_restart_set,
+        reduction_bin_cols_res,
         reduction_seed_chunk_cols_res,
         reduction_agg_res,
         keys_config_res,
@@ -589,6 +594,13 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
     assert not seed_index_restart_set
     reduction_seed_chunk_cols_ref = {"in_dflt", "in_spec", bin_on_spec}
     assert set(reduction_seed_chunk_cols_res) == reduction_seed_chunk_cols_ref
+    reduction_bin_cols_ref = [
+        f"{REDUCTION_BIN_COL_PREFIX}0",
+        f"{REDUCTION_BIN_COL_PREFIX}1",
+        f"{REDUCTION_BIN_COL_PREFIX}2",
+        bin_on_spec,
+    ]
+    assert reduction_bin_cols_res == reduction_bin_cols_ref
 
 
 def test_setup_exception_no_bin_on_nor_by(tmp_path):

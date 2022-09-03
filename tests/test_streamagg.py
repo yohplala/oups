@@ -36,7 +36,8 @@ class Indexer:
     dataset_ref: str
 
 
-def test_parquet_seed_time_grouper_sum_agg(tmp_path):
+@pytest.mark.parametrize("reduction", [False, True])
+def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction):
     # Test with parquet seed, time grouper and 'sum' aggregation.
     # No post.
     # Creation & 1st append, 'discard_last=True',
@@ -113,6 +114,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction,
     )
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
@@ -175,6 +177,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction,
     )
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
@@ -231,6 +234,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=False,
         max_row_group_size=max_row_group_size,
+        reduction=reduction,
     )
     # Test results (not trimming seed data).
     ref_res = seed.to_pandas().groupby(by).agg(**agg).reset_index()
