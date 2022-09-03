@@ -7,6 +7,7 @@ Created on Wed Dec  1 18:35:00 2021.
 import zipfile
 from os import path as os_path
 
+import pytest
 from pandas import DataFrame
 from pandas import Grouper
 from pandas import Timestamp
@@ -65,7 +66,10 @@ def test_files_at_depth(tmp_path):
     assert paths_files == paths_ref
 
 
-def test_tcut():
+@pytest.mark.parametrize(
+    "closed,label", [("left", "left"), ("right", "left"), ("right", "right"), ("left", "right")]
+)
+def test_tcut(closed, label):
     # Test data
     ts = [
         Timestamp("2022/03/01 09:00"),
@@ -78,34 +82,7 @@ def test_tcut():
     df = DataFrame({"a": range(len(ts)), "ts": ts})
     # Test closed=left/label=left.
     grouper = Grouper(
-        key="ts", freq="2H", sort=False, origin="start_day", closed="left", label="left"
-    )
-    agg_ref = df.groupby(grouper)["a"].agg("first")
-    ddf = df.copy()
-    ddf["ts"] = tcut(df["ts"], grouper).astype("datetime64")
-    agg_res = ddf.groupby(grouper)["a"].agg("first")
-    assert agg_ref.equals(agg_res)
-    # Test closed=right/label=left.
-    grouper = Grouper(
-        key="ts", freq="2H", sort=False, origin="start_day", closed="right", label="left"
-    )
-    agg_ref = df.groupby(grouper)["a"].agg("first")
-    ddf = df.copy()
-    ddf["ts"] = tcut(df["ts"], grouper).astype("datetime64")
-    agg_res = ddf.groupby(grouper)["a"].agg("first")
-    assert agg_ref.equals(agg_res)
-    # Test closed=right/label=right.
-    grouper = Grouper(
-        key="ts", freq="2H", sort=False, origin="start_day", closed="right", label="right"
-    )
-    agg_ref = df.groupby(grouper)["a"].agg("first")
-    ddf = df.copy()
-    ddf["ts"] = tcut(df["ts"], grouper).astype("datetime64")
-    agg_res = ddf.groupby(grouper)["a"].agg("first")
-    assert agg_ref.equals(agg_res)
-    # Test closed=left/label=right.
-    grouper = Grouper(
-        key="ts", freq="2H", sort=False, origin="start_day", closed="left", label="right"
+        key="ts", freq="2H", sort=False, origin="start_day", closed=closed, label=label
     )
     agg_ref = df.groupby(grouper)["a"].agg("first")
     ddf = df.copy()
