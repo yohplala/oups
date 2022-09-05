@@ -252,7 +252,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
 
 @pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
 def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
-    # Test with parquet seed, time grouper and 'sum' aggregation.
+    # Test with vaex seed, time grouper and 'sum' aggregation.
     # No post.
     # The 1st append, 'discard_last=True', 2nd append, 'discard_last=False'.
     #
@@ -1691,3 +1691,128 @@ def test_exception_not_key_of_streamagg_results(tmp_path):
     agg = {"sum": ("val", "sum")}
     with pytest.raises(ValueError, match="^provided key"):
         streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+
+
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
+    # Test with vaex seed, time grouper and 'sum' aggregation.
+    # No post.
+    # The 1st append, 'discard_last=True', 2nd append, 'discard_last=False'.
+    #
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
+    # RGS   TS   VAL ROW BIN LABEL | comments
+    #  1      1   1    0   1  8:00 | 2 aggregated rows from same row group.
+    #         1   2                |
+    #         2   3        2  9:00 |
+    #         2   4                |
+    #  2      3   5    4   3 10:00 | no stitching with previous.
+    #         3   6                | 1 aggregated row.
+    #  3      3   7    6           | stitching with previous (same bin).
+    #         4   8        4 11:00 | 2 aggregated rows, not incl. stitching
+    #         4   9                | with prev agg row.
+    #         5  10        5 12:00 |
+    #  4      5  11   10           | stitching with previous (same bin).
+    #         5  12                | 0 aggregated row, not incl stitching.
+    #  5      6  13   12   6 13:00 |
+    #  6      6  14   13           |
+    #         6  15                |
+    #  7      7  16   15   7 14:00 | no stitching, 1 aggregated row.
+    #         7  17                |
+    #
+    # Setup seed data.
+    max_row_group_size = 6
+    ts = [1] * 2 + [2] * 2 + [3] * 3 + [4] * 2 + [5] * 3 + [6] * 3 + [7] * 2
+    ordered_on = "ts"
+    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("seed")
+    # Setup aggregation.
+    agg_col = "sum"
+    agg = {agg_col: ("val", "sum")}
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=None,
+        bin_on=ordered_on,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+        reduction=reduction1,
+    )
+    # Check number of rows of each row groups in aggregated results.
+    pf_res = store[key].pf
+    n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
+    n_rows_ref = [6]
+    assert n_rows_res == n_rows_ref
+    # Check aggregated results: last row has been discarded with 'discard_last'
+    # `True`.
+    dti_ref = [1, 2, 3, 4, 5, 6]
+    agg_sum_ref = [3, 7, 18, 17, 33, 42]
+    ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # Check 'last_complete_index' is last-but-one timestamp (because of
+    # 'discard_last').
+    (
+        last_seed_index_res,
+        last_agg_row_res,
+        binning_buffer_res,
+        post_buffer_res,
+    ) = _get_streamagg_md(store[key])
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref
+    binning_buffer_ref = {}
+    assert binning_buffer_res == binning_buffer_ref
+    last_agg_row_ref = pDataFrame(data={agg_col: 42}, index=pIndex([ts[-3]], name=ordered_on))
+    assert last_agg_row_res.equals(last_agg_row_ref)
+    post_buffer_ref = {}
+    assert post_buffer_res == post_buffer_ref
+    # 1st append.
+    # Complete seed_df with new data and continue aggregation.
+    # 'discard_last=False'
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
+    # 1 hour binning
+    # RG    TS   VAL ROW BIN LABEL | comments
+    #         7  16        1 14:00 | one-but-last row from prev seed data
+    #         7  17                | last row from previous seed data
+    #         8   1        2 15:00 | no stitching
+    #         8   2        2 15:00 |
+    ts = [8] * 2
+    seed_pdf2 = pDataFrame({ordered_on: ts, "val": [1, 2]})
+    seed_vdf = seed_vdf.concat(from_pandas(seed_pdf2))
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=None,
+        bin_on=ordered_on,
+        discard_last=False,
+        max_row_group_size=max_row_group_size,
+        reduction=reduction2,
+    )
+    # Check aggregated results: last row has not been discarded.
+    agg_sum_ref = [3, 7, 18, 17, 33, 42, 33, 3]
+    dti_ref = [1, 2, 3, 4, 5, 6, 7, 8]
+    ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # Check 'last_seed_index' is last timestamp (because of 'discard_last').
+    (
+        last_seed_index_res,
+        _,
+        _,
+        _,
+    ) = _get_streamagg_md(store[key])
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref

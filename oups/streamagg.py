@@ -1360,9 +1360,10 @@ def streamagg(
         seed, ordered_on, trim_start, seed_index_restart, discard_last, all_cols_in
     )
     for seed_chunk in iter_data:
+        print("")
         print("start of loop")
-        #        print("seed_chunk")
-        #        print(seed_chunk)
+        print("seed_chunk")
+        print(seed_chunk)
         # To be parallelized "_post_n_bin".
         # For using joblib here, check (+ memap for seed_chunk binning)
         # https://stackoverflow.com/questions/61215938/joblib-parallelization-of-function-with-multiple-keyword-arguments
