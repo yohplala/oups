@@ -232,11 +232,16 @@ def _post_n_write_agg_chunks(
         If some metadata is defined, ``post_buffer`` also gets its way in
         metadata.
     """
+    print("_post_n_write_agg_chunks")
+    print("chunks at start of post n write")
+    print(chunks)
     # Keep last row as there might be not further iteration.
     if len(chunks) > 1:
         agg_res = concat(chunks)
     else:
         agg_res = chunks[0]
+    print("agg_res after concat")
+    print(agg_res)
     if index_name or reduction:
         # In case 'by' is a callable, index may have no name, but user may have
         # defined one with 'bin_on' parameter.
@@ -253,6 +258,8 @@ def _post_n_write_agg_chunks(
         # Set oups metadata.
         _set_streamagg_md(key, *other_metadata, post_buffer)
     # Record data.
+    print("agg_res before write")
+    print(agg_res)
     store[key] = write_config, agg_res
 
 
@@ -519,6 +526,8 @@ def _setup(
                 aggregations.
 
     """
+    print("")
+    print("_setup")
     keys_config = {}
     seed_index_restart_set = set()
     all_cols_in = {ordered_on}
@@ -542,6 +551,8 @@ def _setup(
         "bins": None,
     }
     for i, (key, key_conf_in) in enumerate(keys.items()):
+        print("key")
+        print(key)
         # Parameters in 'key_conf_in' take precedence over those in 'kwargs'.
         key_conf_in = kwargs | key_conf_in
         # Step 1 / Process parameters.
@@ -645,9 +656,14 @@ def _setup(
                 prev_agg_res
             )
             seed_index_restart_set.add(seed_index_restart)
-            if reduction:
-                # Make sure index name is set to 'generic_bin_col'.
-                last_agg_row.index.name = reduction_bin_col
+            # WiP
+            # /!\ REMOVE /!\ useless, pandas does not case about index name for concat
+        #            if reduction:
+        # Make sure index name is set to 'generic_bin_col'.
+        #                last_agg_row.index.name = reduction_bin_col
+        #            elif last_agg_row.index.name.startswith(REDUCTION_BIN_COL_PREFIX):
+        # If use of 'reduction' at previous step, and not now any more,
+        # reset name of index for being able to concat.
         else:
             last_agg_row = last_agg_row_dft
             # Because 'binning_buffer' and 'post_buffer' are modified in-place
@@ -657,6 +673,8 @@ def _setup(
         # 'agg_chunks_buffer' is a buffer to keep aggregation chunks
         # before a concatenation to record. Because it is appended in-place
         # for each key, it is created separately for each key.
+        print("bin_out_col after setup")
+        print(bin_out_col)
         keys_config[key] = key_default | {
             "by": by,
             "cols_to_by": cols_to_by,
@@ -830,6 +848,8 @@ def _post_n_bin(
     # /!\ REMOVE /!\
     print("")
     print("_post_n_bin")
+    print("agg_res beofre post n write")
+    print(agg_res)
     if agg_res is not None:
         # If previous results, check if this is write time.
         # Spare last aggregation row as a dataframe for stitching with new
@@ -878,8 +898,7 @@ def _post_n_bin(
         if isinstance(reduction_bins, Series):
             # Set "generic" names to bin arrays so that when they are
             # concatenated, a same name is not used twice.
-            out_name = reduction_bins.name
-            if out_name and not bin_out_col:
+            if not bin_out_col and (out_name := reduction_bins.name):
                 # Initialize 'bin_out_col' with name defined by 'by'.
                 # Risk of several bin columns having the same name this way.
                 # Only done in 'last resort' if 'bin_out_col' has not been
@@ -901,6 +920,9 @@ def _post_n_bin(
             # If 'binning_buffer' is used, it has to be modified in-place, so
             # as to ship values from iteration N to iteration N+1.
             bins = by(data=seed_chunk.loc[:, cols_to_by], buffer=binning_buffer)
+            if not bin_out_col and isinstance(bins, Series) and (out_name := bins.name):
+                # Initialize 'bin_out_col' with name defined by 'by'.
+                bin_out_col = out_name
     # /!\ REMOVE /!\
     #    print("reduction_bins")
     #    print(reduction_bins)
@@ -972,6 +994,8 @@ def _group_n_stitch(
     #    if reduction:
     # Rename index as it is expected, possibly `None`.
     #        agg_res.index.name = bin_exp_col
+    print("agg_res after groupby")
+    print(agg_res)
     agg_res_len = len(agg_res)
     # Stitch with last row from *prior* aggregation.
     if not last_agg_row.empty:
@@ -1013,6 +1037,8 @@ def _group_n_stitch(
             )
     # Setting 'last_agg_row' from new 'agg_res'.
     last_agg_row = agg_res.iloc[-1:] if agg_res_len > 1 else agg_res
+    print("agg_res after stitch")
+    print(agg_res)
     # Updating key settings.
     updated_conf = {
         "agg_res": agg_res,
@@ -1060,6 +1086,10 @@ def _last_post(
         Settings related to 'key' for conducting last post-processing and
         writing of results.
     """
+    print("")
+    print("_last_post")
+    print("agg_res at start of last post")
+    print(agg_res)
     # Post-process & write results from last iteration, this time keeping
     # last row, and recording metadata for a future 'streamagg' execution.
     agg_chunks_buffer.append(agg_res)

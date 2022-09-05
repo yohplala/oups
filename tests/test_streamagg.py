@@ -36,8 +36,8 @@ class Indexer:
     dataset_ref: str
 
 
-@pytest.mark.parametrize("reduction", [False, True])
-def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'sum' aggregation.
     # No post.
     # Creation & 1st append, 'discard_last=True',
@@ -114,7 +114,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
-        reduction=reduction,
+        reduction=reduction1,
     )
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
@@ -177,7 +177,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
-        reduction=reduction,
+        reduction=reduction2,
     )
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
@@ -234,7 +234,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction):
         by=by,
         discard_last=False,
         max_row_group_size=max_row_group_size,
-        reduction=reduction,
+        reduction=reduction2,
     )
     # Test results (not trimming seed data).
     ref_res = seed.to_pandas().groupby(by).agg(**agg).reset_index()
@@ -250,7 +250,8 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction):
     assert last_seed_index_res == ts[-1]
 
 
-def test_vaex_seed_time_grouper_sum_agg(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'sum' aggregation.
     # No post.
     # The 1st append, 'discard_last=True', 2nd append, 'discard_last=False'.
@@ -322,6 +323,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
@@ -385,6 +387,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=False,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Check aggregated results: last row has not been discarded.
     agg_sum_ref = [3, 7, 18, 17, 33, 42, 33, 3]
@@ -414,7 +417,8 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
     assert last_seed_index_res == last_seed_index_ref
 
 
-def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first', 'last', 'min', and
     # 'max' aggregation. No post, 'discard_last=True'.
     # 'Stress test' with appending new data twice.
@@ -453,6 +457,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Test results
     ref_res = seed_df.iloc[:-2].groupby(by).agg(**agg).reset_index()
@@ -476,6 +481,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Test results
     ref_res = pconcat([seed_df, seed_df2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -499,6 +505,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res = pconcat([seed_df, seed_df2, seed_df3]).iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -509,7 +516,8 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
     assert n_rows_res == n_rows_ref
 
 
-def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first', 'last', 'min', and
     # 'max' aggregation. No post, 'discard_last=True'. 'Stress test' with
     # appending new data twice.
@@ -548,6 +556,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Test results
     ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
@@ -568,6 +577,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res = pconcat([seed_pdf, seed_pdf2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -588,6 +598,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res = (
@@ -600,7 +611,8 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
     assert n_rows_res == n_rows_ref
 
 
-def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and assess with 'post':
     #  - assess a 'duration' with 'first' and 'last' aggregation,
     #  - assess a 'weighted mean' by using 'sum' aggregation,
@@ -718,6 +730,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
         post=post,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Check resulting dataframe.
     # Get reference results, discarding last row, because of 'discard_last'.
@@ -774,6 +787,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
         post=post,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res_agg = pconcat([seed_df, seed_df2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -782,7 +796,8 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     assert rec_res.equals(ref_res_post)
 
 
-def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # Change group keys column name with 'bin_on' set as a tuple.
@@ -843,6 +858,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
         bin_on=(bin_on, ts_open),
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Test results
     ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg)
@@ -869,6 +885,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
         trim_start=True,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res = pconcat([seed_pdf, seed_pdf2]).iloc[:-1].groupby(by).agg(**agg)
@@ -878,7 +895,8 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
     assert rec_res.equals(ref_res)
 
 
-def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
     # Test with vaex seed, binning every 4 rows with 'first', and 'max'
     # aggregation. No post, `discard_last` set `True`.
     # Additionally, shows an example of how 'by' as callable can output a
@@ -984,6 +1002,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed = seed_pdf.iloc[:-2]
@@ -1049,6 +1068,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
@@ -1070,7 +1090,8 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
-def test_vaex_seed_by_callable_with_bin_on(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     # Test with vaex seed, binning every time a '1' appear in column 'val'.
     # `discard_last` set `True`.
     # Additionally, show an example of how 'bin_on' as a tuple is used to
@@ -1172,6 +1193,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed = seed_pdf.iloc[:-2]
@@ -1221,6 +1243,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
@@ -1245,7 +1268,8 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
-def test_parquet_seed_time_grouper_trim_start(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # Test 'trim_start=False' when appending.
@@ -1273,6 +1297,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
         by=by,
         trim_start=True,
         discard_last=True,
+        reduction=reduction1,
     )
     # Test results.
     ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -1298,6 +1323,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
         by=by,
         trim_start=False,
         discard_last=True,
+        reduction=reduction2,
     )
     # Test results.
     seed_pdf_ref = pconcat([seed_pdf.iloc[:-1], seed_pdf2])
@@ -1306,7 +1332,8 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
     assert rec_res.equals(ref_res)
 
 
-def test_vaex_seed_time_grouper_trim_start(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # Test 'trim_start=False' when appending.
@@ -1332,6 +1359,7 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
         by=by,
         trim_start=True,
         discard_last=True,
+        reduction=reduction1,
     )
     # Test results.
     ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -1355,6 +1383,7 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
         by=by,
         trim_start=False,
         discard_last=True,
+        reduction=reduction2,
     )
     # Test results.
     seed_pdf_ref = pconcat([seed_pdf.iloc[:-1], seed_pdf2])
@@ -1363,7 +1392,8 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
     assert rec_res.equals(ref_res)
 
 
-def test_vaex_seed_time_grouper_agg_first(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # 1st agg ends on a full bin (no stitching required when re-starting).
@@ -1381,7 +1411,15 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation.
-    streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        reduction=reduction1,
+    )
     # Test results.
     ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index()
     rec_res = store[key].pdf
@@ -1392,14 +1430,23 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path):
     seed_pdf2 = pconcat([seed_pdf, seed_pdf2])
     seed_vdf2 = from_pandas(seed_pdf2)
     # Streamed aggregation.
-    streamagg(seed=seed_vdf2, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed_vdf2,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        reduction=reduction2,
+    )
     # Test results.
     ref_res = seed_pdf2.iloc[:-1].groupby(by).agg(**agg).reset_index()
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
 
-def test_vaex_seed_single_row(tmp_path):
+@pytest.mark.parametrize("reduction", [False, True])
+def test_vaex_seed_single_row(tmp_path, reduction):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # Single row.
     # No post, 'discard_last=True'.
@@ -1416,12 +1463,21 @@ def test_vaex_seed_single_row(tmp_path):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
-    streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        reduction=reduction,
+    )
     # Test results.
     assert key not in store
 
 
-def test_parquet_seed_single_row(tmp_path):
+@pytest.mark.parametrize("reduction", [False, True])
+def test_parquet_seed_single_row(tmp_path, reduction):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # Single row.
     # No post, 'discard_last=True'.
@@ -1440,12 +1496,15 @@ def test_parquet_seed_single_row(tmp_path):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
-    streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by, reduction=reduction
+    )
     # Test results.
     assert key not in store
 
 
-def test_parquet_seed_single_row_within_seed(tmp_path):
+@pytest.mark.parametrize("reduction", [False, True])
+def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # Single row in the middle of otherwise larger chunks.
     # No post, 'discard_last=True'.
@@ -1509,7 +1568,9 @@ def test_parquet_seed_single_row_within_seed(tmp_path):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
-    streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by, reduction=reduction
+    )
     # Test results.
     ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
     rec_res = store[key].pdf
@@ -1539,7 +1600,8 @@ def test_bin_on_exception(tmp_path):
         streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
 
 
-def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
+@pytest.mark.parametrize("reduction", [False, True])
+def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # Test 'duplicates_on=[ordered_on]' (without 'bin_on')
@@ -1581,6 +1643,7 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
         post=post,
         discard_last=True,
         duplicates_on=[],
+        reduction=reduction,
     )
     # Test results.
     ref_res = (
