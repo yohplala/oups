@@ -1577,29 +1577,6 @@ def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     assert rec_res.equals(ref_res)
 
 
-def test_bin_on_exception(tmp_path):
-    # Test error message when 'bin_on' is also a name for an output aggregation
-    # column.
-    date = "2020/01/01 "
-    ordered_on = "ts"
-    ts = DatetimeIndex([date + "08:00"])
-    bin_on = "ts2"
-    seed_pdf = pDataFrame({ordered_on: ts, bin_on: ts, "val": range(1, len(ts) + 1)})
-    seed_path = os_path.join(tmp_path, "seed")
-    fp_write(seed_path, seed_pdf, file_scheme="hive")
-    seed = ParquetFile(seed_path)
-    # Setup oups parquet collection and key.
-    store_path = os_path.join(tmp_path, "store")
-    store = ParquetSet(store_path, Indexer)
-    key = Indexer("agg_res")
-    # Setup aggregation.
-    by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
-    agg = {bin_on: ("val", "sum")}
-    # Streamed aggregation, check error message.
-    with pytest.raises(ValueError, match="^not possible to have"):
-        streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
-
-
 @pytest.mark.parametrize("reduction", [False, True])
 def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     # Test with vaex seed, time grouper and 'first' aggregation.
@@ -1651,46 +1628,6 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     )
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
-
-
-def test_exception_unknown_agg_function(tmp_path):
-    # Test error message when agg func is not within those allowed.
-    date = "2020/01/01 "
-    ts = DatetimeIndex([date + "08:00", date + "08:30"])
-    ordered_on = "ts_order"
-    val = range(1, len(ts) + 1)
-    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
-    seed_vdf = from_pandas(seed_pdf)
-    # Setup oups parquet collection and key.
-    store_path = os_path.join(tmp_path, "store")
-    store = ParquetSet(store_path, Indexer)
-    key = Indexer("agg_res")
-    # Setup aggregation.
-    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
-    agg = {"sum": ("val", "unknown")}
-    with pytest.raises(ValueError, match="^aggregation function"):
-        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
-
-
-def test_exception_not_key_of_streamagg_results(tmp_path):
-    # Test error message provided key is not that of streamagg results.
-    date = "2020/01/01 "
-    ts = DatetimeIndex([date + "08:00", date + "08:30"])
-    ordered_on = "ts_order"
-    val = range(1, len(ts) + 1)
-    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
-    seed_vdf = from_pandas(seed_pdf)
-    # Setup oups parquet collection and key.
-    store_path = os_path.join(tmp_path, "store")
-    store = ParquetSet(store_path, Indexer)
-    key = Indexer("agg_res")
-    # Store some data using 'key'.
-    store[key] = seed_vdf
-    # Setup aggregation.
-    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
-    agg = {"sum": ("val", "sum")}
-    with pytest.raises(ValueError, match="^provided key"):
-        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
 
 
 @pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
@@ -1816,3 +1753,89 @@ def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
+
+
+def test_exception_bin_on(tmp_path):
+    # Test error message when 'bin_on' is also a name for an output aggregation
+    # column.
+    date = "2020/01/01 "
+    ordered_on = "ts"
+    ts = DatetimeIndex([date + "08:00"])
+    bin_on = "ts2"
+    seed_pdf = pDataFrame({ordered_on: ts, bin_on: ts, "val": range(1, len(ts) + 1)})
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_pdf, file_scheme="hive")
+    seed = ParquetFile(seed_path)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("agg_res")
+    # Setup aggregation.
+    by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
+    agg = {bin_on: ("val", "sum")}
+    # Streamed aggregation, check error message.
+    with pytest.raises(ValueError, match="^not possible to have"):
+        streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+
+
+def test_exception_unknown_agg_function(tmp_path):
+    # Test error message when agg func is not within those allowed.
+    date = "2020/01/01 "
+    ts = DatetimeIndex([date + "08:00", date + "08:30"])
+    ordered_on = "ts_order"
+    val = range(1, len(ts) + 1)
+    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("agg_res")
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "unknown")}
+    with pytest.raises(ValueError, match="^aggregation function"):
+        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+
+
+def test_exception_not_key_of_streamagg_results(tmp_path):
+    # Test error message provided key is not that of streamagg results.
+    date = "2020/01/01 "
+    ts = DatetimeIndex([date + "08:00", date + "08:30"])
+    ordered_on = "ts_order"
+    val = range(1, len(ts) + 1)
+    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("agg_res")
+    # Store some data using 'key'.
+    store[key] = seed_vdf
+    # Setup aggregation.
+    by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {"sum": ("val", "sum")}
+    with pytest.raises(ValueError, match="^provided key"):
+        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+
+
+def test_exception_no_agg_in_keys(tmp_path):
+    # Test error message when 'key' is a single key, without 'agg' parameter.
+    date = "2020/01/01 "
+    ts = DatetimeIndex([date + "08:00", date + "08:30"])
+    ordered_on = "ts_order"
+    val = range(1, len(ts) + 1)
+    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_pdf, file_scheme="hive")
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    # Setup aggregation.
+    with pytest.raises(ValueError, match="^not possible to use a single key"):
+        streamagg(
+            seed=seed_pdf,
+            ordered_on=ordered_on,
+            key=Indexer("agg_res"),
+            store=store,
+            by=Grouper(key=ordered_on, freq="1H", closed="left", label="left"),
+        )

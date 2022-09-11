@@ -1324,9 +1324,7 @@ def streamagg(
     # Parameter setup.
     if not isinstance(key, dict):
         if not agg:
-            raise ValueError(
-                "not possible to use a single key without" " specifying parameter 'agg'."
-            )
+            raise ValueError("not possible to use a single key without specifying parameter 'agg'.")
         key = {key: {"agg": agg, "by": by, "bin_on": bin_on, "post": post}}
     (
         all_cols_in,

@@ -611,50 +611,6 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
     assert reduction_bin_cols_res == reduction_bin_cols_ref
 
 
-def test_setup_exception_no_bin_on_nor_by(tmp_path):
-    ordered_on = "ts"
-    key = Indexer("agg_res")
-    store_path = os_path.join(tmp_path, "store")
-    store = ParquetSet(store_path, Indexer)
-    keys_config = {key: {"agg": {"out_spec": ("in_spec", "first")}}}
-    parameter_in = {
-        "store": store,
-        "keys": keys_config,
-        "ordered_on": ordered_on,
-        "trim_start": True,
-        "agg": None,
-        "post": None,
-        "reduction": True,
-    }
-    # Test.
-    with pytest.raises(ValueError, match="^at least one among"):
-        (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config_res) = _setup(
-            **parameter_in
-        )
-
-
-def test_setup_exception_no_bin_on_nor_by_key_when_grouper(tmp_path):
-    ordered_on = "ts"
-    key = Indexer("agg_res")
-    store_path = os_path.join(tmp_path, "store")
-    store = ParquetSet(store_path, Indexer)
-    keys_config = {key: {"agg": {"out_spec": ("in_spec", "first")}, "by": Grouper(freq="1H")}}
-    parameter_in = {
-        "store": store,
-        "keys": keys_config,
-        "ordered_on": ordered_on,
-        "trim_start": True,
-        "agg": None,
-        "post": None,
-        "reduction": True,
-    }
-    # Test.
-    with pytest.raises(ValueError, match="^no column name defined to bin"):
-        (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config_res) = _setup(
-            **parameter_in
-        )
-
-
 @pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
 def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
     # Test with parquet seed, and 4 keys.
@@ -831,20 +787,126 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         assert rec_res.equals(ref_df)
 
 
-# Tester que 'bins' si reduction
-#  - si 'by' est callable, récupère nom générique de colonne
-#  - si 'by' est grouper, récupère nolm générique dans attribute 'by'
+def test_exception_setup_no_bin_on_nor_by(tmp_path):
+    ordered_on = "ts"
+    key = Indexer("agg_res")
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    keys_config = {key: {"agg": {"out_spec": ("in_spec", "first")}}}
+    parameter_in = {
+        "store": store,
+        "keys": keys_config,
+        "ordered_on": ordered_on,
+        "trim_start": True,
+        "agg": None,
+        "post": None,
+        "reduction": True,
+    }
+    # Test.
+    with pytest.raises(ValueError, match="^at least one among"):
+        (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config_res) = _setup(
+            **parameter_in
+        )
 
-# Test avec 2 keys (sampler) réalisés séparemment puis ensemble: vérifier que chainagg
-# réalise le changement de nom de l'index dans 'last_agg_row' pour redémarrer.
+
+def test_exception_setup_no_bin_on_nor_by_key_when_grouper(tmp_path):
+    ordered_on = "ts"
+    key = Indexer("agg_res")
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    keys_config = {key: {"agg": {"out_spec": ("in_spec", "first")}, "by": Grouper(freq="1H")}}
+    parameter_in = {
+        "store": store,
+        "keys": keys_config,
+        "ordered_on": ordered_on,
+        "trim_start": True,
+        "agg": None,
+        "post": None,
+        "reduction": True,
+    }
+    # Test.
+    with pytest.raises(ValueError, match="^no column name defined to bin"):
+        (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config_res) = _setup(
+            **parameter_in
+        )
 
 
-# Test exception when calling streamagg with agg = None & key not a dict: not possible.
-
-# Test exception when, with aggregation restart, seed_index_restart_set has
-# 2 different values (from 2 different agrgegation resultes)
-
-
-# Test maxx row_group_sizedefined in dict of a keys is forwarded in write_config
-# Test some default option vs non default options
-# Check 'reduction_agg' and modified 'agg'
+def test_exception_different_index_at_restart(tmp_path):
+    # Test exception at restart with 2 different 'seed_index_restart' for 2
+    # different keys.
+    # - key 1: time grouper '2T', agg 'first', and 'last',
+    # - key 2: time grouper '13T', agg 'first', and 'max',
+    max_row_group_size = 6
+    start = Timestamp("2020/01/01")
+    rr = np.random.default_rng(1)
+    N = 10
+    rand_ints = rr.integers(100, size=N)
+    rand_ints.sort()
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ordered_on = "ts"
+    seed_df = pDataFrame({ordered_on: ts, "val": rand_ints})
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
+    seed = ParquetFile(seed_path)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    # Streamagg with 'key1'.
+    key1 = Indexer("agg_2T")
+    key1_cf = {
+        "by": Grouper(key=ordered_on, freq="2T", closed="left", label="left"),
+        "agg": {"first": ("val", "first"), "last": ("val", "last")},
+    }
+    streamagg(
+        seed=seed,
+        ordered_on=ordered_on,
+        store=store,
+        key={key1: key1_cf},
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Extend seed.
+    start = seed_df[ordered_on].iloc[-1]
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed_df2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100})
+    fp_write(
+        seed_path, seed_df2, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+    )
+    seed = ParquetFile(seed_path)
+    # Streamagg with 'key2'.
+    key2 = Indexer("agg_13T")
+    key2_cf = {
+        "by": Grouper(key=ordered_on, freq="13T", closed="left", label="left"),
+        "agg": {"first": ("val", "first"), "max": ("val", "max")},
+    }
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed,
+        ordered_on=ordered_on,
+        store=store,
+        key={key2: key2_cf},
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+    )
+    # Extend seed again.
+    start = seed_df2[ordered_on].iloc[-1]
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed_df3 = pDataFrame({ordered_on: ts, "val": rand_ints + 400})
+    fp_write(
+        seed_path, seed_df3, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+    )
+    seed = ParquetFile(seed_path)
+    # Streamagg with 'key1' and 'key2'.
+    key_configs = {key1: key1_cf, key2: key2_cf}
+    # Test.
+    with pytest.raises(
+        ValueError, match="^not possible to aggregate on multiple keys with existing"
+    ):
+        streamagg(
+            seed=seed,
+            ordered_on=ordered_on,
+            store=store,
+            key=key_configs,
+            discard_last=True,
+            max_row_group_size=max_row_group_size,
+        )
