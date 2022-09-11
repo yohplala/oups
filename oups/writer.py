@@ -553,7 +553,9 @@ def write(
     # Manage metadata, whatever the case, initiating new dataset or updating
     # existing one.
     if OUPS_METADATA:
-        if md_key and OUPS_METADATA[md_key] or md_key is None:
+        # If 'md_key' is 'None', then metadata are directly data to be stored
+        # for provided key.
+        if md_key and md_key in OUPS_METADATA and OUPS_METADATA[md_key] or md_key is None:
             metadata = _update_metadata(metadata, pf.key_value_metadata, md_key)
     if metadata:
         update_custom_metadata(pf, metadata)

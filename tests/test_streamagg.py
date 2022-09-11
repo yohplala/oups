@@ -99,7 +99,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg_col = "sum"
@@ -308,7 +308,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg_col = "sum"
@@ -438,7 +438,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="5T", closed="left", label="left")
     agg = {
@@ -537,7 +537,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, red
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="5T", closed="left", label="left")
     agg = {
@@ -677,7 +677,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {
@@ -827,7 +827,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
     agg = {ordered_on: (ordered_on, "last"), "sum": ("val", "sum")}
@@ -958,10 +958,10 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
 
     # Setup binning.
-    def by(data: Series, buffer: dict):
+    def by_4rows(data: Series, buffer: dict):
         """Bin by group of 4 rows. Label for bins are values from `ordered_on`."""
         # A pandas Series is returned, with name being that of the 'ordered_on'
         # column. Because of pandas magic, this column will then be in aggregation
@@ -999,14 +999,14 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         agg=agg,
         store=store,
         key=key,
-        by=by,
+        by=by_4rows,
         discard_last=True,
         max_row_group_size=max_row_group_size,
         reduction=reduction1,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed = seed_pdf.iloc[:-2]
-    bins = by(trimmed_seed[ordered_on], {})
+    bins = by_4rows(trimmed_seed[ordered_on], {})
     ref_res_agg = seed_pdf.iloc[:-2].groupby(bins).agg(**agg).reset_index()
     # Test results
     rec_res = store[key].pdf
@@ -1065,14 +1065,14 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         agg=agg,
         store=store,
         key=key,
-        by=by,
+        by=by_4rows,
         discard_last=True,
         max_row_group_size=max_row_group_size,
         reduction=reduction2,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
-    bins = by(trimmed_seed2[ordered_on], {})
+    bins = by_4rows(trimmed_seed2[ordered_on], {})
     ref_res_agg2 = seed_pdf2.iloc[:-1].groupby(bins).agg(**agg).reset_index()
     # Test results
     rec_res2 = store[key].pdf
@@ -1156,10 +1156,10 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
 
     # Setup binning.
-    def by(data: pDataFrame, buffer: dict):
+    def by_1val(data: pDataFrame, buffer: dict):
         """Start a new bin each time a 1 is spot."""
         # A pandas Series is returned.
         # Its name does not matter as 'bin_on' in streamagg is a tuple which
@@ -1189,7 +1189,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
         agg=agg,
         store=store,
         key=key,
-        by=by,
+        by=by_1val,
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -1197,7 +1197,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed = seed_pdf.iloc[:-2]
-    bins = by(trimmed_seed[[ordered_on, bin_on]], {})
+    bins = by_1val(trimmed_seed[[ordered_on, bin_on]], {})
     ref_res_agg = seed_pdf.iloc[:-2].groupby(bins).agg(**agg)
     ref_res_agg.index.name = bin_out_col
     ref_res_agg.reset_index(inplace=True)
@@ -1239,7 +1239,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
         agg=agg,
         store=store,
         key=key,
-        by=by,
+        by=by_1val,
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -1247,7 +1247,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
-    bins = by(trimmed_seed2[[ordered_on, bin_on]], {})
+    bins = by_1val(trimmed_seed2[[ordered_on, bin_on]], {})
     ref_res_agg2 = seed_pdf2.iloc[:-1].groupby(bins).agg(**agg)
     ref_res_agg2.index.name = bin_out_col
     ref_res_agg2.reset_index(inplace=True)
@@ -1283,7 +1283,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1345,7 +1345,7 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1406,7 +1406,7 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1458,7 +1458,7 @@ def test_vaex_seed_single_row(tmp_path, reduction):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1491,7 +1491,7 @@ def test_parquet_seed_single_row(tmp_path, reduction):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1563,7 +1563,7 @@ def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1591,7 +1591,7 @@ def test_bin_on_exception(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
     agg = {bin_on: ("val", "sum")}
@@ -1617,7 +1617,7 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1664,7 +1664,7 @@ def test_exception_unknown_agg_function(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "unknown")}
@@ -1683,7 +1683,7 @@ def test_exception_not_key_of_streamagg_results(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Store some data using 'key'.
     store[key] = seed_vdf
     # Setup aggregation.
@@ -1729,7 +1729,7 @@ def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     agg_col = "sum"
     agg = {agg_col: ("val", "sum")}

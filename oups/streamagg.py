@@ -1414,6 +1414,8 @@ def streamagg(
             print("seed_chunk after concat and rename")
             print(seed_chunk)
             print("")
+            print("reduction_agg")
+            print(reduction_agg)
             seed_chunk = seed_chunk.groupby(reduction_bin_cols, sort=False).agg(**reduction_agg)
             seed_chunk.reset_index(inplace=True)
             print("seed_chunk after groupby")
