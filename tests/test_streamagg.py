@@ -36,7 +36,8 @@ class Indexer:
     dataset_ref: str
 
 
-def test_parquet_seed_time_grouper_sum_agg(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'sum' aggregation.
     # No post.
     # Creation & 1st append, 'discard_last=True',
@@ -98,7 +99,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg_col = "sum"
@@ -113,6 +114,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
@@ -139,8 +141,8 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Check 'last_seed_index' is last timestamp.
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -175,6 +177,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
@@ -202,8 +205,8 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     # Check 'last_seed_index' is last timestamp.
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -231,6 +234,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=False,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results (not trimming seed data).
     ref_res = seed.to_pandas().groupby(by).agg(**agg).reset_index()
@@ -246,8 +250,9 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path):
     assert last_seed_index_res == ts[-1]
 
 
-def test_vaex_seed_time_grouper_sum_agg(tmp_path):
-    # Test with parquet seed, time grouper and 'sum' aggregation.
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
+    # Test with vaex seed, time grouper and 'sum' aggregation.
     # No post.
     # The 1st append, 'discard_last=True', 2nd append, 'discard_last=False'.
     #
@@ -303,7 +308,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg_col = "sum"
@@ -318,6 +323,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
@@ -345,8 +351,8 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
     # 'discard_last').
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -381,6 +387,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
         by=by,
         discard_last=False,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Check aggregated results: last row has not been discarded.
     agg_sum_ref = [3, 7, 18, 17, 33, 42, 33, 3]
@@ -410,7 +417,8 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path):
     assert last_seed_index_res == last_seed_index_ref
 
 
-def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first', 'last', 'min', and
     # 'max' aggregation. No post, 'discard_last=True'.
     # 'Stress test' with appending new data twice.
@@ -430,7 +438,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="5T", closed="left", label="left")
     agg = {
@@ -449,6 +457,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Test results
     ref_res = seed_df.iloc[:-2].groupby(by).agg(**agg).reset_index()
@@ -472,6 +481,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Test results
     ref_res = pconcat([seed_df, seed_df2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -495,6 +505,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res = pconcat([seed_df, seed_df2, seed_df3]).iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -505,7 +516,8 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path):
     assert n_rows_res == n_rows_ref
 
 
-def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first', 'last', 'min', and
     # 'max' aggregation. No post, 'discard_last=True'. 'Stress test' with
     # appending new data twice.
@@ -525,7 +537,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="5T", closed="left", label="left")
     agg = {
@@ -544,6 +556,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Test results
     ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
@@ -564,6 +577,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res = pconcat([seed_pdf, seed_pdf2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -584,6 +598,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res = (
@@ -596,7 +611,8 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path):
     assert n_rows_res == n_rows_ref
 
 
-def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and assess with 'post':
     #  - assess a 'duration' with 'first' and 'last' aggregation,
     #  - assess a 'weighted mean' by using 'sum' aggregation,
@@ -661,7 +677,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {
@@ -714,6 +730,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
         post=post,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Check resulting dataframe.
     # Get reference results, discarding last row, because of 'discard_last'.
@@ -729,8 +746,8 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     # Check metadata.
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -770,6 +787,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
         post=post,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res_agg = pconcat([seed_df, seed_df2]).iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -778,7 +796,8 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     assert rec_res.equals(ref_res_post)
 
 
-def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # Change group keys column name with 'bin_on' set as a tuple.
@@ -808,7 +827,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
     agg = {ordered_on: (ordered_on, "last"), "sum": ("val", "sum")}
@@ -839,6 +858,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
         bin_on=(bin_on, ts_open),
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Test results
     ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg)
@@ -865,6 +885,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
         trim_start=True,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Test results
     ref_res = pconcat([seed_pdf, seed_pdf2]).iloc[:-1].groupby(by).agg(**agg)
@@ -874,7 +895,8 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
     assert rec_res.equals(ref_res)
 
 
-def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
     # Test with vaex seed, binning every 4 rows with 'first', and 'max'
     # aggregation. No post, `discard_last` set `True`.
     # Additionally, shows an example of how 'by' as callable can output a
@@ -936,18 +958,18 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
 
     # Setup binning.
-    def by(data: pDataFrame, buffer: dict):
+    def by_4rows(data: Series, buffer: dict):
         """Bin by group of 4 rows. Label for bins are values from `ordered_on`."""
         # A pandas Series is returned, with name being that of the 'ordered_on'
         # column. Because of pandas magic, this column will then be in aggregation
         # results, and oups will be able to use it for writing data.
         # With actual setting, without this trick, 'streamagg' could not write
-        # the results (no 'ordered_on' columnin results).
-        ordered_on = data.columns[0]
-        group_keys = data.copy()
+        # the results (no 'ordered_on' column in results).
+        ordered_on = data.name
+        group_keys = pDataFrame(data)
         # Setup 1st key of groups from previous binning.
         row_offset = 4 - buffer["row_offset"] if "row_offset" in buffer else 0
         group_keys["tmp"] = data.iloc[row_offset::4]
@@ -977,13 +999,14 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
         agg=agg,
         store=store,
         key=key,
-        by=by,
+        by=by_4rows,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed = seed_pdf.iloc[:-2]
-    bins = by(trimmed_seed[[ordered_on]], {})
+    bins = by_4rows(trimmed_seed[ordered_on], {})
     ref_res_agg = seed_pdf.iloc[:-2].groupby(bins).agg(**agg).reset_index()
     # Test results
     rec_res = store[key].pdf
@@ -991,8 +1014,8 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     # Check metadata.
     (
         last_seed_index_res,
-        binning_buffer_res,
         last_agg_row_res,
+        binning_buffer_res,
         post_buffer_res,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
@@ -1042,13 +1065,14 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
         agg=agg,
         store=store,
         key=key,
-        by=by,
+        by=by_4rows,
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
-    bins = by(trimmed_seed2[[ordered_on]], {})
+    bins = by_4rows(trimmed_seed2[ordered_on], {})
     ref_res_agg2 = seed_pdf2.iloc[:-1].groupby(bins).agg(**agg).reset_index()
     # Test results
     rec_res2 = store[key].pdf
@@ -1056,8 +1080,8 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     # Check binning buffer stored in metadata.
     (
         last_seed_index_res2,
-        binning_buffer_res2,
         _,
+        binning_buffer_res2,
         _,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref2 = ts2[-1]
@@ -1066,7 +1090,8 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path):
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
-def test_vaex_seed_by_callable_with_bin_on(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     # Test with vaex seed, binning every time a '1' appear in column 'val'.
     # `discard_last` set `True`.
     # Additionally, show an example of how 'bin_on' as a tuple is used to
@@ -1131,10 +1156,10 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
 
     # Setup binning.
-    def by(data: pDataFrame, buffer: dict):
+    def by_1val(data: pDataFrame, buffer: dict):
         """Start a new bin each time a 1 is spot."""
         # A pandas Series is returned.
         # Its name does not matter as 'bin_on' in streamagg is a tuple which
@@ -1164,14 +1189,15 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
         agg=agg,
         store=store,
         key=key,
-        by=by,
+        by=by_1val,
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction1,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed = seed_pdf.iloc[:-2]
-    bins = by(trimmed_seed[[ordered_on, bin_on]], {})
+    bins = by_1val(trimmed_seed[[ordered_on, bin_on]], {})
     ref_res_agg = seed_pdf.iloc[:-2].groupby(bins).agg(**agg)
     ref_res_agg.index.name = bin_out_col
     ref_res_agg.reset_index(inplace=True)
@@ -1213,14 +1239,15 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
         agg=agg,
         store=store,
         key=key,
-        by=by,
+        by=by_1val,
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
         max_row_group_size=max_row_group_size,
+        reduction=reduction2,
     )
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
-    bins = by(trimmed_seed2[[ordered_on, bin_on]], {})
+    bins = by_1val(trimmed_seed2[[ordered_on, bin_on]], {})
     ref_res_agg2 = seed_pdf2.iloc[:-1].groupby(bins).agg(**agg)
     ref_res_agg2.index.name = bin_out_col
     ref_res_agg2.reset_index(inplace=True)
@@ -1231,8 +1258,8 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     # Check binning buffer stored in metadata.
     (
         last_seed_index_res2,
-        binning_buffer_res2,
         _,
+        binning_buffer_res2,
         _,
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref2 = ts2[-1]
@@ -1241,7 +1268,8 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
-def test_parquet_seed_time_grouper_trim_start(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # Test 'trim_start=False' when appending.
@@ -1255,7 +1283,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1269,6 +1297,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
         by=by,
         trim_start=True,
         discard_last=True,
+        reduction=reduction1,
     )
     # Test results.
     ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -1294,6 +1323,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
         by=by,
         trim_start=False,
         discard_last=True,
+        reduction=reduction2,
     )
     # Test results.
     seed_pdf_ref = pconcat([seed_pdf.iloc[:-1], seed_pdf2])
@@ -1302,7 +1332,8 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path):
     assert rec_res.equals(ref_res)
 
 
-def test_vaex_seed_time_grouper_trim_start(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # Test 'trim_start=False' when appending.
@@ -1314,7 +1345,7 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1328,6 +1359,7 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
         by=by,
         trim_start=True,
         discard_last=True,
+        reduction=reduction1,
     )
     # Test results.
     ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index()
@@ -1351,6 +1383,7 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
         by=by,
         trim_start=False,
         discard_last=True,
+        reduction=reduction2,
     )
     # Test results.
     seed_pdf_ref = pconcat([seed_pdf.iloc[:-1], seed_pdf2])
@@ -1359,7 +1392,8 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path):
     assert rec_res.equals(ref_res)
 
 
-def test_vaex_seed_time_grouper_agg_first(tmp_path):
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # 1st agg ends on a full bin (no stitching required when re-starting).
@@ -1372,12 +1406,20 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation.
-    streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        reduction=reduction1,
+    )
     # Test results.
     ref_res = seed_pdf.iloc[:-1].groupby(by).agg(**agg).reset_index()
     rec_res = store[key].pdf
@@ -1388,14 +1430,23 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path):
     seed_pdf2 = pconcat([seed_pdf, seed_pdf2])
     seed_vdf2 = from_pandas(seed_pdf2)
     # Streamed aggregation.
-    streamagg(seed=seed_vdf2, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed_vdf2,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        reduction=reduction2,
+    )
     # Test results.
     ref_res = seed_pdf2.iloc[:-1].groupby(by).agg(**agg).reset_index()
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
 
-def test_vaex_seed_single_row(tmp_path):
+@pytest.mark.parametrize("reduction", [False, True])
+def test_vaex_seed_single_row(tmp_path, reduction):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # Single row.
     # No post, 'discard_last=True'.
@@ -1407,17 +1458,26 @@ def test_vaex_seed_single_row(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
-    streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=by,
+        reduction=reduction,
+    )
     # Test results.
     assert key not in store
 
 
-def test_parquet_seed_single_row(tmp_path):
+@pytest.mark.parametrize("reduction", [False, True])
+def test_parquet_seed_single_row(tmp_path, reduction):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # Single row.
     # No post, 'discard_last=True'.
@@ -1431,17 +1491,20 @@ def test_parquet_seed_single_row(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
-    streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by, reduction=reduction
+    )
     # Test results.
     assert key not in store
 
 
-def test_parquet_seed_single_row_within_seed(tmp_path):
+@pytest.mark.parametrize("reduction", [False, True])
+def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # Single row in the middle of otherwise larger chunks.
     # No post, 'discard_last=True'.
@@ -1500,42 +1563,22 @@ def test_parquet_seed_single_row_within_seed(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
-    streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+    streamagg(
+        seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by, reduction=reduction
+    )
     # Test results.
     ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
 
-def test_bin_on_exception(tmp_path):
-    # Test error message when 'bin_on' is also a name for an output aggregation
-    # column.
-    date = "2020/01/01 "
-    ordered_on = "ts"
-    ts = DatetimeIndex([date + "08:00"])
-    bin_on = "ts2"
-    seed_pdf = pDataFrame({ordered_on: ts, bin_on: ts, "val": range(1, len(ts) + 1)})
-    seed_path = os_path.join(tmp_path, "seed")
-    fp_write(seed_path, seed_pdf, file_scheme="hive")
-    seed = ParquetFile(seed_path)
-    # Setup oups parquet collection and key.
-    store_path = os_path.join(tmp_path, "store")
-    store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
-    # Setup aggregation.
-    by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
-    agg = {bin_on: ("val", "sum")}
-    # Streamed aggregation, check error message.
-    with pytest.raises(ValueError, match="^not possible to have"):
-        streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
-
-
-def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
+@pytest.mark.parametrize("reduction", [False, True])
+def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # Test 'duplicates_on=[ordered_on]' (without 'bin_on')
@@ -1551,7 +1594,7 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
@@ -1577,6 +1620,7 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
         post=post,
         discard_last=True,
         duplicates_on=[],
+        reduction=reduction,
     )
     # Test results.
     ref_res = (
@@ -1584,6 +1628,154 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
     )
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
+
+
+@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
+    # Test with vaex seed, time grouper and 'sum' aggregation.
+    # No post.
+    # The 1st append, 'discard_last=True', 2nd append, 'discard_last=False'.
+    #
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
+    # RGS   TS   VAL ROW BIN LABEL | comments
+    #  1      1   1    0   1  8:00 | 2 aggregated rows from same row group.
+    #         1   2                |
+    #         2   3        2  9:00 |
+    #         2   4                |
+    #  2      3   5    4   3 10:00 | no stitching with previous.
+    #         3   6                | 1 aggregated row.
+    #  3      3   7    6           | stitching with previous (same bin).
+    #         4   8        4 11:00 | 2 aggregated rows, not incl. stitching
+    #         4   9                | with prev agg row.
+    #         5  10        5 12:00 |
+    #  4      5  11   10           | stitching with previous (same bin).
+    #         5  12                | 0 aggregated row, not incl stitching.
+    #  5      6  13   12   6 13:00 |
+    #  6      6  14   13           |
+    #         6  15                |
+    #  7      7  16   15   7 14:00 | no stitching, 1 aggregated row.
+    #         7  17                |
+    #
+    # Setup seed data.
+    max_row_group_size = 6
+    ts = [1] * 2 + [2] * 2 + [3] * 3 + [4] * 2 + [5] * 3 + [6] * 3 + [7] * 2
+    ordered_on = "ts"
+    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_vdf = from_pandas(seed_pdf)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("agg_res")
+    # Setup aggregation.
+    agg_col = "sum"
+    agg = {agg_col: ("val", "sum")}
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=None,
+        bin_on=ordered_on,
+        discard_last=True,
+        max_row_group_size=max_row_group_size,
+        reduction=reduction1,
+    )
+    # Check number of rows of each row groups in aggregated results.
+    pf_res = store[key].pf
+    n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
+    n_rows_ref = [6]
+    assert n_rows_res == n_rows_ref
+    # Check aggregated results: last row has been discarded with 'discard_last'
+    # `True`.
+    dti_ref = [1, 2, 3, 4, 5, 6]
+    agg_sum_ref = [3, 7, 18, 17, 33, 42]
+    ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # Check 'last_complete_index' is last-but-one timestamp (because of
+    # 'discard_last').
+    (
+        last_seed_index_res,
+        last_agg_row_res,
+        binning_buffer_res,
+        post_buffer_res,
+    ) = _get_streamagg_md(store[key])
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref
+    binning_buffer_ref = {}
+    assert binning_buffer_res == binning_buffer_ref
+    last_agg_row_ref = pDataFrame(data={agg_col: 42}, index=pIndex([ts[-3]], name=ordered_on))
+    assert last_agg_row_res.equals(last_agg_row_ref)
+    post_buffer_ref = {}
+    assert post_buffer_res == post_buffer_ref
+    # 1st append.
+    # Complete seed_df with new data and continue aggregation.
+    # 'discard_last=False'
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
+    # 1 hour binning
+    # RG    TS   VAL ROW BIN LABEL | comments
+    #         7  16        1 14:00 | one-but-last row from prev seed data
+    #         7  17                | last row from previous seed data
+    #         8   1        2 15:00 | no stitching
+    #         8   2        2 15:00 |
+    ts = [8] * 2
+    seed_pdf2 = pDataFrame({ordered_on: ts, "val": [1, 2]})
+    seed_vdf = seed_vdf.concat(from_pandas(seed_pdf2))
+    # Setup streamed aggregation.
+    streamagg(
+        seed=seed_vdf,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        key=key,
+        by=None,
+        bin_on=ordered_on,
+        discard_last=False,
+        max_row_group_size=max_row_group_size,
+        reduction=reduction2,
+    )
+    # Check aggregated results: last row has not been discarded.
+    agg_sum_ref = [3, 7, 18, 17, 33, 42, 33, 3]
+    dti_ref = [1, 2, 3, 4, 5, 6, 7, 8]
+    ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # Check 'last_seed_index' is last timestamp (because of 'discard_last').
+    (
+        last_seed_index_res,
+        _,
+        _,
+        _,
+    ) = _get_streamagg_md(store[key])
+    last_seed_index_ref = ts[-1]
+    assert last_seed_index_res == last_seed_index_ref
+
+
+def test_exception_bin_on(tmp_path):
+    # Test error message when 'bin_on' is also a name for an output aggregation
+    # column.
+    date = "2020/01/01 "
+    ordered_on = "ts"
+    ts = DatetimeIndex([date + "08:00"])
+    bin_on = "ts2"
+    seed_pdf = pDataFrame({ordered_on: ts, bin_on: ts, "val": range(1, len(ts) + 1)})
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_pdf, file_scheme="hive")
+    seed = ParquetFile(seed_path)
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    key = Indexer("agg_res")
+    # Setup aggregation.
+    by = Grouper(key=bin_on, freq="1H", closed="left", label="left")
+    agg = {bin_on: ("val", "sum")}
+    # Streamed aggregation, check error message.
+    with pytest.raises(ValueError, match="^not possible to have"):
+        streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
 
 
 def test_exception_unknown_agg_function(tmp_path):
@@ -1597,7 +1789,7 @@ def test_exception_unknown_agg_function(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Setup aggregation.
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "unknown")}
@@ -1616,7 +1808,7 @@ def test_exception_not_key_of_streamagg_results(tmp_path):
     # Setup oups parquet collection and key.
     store_path = os_path.join(tmp_path, "store")
     store = ParquetSet(store_path, Indexer)
-    key = Indexer("seed")
+    key = Indexer("agg_res")
     # Store some data using 'key'.
     store[key] = seed_vdf
     # Setup aggregation.
@@ -1624,3 +1816,26 @@ def test_exception_not_key_of_streamagg_results(tmp_path):
     agg = {"sum": ("val", "sum")}
     with pytest.raises(ValueError, match="^provided key"):
         streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+
+
+def test_exception_no_agg_in_keys(tmp_path):
+    # Test error message when 'key' is a single key, without 'agg' parameter.
+    date = "2020/01/01 "
+    ts = DatetimeIndex([date + "08:00", date + "08:30"])
+    ordered_on = "ts_order"
+    val = range(1, len(ts) + 1)
+    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_path = os_path.join(tmp_path, "seed")
+    fp_write(seed_path, seed_pdf, file_scheme="hive")
+    # Setup oups parquet collection and key.
+    store_path = os_path.join(tmp_path, "store")
+    store = ParquetSet(store_path, Indexer)
+    # Setup aggregation.
+    with pytest.raises(ValueError, match="^not possible to use a single key"):
+        streamagg(
+            seed=seed_pdf,
+            ordered_on=ordered_on,
+            key=Indexer("agg_res"),
+            store=store,
+            by=Grouper(key=ordered_on, freq="1H", closed="left", label="left"),
+        )

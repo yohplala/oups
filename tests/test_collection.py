@@ -20,6 +20,9 @@ from oups import toplevel
 from . import TEST_DATA
 
 
+# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+
+
 @sublevel
 class SpaceTime:
     area: str

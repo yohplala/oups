@@ -169,10 +169,10 @@ class ParquetSet:
         """
         if not isinstance(key, self._indexer):
             raise TypeError(f"{key} is not an instance of {self._indexer.__name__}.")
-        if not isinstance(data, pDataFrame) and not isinstance(data, vDataFrame):
+        if not isinstance(data, (pDataFrame, vDataFrame)):
             raise TypeError("data should be a pandas or vaex dataframe.")
         dirpath = os_path.join(self._basepath, key.to_path)
-        write(dirpath=dirpath, data=data, **kwargs)
+        write(dirpath=dirpath, data=data, md_key=key, **kwargs)
         # If no trouble from writing, add key.
         self._keys.add(key)
         return
