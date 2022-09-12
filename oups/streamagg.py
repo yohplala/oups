@@ -232,16 +232,11 @@ def _post_n_write_agg_chunks(
         If some metadata is defined, ``post_buffer`` also gets its way in
         metadata.
     """
-    print("_post_n_write_agg_chunks")
-    print("chunks at start of post n write")
-    print(chunks)
     # Keep last row as there might be not further iteration.
     if len(chunks) > 1:
         agg_res = concat(chunks)
     else:
         agg_res = chunks[0]
-    print("agg_res after concat")
-    print(agg_res)
     if index_name or reduction:
         # In case 'by' is a callable, index may have no name, but user may have
         # defined one with 'bin_on' parameter.
@@ -258,8 +253,6 @@ def _post_n_write_agg_chunks(
         # Set oups metadata.
         _set_streamagg_md(key, *other_metadata, post_buffer)
     # Record data.
-    print("agg_res before write")
-    print(agg_res)
     store[key] = write_config, agg_res
 
 
@@ -526,8 +519,6 @@ def _setup(
                 aggregations.
 
     """
-    print("")
-    print("_setup")
     keys_config = {}
     seed_index_restart_set = set()
     all_cols_in = {ordered_on}
@@ -551,8 +542,6 @@ def _setup(
         "bins": None,
     }
     for i, (key, key_conf_in) in enumerate(keys.items()):
-        print("key")
-        print(key)
         # Parameters in 'key_conf_in' take precedence over those in 'kwargs'.
         key_conf_in = kwargs | key_conf_in
         # Step 1 / Process parameters.
@@ -656,14 +645,11 @@ def _setup(
                 prev_agg_res
             )
             seed_index_restart_set.add(seed_index_restart)
-            # WiP
-            # /!\ REMOVE /!\ useless, pandas does not case about index name for concat
-        #            if reduction:
-        # Make sure index name is set to 'generic_bin_col'.
-        #                last_agg_row.index.name = reduction_bin_col
-        #            elif last_agg_row.index.name.startswith(REDUCTION_BIN_COL_PREFIX):
-        # If use of 'reduction' at previous step, and not now any more,
-        # reset name of index for being able to concat.
+            # Comment: pandas does not care about index name for concat. If
+            # - prior agg results are obtained with 'reduction', hence index
+            #   name of 'last_agg_row' has been modified,
+            # - and that now, 'reduction' is not used,
+            # it is not necessary to modify index name of 'last_agg_row'.
         else:
             last_agg_row = last_agg_row_dft
             # Because 'binning_buffer' and 'post_buffer' are modified in-place
@@ -673,8 +659,6 @@ def _setup(
         # 'agg_chunks_buffer' is a buffer to keep aggregation chunks
         # before a concatenation to record. Because it is appended in-place
         # for each key, it is created separately for each key.
-        print("bin_out_col after setup")
-        print(bin_out_col)
         keys_config[key] = key_default | {
             "by": by,
             "cols_to_by": cols_to_by,
@@ -816,7 +800,6 @@ def _post_n_bin(
     cols_to_by: List[str],
     binning_buffer: dict,
     reduction_bin_col: str,
-    **kwargs,
 ):
     """Conduct post-processing, and writing for iter. n-1, and binning for iter. n.
 
@@ -845,11 +828,6 @@ def _post_n_bin(
         - ``updated_config``, dict with modified parameters.
 
     """
-    # /!\ REMOVE /!\
-    print("")
-    print("_post_n_bin")
-    print("agg_res beofre post n write")
-    print(agg_res)
     if agg_res is not None:
         # If previous results, check if this is write time.
         # Spare last aggregation row as a dataframe for stitching with new
@@ -893,8 +871,6 @@ def _post_n_bin(
             # Bin directly on existing column. Name is available with 'bins'.
             # Column will be used directly column from seed_chunk.
             reduction_bins = None
-        print("bin_out_col before reduction_bins renamed")
-        print(bin_out_col)
         if isinstance(reduction_bins, Series):
             # Set "generic" names to bin arrays so that when they are
             # concatenated, a same name is not used twice.
@@ -910,8 +886,6 @@ def _post_n_bin(
             # Then 'reduction_bins' is a collection of some sort.
             # Let's make it a pandas Series and provide it a name.
             reduction_bins = Series(reduction_bins, name=reduction_bin_col)
-        print("bin_out_col after reduction_bins renamed")
-        print(bin_out_col)
     else:
         # No reduction step.
         reduction_bins = None
@@ -923,11 +897,6 @@ def _post_n_bin(
             if not bin_out_col and isinstance(bins, Series) and (out_name := bins.name):
                 # Initialize 'bin_out_col' with name defined by 'by'.
                 bin_out_col = out_name
-    # /!\ REMOVE /!\
-    #    print("reduction_bins")
-    #    print(reduction_bins)
-    #    print("bins")
-    #    print(bins)
     # Updating key settings.
     updated_conf = {
         "agg_chunks_buffer": agg_chunks_buffer,
@@ -953,7 +922,6 @@ def _group_n_stitch(
     agg_n_rows: int,
     self_agg: dict,
     isfbn: bool,
-    **kwargs,
 ):
     """Conduct groupby, and stitching of previous groupby with current one.
 
@@ -981,21 +949,7 @@ def _group_n_stitch(
     """
     # Bin and aggregate. Do not sort to keep order of groups as they
     # appear. Group keys becomes the index.
-    print("_group_n_stitch")
-    #    print("seed_chunk")
-    #    print(seed_chunk)
-    print("key")
-    print(key)
-    print("bins")
-    print(bins)
     agg_res = seed_chunk.groupby(bins, sort=False).agg(**agg)
-    #    print("agg_res")
-    #    print(agg_res)
-    #    if reduction:
-    # Rename index as it is expected, possibly `None`.
-    #        agg_res.index.name = bin_exp_col
-    print("agg_res after groupby")
-    print(agg_res)
     agg_res_len = len(agg_res)
     # Stitch with last row from *prior* aggregation.
     if not last_agg_row.empty:
@@ -1037,8 +991,6 @@ def _group_n_stitch(
             )
     # Setting 'last_agg_row' from new 'agg_res'.
     last_agg_row = agg_res.iloc[-1:] if agg_res_len > 1 else agg_res
-    print("agg_res after stitch")
-    print(agg_res)
     # Updating key settings.
     updated_conf = {
         "agg_res": agg_res,
@@ -1049,67 +1001,6 @@ def _group_n_stitch(
         "last_agg_row": last_agg_row,
     }
     return key, updated_conf
-
-
-def _last_post(
-    last_seed_index: Union[int, float, pTimestamp],
-    store: ParquetSet,
-    reduction: bool,
-    key: dataclass,
-    agg_res: Union[pDataFrame, None],
-    agg_chunks_buffer: List[pDataFrame],
-    write_config: dict,
-    bin_out_col: Union[str, None],
-    post: Union[Callable, None],
-    isfbn: bool,
-    post_buffer: dict,
-    binning_buffer: dict,
-    last_agg_row: pDataFrame,
-    **kwargs,
-):
-    """Conduct last post processing step and write, with metadata update.
-
-    Parameters
-    ----------
-    last_seed_index : Union[int, float, pTimestamp]
-        Last index valuee in seed data.
-    store : ParquetSet
-        Store to which recording aggregation results.
-    reduction : bool
-        If the reduction step is to be performed.
-    key : dataclass
-        Key for recording aggregation results.
-
-    Other parameters
-    ----------------
-    config
-        Settings related to 'key' for conducting last post-processing and
-        writing of results.
-    """
-    print("")
-    print("_last_post")
-    print("agg_res at start of last post")
-    print(agg_res)
-    # Post-process & write results from last iteration, this time keeping
-    # last row, and recording metadata for a future 'streamagg' execution.
-    agg_chunks_buffer.append(agg_res)
-    # A deep copy is made for 'last_agg_row' to prevent a specific case where
-    # 'agg_chuks_buffer' is a list of a single 'agg_res' dataframe of a single
-    # row. In this very specific case, both 'agg_res' and 'last_agg_row' points
-    # toward the same dataframe, but 'agg_res' gets modified in '_post_n_write'
-    # while 'last_agg_row' should not be. The deep copy prevents this.
-    _post_n_write_agg_chunks(
-        chunks=agg_chunks_buffer,
-        store=store,
-        key=key,
-        write_config=write_config,
-        reduction=reduction,
-        index_name=bin_out_col,
-        post=post,
-        isfbn=isfbn,
-        post_buffer=post_buffer,
-        other_metadata=(last_seed_index, last_agg_row.copy(), binning_buffer),
-    )
 
 
 def streamagg(
@@ -1317,15 +1208,13 @@ def streamagg(
           voluntary choice from the user.
 
     """
-    print("")
-    print("streamagg")
-    print("reduction")
-    print(reduction)
     # Parameter setup.
     if not isinstance(key, dict):
         if not agg:
             raise ValueError("not possible to use a single key without specifying parameter 'agg'.")
         key = {key: {"agg": agg, "by": by, "bin_on": bin_on, "post": post}}
+    # 'reduction_bin_cols' contain ALL columns to use for binning, including
+    # column to be used "as they are" for binning. ('by' is `None`).
     (
         all_cols_in,
         trim_start,
@@ -1358,41 +1247,46 @@ def streamagg(
         seed, ordered_on, trim_start, seed_index_restart, discard_last, all_cols_in
     )
     for seed_chunk in iter_data:
-        print("")
-        print("start of loop")
-        print("seed_chunk")
-        print(seed_chunk)
-        # To be parallelized "_post_n_bin".
-        # For using joblib here, check (+ memap for seed_chunk binning)
+        # WiP parallelization "_post_n_bin".
+        # For using joblib.
         # https://stackoverflow.com/questions/61215938/joblib-parallelization-of-function-with-multiple-keyword-arguments
-        # Work with memmap: needs to define each column as a separate memmap (for 'ordered_on' and 'bin_on')
+        # - ought to work with memmap.
+        # - releasing group of workers:
+        #   "Note that the 'loky' backend now used by default for process-based parallelism automatically
+        #    tries to maintain and reuse a pool of workers by it-self even for calls without the context manager."
         bins_n_conf = [
-            _post_n_bin(seed_chunk=seed_chunk, reduction=reduction, store=store, key=key, **config)
+            _post_n_bin(
+                seed_chunk=seed_chunk,
+                reduction=reduction,
+                store=store,
+                key=key,
+                agg_res=config["agg_res"],
+                agg_res_len=config["agg_res_len"],
+                agg_chunks_buffer=config["agg_chunks_buffer"],
+                agg_n_rows=config["agg_n_rows"],
+                agg_mean_row_group_size=config["agg_mean_row_group_size"],
+                max_agg_row_group_size=config["max_agg_row_group_size"],
+                write_config=config["write_config"],
+                bin_out_col=config["bin_out_col"],
+                post=config["post"],
+                isfbn=config["isfbn"],
+                post_buffer=config["post_buffer"],
+                bins=config["bins"],
+                by=config["by"],
+                cols_to_by=config["cols_to_by"],
+                binning_buffer=config["binning_buffer"],
+                reduction_bin_col=config["reduction_bin_col"],
+            )
             for key, config in keys_config.items()
         ]
-        print("bins_n_conf")
-        print(bins_n_conf)
-        # Comment to be removed: group of workers should be released here so that vaex can take workers.
-        # Anyway:
-        # Note that the 'loky' backend now used by default for process-based parallelism automatically
-        # tries to maintain and reuse a pool of workers by it-self even for calls without the context manager.
         if reduction:
-            print("in loop: case reduction")
-            #            reduction_bin_cols = []
-            # WiP /!\ not necessary that 'reduction_bins' is a dict. /!\
-            # change it as a list?
             reduction_bins = []
             for key, config in bins_n_conf:
-                #                red_bin_col = keys_config[key]["reduction_bin_col"]
-                # 'reduction_bin_cols' contain ALL columns to use for binning,
-                # including column to be use "as it is" for binning. ('by' is
-                # `None`).
-                #                reduction_bin_cols.append(keys_config[key]["reduction_bin_col"])
                 if config["reduction_bins"] is not None:
                     # Cases 'by' is pd.Grouper or Callable.
                     # In this case, spare 'reduction_bins'.
                     # It is popped so that it is not serialized/copy in next
-                    # parallel run.
+                    # parallel run (this data is a 1D-array).
                     # Keys of 'reduction_bins' are names of
                     # 'reduction_bin_col' for only new columns (not the ones
                     # that have to be used directly for binning)
@@ -1403,54 +1297,61 @@ def streamagg(
             seed_chunk = concat(
                 [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]], axis=1, copy=False
             )
-            #            seed_chunk.rename(
-            #                columns={
-            #                    i: reduction_bin_col for i, reduction_bin_col in enumerate(reduction_bins)
-            #                },
-            #                inplace=True,
-            #            )
-            print("seed_chunk after concat and rename")
-            print(seed_chunk)
-            print("")
-            print("reduction_agg")
-            print(reduction_agg)
             seed_chunk = seed_chunk.groupby(reduction_bin_cols, sort=False).agg(**reduction_agg)
             seed_chunk.reset_index(inplace=True)
-            print("seed_chunk after groupby")
-            print(seed_chunk)
-            print("")
         else:
             # Consolidate results only.
             for key, config in bins_n_conf:
                 keys_config[key].update(config)
-
-        # To be parallelized "_group_n_stitch". /!!!\ WiP /!!!\
-        # /!\ wiP here: send the right 'seed_chunk to each key with the correct 'cols_to_group'.
+        # WiP parallelization "_group_n_stitch".
+        # Send the right 'seed_chunk' to each key with the correct 'cols_to_group'?
         # https://github.com/joblib/joblib/issues/1244
-
-        # Check
         # https://joblib.readthedocs.io/en/latest/parallel.html#reusing-a-pool-of-workers
-        # /!\ WiP /!\ Here: 'bins' is column name according which doing the binning.
-        # 'bins' in key config dictionary will only be a column name.
-        # WipP here: send column names really necessary for groupby?
-        # not sure it really is necessary if memmap
         agg_res_n_conf = [
-            _group_n_stitch(seed_chunk=seed_chunk, reduction=reduction, key=key, **config)
+            _group_n_stitch(
+                seed_chunk=seed_chunk,
+                reduction=reduction,
+                key=key,
+                bins=config["bins"],
+                agg=config["agg"],
+                last_agg_row=config["last_agg_row"],
+                agg_chunks_buffer=config["agg_chunks_buffer"],
+                agg_n_rows=config["agg_n_rows"],
+                self_agg=config["self_agg"],
+                isfbn=config["isfbn"],
+            )
             for key, config in keys_config.items()
         ]
         for key, config in agg_res_n_conf:
             keys_config[key].update(config)
-        # WiP here to keep group of workers for next step (post and bin or last post).
-
-    # /!\ WiP /!\ here use result from reduction step to check if something done.
-    # Remove query of an agg_res
+    # Check if at least one iteration has been achieved or not.
     agg_res = next(iter(keys_config.values()))["agg_res"]
     if agg_res is None:
         # No iteration has been achieved, as no data.
         return
+    # Post-process & write results from last iteration, this time keeping
+    # last row, and recording metadata for a future 'streamagg' execution.
+    # A deep copy is made for 'last_agg_row' to prevent a specific case where
+    # 'agg_chuks_buffer' is a list of a single 'agg_res' dataframe of a single
+    # row. In this very specific case, both 'agg_res' and 'last_agg_row' points
+    # toward the same dataframe, but 'agg_res' gets modified in '_post_n_write'
+    # while 'last_agg_row' should not be. The deep copy prevents this.
     [
-        _last_post(
-            last_seed_index=last_seed_index, store=store, reduction=reduction, key=key, **config
+        _post_n_write_agg_chunks(
+            reduction=reduction,
+            store=store,
+            key=key,
+            chunks=[*config["agg_chunks_buffer"], config["agg_res"]],
+            write_config=config["write_config"],
+            index_name=config["bin_out_col"],
+            post=config["post"],
+            isfbn=config["isfbn"],
+            post_buffer=config["post_buffer"],
+            other_metadata=(
+                last_seed_index,
+                config["last_agg_row"].copy(),
+                config["binning_buffer"],
+            ),
         )
         for key, config in keys_config.items()
     ]

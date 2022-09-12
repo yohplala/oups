@@ -219,7 +219,6 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
     key4_last_agg_row = keys_config_res[key4].pop("last_agg_row")
     assert key4_last_agg_row.equals(pDataFrame())
     assert keys_config_ref[key4] == keys_config_res[key4]
-    #
     all_cols_in_ref = {"in_spec", ordered_on_dflt, bin_on_spec, ordered_on_alt, "in_dflt"}
     assert set(all_cols_in_res) == all_cols_in_ref
     assert not trim_start
@@ -392,7 +391,6 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
     key4_last_agg_row = keys_config_res[key4].pop("last_agg_row")
     assert key4_last_agg_row.equals(pDataFrame())
     assert keys_config_ref[key4] == keys_config_res[key4]
-    #
     all_cols_in_ref = {"in_spec", ordered_on_dflt, bin_on_spec, ordered_on_alt, "in_dflt"}
     assert set(all_cols_in_res) == all_cols_in_ref
     assert not trim_start
@@ -594,7 +592,6 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
     key4_last_agg_row = keys_config_res[key4].pop("last_agg_row")
     assert key4_last_agg_row.equals(pDataFrame())
     assert keys_config_ref[key4] == keys_config_res[key4]
-    #
     all_cols_in_ref = {"in_spec", ordered_on_dflt, bin_on_spec, ordered_on_alt, "in_dflt"}
     assert set(all_cols_in_res) == all_cols_in_ref
     assert reduction_agg_res == reduction_agg_ref
