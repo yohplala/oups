@@ -24,6 +24,7 @@ from vaex import from_pandas
 from oups import ParquetSet
 from oups import streamagg
 from oups import toplevel
+from oups.streamagg import VAEX
 from oups.streamagg import _get_streamagg_md
 
 
@@ -36,7 +37,10 @@ class Indexer:
     dataset_ref: str
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'sum' aggregation.
     # No post.
@@ -250,7 +254,10 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     assert last_seed_index_res == ts[-1]
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'sum' aggregation.
     # No post.
@@ -417,7 +424,10 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     assert last_seed_index_res == last_seed_index_ref
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first', 'last', 'min', and
     # 'max' aggregation. No post, 'discard_last=True'.
@@ -516,7 +526,10 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
     assert n_rows_res == n_rows_ref
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first', 'last', 'min', and
     # 'max' aggregation. No post, 'discard_last=True'. 'Stress test' with
@@ -611,7 +624,10 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, red
     assert n_rows_res == n_rows_ref
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and assess with 'post':
     #  - assess a 'duration' with 'first' and 'last' aggregation,
@@ -796,7 +812,10 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
     assert rec_res.equals(ref_res_post)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
@@ -895,7 +914,10 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
     # Test with vaex seed, binning every 4 rows with 'first', and 'max'
     # aggregation. No post, `discard_last` set `True`.
@@ -1090,7 +1112,10 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     # Test with vaex seed, binning every time a '1' appear in column 'val'.
     # `discard_last` set `True`.
@@ -1268,7 +1293,10 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
@@ -1332,7 +1360,10 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
@@ -1392,7 +1423,10 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
@@ -1445,7 +1479,7 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction", [False, True])
+@pytest.mark.parametrize("reduction", [False, True, VAEX])
 def test_vaex_seed_single_row(tmp_path, reduction):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # Single row.
@@ -1476,7 +1510,7 @@ def test_vaex_seed_single_row(tmp_path, reduction):
     assert key not in store
 
 
-@pytest.mark.parametrize("reduction", [False, True])
+@pytest.mark.parametrize("reduction", [False, True, VAEX])
 def test_parquet_seed_single_row(tmp_path, reduction):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # Single row.
@@ -1503,7 +1537,7 @@ def test_parquet_seed_single_row(tmp_path, reduction):
     assert key not in store
 
 
-@pytest.mark.parametrize("reduction", [False, True])
+@pytest.mark.parametrize("reduction", [False, True, VAEX])
 def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # Single row in the middle of otherwise larger chunks.
@@ -1577,7 +1611,7 @@ def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction", [False, True])
+@pytest.mark.parametrize("reduction", [False, True, VAEX])
 def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
@@ -1630,7 +1664,10 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'sum' aggregation.
     # No post.

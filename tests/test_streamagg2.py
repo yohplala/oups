@@ -22,6 +22,7 @@ from oups import ParquetSet
 from oups import streamagg
 from oups import toplevel
 from oups.streamagg import REDUCTION_BIN_COL_PREFIX
+from oups.streamagg import VAEX
 from oups.streamagg import _setup
 from oups.writer import MAX_ROW_GROUP_SIZE
 
@@ -100,6 +101,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
         seed_index_restart_set,
         reduction_bin_cols_res,
         reduction_seed_chunk_cols_res,
+        vaex_sort_res,
         reduction_agg_res,
         keys_config_res,
     ) = _setup(**parameter_in)
@@ -226,6 +228,7 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
     assert not reduction_bin_cols_res
     assert not reduction_seed_chunk_cols_res
     assert not reduction_agg_res
+    assert vaex_sort_res is None
 
 
 def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
@@ -288,6 +291,7 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
         seed_index_restart_set,
         reduction_bin_cols_res,
         reduction_seed_chunk_cols_res,
+        vaex_sort_res,
         reduction_agg_res,
         keys_config_res,
     ) = _setup(**parameter_in)
@@ -398,6 +402,7 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
     assert not reduction_bin_cols_res
     assert not reduction_seed_chunk_cols_res
     assert not reduction_agg_res
+    assert vaex_sort_res is None
 
 
 def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
@@ -464,6 +469,7 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
         seed_index_restart_set,
         reduction_bin_cols_res,
         reduction_seed_chunk_cols_res,
+        vaex_sort_res,
         reduction_agg_res,
         keys_config_res,
     ) = _setup(**parameter_in)
@@ -606,9 +612,13 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
         bin_on_spec,
     ]
     assert reduction_bin_cols_res == reduction_bin_cols_ref
+    assert vaex_sort_res is None
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
     # Test with parquet seed, and 4 keys.
     # - key 1: time grouper '2T', agg 'first', and 'last',

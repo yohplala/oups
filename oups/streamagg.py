@@ -14,9 +14,17 @@ from pandas import DataFrame as pDataFrame
 from pandas import Grouper
 from pandas import Series
 from pandas import Timestamp as pTimestamp
-from pandas import concat
+from pandas import concat as pconcat
 from pandas import date_range
 from pandas import read_json
+from vaex import from_arrays
+from vaex import from_pandas
+from vaex import vrange
+from vaex.agg import first as vfirst
+from vaex.agg import last as vlast
+from vaex.agg import max as vmax
+from vaex.agg import min as vmin
+from vaex.agg import sum as vsum
 from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.collection import ParquetSet
@@ -28,7 +36,15 @@ from oups.writer import OUPS_METADATA_KEY
 
 
 VDATAFRAME_ROW_GROUP_SIZE = 6_345_000
-ACCEPTED_AGG_FUNC = {"first", "last", "min", "max", "sum"}
+# Aggregation functions.
+FIRST = "first"
+LAST = "last"
+MIN = "min"
+MAX = "max"
+SUM = "sum"
+ACCEPTED_AGG_FUNC = {FIRST, LAST, MIN, MAX, SUM}
+VAEX_AGG = {FIRST: vfirst, LAST: vlast, MIN: vmin, MAX: vmax, SUM: vsum}
+VAEX_SORT = "vaex_sort"
 # List of keys to metadata of aggregation results.
 MD_KEY_STREAMAGG = "streamagg"
 MD_KEY_LAST_SEED_INDEX = "last_seed_index"
@@ -40,6 +56,7 @@ PANDAS_SERIALIZE = {"orient": "table", "date_unit": "ns", "double_precision": 15
 PANDAS_DESERIALIZE = {"orient": "table", "date_unit": "ns", "precise_float": True}
 # Misc.
 REDUCTION_BIN_COL_PREFIX = "bin_"
+VAEX = "vaex"
 
 
 def _is_stremagg_result(handle: ParquetHandle) -> bool:
@@ -234,7 +251,7 @@ def _post_n_write_agg_chunks(
     """
     # Keep last row as there might be not further iteration.
     if len(chunks) > 1:
-        agg_res = concat(chunks)
+        agg_res = pconcat(chunks)
     else:
         agg_res = chunks[0]
     if index_name or reduction:
@@ -480,6 +497,8 @@ def _setup(
             reduction step.
           - ``reduction_seed_chunk_cols``, list of columns already in seed, to
             be kept in 'seed_chunk' for reduction step.
+          - ``vaex_sort``, str, column name to use for sorting groupby result
+            from reduction step, in step reduction is performed with vaex.
           - ``reduction_agg``, dict specifying the minimal config to perform
             the reduction aggregation step, still containing all required
             aggregation functions. It is in the form:
@@ -594,7 +613,9 @@ def _setup(
                 # {("input_col_name__agg_function_name") : ("input_col", "agg_function_name")}
                 reduction_agg_col = f"{col_in}__{agg_func}"
                 if reduction_agg_col not in reduction_agg:
-                    reduction_agg[reduction_agg_col] = (col_in, agg_func)
+                    reduction_agg[reduction_agg_col] = (
+                        VAEX_AGG[agg_func](col_in) if reduction == VAEX else (col_in, agg_func)
+                    )
                 # Modify consequently 'agg' so that it can operate on agg results from
                 # reduction step.
                 key_agg[col_out] = (reduction_agg_col, agg_func)
@@ -679,12 +700,26 @@ def _setup(
         # No aggregation result existing yet. Whatever 'trim_start' value, no
         # trimming is possible.
         trim_start = False
+    # In case of a reduction performed with vaex, result from reduction loses
+    # its initial order. It is then necessary to re-order bins in the order of
+    # appearance of 1st occurrence. For this, either we use an aggregation
+    # already requested on 'ordered_on' column if relevant.
+    # Or we will create a temporary index column on-the-fly, just before
+    # reduction.
+    vaex_sort = None
+    if reduction == VAEX and (vaex_sort := f"{ordered_on}__{FIRST}") not in reduction_agg:
+        # If not requested, request a new agg that will behave similarly.
+        # Byt using 2 underscores, this column is considered hidden, and will
+        # not be exported when translating the results back to pandas.
+        vaex_sort = VAEX_SORT
+        reduction_agg[vaex_sort] = VAEX_AGG[FIRST](ordered_on)
     return (
         list(all_cols_in),
         trim_start,
         seed_index_restart_set,
         reduction_bin_cols,
         list(reduction_seed_chunk_cols),
+        vaex_sort,
         reduction_agg,
         keys_config,
     )
@@ -880,12 +915,19 @@ def _post_n_bin(
                 # Only done in 'last resort' if 'bin_out_col' has not been
                 # defined after setup.
                 bin_out_col = out_name
-            # Rename with "generic name".
-            reduction_bins.name = reduction_bin_col
+            if reduction == VAEX:
+                reduction_bins = from_arrays(**{reduction_bin_col: reduction_bins.to_numpy()})
+            else:
+                # Rename with "generic name".
+                reduction_bins.name = reduction_bin_col
         elif reduction_bins is not None:
             # Then 'reduction_bins' is a collection of some sort.
             # Let's make it a pandas Series and provide it a name.
-            reduction_bins = Series(reduction_bins, name=reduction_bin_col)
+            reduction_bins = (
+                from_arrays(**{reduction_bin_col: reduction_bins})
+                if reduction == VAEX
+                else Series(reduction_bins, name=reduction_bin_col)
+            )
     else:
         # No reduction step.
         reduction_bins = None
@@ -970,7 +1012,7 @@ def _group_n_stitch(
                     start=last, end=first, freq=bins.freq, inclusive="neither", name=bins.key
                 )
                 if not missing.empty:
-                    last_agg_row = concat(
+                    last_agg_row = pconcat(
                         [last_agg_row, pDataFrame(index=missing, columns=last_agg_row.columns)]
                     )
                     n_added_rows = len(last_agg_row)
@@ -985,7 +1027,7 @@ def _group_n_stitch(
             # bin), and first row of new aggregation results, then replay
             # aggregation between both.
             agg_res.iloc[:1] = (
-                concat([last_agg_row, agg_res.iloc[:1]])
+                pconcat([last_agg_row, agg_res.iloc[:1]])
                 .groupby(level=0, sort=False)
                 .agg(**self_agg)
             )
@@ -1133,13 +1175,15 @@ def streamagg(
         If ``True``, last row group in seed data (sharing the same value in
         `ordered_on` column) is removed from the aggregation step. See below
         notes.
-    reduction : bool, default False
+    reduction : bool or "vaex", default False
         If `True`, perform a 1st multi-groupby and aggregation on seed data.
         This 1st step (common to all keys) reduces then the side of seed data
         before it is used for each individual groupby and aggregation of each
         key.
         The more the number of keys, the more the reduction step ought to bring
         performance improvement.
+        If `"vaex"`, the reduction step is performed with vaex instead of
+        pandas.
 
     Other parameters
     ----------------
@@ -1221,6 +1265,7 @@ def streamagg(
         seed_index_restart_set,
         reduction_bin_cols,
         reduction_seed_chunk_cols,
+        vaex_sort,
         reduction_agg,
         keys_config,
     ) = _setup(
@@ -1294,11 +1339,30 @@ def streamagg(
                 # Consolidate results.
                 keys_config[key].update(config)
             # Re-create a seed_chunk with new 'bins' columns.
-            seed_chunk = concat(
-                [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]], axis=1, copy=False
-            )
-            seed_chunk = seed_chunk.groupby(reduction_bin_cols, sort=False).agg(**reduction_agg)
-            seed_chunk.reset_index(inplace=True)
+            if reduction == VAEX:
+                # Reduction with vaex.
+                seed_chunk = from_pandas(seed_chunk[reduction_seed_chunk_cols])
+                if ordered_on not in reduction_seed_chunk_cols:
+                    # Keep track of initial order to sort aggregation results
+                    # after vaex reduction.
+                    seed_chunk[ordered_on] = vrange(0, len(seed_chunk))
+                for red_bin in reduction_bins:
+                    seed_chunk.join(red_bin, inplace=True)
+                seed_chunk = (
+                    seed_chunk.groupby(reduction_bin_cols, sort=False)
+                    .agg(reduction_agg)
+                    .sort(vaex_sort)
+                )
+                if VAEX_SORT in seed_chunk.get_column_names():
+                    seed_chunk = seed_chunk.drop(VAEX_SORT)
+                seed_chunk = seed_chunk.to_pandas_df()
+            else:
+                # Reduction with pandas.
+                seed_chunk = pconcat(
+                    [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]], axis=1, copy=False
+                )
+                seed_chunk = seed_chunk.groupby(reduction_bin_cols, sort=False).agg(**reduction_agg)
+                seed_chunk.reset_index(inplace=True)
         else:
             # Consolidate results only.
             for key, config in bins_n_conf:
