@@ -6,6 +6,7 @@ Created on Wed Mar  9 21:30:00 2022.
 """
 from copy import copy
 from dataclasses import dataclass
+from os import path as os_path
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
@@ -33,6 +34,7 @@ from oups.utils import tcut
 from oups.writer import MAX_ROW_GROUP_SIZE
 from oups.writer import OUPS_METADATA
 from oups.writer import OUPS_METADATA_KEY
+from oups.writer import write
 
 
 VDATAFRAME_ROW_GROUP_SIZE = 6_345_000
@@ -57,6 +59,10 @@ PANDAS_DESERIALIZE = {"orient": "table", "date_unit": "ns", "precise_float": Tru
 # Misc.
 REDUCTION_BIN_COL_PREFIX = "bin_"
 VAEX = "vaex"
+
+
+# /!\ Wip: change store to dirpath
+# when appropriate, change key to string
 
 
 def _is_stremagg_result(handle: ParquetHandle) -> bool:
@@ -134,7 +140,7 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
 
 
 def _set_streamagg_md(
-    key: dataclass,
+    key: str,
     last_seed_index,
     last_agg_row: pDataFrame,
     binning_buffer: dict = None,
@@ -144,7 +150,7 @@ def _set_streamagg_md(
 
     Parameters
     ----------
-    key : dataclass
+    key : str
         Key of data in oups store for which metadata is to be written.
     last_seed_index : default None
         Last index in seed data. Can be numeric type, timestamp...
@@ -183,8 +189,8 @@ def _set_streamagg_md(
 
 def _post_n_write_agg_chunks(
     chunks: List[pDataFrame],
-    store: ParquetSet,
-    key: dataclass,
+    dirpath: str,
+    key: str,
     write_config: dict,
     reduction: bool,
     index_name: str = None,
@@ -199,10 +205,10 @@ def _post_n_write_agg_chunks(
     ----------
     chunks : List[pandas.DataFrame]
         List of chunks resulting from aggregation (pandas dataframes).
-    store : ParquetSet
-        Store to which recording aggregation results.
-    key : Indexer
-        Key for recording aggregation results.
+    dirpath : str
+        Path to which recording aggregation results.
+    key : str
+        Key for retrieving corresponding metadata.
     index_name : str, default None
         If set, name index of dataframe resulting from aggregation with this
         value.
@@ -270,7 +276,9 @@ def _post_n_write_agg_chunks(
         # Set oups metadata.
         _set_streamagg_md(key, *other_metadata, post_buffer)
     # Record data.
-    store[key] = write_config, agg_res
+    print("write_config")
+    print(write_config)
+    write(dirpath=dirpath, data=agg_res, md_key=key, **write_config)
 
 
 def _setup_binning(
@@ -485,7 +493,7 @@ def _setup(
     Returns
     -------
     tuple
-        Settings for parallel aggregation, with 5 items.
+        Settings for chained aggregation.
 
           - ``all_cols_in``, list specifying all columns to loaded from seed
             data, required to perform the aggregation.
@@ -506,7 +514,8 @@ def _setup(
             ``'input_col__agg_function_name'`` is used as generic name.
           - ``keys_config``, dict of keys config. A config is also a dict in
             the form:
-            ``{key: {'agg_n_rows' : 0,
+            ``{key: {'dirpath': str, where to record agg res,
+                     'agg_n_rows' : 0,
                      'agg_mean_row_group_size' : 0,
                      'agg_res' : None,
                      'agg_res_len' : None,
@@ -532,6 +541,7 @@ def _setup(
                }``
             To be noticed:
 
+              - key of dict ``keys_config`` is a string.
               - in case of a reduction step, 'agg' is modified to use as input
                 column generic names from reduction aggregation.
               - 'self_agg' is the aggregation step required for stitching
@@ -680,7 +690,8 @@ def _setup(
         # 'agg_chunks_buffer' is a buffer to keep aggregation chunks
         # before a concatenation to record. Because it is appended in-place
         # for each key, it is created separately for each key.
-        keys_config[key] = key_default | {
+        keys_config[str(key)] = key_default | {
+            "dirpath": os_path.join(store._basepath, key.to_path),
             "by": by,
             "cols_to_by": cols_to_by,
             "bins": bins,
@@ -817,8 +828,8 @@ def _iter_data(
 def _post_n_bin(
     seed_chunk: pDataFrame,
     reduction: bool,
-    store: ParquetSet,
-    key: dataclass,
+    dirpath: str,
+    key: str,
     agg_res: Union[pDataFrame, None],
     agg_res_len: int,
     agg_chunks_buffer: List[pDataFrame],
@@ -844,10 +855,10 @@ def _post_n_bin(
         Chunk of seed data.
     reduction : bool
         If the reduction step is to be performed.
-    store : ParquetSet
-        Store to which recording aggregation results.
-    key : dataclass
-        Key for recording aggregation results.
+    dirpath : str
+        Path to which recording aggregation results.
+    key : str
+        Key for retrieving metadata corresponding to aggregation results.
 
     Other parameters
     ----------------
@@ -882,7 +893,7 @@ def _post_n_bin(
                 # Write results from previous iteration.
                 _post_n_write_agg_chunks(
                     chunks=agg_chunks_buffer,
-                    store=store,
+                    dirpath=dirpath,
                     key=key,
                     write_config=write_config,
                     reduction=reduction,
@@ -956,7 +967,7 @@ def _post_n_bin(
 def _group_n_stitch(
     seed_chunk: pDataFrame,
     reduction: bool,
-    key: dataclass,
+    key: str,
     bins: str,
     agg: dict,
     last_agg_row: pDataFrame,
@@ -973,7 +984,7 @@ def _group_n_stitch(
         Chunk of seed data.
     reduction : bool
         If the reduction step is to be performed.
-    key : dataclass
+    key : str
         Key for recording aggregation results.
 
     Other parameters
@@ -1303,8 +1314,8 @@ def streamagg(
             _post_n_bin(
                 seed_chunk=seed_chunk,
                 reduction=reduction,
-                store=store,
                 key=key,
+                dirpath=config["dirpath"],
                 agg_res=config["agg_res"],
                 agg_res_len=config["agg_res_len"],
                 agg_chunks_buffer=config["agg_chunks_buffer"],
@@ -1403,8 +1414,8 @@ def streamagg(
     [
         _post_n_write_agg_chunks(
             reduction=reduction,
-            store=store,
             key=key,
+            dirpath=config["dirpath"],
             chunks=[*config["agg_chunks_buffer"], config["agg_res"]],
             write_config=config["write_config"],
             index_name=config["bin_out_col"],
@@ -1419,3 +1430,7 @@ def streamagg(
         )
         for key, config in keys_config.items()
     ]
+    # Add keys in store for those who where not in.
+    for k in key:
+        if k not in store:
+            store._keys.add(key)

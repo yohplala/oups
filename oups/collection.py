@@ -173,8 +173,9 @@ class ParquetSet:
             raise TypeError("data should be a pandas or vaex dataframe.")
         dirpath = os_path.join(self._basepath, key.to_path)
         write(dirpath=dirpath, data=data, md_key=key, **kwargs)
-        # If no trouble from writing, add key.
-        self._keys.add(key)
+        if key not in self:
+            # If no trouble from writing, add key.
+            self._keys.add(key)
         return
 
     def __setitem__(
