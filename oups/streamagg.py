@@ -276,8 +276,6 @@ def _post_n_write_agg_chunks(
         # Set oups metadata.
         _set_streamagg_md(key, *other_metadata, post_buffer)
     # Record data.
-    print("write_config")
-    print(write_config)
     write(dirpath=dirpath, data=agg_res, md_key=key, **write_config)
 
 
@@ -1060,7 +1058,7 @@ def streamagg(
     seed: Union[vDataFrame, ParquetFile],
     ordered_on: str,
     store: ParquetSet,
-    key: Union[dataclass, dict],
+    keys: Union[dataclass, dict],
     agg: dict = None,
     by: Union[Grouper, Callable[[Series, dict], Series]] = None,
     bin_on: Union[str, Tuple[str, str]] = None,
@@ -1096,7 +1094,7 @@ def streamagg(
         and/or ``bin_on`` parameters have to be set.
     store : ParquetSet
         Store to which recording aggregation results.
-    key : Union[Indexer, dict]
+    keys : Union[Indexer, dict]
         Key for recording aggregation results.
         If a dict, several keys can be specified for operating multiple
         parallel aggregations on the same seed. In this case, the dict should
@@ -1264,10 +1262,10 @@ def streamagg(
 
     """
     # Parameter setup.
-    if not isinstance(key, dict):
+    if not isinstance(keys, dict):
         if not agg:
             raise ValueError("not possible to use a single key without specifying parameter 'agg'.")
-        key = {key: {"agg": agg, "by": by, "bin_on": bin_on, "post": post}}
+        keys = {keys: {"agg": agg, "by": by, "bin_on": bin_on, "post": post}}
     # 'reduction_bin_cols' contain ALL columns to use for binning, including
     # column to be used "as they are" for binning. ('by' is `None`).
     (
@@ -1282,7 +1280,7 @@ def streamagg(
     ) = _setup(
         ordered_on=ordered_on,
         store=store,
-        keys=key,
+        keys=keys,
         agg=agg,
         post=post,
         trim_start=trim_start,
@@ -1431,6 +1429,6 @@ def streamagg(
         for key, config in keys_config.items()
     ]
     # Add keys in store for those who where not in.
-    for k in key:
-        if k not in store:
+    for key in keys:
+        if key not in store:
             store._keys.add(key)

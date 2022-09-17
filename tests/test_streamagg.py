@@ -114,7 +114,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -177,7 +177,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -234,7 +234,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=False,
         max_row_group_size=max_row_group_size,
@@ -326,7 +326,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -390,7 +390,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=False,
         max_row_group_size=max_row_group_size,
@@ -463,7 +463,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -487,7 +487,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -511,7 +511,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -565,7 +565,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, red
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -586,7 +586,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, red
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -607,7 +607,7 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, red
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -741,7 +741,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         post=post,
         discard_last=True,
@@ -798,7 +798,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         post=post,
         discard_last=True,
@@ -859,7 +859,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
             ordered_on=ordered_on,
             agg=agg,
             store=store,
-            key=key,
+            keys=key,
             by=by,
             bin_on=bin_on + "_",
             discard_last=True,
@@ -872,7 +872,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         bin_on=(bin_on, ts_open),
         discard_last=True,
@@ -898,7 +898,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         bin_on=(bin_on, ts_open),
         trim_start=True,
@@ -990,11 +990,16 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         # results, and oups will be able to use it for writing data.
         # With actual setting, without this trick, 'streamagg' could not write
         # the results (no 'ordered_on' column in results).
+        by_4_rows = 4
         ordered_on = data.name
         group_keys = pDataFrame(data)
         # Setup 1st key of groups from previous binning.
-        row_offset = 4 - buffer["row_offset"] if "row_offset" in buffer else 0
-        group_keys["tmp"] = data.iloc[row_offset::4]
+        row_offset = (
+            by_4_rows - buffer["row_offset"]
+            if "row_offset" in buffer and buffer["row_offset"]
+            else 0
+        )
+        group_keys["tmp"] = data.iloc[row_offset::by_4_rows]
         if row_offset and "last_key" in buffer:
             # Initialize 1st row if row_offset is not 0.
             group_keys.iloc[0, group_keys.columns.get_loc("tmp")] = buffer["last_key"]
@@ -1002,10 +1007,19 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         group_keys = Series(group_keys[ordered_on], name=ordered_on)
         keys, counts = np.unique(group_keys, return_counts=True)
         # Update buffer in-place for next binning.
-        if "row_offset" in buffer and buffer["row_offset"] != 4:
-            buffer["row_offset"] = counts[-1] + buffer["row_offset"]
+        last_key_counts = counts[-1]
+        if len(counts) == 1:
+            # Case single key in data chunk. Sum with previous 'row_offset'.
+            buffer["row_offset"] = last_key_counts + buffer["row_offset"]
+            if buffer["row_offset"] == by_4_rows:
+                # Restart at 0.
+                buffer["row_offset"] = 0
+        elif last_key_counts != by_4_rows:
+            # Case several keys in data chunk.
+            buffer["row_offset"] = last_key_counts
         else:
-            buffer["row_offset"] = counts[-1]
+            # Case several keys in data chunk.
+            buffer["row_offset"] = 0
         buffer["last_key"] = keys[-1]
         return group_keys
 
@@ -1020,7 +1034,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by_4rows,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -1042,7 +1056,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
     ) = _get_streamagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
-    binning_buffer_ref = {"row_offset": 4, "last_key": ts[-6]}
+    binning_buffer_ref = {"row_offset": 0, "last_key": ts[-6]}
     assert binning_buffer_res == binning_buffer_ref
     last_agg_row_ref = pDataFrame(
         data={"first": 13.0, "max": 16.0},
@@ -1086,7 +1100,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by_4rows,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -1213,7 +1227,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by_1val,
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
@@ -1263,7 +1277,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by_1val,
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
@@ -1321,7 +1335,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         trim_start=True,
         discard_last=True,
@@ -1347,7 +1361,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         trim_start=False,
         discard_last=True,
@@ -1386,7 +1400,7 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         trim_start=True,
         discard_last=True,
@@ -1410,7 +1424,7 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         trim_start=False,
         discard_last=True,
@@ -1450,7 +1464,7 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         reduction=reduction1,
     )
@@ -1469,7 +1483,7 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         reduction=reduction2,
     )
@@ -1502,7 +1516,7 @@ def test_vaex_seed_single_row(tmp_path, reduction):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         reduction=reduction,
     )
@@ -1531,7 +1545,7 @@ def test_parquet_seed_single_row(tmp_path, reduction):
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
     streamagg(
-        seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by, reduction=reduction
+        seed=seed, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by, reduction=reduction
     )
     # Test results.
     assert key not in store
@@ -1603,7 +1617,7 @@ def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
     streamagg(
-        seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by, reduction=reduction
+        seed=seed, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by, reduction=reduction
     )
     # Test results.
     ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
@@ -1649,7 +1663,7 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         post=post,
         discard_last=True,
@@ -1713,7 +1727,7 @@ def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=None,
         bin_on=ordered_on,
         discard_last=True,
@@ -1768,7 +1782,7 @@ def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=None,
         bin_on=ordered_on,
         discard_last=False,
@@ -1812,7 +1826,7 @@ def test_exception_bin_on(tmp_path):
     agg = {bin_on: ("val", "sum")}
     # Streamed aggregation, check error message.
     with pytest.raises(ValueError, match="^not possible to have"):
-        streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+        streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by)
 
 
 def test_exception_unknown_agg_function(tmp_path):
@@ -1831,7 +1845,7 @@ def test_exception_unknown_agg_function(tmp_path):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "unknown")}
     with pytest.raises(ValueError, match="^aggregation function"):
-        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by)
 
 
 def test_exception_not_key_of_streamagg_results(tmp_path):
@@ -1852,7 +1866,7 @@ def test_exception_not_key_of_streamagg_results(tmp_path):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     with pytest.raises(ValueError, match="^provided key"):
-        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by)
 
 
 def test_exception_no_agg_in_keys(tmp_path):
@@ -1872,7 +1886,7 @@ def test_exception_no_agg_in_keys(tmp_path):
         streamagg(
             seed=seed_pdf,
             ordered_on=ordered_on,
-            key=Indexer("agg_res"),
+            keys=Indexer("agg_res"),
             store=store,
             by=Grouper(key=ordered_on, freq="1H", closed="left", label="left"),
         )

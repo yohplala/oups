@@ -107,7 +107,8 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
     ) = _setup(**parameter_in)
     # Reference results.
     keys_config_ref = {
-        key1: {
+        str(key1): {
+            "dirpath": os_path.join(store.basepath, key1.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -132,7 +133,8 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "post_buffer": {},
             "agg_chunks_buffer": [],
         },
-        key2: {
+        str(key2): {
+            "dirpath": os_path.join(store.basepath, key2.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -157,7 +159,8 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "post_buffer": {},
             "agg_chunks_buffer": [],
         },
-        key3: {
+        str(key3): {
+            "dirpath": os_path.join(store.basepath, key3.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -182,7 +185,8 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
             "post_buffer": {},
             "agg_chunks_buffer": [],
         },
-        key4: {
+        str(key4): {
+            "dirpath": os_path.join(store.basepath, key4.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -209,18 +213,18 @@ def test_setup_4_keys_with_default_parameters_for_writing(tmp_path):
         },
     }
     # Check.
-    key1_last_agg_row = keys_config_res[key1].pop("last_agg_row")
+    key1_last_agg_row = keys_config_res[str(key1)].pop("last_agg_row")
     assert key1_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key1] == keys_config_res[key1]
-    key2_last_agg_row = keys_config_res[key2].pop("last_agg_row")
+    assert keys_config_ref[str(key1)] == keys_config_res[str(key1)]
+    key2_last_agg_row = keys_config_res[str(key2)].pop("last_agg_row")
     assert key2_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key2] == keys_config_res[key2]
-    key3_last_agg_row = keys_config_res[key3].pop("last_agg_row")
+    assert keys_config_ref[str(key2)] == keys_config_res[str(key2)]
+    key3_last_agg_row = keys_config_res[str(key3)].pop("last_agg_row")
     assert key3_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key3] == keys_config_res[key3]
-    key4_last_agg_row = keys_config_res[key4].pop("last_agg_row")
+    assert keys_config_ref[str(key3)] == keys_config_res[str(key3)]
+    key4_last_agg_row = keys_config_res[str(key4)].pop("last_agg_row")
     assert key4_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key4] == keys_config_res[key4]
+    assert keys_config_ref[str(key4)] == keys_config_res[str(key4)]
     all_cols_in_ref = {"in_spec", ordered_on_dflt, bin_on_spec, ordered_on_alt, "in_dflt"}
     assert set(all_cols_in_res) == all_cols_in_ref
     assert not trim_start
@@ -297,7 +301,8 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
     ) = _setup(**parameter_in)
     # Reference results.
     keys_config_ref = {
-        key1: {
+        str(key1): {
+            "dirpath": os_path.join(store.basepath, key1.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -317,7 +322,8 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "post_buffer": {},
             "agg_chunks_buffer": [],
         },
-        key2: {
+        str(key2): {
+            "dirpath": os_path.join(store.basepath, key2.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -341,7 +347,8 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "post_buffer": {},
             "agg_chunks_buffer": [],
         },
-        key3: {
+        str(key3): {
+            "dirpath": os_path.join(store.basepath, key3.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -361,7 +368,8 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
             "post_buffer": {},
             "agg_chunks_buffer": [],
         },
-        key4: {
+        str(key4): {
+            "dirpath": os_path.join(store.basepath, key4.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -383,18 +391,18 @@ def test_setup_4_keys_wo_default_parameters_for_writing_nor_post(tmp_path):
         },
     }
     # Check.
-    key1_last_agg_row = keys_config_res[key1].pop("last_agg_row")
+    key1_last_agg_row = keys_config_res[str(key1)].pop("last_agg_row")
     assert key1_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key1] == keys_config_res[key1]
-    key2_last_agg_row = keys_config_res[key2].pop("last_agg_row")
+    assert keys_config_ref[str(key1)] == keys_config_res[str(key1)]
+    key2_last_agg_row = keys_config_res[str(key2)].pop("last_agg_row")
     assert key2_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key2] == keys_config_res[key2]
-    key3_last_agg_row = keys_config_res[key3].pop("last_agg_row")
+    assert keys_config_ref[str(key2)] == keys_config_res[str(key2)]
+    key3_last_agg_row = keys_config_res[str(key3)].pop("last_agg_row")
     assert key3_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key3] == keys_config_res[key3]
-    key4_last_agg_row = keys_config_res[key4].pop("last_agg_row")
+    assert keys_config_ref[str(key3)] == keys_config_res[str(key3)]
+    key4_last_agg_row = keys_config_res[str(key4)].pop("last_agg_row")
     assert key4_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key4] == keys_config_res[key4]
+    assert keys_config_ref[str(key4)] == keys_config_res[str(key4)]
     all_cols_in_ref = {"in_spec", ordered_on_dflt, bin_on_spec, ordered_on_alt, "in_dflt"}
     assert set(all_cols_in_res) == all_cols_in_ref
     assert not trim_start
@@ -477,7 +485,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
     tgrouper_key1_ref = copy(tgrouper)
     tgrouper_key1_ref.key = f"{REDUCTION_BIN_COL_PREFIX}0"
     keys_config_ref = {
-        key1: {
+        str(key1): {
+            "dirpath": os_path.join(store.basepath, key1.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -502,7 +511,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "post_buffer": {},
             "agg_chunks_buffer": [],
         },
-        key2: {
+        str(key2): {
+            "dirpath": os_path.join(store.basepath, key2.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -527,7 +537,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "post_buffer": {},
             "agg_chunks_buffer": [],
         },
-        key3: {
+        str(key3): {
+            "dirpath": os_path.join(store.basepath, key3.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -552,7 +563,8 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
             "post_buffer": {},
             "agg_chunks_buffer": [],
         },
-        key4: {
+        str(key4): {
+            "dirpath": os_path.join(store.basepath, key4.to_path),
             "agg_n_rows": 0,
             "agg_mean_row_group_size": 0,
             "agg_res": None,
@@ -583,21 +595,21 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
         "in_dflt__last": ("in_dflt", "last"),
     }
     # Check.
-    key1_last_agg_row = keys_config_res[key1].pop("last_agg_row")
+    key1_last_agg_row = keys_config_res[str(key1)].pop("last_agg_row")
     assert key1_last_agg_row.equals(pDataFrame())
-    key1_bins_res = keys_config_res[key1].pop("bins")
-    key1_bins_ref = keys_config_ref[key1].pop("bins")
+    key1_bins_res = keys_config_res[str(key1)].pop("bins")
+    key1_bins_ref = keys_config_ref[str(key1)].pop("bins")
     assert key1_bins_res.__dict__ == key1_bins_ref.__dict__
-    assert keys_config_ref[key1] == keys_config_res[key1]
-    key2_last_agg_row = keys_config_res[key2].pop("last_agg_row")
+    assert keys_config_ref[str(key1)] == keys_config_res[str(key1)]
+    key2_last_agg_row = keys_config_res[str(key2)].pop("last_agg_row")
     assert key2_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key2] == keys_config_res[key2]
-    key3_last_agg_row = keys_config_res[key3].pop("last_agg_row")
+    assert keys_config_ref[str(key2)] == keys_config_res[str(key2)]
+    key3_last_agg_row = keys_config_res[str(key3)].pop("last_agg_row")
     assert key3_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key3] == keys_config_res[key3]
-    key4_last_agg_row = keys_config_res[key4].pop("last_agg_row")
+    assert keys_config_ref[str(key3)] == keys_config_res[str(key3)]
+    key4_last_agg_row = keys_config_res[str(key4)].pop("last_agg_row")
     assert key4_last_agg_row.equals(pDataFrame())
-    assert keys_config_ref[key4] == keys_config_res[key4]
+    assert keys_config_ref[str(key4)] == keys_config_res[str(key4)]
     all_cols_in_ref = {"in_spec", ordered_on_dflt, bin_on_spec, ordered_on_alt, "in_dflt"}
     assert set(all_cols_in_res) == all_cols_in_ref
     assert reduction_agg_res == reduction_agg_ref
@@ -659,11 +671,16 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         # results, and oups will be able to use it for writing data.
         # With actual setting, without this trick, 'streamagg' could not write
         # the results (no 'ordered_on' column in results).
+        by_4_rows = 4
         ordered_on = data.name
         group_keys = pDataFrame(data)
         # Setup 1st key of groups from previous binning.
-        row_offset = 4 - buffer["row_offset"] if "row_offset" in buffer else 0
-        group_keys["tmp"] = data.iloc[row_offset::4]
+        row_offset = (
+            by_4_rows - buffer["row_offset"]
+            if "row_offset" in buffer and buffer["row_offset"]
+            else 0
+        )
+        group_keys["tmp"] = data.iloc[row_offset::by_4_rows]
         if row_offset and "last_key" in buffer:
             # Initialize 1st row if row_offset is not 0.
             group_keys.iloc[0, group_keys.columns.get_loc("tmp")] = buffer["last_key"]
@@ -671,10 +688,19 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         group_keys = Series(group_keys[ordered_on], name=ordered_on)
         keys, counts = np.unique(group_keys, return_counts=True)
         # Update buffer in-place for next binning.
-        if "row_offset" in buffer and buffer["row_offset"] != 4:
-            buffer["row_offset"] = counts[-1] + buffer["row_offset"]
+        last_key_counts = counts[-1]
+        if len(counts) == 1:
+            # Case single key in data chunk. Sum with previous 'row_offset'.
+            buffer["row_offset"] = last_key_counts + buffer["row_offset"]
+            if buffer["row_offset"] == by_4_rows:
+                # Restart at 0.
+                buffer["row_offset"] = 0
+        elif last_key_counts != by_4_rows:
+            # Case several keys in data chunk.
+            buffer["row_offset"] = last_key_counts
         else:
-            buffer["row_offset"] = counts[-1]
+            # Case several keys in data chunk.
+            buffer["row_offset"] = 0
         buffer["last_key"] = keys[-1]
         return group_keys
 
@@ -688,7 +714,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         "agg": {"first": ("val", "first"), "max": ("val", "max")},
     }
     key3_cf = {
-        "by": Grouper(key=ordered_on, freq="13T", closed="left", label="left"),
+        "by": by_4rows,
         "agg": {"min": ("val", "min"), "max": ("val", "max")},
     }
     key4_cf = {
@@ -701,7 +727,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         seed=seed,
         ordered_on=ordered_on,
         store=store,
-        key=key_configs,
+        keys=key_configs,
         discard_last=True,
         max_row_group_size=max_row_group_size,
         reduction=reduction1,
@@ -709,16 +735,21 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
     # Test results
     # Remove last 'group' as per 'ordered_on' in 'seed_df'.
     seed_df_trim = seed_df[seed_df[ordered_on] < seed_df[ordered_on].iloc[-1]]
-    ref_res = {
-        key: seed_df_trim.groupby(key_configs[key]["by"])
-        .agg(**key_configs[key]["agg"])
-        .reset_index()
-        for key in [key1, key2, key3]
-    } | {
-        key4: seed_df_trim.groupby(key_configs[key4]["bin_on"])
-        .agg(**key_configs[key4]["agg"])
-        .reset_index()
-    }
+    key3_bins = by_4rows(data=seed_df_trim[ordered_on], buffer={})
+    ref_res = (
+        {
+            key: seed_df_trim.groupby(key_configs[key]["by"])
+            .agg(**key_configs[key]["agg"])
+            .reset_index()
+            for key in [key1, key2]
+        }
+        | {key3: seed_df_trim.groupby(key3_bins).agg(**key_configs[key3]["agg"]).reset_index()}
+        | {
+            key4: seed_df_trim.groupby(key_configs[key4]["bin_on"])
+            .agg(**key_configs[key4]["agg"])
+            .reset_index()
+        }
+    )
     for key, ref_df in ref_res.items():
         rec_res = store[key].pdf
         assert rec_res.equals(ref_df)
@@ -735,25 +766,29 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         seed=seed,
         ordered_on=ordered_on,
         store=store,
-        key=key_configs,
+        keys=key_configs,
         discard_last=True,
         max_row_group_size=max_row_group_size,
         reduction=reduction2,
     )
     # Test results
     seed_df2_trim = seed_df2[seed_df2[ordered_on] < seed_df2[ordered_on].iloc[-1]]
-    ref_res = {
-        key: pconcat([seed_df, seed_df2_trim])
-        .groupby(key_configs[key]["by"])
-        .agg(**key_configs[key]["agg"])
-        .reset_index()
-        for key in [key1, key2, key3]
-    } | {
-        key4: pconcat([seed_df, seed_df2_trim])
-        .groupby(key_configs[key4]["bin_on"])
-        .agg(**key_configs[key4]["agg"])
-        .reset_index()
-    }
+    seed_df2_ref = pconcat([seed_df, seed_df2_trim], ignore_index=True)
+    key3_bins = by_4rows(data=seed_df2_ref[ordered_on], buffer={})
+    ref_res = (
+        {
+            key: seed_df2_ref.groupby(key_configs[key]["by"])
+            .agg(**key_configs[key]["agg"])
+            .reset_index()
+            for key in [key1, key2]
+        }
+        | {key3: seed_df2_ref.groupby(key3_bins).agg(**key_configs[key3]["agg"]).reset_index()}
+        | {
+            key4: seed_df2_ref.groupby(key_configs[key4]["bin_on"])
+            .agg(**key_configs[key4]["agg"])
+            .reset_index()
+        }
+    )
     for key, ref_df in ref_res.items():
         rec_res = store[key].pdf
         assert rec_res.equals(ref_df)
@@ -770,25 +805,29 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         seed=seed,
         ordered_on=ordered_on,
         store=store,
-        key=key_configs,
+        keys=key_configs,
         discard_last=True,
         max_row_group_size=max_row_group_size,
         reduction=reduction2,
     )
     # Test results
     seed_df3_trim = seed_df3[seed_df3[ordered_on] < seed_df3[ordered_on].iloc[-1]]
-    ref_res = {
-        key: pconcat([seed_df, seed_df2, seed_df3_trim])
-        .groupby(key_configs[key]["by"])
-        .agg(**key_configs[key]["agg"])
-        .reset_index()
-        for key in [key1, key2, key3]
-    } | {
-        key4: pconcat([seed_df, seed_df2, seed_df3_trim])
-        .groupby(key_configs[key4]["bin_on"])
-        .agg(**key_configs[key4]["agg"])
-        .reset_index()
-    }
+    seed_df3_ref = pconcat([seed_df, seed_df2, seed_df3_trim], ignore_index=True)
+    key3_bins = by_4rows(data=seed_df3_ref[ordered_on], buffer={})
+    ref_res = (
+        {
+            key: seed_df3_ref.groupby(key_configs[key]["by"])
+            .agg(**key_configs[key]["agg"])
+            .reset_index()
+            for key in [key1, key2]
+        }
+        | {key3: seed_df3_ref.groupby(key3_bins).agg(**key_configs[key3]["agg"]).reset_index()}
+        | {
+            key4: seed_df3_ref.groupby(key_configs[key4]["bin_on"])
+            .agg(**key_configs[key4]["agg"])
+            .reset_index()
+        }
+    )
     for key, ref_df in ref_res.items():
         rec_res = store[key].pdf
         assert rec_res.equals(ref_df)
@@ -868,7 +907,7 @@ def test_exception_different_index_at_restart(tmp_path):
         seed=seed,
         ordered_on=ordered_on,
         store=store,
-        key={key1: key1_cf},
+        keys={key1: key1_cf},
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
@@ -891,7 +930,7 @@ def test_exception_different_index_at_restart(tmp_path):
         seed=seed,
         ordered_on=ordered_on,
         store=store,
-        key={key2: key2_cf},
+        keys={key2: key2_cf},
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
@@ -913,7 +952,7 @@ def test_exception_different_index_at_restart(tmp_path):
             seed=seed,
             ordered_on=ordered_on,
             store=store,
-            key=key_configs,
+            keys=key_configs,
             discard_last=True,
             max_row_group_size=max_row_group_size,
         )
