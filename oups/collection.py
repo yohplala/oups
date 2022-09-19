@@ -235,12 +235,13 @@ class ParquetSet:
         """
         # Keep track of intermediate partition folders, in case one get
         # empty.
-        basepath = self._basepath
-        dirpath = os_path.join(basepath, key.to_path)
-        rmtree(dirpath)
-        self._keys.remove(key)
-        # Remove possibly empty directories.
-        upper_dir = strip_path_tail(dirpath)
-        while (upper_dir != basepath) and (not listdir(upper_dir)):
-            rmdir(upper_dir)
-            upper_dir = strip_path_tail(upper_dir)
+        if key in self._keys:
+            basepath = self._basepath
+            dirpath = os_path.join(basepath, key.to_path)
+            rmtree(dirpath)
+            self._keys.remove(key)
+            # Remove possibly empty directories.
+            upper_dir = strip_path_tail(dirpath)
+            while (upper_dir != basepath) and (not listdir(upper_dir)):
+                rmdir(upper_dir)
+                upper_dir = strip_path_tail(upper_dir)
