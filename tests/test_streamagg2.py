@@ -628,10 +628,18 @@ def test_setup_4_keys_with_default_parameters_for_writing_n_reduction(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "reduction1,reduction2",
-    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+    "reduction1,reduction2, parallel",
+    [
+        (False, False, False),
+        (True, True, False),
+        (True, False, False),
+        (VAEX, VAEX, False),
+        (VAEX, False, False),
+        (True, True, True),
+        (VAEX, VAEX, True),
+    ],
 )
-def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
+def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
     # Test with parquet seed, and 4 keys.
     # - key 1: time grouper '2T', agg 'first', and 'last',
     # - key 2: time grouper '13T', agg 'first', and 'max',
@@ -731,6 +739,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         discard_last=True,
         max_row_group_size=max_row_group_size,
         reduction=reduction1,
+        parallel=parallel,
     )
     # Test results
     # Remove last 'group' as per 'ordered_on' in 'seed_df'.
@@ -770,6 +779,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         discard_last=True,
         max_row_group_size=max_row_group_size,
         reduction=reduction2,
+        parallel=parallel,
     )
     # Test results
     seed_df2_trim = seed_df2[seed_df2[ordered_on] < seed_df2[ordered_on].iloc[-1]]
@@ -809,6 +819,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2):
         discard_last=True,
         max_row_group_size=max_row_group_size,
         reduction=reduction2,
+        parallel=parallel,
     )
     # Test results
     seed_df3_trim = seed_df3[seed_df3[ordered_on] < seed_df3[ordered_on].iloc[-1]]

@@ -11,6 +11,8 @@ from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from fastparquet import ParquetFile
+from joblib import Parallel
+from joblib import delayed
 from pandas import DataFrame as pDataFrame
 from pandas import Grouper
 from pandas import Series
@@ -1066,6 +1068,7 @@ def streamagg(
     trim_start: bool = True,
     discard_last: bool = True,
     reduction: bool = False,
+    parallel: bool = False,
     **kwargs,
 ):
     """Aggregate sequentially on successive chunks (stream) of ordered data.
@@ -1193,6 +1196,11 @@ def streamagg(
         performance improvement.
         If `"vaex"`, the reduction step is performed with vaex instead of
         pandas.
+    parallel : bool, default False
+        Conduct binning, post-processing and writing in parallel, with one
+        process per `key`. If a single `key`, only one process is possible.
+        This does not impact execution of reduction in step in parallel if
+        vaex is used.
 
     Other parameters
     ----------------
@@ -1300,134 +1308,141 @@ def streamagg(
     last_seed_index, iter_data = _iter_data(
         seed, ordered_on, trim_start, seed_index_restart, discard_last, all_cols_in
     )
-    for seed_chunk in iter_data:
-        # WiP parallelization "_post_n_bin".
-        # For using joblib.
-        # https://stackoverflow.com/questions/61215938/joblib-parallelization-of-function-with-multiple-keyword-arguments
-        # - ought to work with memmap.
-        # - releasing group of workers:
-        #   "Note that the 'loky' backend now used by default for process-based parallelism automatically
-        #    tries to maintain and reuse a pool of workers by it-self even for calls without the context manager."
-        bins_n_conf = [
-            _post_n_bin(
-                seed_chunk=seed_chunk,
+    n_jobs = -1 if (parallel and len(keys) > 1) else 1
+    # WiP
+    # implement 'parallel' parameter for setting n_jobs
+    # test 'prefer=threads'?
+    with Parallel(n_jobs=n_jobs) as p_job:
+        for seed_chunk in iter_data:
+            # WiP parallelization "_post_n_bin".
+            # For using joblib.
+            # https://stackoverflow.com/questions/61215938/joblib-parallelization-of-function-with-multiple-keyword-arguments
+            # - ought to work with memmap.
+            # - releasing group of workers:
+            #   "Note that the 'loky' backend now used by default for process-based parallelism automatically
+            #    tries to maintain and reuse a pool of workers by it-self even for calls without the context manager."
+            bins_n_conf = p_job(
+                delayed(_post_n_bin)(
+                    seed_chunk=seed_chunk,
+                    reduction=reduction,
+                    key=key,
+                    dirpath=config["dirpath"],
+                    agg_res=config["agg_res"],
+                    agg_res_len=config["agg_res_len"],
+                    agg_chunks_buffer=config["agg_chunks_buffer"],
+                    agg_n_rows=config["agg_n_rows"],
+                    agg_mean_row_group_size=config["agg_mean_row_group_size"],
+                    max_agg_row_group_size=config["max_agg_row_group_size"],
+                    write_config=config["write_config"],
+                    bin_out_col=config["bin_out_col"],
+                    post=config["post"],
+                    isfbn=config["isfbn"],
+                    post_buffer=config["post_buffer"],
+                    bins=config["bins"],
+                    by=config["by"],
+                    cols_to_by=config["cols_to_by"],
+                    binning_buffer=config["binning_buffer"],
+                    reduction_bin_col=config["reduction_bin_col"],
+                )
+                for key, config in keys_config.items()
+            )
+            if reduction:
+                reduction_bins = []
+                for key, config in bins_n_conf:
+                    if config["reduction_bins"] is not None:
+                        # Cases 'by' is pd.Grouper or Callable.
+                        # In this case, spare 'reduction_bins'.
+                        # It is popped so that it is not serialized/copy in next
+                        # parallel run (this data is a 1D-array).
+                        # Keys of 'reduction_bins' are names of
+                        # 'reduction_bin_col' for only new columns (not the ones
+                        # that have to be used directly for binning)
+                        reduction_bins.append(config.pop("reduction_bins"))
+                    # Consolidate results.
+                    keys_config[key].update(config)
+                # Re-create a seed_chunk with new 'bins' columns.
+                if reduction == VAEX:
+                    # Reduction with vaex.
+                    seed_chunk = from_pandas(seed_chunk[reduction_seed_chunk_cols])
+                    if ordered_on not in reduction_seed_chunk_cols:
+                        # Keep track of initial order to sort aggregation results
+                        # after vaex reduction.
+                        seed_chunk[ordered_on] = vrange(0, len(seed_chunk))
+                    for red_bin in reduction_bins:
+                        seed_chunk.join(red_bin, inplace=True)
+                    seed_chunk = (
+                        seed_chunk.groupby(reduction_bin_cols, sort=False)
+                        .agg(reduction_agg)
+                        .sort(vaex_sort)
+                    )
+                    if VAEX_SORT in seed_chunk.get_column_names():
+                        seed_chunk = seed_chunk.drop(VAEX_SORT)
+                    seed_chunk = seed_chunk.to_pandas_df()
+                else:
+                    # Reduction with pandas.
+                    seed_chunk = pconcat(
+                        [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]], axis=1, copy=False
+                    )
+                    seed_chunk = seed_chunk.groupby(reduction_bin_cols, sort=False).agg(
+                        **reduction_agg
+                    )
+                    seed_chunk.reset_index(inplace=True)
+            else:
+                # Consolidate results only.
+                for key, config in bins_n_conf:
+                    keys_config[key].update(config)
+            # WiP parallelization "_group_n_stitch".
+            # Send the right 'seed_chunk' to each key with the correct 'cols_to_group'?
+            # https://github.com/joblib/joblib/issues/1244
+            # https://joblib.readthedocs.io/en/latest/parallel.html#reusing-a-pool-of-workers
+            agg_res_n_conf = p_job(
+                delayed(_group_n_stitch)(
+                    seed_chunk=seed_chunk,
+                    reduction=reduction,
+                    key=key,
+                    bins=config["bins"],
+                    agg=config["agg"],
+                    last_agg_row=config["last_agg_row"],
+                    agg_chunks_buffer=config["agg_chunks_buffer"],
+                    agg_n_rows=config["agg_n_rows"],
+                    self_agg=config["self_agg"],
+                    isfbn=config["isfbn"],
+                )
+                for key, config in keys_config.items()
+            )
+            for key, config in agg_res_n_conf:
+                keys_config[key].update(config)
+        # Check if at least one iteration has been achieved or not.
+        agg_res = next(iter(keys_config.values()))["agg_res"]
+        if agg_res is None:
+            # No iteration has been achieved, as no data.
+            return
+        # Post-process & write results from last iteration, this time keeping
+        # last row, and recording metadata for a future 'streamagg' execution.
+        # A deep copy is made for 'last_agg_row' to prevent a specific case where
+        # 'agg_chuks_buffer' is a list of a single 'agg_res' dataframe of a single
+        # row. In this very specific case, both 'agg_res' and 'last_agg_row' points
+        # toward the same dataframe, but 'agg_res' gets modified in '_post_n_write'
+        # while 'last_agg_row' should not be. The deep copy prevents this.
+        p_job(
+            delayed(_post_n_write_agg_chunks)(
                 reduction=reduction,
                 key=key,
                 dirpath=config["dirpath"],
-                agg_res=config["agg_res"],
-                agg_res_len=config["agg_res_len"],
-                agg_chunks_buffer=config["agg_chunks_buffer"],
-                agg_n_rows=config["agg_n_rows"],
-                agg_mean_row_group_size=config["agg_mean_row_group_size"],
-                max_agg_row_group_size=config["max_agg_row_group_size"],
+                chunks=[*config["agg_chunks_buffer"], config["agg_res"]],
                 write_config=config["write_config"],
-                bin_out_col=config["bin_out_col"],
+                index_name=config["bin_out_col"],
                 post=config["post"],
                 isfbn=config["isfbn"],
                 post_buffer=config["post_buffer"],
-                bins=config["bins"],
-                by=config["by"],
-                cols_to_by=config["cols_to_by"],
-                binning_buffer=config["binning_buffer"],
-                reduction_bin_col=config["reduction_bin_col"],
+                other_metadata=(
+                    last_seed_index,
+                    config["last_agg_row"].copy(),
+                    config["binning_buffer"],
+                ),
             )
             for key, config in keys_config.items()
-        ]
-        if reduction:
-            reduction_bins = []
-            for key, config in bins_n_conf:
-                if config["reduction_bins"] is not None:
-                    # Cases 'by' is pd.Grouper or Callable.
-                    # In this case, spare 'reduction_bins'.
-                    # It is popped so that it is not serialized/copy in next
-                    # parallel run (this data is a 1D-array).
-                    # Keys of 'reduction_bins' are names of
-                    # 'reduction_bin_col' for only new columns (not the ones
-                    # that have to be used directly for binning)
-                    reduction_bins.append(config.pop("reduction_bins"))
-                # Consolidate results.
-                keys_config[key].update(config)
-            # Re-create a seed_chunk with new 'bins' columns.
-            if reduction == VAEX:
-                # Reduction with vaex.
-                seed_chunk = from_pandas(seed_chunk[reduction_seed_chunk_cols])
-                if ordered_on not in reduction_seed_chunk_cols:
-                    # Keep track of initial order to sort aggregation results
-                    # after vaex reduction.
-                    seed_chunk[ordered_on] = vrange(0, len(seed_chunk))
-                for red_bin in reduction_bins:
-                    seed_chunk.join(red_bin, inplace=True)
-                seed_chunk = (
-                    seed_chunk.groupby(reduction_bin_cols, sort=False)
-                    .agg(reduction_agg)
-                    .sort(vaex_sort)
-                )
-                if VAEX_SORT in seed_chunk.get_column_names():
-                    seed_chunk = seed_chunk.drop(VAEX_SORT)
-                seed_chunk = seed_chunk.to_pandas_df()
-            else:
-                # Reduction with pandas.
-                seed_chunk = pconcat(
-                    [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]], axis=1, copy=False
-                )
-                seed_chunk = seed_chunk.groupby(reduction_bin_cols, sort=False).agg(**reduction_agg)
-                seed_chunk.reset_index(inplace=True)
-        else:
-            # Consolidate results only.
-            for key, config in bins_n_conf:
-                keys_config[key].update(config)
-        # WiP parallelization "_group_n_stitch".
-        # Send the right 'seed_chunk' to each key with the correct 'cols_to_group'?
-        # https://github.com/joblib/joblib/issues/1244
-        # https://joblib.readthedocs.io/en/latest/parallel.html#reusing-a-pool-of-workers
-        agg_res_n_conf = [
-            _group_n_stitch(
-                seed_chunk=seed_chunk,
-                reduction=reduction,
-                key=key,
-                bins=config["bins"],
-                agg=config["agg"],
-                last_agg_row=config["last_agg_row"],
-                agg_chunks_buffer=config["agg_chunks_buffer"],
-                agg_n_rows=config["agg_n_rows"],
-                self_agg=config["self_agg"],
-                isfbn=config["isfbn"],
-            )
-            for key, config in keys_config.items()
-        ]
-        for key, config in agg_res_n_conf:
-            keys_config[key].update(config)
-    # Check if at least one iteration has been achieved or not.
-    agg_res = next(iter(keys_config.values()))["agg_res"]
-    if agg_res is None:
-        # No iteration has been achieved, as no data.
-        return
-    # Post-process & write results from last iteration, this time keeping
-    # last row, and recording metadata for a future 'streamagg' execution.
-    # A deep copy is made for 'last_agg_row' to prevent a specific case where
-    # 'agg_chuks_buffer' is a list of a single 'agg_res' dataframe of a single
-    # row. In this very specific case, both 'agg_res' and 'last_agg_row' points
-    # toward the same dataframe, but 'agg_res' gets modified in '_post_n_write'
-    # while 'last_agg_row' should not be. The deep copy prevents this.
-    [
-        _post_n_write_agg_chunks(
-            reduction=reduction,
-            key=key,
-            dirpath=config["dirpath"],
-            chunks=[*config["agg_chunks_buffer"], config["agg_res"]],
-            write_config=config["write_config"],
-            index_name=config["bin_out_col"],
-            post=config["post"],
-            isfbn=config["isfbn"],
-            post_buffer=config["post_buffer"],
-            other_metadata=(
-                last_seed_index,
-                config["last_agg_row"].copy(),
-                config["binning_buffer"],
-            ),
         )
-        for key, config in keys_config.items()
-    ]
     # Add keys in store for those who where not in.
     for key in keys:
         if key not in store:
