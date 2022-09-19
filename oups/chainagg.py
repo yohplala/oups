@@ -6,17 +6,29 @@ Created on Wed Mar  9 21:30:00 2022.
 """
 from copy import copy
 from dataclasses import dataclass
+from multiprocessing import cpu_count
+from os import path as os_path
 from typing import Callable, Dict, List, Tuple, Union
 
 import numpy as np
 from fastparquet import ParquetFile
+from joblib import Parallel
+from joblib import delayed
 from pandas import DataFrame as pDataFrame
 from pandas import Grouper
 from pandas import Series
 from pandas import Timestamp as pTimestamp
-from pandas import concat
+from pandas import concat as pconcat
 from pandas import date_range
 from pandas import read_json
+from vaex import from_arrays
+from vaex import from_pandas
+from vaex import vrange
+from vaex.agg import first as vfirst
+from vaex.agg import last as vlast
+from vaex.agg import max as vmax
+from vaex.agg import min as vmin
+from vaex.agg import sum as vsum
 from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.collection import ParquetSet
@@ -25,12 +37,21 @@ from oups.utils import tcut
 from oups.writer import MAX_ROW_GROUP_SIZE
 from oups.writer import OUPS_METADATA
 from oups.writer import OUPS_METADATA_KEY
+from oups.writer import write
 
 
 VDATAFRAME_ROW_GROUP_SIZE = 6_345_000
-ACCEPTED_AGG_FUNC = {"first", "last", "min", "max", "sum"}
+# Aggregation functions.
+FIRST = "first"
+LAST = "last"
+MIN = "min"
+MAX = "max"
+SUM = "sum"
+ACCEPTED_AGG_FUNC = {FIRST, LAST, MIN, MAX, SUM}
+VAEX_AGG = {FIRST: vfirst, LAST: vlast, MIN: vmin, MAX: vmax, SUM: vsum}
+VAEX_SORT = "vaex_sort"
 # List of keys to metadata of aggregation results.
-MD_KEY_STREAMAGG = "streamagg"
+MD_KEY_CHAINAGG = "chainagg"
 MD_KEY_LAST_SEED_INDEX = "last_seed_index"
 MD_KEY_BINNING_BUFFER = "binning_buffer"
 MD_KEY_LAST_AGGREGATION_ROW = "last_aggregation_row"
@@ -40,6 +61,7 @@ PANDAS_SERIALIZE = {"orient": "table", "date_unit": "ns", "double_precision": 15
 PANDAS_DESERIALIZE = {"orient": "table", "date_unit": "ns", "precise_float": True}
 # Misc.
 REDUCTION_BIN_COL_PREFIX = "bin_"
+VAEX = "vaex"
 
 
 def _is_stremagg_result(handle: ParquetHandle) -> bool:
@@ -54,20 +76,20 @@ def _is_stremagg_result(handle: ParquetHandle) -> bool:
     -------
     bool
         `True` if parquet file contains metadata as produced by
-        ``oups.streamagg``, which confirms this dataset has been produced with
+        ``oups.chainagg``, which confirms this dataset has been produced with
         this latter function.
     """
     # As oups specific metadata is a string produced by json library, the last
     # 'in' condition is checking if the set of characters defined by
-    # 'MD_KEY_STREAMAGG' is in a string.
+    # 'MD_KEY_CHAINAGG' is in a string.
     pf = handle.pf
     return (
         OUPS_METADATA_KEY in pf.key_value_metadata
-        and MD_KEY_STREAMAGG in pf.key_value_metadata[OUPS_METADATA_KEY]
+        and MD_KEY_CHAINAGG in pf.key_value_metadata[OUPS_METADATA_KEY]
     )
 
 
-def _get_streamagg_md(handle: ParquetHandle) -> tuple:
+def _get_chainagg_md(handle: ParquetHandle) -> tuple:
     """Retrieve and deserialize stremagg metadata from previous aggregation.
 
     Parameters
@@ -91,33 +113,33 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
     # Get seed index value to start new aggregation.
     # It is a value to be included when filtering seed data.
     # Trim accordingly head of seed data in this case.
-    streamagg_md = handle._oups_metadata[MD_KEY_STREAMAGG]
+    chainagg_md = handle._oups_metadata[MD_KEY_CHAINAGG]
     # De-serialize 'last_seed_index'.
-    last_seed_index = streamagg_md[MD_KEY_LAST_SEED_INDEX]
+    last_seed_index = chainagg_md[MD_KEY_LAST_SEED_INDEX]
     last_seed_index = read_json(last_seed_index, **PANDAS_DESERIALIZE).iloc[0, 0]
     # 'last_agg_row' for stitching with new aggregation results.
-    last_agg_row = read_json(streamagg_md[MD_KEY_LAST_AGGREGATION_ROW], **PANDAS_DESERIALIZE)
+    last_agg_row = read_json(chainagg_md[MD_KEY_LAST_AGGREGATION_ROW], **PANDAS_DESERIALIZE)
     # Metadata related to binning process from past binnings on prior data.
     # It is used in case 'by' is a callable.
-    if streamagg_md[MD_KEY_BINNING_BUFFER]:
+    if chainagg_md[MD_KEY_BINNING_BUFFER]:
         binning_buffer = (
-            read_json(streamagg_md[MD_KEY_BINNING_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+            read_json(chainagg_md[MD_KEY_BINNING_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
         )
     else:
         binning_buffer = {}
     # Metadata related to post-processing of prior aggregation results, to be
     # used by 'post'.
-    if streamagg_md[MD_KEY_POST_BUFFER]:
+    if chainagg_md[MD_KEY_POST_BUFFER]:
         post_buffer = (
-            read_json(streamagg_md[MD_KEY_POST_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+            read_json(chainagg_md[MD_KEY_POST_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
         )
     else:
         post_buffer = {}
     return last_seed_index, last_agg_row, binning_buffer, post_buffer
 
 
-def _set_streamagg_md(
-    key: dataclass,
+def _set_chainagg_md(
+    key: str,
     last_seed_index,
     last_agg_row: pDataFrame,
     binning_buffer: dict = None,
@@ -127,7 +149,7 @@ def _set_streamagg_md(
 
     Parameters
     ----------
-    key : dataclass
+    key : str
         Key of data in oups store for which metadata is to be written.
     last_seed_index : default None
         Last index in seed data. Can be numeric type, timestamp...
@@ -141,7 +163,7 @@ def _set_streamagg_md(
         Last values from post-processing, that can be required when restarting
         post-processing of new aggregation results.
     """
-    # Setup metadata for a future 'streamagg' execution.
+    # Setup metadata for a future 'chainagg' execution.
     # Store a json serialized pandas series, to keep track of 'whatever the
     # object' the index is.
     last_seed_index = pDataFrame({MD_KEY_LAST_SEED_INDEX: [last_seed_index]}).to_json(
@@ -154,7 +176,7 @@ def _set_streamagg_md(
         post_buffer = pDataFrame(post_buffer, index=[0]).to_json(**PANDAS_SERIALIZE)
     # Set oups metadata.
     metadata = {
-        MD_KEY_STREAMAGG: {
+        MD_KEY_CHAINAGG: {
             MD_KEY_LAST_SEED_INDEX: last_seed_index,
             MD_KEY_BINNING_BUFFER: binning_buffer,
             MD_KEY_LAST_AGGREGATION_ROW: last_agg_row,
@@ -166,8 +188,8 @@ def _set_streamagg_md(
 
 def _post_n_write_agg_chunks(
     chunks: List[pDataFrame],
-    store: ParquetSet,
-    key: dataclass,
+    dirpath: str,
+    key: str,
     write_config: dict,
     reduction: bool,
     index_name: str = None,
@@ -182,10 +204,10 @@ def _post_n_write_agg_chunks(
     ----------
     chunks : List[pandas.DataFrame]
         List of chunks resulting from aggregation (pandas dataframes).
-    store : ParquetSet
-        Store to which recording aggregation results.
-    key : Indexer
-        Key for recording aggregation results.
+    dirpath : str
+        Path to which recording aggregation results.
+    key : str
+        Key for retrieving corresponding metadata.
     index_name : str, default None
         If set, name index of dataframe resulting from aggregation with this
         value.
@@ -234,7 +256,7 @@ def _post_n_write_agg_chunks(
     """
     # Keep last row as there might be not further iteration.
     if len(chunks) > 1:
-        agg_res = concat(chunks)
+        agg_res = pconcat(chunks)
     else:
         agg_res = chunks[0]
     if index_name or reduction:
@@ -251,9 +273,9 @@ def _post_n_write_agg_chunks(
         agg_res = post(agg_res, isfbn, post_buffer)
     if other_metadata:
         # Set oups metadata.
-        _set_streamagg_md(key, *other_metadata, post_buffer)
+        _set_chainagg_md(key, *other_metadata, post_buffer)
     # Record data.
-    store[key] = write_config, agg_res
+    write(dirpath=dirpath, data=agg_res, md_key=key, **write_config)
 
 
 def _setup_binning(
@@ -468,7 +490,7 @@ def _setup(
     Returns
     -------
     tuple
-        Settings for parallel aggregation, with 5 items.
+        Settings for chained aggregation.
 
           - ``all_cols_in``, list specifying all columns to loaded from seed
             data, required to perform the aggregation.
@@ -480,6 +502,8 @@ def _setup(
             reduction step.
           - ``reduction_seed_chunk_cols``, list of columns already in seed, to
             be kept in 'seed_chunk' for reduction step.
+          - ``vaex_sort``, str, column name to use for sorting groupby result
+            from reduction step, in step reduction is performed with vaex.
           - ``reduction_agg``, dict specifying the minimal config to perform
             the reduction aggregation step, still containing all required
             aggregation functions. It is in the form:
@@ -487,7 +511,8 @@ def _setup(
             ``'input_col__agg_function_name'`` is used as generic name.
           - ``keys_config``, dict of keys config. A config is also a dict in
             the form:
-            ``{key: {'agg_n_rows' : 0,
+            ``{key: {'dirpath': str, where to record agg res,
+                     'agg_n_rows' : 0,
                      'agg_mean_row_group_size' : 0,
                      'agg_res' : None,
                      'agg_res_len' : None,
@@ -513,6 +538,7 @@ def _setup(
                }``
             To be noticed:
 
+              - key of dict ``keys_config`` is a string.
               - in case of a reduction step, 'agg' is modified to use as input
                 column generic names from reduction aggregation.
               - 'self_agg' is the aggregation step required for stitching
@@ -594,7 +620,9 @@ def _setup(
                 # {("input_col_name__agg_function_name") : ("input_col", "agg_function_name")}
                 reduction_agg_col = f"{col_in}__{agg_func}"
                 if reduction_agg_col not in reduction_agg:
-                    reduction_agg[reduction_agg_col] = (col_in, agg_func)
+                    reduction_agg[reduction_agg_col] = (
+                        VAEX_AGG[agg_func](col_in) if reduction == VAEX else (col_in, agg_func)
+                    )
                 # Modify consequently 'agg' so that it can operate on agg results from
                 # reduction step.
                 key_agg[col_out] = (reduction_agg_col, agg_func)
@@ -636,12 +664,12 @@ def _setup(
         # Step 2 / Process metadata if already existing aggregation results.
         # Initialize variables.
         if key in store:
-            # Prior streamagg results already in store.
+            # Prior chainagg results already in store.
             # Retrieve corresponding metadata to re-start aggregations.
             prev_agg_res = store[key]
             if not _is_stremagg_result(prev_agg_res):
-                raise ValueError(f"provided key '{key}' is not that of 'streamagg' results.")
-            seed_index_restart, last_agg_row, binning_buffer, post_buffer = _get_streamagg_md(
+                raise ValueError(f"provided key '{key}' is not that of 'chainagg' results.")
+            seed_index_restart, last_agg_row, binning_buffer, post_buffer = _get_chainagg_md(
                 prev_agg_res
             )
             seed_index_restart_set.add(seed_index_restart)
@@ -659,7 +687,8 @@ def _setup(
         # 'agg_chunks_buffer' is a buffer to keep aggregation chunks
         # before a concatenation to record. Because it is appended in-place
         # for each key, it is created separately for each key.
-        keys_config[key] = key_default | {
+        keys_config[str(key)] = key_default | {
+            "dirpath": os_path.join(store._basepath, key.to_path),
             "by": by,
             "cols_to_by": cols_to_by,
             "bins": bins,
@@ -679,12 +708,26 @@ def _setup(
         # No aggregation result existing yet. Whatever 'trim_start' value, no
         # trimming is possible.
         trim_start = False
+    # In case of a reduction performed with vaex, result from reduction loses
+    # its initial order. It is then necessary to re-order bins in the order of
+    # appearance of 1st occurrence. For this, either we use an aggregation
+    # already requested on 'ordered_on' column if relevant.
+    # Or we will create a temporary index column on-the-fly, just before
+    # reduction.
+    vaex_sort = None
+    if reduction == VAEX and (vaex_sort := f"{ordered_on}__{FIRST}") not in reduction_agg:
+        # If not requested, request a new agg that will behave similarly.
+        # Byt using 2 underscores, this column is considered hidden, and will
+        # not be exported when translating the results back to pandas.
+        vaex_sort = VAEX_SORT
+        reduction_agg[vaex_sort] = VAEX_AGG[FIRST](ordered_on)
     return (
         list(all_cols_in),
         trim_start,
         seed_index_restart_set,
         reduction_bin_cols,
         list(reduction_seed_chunk_cols),
+        vaex_sort,
         reduction_agg,
         keys_config,
     )
@@ -782,8 +825,8 @@ def _iter_data(
 def _post_n_bin(
     seed_chunk: pDataFrame,
     reduction: bool,
-    store: ParquetSet,
-    key: dataclass,
+    dirpath: str,
+    key: str,
     agg_res: Union[pDataFrame, None],
     agg_res_len: int,
     agg_chunks_buffer: List[pDataFrame],
@@ -809,10 +852,10 @@ def _post_n_bin(
         Chunk of seed data.
     reduction : bool
         If the reduction step is to be performed.
-    store : ParquetSet
-        Store to which recording aggregation results.
-    key : dataclass
-        Key for recording aggregation results.
+    dirpath : str
+        Path to which recording aggregation results.
+    key : str
+        Key for retrieving metadata corresponding to aggregation results.
 
     Other parameters
     ----------------
@@ -847,7 +890,7 @@ def _post_n_bin(
                 # Write results from previous iteration.
                 _post_n_write_agg_chunks(
                     chunks=agg_chunks_buffer,
-                    store=store,
+                    dirpath=dirpath,
                     key=key,
                     write_config=write_config,
                     reduction=reduction,
@@ -880,12 +923,19 @@ def _post_n_bin(
                 # Only done in 'last resort' if 'bin_out_col' has not been
                 # defined after setup.
                 bin_out_col = out_name
-            # Rename with "generic name".
-            reduction_bins.name = reduction_bin_col
+            if reduction == VAEX:
+                reduction_bins = from_arrays(**{reduction_bin_col: reduction_bins.to_numpy()})
+            else:
+                # Rename with "generic name".
+                reduction_bins.name = reduction_bin_col
         elif reduction_bins is not None:
             # Then 'reduction_bins' is a collection of some sort.
             # Let's make it a pandas Series and provide it a name.
-            reduction_bins = Series(reduction_bins, name=reduction_bin_col)
+            reduction_bins = (
+                from_arrays(**{reduction_bin_col: reduction_bins})
+                if reduction == VAEX
+                else Series(reduction_bins, name=reduction_bin_col)
+            )
     else:
         # No reduction step.
         reduction_bins = None
@@ -914,7 +964,7 @@ def _post_n_bin(
 def _group_n_stitch(
     seed_chunk: pDataFrame,
     reduction: bool,
-    key: dataclass,
+    key: str,
     bins: str,
     agg: dict,
     last_agg_row: pDataFrame,
@@ -931,7 +981,7 @@ def _group_n_stitch(
         Chunk of seed data.
     reduction : bool
         If the reduction step is to be performed.
-    key : dataclass
+    key : str
         Key for recording aggregation results.
 
     Other parameters
@@ -970,7 +1020,7 @@ def _group_n_stitch(
                     start=last, end=first, freq=bins.freq, inclusive="neither", name=bins.key
                 )
                 if not missing.empty:
-                    last_agg_row = concat(
+                    last_agg_row = pconcat(
                         [last_agg_row, pDataFrame(index=missing, columns=last_agg_row.columns)]
                     )
                     n_added_rows = len(last_agg_row)
@@ -985,7 +1035,7 @@ def _group_n_stitch(
             # bin), and first row of new aggregation results, then replay
             # aggregation between both.
             agg_res.iloc[:1] = (
-                concat([last_agg_row, agg_res.iloc[:1]])
+                pconcat([last_agg_row, agg_res.iloc[:1]])
                 .groupby(level=0, sort=False)
                 .agg(**self_agg)
             )
@@ -1003,11 +1053,11 @@ def _group_n_stitch(
     return key, updated_conf
 
 
-def streamagg(
+def chainagg(
     seed: Union[vDataFrame, ParquetFile],
     ordered_on: str,
     store: ParquetSet,
-    key: Union[dataclass, dict],
+    keys: Union[dataclass, dict],
     agg: dict = None,
     by: Union[Grouper, Callable[[Series, dict], Series]] = None,
     bin_on: Union[str, Tuple[str, str]] = None,
@@ -1015,6 +1065,7 @@ def streamagg(
     trim_start: bool = True,
     discard_last: bool = True,
     reduction: bool = False,
+    parallel: bool = False,
     **kwargs,
 ):
     """Aggregate sequentially on successive chunks (stream) of ordered data.
@@ -1043,7 +1094,7 @@ def streamagg(
         and/or ``bin_on`` parameters have to be set.
     store : ParquetSet
         Store to which recording aggregation results.
-    key : Union[Indexer, dict]
+    keys : Union[Indexer, dict]
         Key for recording aggregation results.
         If a dict, several keys can be specified for operating multiple
         parallel aggregations on the same seed. In this case, the dict should
@@ -1056,8 +1107,8 @@ def streamagg(
           - If not specified, `by` and `bin_on` parameters in dict do not get
             default values.
           - If not specified `agg` and `post` parameters in dict get values
-            from `agg` and `post` parameters defined when calling `streamagg`.
-            If using 'post' when calling 'streamagg' and not willing to apply
+            from `agg` and `post` parameters defined when calling `chainagg`.
+            If using 'post' when calling 'chainagg' and not willing to apply
             it for one key, set it to ``None`` in key specific config.
 
     agg : Union[dict, None], default None
@@ -1133,13 +1184,20 @@ def streamagg(
         If ``True``, last row group in seed data (sharing the same value in
         `ordered_on` column) is removed from the aggregation step. See below
         notes.
-    reduction : bool, default False
+    reduction : bool or "vaex", default False
         If `True`, perform a 1st multi-groupby and aggregation on seed data.
         This 1st step (common to all keys) reduces then the side of seed data
         before it is used for each individual groupby and aggregation of each
         key.
         The more the number of keys, the more the reduction step ought to bring
         performance improvement.
+        If `"vaex"`, the reduction step is performed with vaex instead of
+        pandas.
+    parallel : bool, default False
+        Conduct binning, post-processing and writing in parallel, with one
+        process per `key`. If a single `key`, only one process is possible.
+        This does not impact execution of reduction in step in parallel if
+        vaex is used.
 
     Other parameters
     ----------------
@@ -1151,7 +1209,7 @@ def streamagg(
     Notes
     -----
     - Result is necessarily added to a dataset from an instantiated oups
-      ``ParquetSet``. ``streamagg`` actually relies on the `advanced` update
+      ``ParquetSet``. ``chainagg`` actually relies on the `advanced` update
       feature from oups.
     - If aggregation results already exist in the instantiated oups
       ``ParquetSet``, last index from previous aggregation is retrieved, and
@@ -1193,7 +1251,7 @@ def streamagg(
       when calling ``oups.writer.write``. If additional parameters are defined
       by the user, some checks are made.
 
-        - 'ordered_on' is forced to 'streamagg' ``ordered_on`` parameter.
+        - 'ordered_on' is forced to 'chainagg' ``ordered_on`` parameter.
         - If 'duplicates_on' is not set by the user or is `None`, then it is
           set to the name of the output column for group keys defined by
           `bin_on`. The rational is that this column identifies uniquely each
@@ -1202,17 +1260,17 @@ def streamagg(
           already (if there are unique values in 'ordered_on') and the column
           containing group keys is then removed during user post-processing.
           To allow this case, if the user is setting ``duplicates_on`` as
-          additional parameter to ``streamagg``, it is not
+          additional parameter to ``chainagg``, it is not
           modified. It means omission of the column name containing the group
           keys, as defined by 'bin_on' parameter when it is set, is a
           voluntary choice from the user.
 
     """
     # Parameter setup.
-    if not isinstance(key, dict):
+    if not isinstance(keys, dict):
         if not agg:
             raise ValueError("not possible to use a single key without specifying parameter 'agg'.")
-        key = {key: {"agg": agg, "by": by, "bin_on": bin_on, "post": post}}
+        keys = {keys: {"agg": agg, "by": by, "bin_on": bin_on, "post": post}}
     # 'reduction_bin_cols' contain ALL columns to use for binning, including
     # column to be used "as they are" for binning. ('by' is `None`).
     (
@@ -1221,12 +1279,13 @@ def streamagg(
         seed_index_restart_set,
         reduction_bin_cols,
         reduction_seed_chunk_cols,
+        vaex_sort,
         reduction_agg,
         keys_config,
     ) = _setup(
         ordered_on=ordered_on,
         store=store,
-        keys=key,
+        keys=keys,
         agg=agg,
         post=post,
         trim_start=trim_start,
@@ -1246,112 +1305,134 @@ def streamagg(
     last_seed_index, iter_data = _iter_data(
         seed, ordered_on, trim_start, seed_index_restart, discard_last, all_cols_in
     )
-    for seed_chunk in iter_data:
-        # WiP parallelization "_post_n_bin".
-        # For using joblib.
-        # https://stackoverflow.com/questions/61215938/joblib-parallelization-of-function-with-multiple-keyword-arguments
-        # - ought to work with memmap.
-        # - releasing group of workers:
-        #   "Note that the 'loky' backend now used by default for process-based parallelism automatically
-        #    tries to maintain and reuse a pool of workers by it-self even for calls without the context manager."
-        bins_n_conf = [
-            _post_n_bin(
-                seed_chunk=seed_chunk,
+    n_keys = len(keys)
+    n_jobs = min(int(cpu_count() * 3 / 4), n_keys) if (parallel and n_keys > 1) else 1
+    with Parallel(n_jobs=n_jobs, prefer="threads") as p_job:
+        for seed_chunk in iter_data:
+            bins_n_conf = p_job(
+                delayed(_post_n_bin)(
+                    seed_chunk=seed_chunk,
+                    reduction=reduction,
+                    key=key,
+                    dirpath=config["dirpath"],
+                    agg_res=config["agg_res"],
+                    agg_res_len=config["agg_res_len"],
+                    agg_chunks_buffer=config["agg_chunks_buffer"],
+                    agg_n_rows=config["agg_n_rows"],
+                    agg_mean_row_group_size=config["agg_mean_row_group_size"],
+                    max_agg_row_group_size=config["max_agg_row_group_size"],
+                    write_config=config["write_config"],
+                    bin_out_col=config["bin_out_col"],
+                    post=config["post"],
+                    isfbn=config["isfbn"],
+                    post_buffer=config["post_buffer"],
+                    bins=config["bins"],
+                    by=config["by"],
+                    cols_to_by=config["cols_to_by"],
+                    binning_buffer=config["binning_buffer"],
+                    reduction_bin_col=config["reduction_bin_col"],
+                )
+                for key, config in keys_config.items()
+            )
+            # TODO
+            # Remove 'reduction' and vaex related stuff: is less efficient than
+            # without reduction. In this case, run '_post_n_bin' and
+            # '_group_n_stitch' in a single function (bypass update of config
+            # dict in-between).
+            if reduction:
+                reduction_bins = []
+                for key, config in bins_n_conf:
+                    if config["reduction_bins"] is not None:
+                        # Cases 'by' is pd.Grouper or Callable.
+                        # In this case, spare 'reduction_bins'.
+                        # It is popped so that it is not serialized/copy in next
+                        # parallel run (this data is a 1D-array).
+                        # Keys of 'reduction_bins' are names of
+                        # 'reduction_bin_col' for only new columns (not the ones
+                        # that have to be used directly for binning)
+                        reduction_bins.append(config.pop("reduction_bins"))
+                    # Consolidate results.
+                    keys_config[key].update(config)
+                # Re-create a seed_chunk with new 'bins' columns.
+                if reduction == VAEX:
+                    # Reduction with vaex.
+                    seed_chunk = from_pandas(seed_chunk[reduction_seed_chunk_cols])
+                    if ordered_on not in reduction_seed_chunk_cols:
+                        # Keep track of initial order to sort aggregation results
+                        # after vaex reduction.
+                        seed_chunk[ordered_on] = vrange(0, len(seed_chunk))
+                    for red_bin in reduction_bins:
+                        seed_chunk.join(red_bin, inplace=True)
+                    seed_chunk = (
+                        seed_chunk.groupby(reduction_bin_cols, sort=False)
+                        .agg(reduction_agg)
+                        .sort(vaex_sort)
+                    )
+                    if VAEX_SORT in seed_chunk.get_column_names():
+                        seed_chunk = seed_chunk.drop(VAEX_SORT)
+                    seed_chunk = seed_chunk.to_pandas_df()
+                else:
+                    # Reduction with pandas.
+                    seed_chunk = pconcat(
+                        [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]], axis=1, copy=False
+                    )
+                    seed_chunk = seed_chunk.groupby(reduction_bin_cols, sort=False).agg(
+                        **reduction_agg
+                    )
+                    seed_chunk.reset_index(inplace=True)
+            else:
+                # Consolidate results only.
+                for key, config in bins_n_conf:
+                    keys_config[key].update(config)
+            agg_res_n_conf = p_job(
+                delayed(_group_n_stitch)(
+                    seed_chunk=seed_chunk,
+                    reduction=reduction,
+                    key=key,
+                    bins=config["bins"],
+                    agg=config["agg"],
+                    last_agg_row=config["last_agg_row"],
+                    agg_chunks_buffer=config["agg_chunks_buffer"],
+                    agg_n_rows=config["agg_n_rows"],
+                    self_agg=config["self_agg"],
+                    isfbn=config["isfbn"],
+                )
+                for key, config in keys_config.items()
+            )
+            for key, config in agg_res_n_conf:
+                keys_config[key].update(config)
+        # Check if at least one iteration has been achieved or not.
+        agg_res = next(iter(keys_config.values()))["agg_res"]
+        if agg_res is None:
+            # No iteration has been achieved, as no data.
+            return
+        # Post-process & write results from last iteration, this time keeping
+        # last row, and recording metadata for a future 'chainagg' execution.
+        # A deep copy is made for 'last_agg_row' to prevent a specific case where
+        # 'agg_chuks_buffer' is a list of a single 'agg_res' dataframe of a single
+        # row. In this very specific case, both 'agg_res' and 'last_agg_row' points
+        # toward the same dataframe, but 'agg_res' gets modified in '_post_n_write'
+        # while 'last_agg_row' should not be. The deep copy prevents this.
+        p_job(
+            delayed(_post_n_write_agg_chunks)(
                 reduction=reduction,
-                store=store,
                 key=key,
-                agg_res=config["agg_res"],
-                agg_res_len=config["agg_res_len"],
-                agg_chunks_buffer=config["agg_chunks_buffer"],
-                agg_n_rows=config["agg_n_rows"],
-                agg_mean_row_group_size=config["agg_mean_row_group_size"],
-                max_agg_row_group_size=config["max_agg_row_group_size"],
+                dirpath=config["dirpath"],
+                chunks=[*config["agg_chunks_buffer"], config["agg_res"]],
                 write_config=config["write_config"],
-                bin_out_col=config["bin_out_col"],
+                index_name=config["bin_out_col"],
                 post=config["post"],
                 isfbn=config["isfbn"],
                 post_buffer=config["post_buffer"],
-                bins=config["bins"],
-                by=config["by"],
-                cols_to_by=config["cols_to_by"],
-                binning_buffer=config["binning_buffer"],
-                reduction_bin_col=config["reduction_bin_col"],
+                other_metadata=(
+                    last_seed_index,
+                    config["last_agg_row"].copy(),
+                    config["binning_buffer"],
+                ),
             )
             for key, config in keys_config.items()
-        ]
-        if reduction:
-            reduction_bins = []
-            for key, config in bins_n_conf:
-                if config["reduction_bins"] is not None:
-                    # Cases 'by' is pd.Grouper or Callable.
-                    # In this case, spare 'reduction_bins'.
-                    # It is popped so that it is not serialized/copy in next
-                    # parallel run (this data is a 1D-array).
-                    # Keys of 'reduction_bins' are names of
-                    # 'reduction_bin_col' for only new columns (not the ones
-                    # that have to be used directly for binning)
-                    reduction_bins.append(config.pop("reduction_bins"))
-                # Consolidate results.
-                keys_config[key].update(config)
-            # Re-create a seed_chunk with new 'bins' columns.
-            seed_chunk = concat(
-                [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]], axis=1, copy=False
-            )
-            seed_chunk = seed_chunk.groupby(reduction_bin_cols, sort=False).agg(**reduction_agg)
-            seed_chunk.reset_index(inplace=True)
-        else:
-            # Consolidate results only.
-            for key, config in bins_n_conf:
-                keys_config[key].update(config)
-        # WiP parallelization "_group_n_stitch".
-        # Send the right 'seed_chunk' to each key with the correct 'cols_to_group'?
-        # https://github.com/joblib/joblib/issues/1244
-        # https://joblib.readthedocs.io/en/latest/parallel.html#reusing-a-pool-of-workers
-        agg_res_n_conf = [
-            _group_n_stitch(
-                seed_chunk=seed_chunk,
-                reduction=reduction,
-                key=key,
-                bins=config["bins"],
-                agg=config["agg"],
-                last_agg_row=config["last_agg_row"],
-                agg_chunks_buffer=config["agg_chunks_buffer"],
-                agg_n_rows=config["agg_n_rows"],
-                self_agg=config["self_agg"],
-                isfbn=config["isfbn"],
-            )
-            for key, config in keys_config.items()
-        ]
-        for key, config in agg_res_n_conf:
-            keys_config[key].update(config)
-    # Check if at least one iteration has been achieved or not.
-    agg_res = next(iter(keys_config.values()))["agg_res"]
-    if agg_res is None:
-        # No iteration has been achieved, as no data.
-        return
-    # Post-process & write results from last iteration, this time keeping
-    # last row, and recording metadata for a future 'streamagg' execution.
-    # A deep copy is made for 'last_agg_row' to prevent a specific case where
-    # 'agg_chuks_buffer' is a list of a single 'agg_res' dataframe of a single
-    # row. In this very specific case, both 'agg_res' and 'last_agg_row' points
-    # toward the same dataframe, but 'agg_res' gets modified in '_post_n_write'
-    # while 'last_agg_row' should not be. The deep copy prevents this.
-    [
-        _post_n_write_agg_chunks(
-            reduction=reduction,
-            store=store,
-            key=key,
-            chunks=[*config["agg_chunks_buffer"], config["agg_res"]],
-            write_config=config["write_config"],
-            index_name=config["bin_out_col"],
-            post=config["post"],
-            isfbn=config["isfbn"],
-            post_buffer=config["post_buffer"],
-            other_metadata=(
-                last_seed_index,
-                config["last_agg_row"].copy(),
-                config["binning_buffer"],
-            ),
         )
-        for key, config in keys_config.items()
-    ]
+    # Add keys in store for those who where not in.
+    for key in keys:
+        if key not in store:
+            store._keys.add(key)

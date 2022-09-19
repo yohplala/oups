@@ -84,7 +84,7 @@ repos:
                 tests/*.py:D103
                 oups/__init__.py:F401
                 oups/writer.py:C901
-                oups/streamagg.py:C901
+                oups/chainagg.py:C901
         ]
 
   - repo: https://github.com/pycqa/pydocstyle

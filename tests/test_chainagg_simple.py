@@ -22,9 +22,10 @@ from vaex import concat as vconcat
 from vaex import from_pandas
 
 from oups import ParquetSet
-from oups import streamagg
+from oups import chainagg
 from oups import toplevel
-from oups.streamagg import _get_streamagg_md
+from oups.chainagg import VAEX
+from oups.chainagg import _get_chainagg_md
 
 
 # from pandas.testing import assert_frame_equal
@@ -36,7 +37,10 @@ class Indexer:
     dataset_ref: str
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'sum' aggregation.
     # No post.
@@ -105,12 +109,12 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     agg_col = "sum"
     agg = {agg_col: ("val", "sum")}
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -144,7 +148,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         last_agg_row_res,
         binning_buffer_res,
         post_buffer_res,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
     binning_buffer_ref = {}
@@ -168,12 +172,12 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     fp_write(seed_path, seed_df, file_scheme="hive", append=True)
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -208,7 +212,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         last_agg_row_res,
         binning_buffer_res,
         post_buffer_res,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
     binning_buffer_ref = {}
@@ -225,12 +229,12 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     fp_write(seed_path, seed_df, file_scheme="hive", append=True)
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=False,
         max_row_group_size=max_row_group_size,
@@ -246,11 +250,14 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         _,
         _,
         _,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     assert last_seed_index_res == ts[-1]
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'sum' aggregation.
     # No post.
@@ -314,12 +321,12 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     agg_col = "sum"
     agg = {agg_col: ("val", "sum")}
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed_vdf,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -354,7 +361,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         last_agg_row_res,
         binning_buffer_res,
         post_buffer_res,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
     binning_buffer_ref = {}
@@ -378,12 +385,12 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
     seed_pdf2 = pDataFrame({ordered_on: ts, "val": [1, 2]})
     seed_vdf = seed_vdf.concat(from_pandas(seed_pdf2))
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed_vdf,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=False,
         max_row_group_size=max_row_group_size,
@@ -412,12 +419,15 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
         _,
         _,
         _,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first', 'last', 'min', and
     # 'max' aggregation. No post, 'discard_last=True'.
@@ -448,12 +458,12 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
         "max": ("val", "max"),
     }
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -472,12 +482,12 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -496,12 +506,12 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -516,7 +526,10 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
     assert n_rows_res == n_rows_ref
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first', 'last', 'min', and
     # 'max' aggregation. No post, 'discard_last=True'. 'Stress test' with
@@ -547,12 +560,12 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, red
         "max": ("val", "max"),
     }
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=(max_row_group_size, seed_vdf),
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -568,12 +581,12 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, red
     seed_pdf2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100}).sort_values(ordered_on)
     seed_vdf = vconcat([seed_vdf, from_pandas(seed_pdf2)])
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=(max_row_group_size, seed_vdf),
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -589,12 +602,12 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, red
     seed_pdf3 = pDataFrame({ordered_on: ts, "val": rand_ints + 400}).sort_values(ordered_on)
     seed_vdf = vconcat([seed_vdf, from_pandas(seed_pdf3)])
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=(max_row_group_size, seed_vdf),
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -611,7 +624,10 @@ def test_vaex_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, red
     assert n_rows_res == n_rows_ref
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and assess with 'post':
     #  - assess a 'duration' with 'first' and 'last' aggregation,
@@ -720,12 +736,12 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
         return agg_res
 
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         post=post,
         discard_last=True,
@@ -749,7 +765,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
         last_agg_row_res,
         binning_buffer_res,
         post_buffer_res,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
     binning_buffer_ref = {}
@@ -777,12 +793,12 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         post=post,
         discard_last=True,
@@ -796,7 +812,10 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
     assert rec_res.equals(ref_res_post)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
@@ -835,12 +854,12 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
     # Test error message as name of column to use for binning defined with 'by'
     # and with 'bin_on' is not the same.
     with pytest.raises(ValueError, match="^two different columns"):
-        streamagg(
+        chainagg(
             seed=seed,
             ordered_on=ordered_on,
             agg=agg,
             store=store,
-            key=key,
+            keys=key,
             by=by,
             bin_on=bin_on + "_",
             discard_last=True,
@@ -848,12 +867,12 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
         )
     # Test with renamed column for group keys.
     ts_open = "ts_open"
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         bin_on=(bin_on, ts_open),
         discard_last=True,
@@ -874,12 +893,12 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
     fp_write(seed_path, seed_pdf2, file_scheme="hive", append=True)
     seed = ParquetFile(seed_path)
     # 2nd streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         bin_on=(bin_on, ts_open),
         trim_start=True,
@@ -895,7 +914,10 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
     # Test with vaex seed, binning every 4 rows with 'first', and 'max'
     # aggregation. No post, `discard_last` set `True`.
@@ -966,13 +988,18 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         # A pandas Series is returned, with name being that of the 'ordered_on'
         # column. Because of pandas magic, this column will then be in aggregation
         # results, and oups will be able to use it for writing data.
-        # With actual setting, without this trick, 'streamagg' could not write
+        # With actual setting, without this trick, 'chainagg' could not write
         # the results (no 'ordered_on' column in results).
+        by_4_rows = 4
         ordered_on = data.name
         group_keys = pDataFrame(data)
         # Setup 1st key of groups from previous binning.
-        row_offset = 4 - buffer["row_offset"] if "row_offset" in buffer else 0
-        group_keys["tmp"] = data.iloc[row_offset::4]
+        row_offset = (
+            by_4_rows - buffer["row_offset"]
+            if "row_offset" in buffer and buffer["row_offset"]
+            else 0
+        )
+        group_keys["tmp"] = data.iloc[row_offset::by_4_rows]
         if row_offset and "last_key" in buffer:
             # Initialize 1st row if row_offset is not 0.
             group_keys.iloc[0, group_keys.columns.get_loc("tmp")] = buffer["last_key"]
@@ -980,10 +1007,19 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         group_keys = Series(group_keys[ordered_on], name=ordered_on)
         keys, counts = np.unique(group_keys, return_counts=True)
         # Update buffer in-place for next binning.
-        if "row_offset" in buffer and buffer["row_offset"] != 4:
-            buffer["row_offset"] = counts[-1] + buffer["row_offset"]
+        last_key_counts = counts[-1]
+        if len(counts) == 1:
+            # Case single key in data chunk. Sum with previous 'row_offset'.
+            buffer["row_offset"] = last_key_counts + buffer["row_offset"]
+            if buffer["row_offset"] == by_4_rows:
+                # Restart at 0.
+                buffer["row_offset"] = 0
+        elif last_key_counts != by_4_rows:
+            # Case several keys in data chunk.
+            buffer["row_offset"] = last_key_counts
         else:
-            buffer["row_offset"] = counts[-1]
+            # Case several keys in data chunk.
+            buffer["row_offset"] = 0
         buffer["last_key"] = keys[-1]
         return group_keys
 
@@ -993,12 +1029,12 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         "max": ("val", "max"),
     }
     max_row_group_size = 4
-    streamagg(
+    chainagg(
         seed=(max_vdf_chunk_size, seed_vdf),
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by_4rows,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -1017,10 +1053,10 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         last_agg_row_res,
         binning_buffer_res,
         post_buffer_res,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
-    binning_buffer_ref = {"row_offset": 4, "last_key": ts[-6]}
+    binning_buffer_ref = {"row_offset": 0, "last_key": ts[-6]}
     assert binning_buffer_res == binning_buffer_ref
     last_agg_row_ref = pDataFrame(
         data={"first": 13.0, "max": 16.0},
@@ -1059,12 +1095,12 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
     seed_pdf2 = pconcat([seed_pdf, seed_pdf2], ignore_index=True)
     seed_vdf2 = from_pandas(seed_pdf2)
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=(max_vdf_chunk_size, seed_vdf2),
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by_4rows,
         discard_last=True,
         max_row_group_size=max_row_group_size,
@@ -1083,14 +1119,17 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
         _,
         binning_buffer_res2,
         _,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref2 = ts2[-1]
     assert last_seed_index_res2 == last_seed_index_ref2
     binning_buffer_ref2 = {"row_offset": 3, "last_key": Timestamp("2020-01-01 15:00:00")}
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     # Test with vaex seed, binning every time a '1' appear in column 'val'.
     # `discard_last` set `True`.
@@ -1162,7 +1201,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     def by_1val(data: pDataFrame, buffer: dict):
         """Start a new bin each time a 1 is spot."""
         # A pandas Series is returned.
-        # Its name does not matter as 'bin_on' in streamagg is a tuple which
+        # Its name does not matter as 'bin_on' in chainagg is a tuple which
         # 2nd item will define the column name for group keys.
         group_on = data.columns[1]
         # Setup 1st key of groups from previous binning.
@@ -1183,12 +1222,12 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
         "max": ("val", "max"),
     }
     bin_out_col = "group_keys"
-    streamagg(
+    chainagg(
         seed=(max_vdf_chunk_size, seed_vdf),
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by_1val,
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
@@ -1233,12 +1272,12 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
     seed_pdf2 = pconcat([seed_pdf, seed_pdf2], ignore_index=True)
     seed_vdf2 = from_pandas(seed_pdf2)
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=(max_vdf_chunk_size, seed_vdf2),
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by_1val,
         bin_on=(bin_on, bin_out_col),
         discard_last=True,
@@ -1261,14 +1300,17 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
         _,
         binning_buffer_res2,
         _,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref2 = ts2[-1]
     assert last_seed_index_res2 == last_seed_index_ref2
     binning_buffer_ref2 = {"last_key": 7}
     assert binning_buffer_res2 == binning_buffer_ref2
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
@@ -1288,12 +1330,12 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         trim_start=True,
         discard_last=True,
@@ -1305,7 +1347,7 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
     last_seed_index_ref = ts[-1]
-    last_seed_index_res, _, _, _ = _get_streamagg_md(store[key])
+    last_seed_index_res, _, _, _ = _get_chainagg_md(store[key])
     assert last_seed_index_res == last_seed_index_ref
     # 1st append. 2nd stremagg with 'trim_start=False'.
     ts2 = DatetimeIndex([date + "09:00", date + "09:30", date + "10:00", date + "10:30"])
@@ -1314,12 +1356,12 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     fp_write(seed_path2, seed_pdf2, file_scheme="hive")
     seed2 = ParquetFile(seed_path2)
     # Streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed2,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         trim_start=False,
         discard_last=True,
@@ -1332,7 +1374,10 @@ def test_parquet_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
@@ -1350,12 +1395,12 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed_vdf,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         trim_start=True,
         discard_last=True,
@@ -1367,19 +1412,19 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
     last_seed_index_ref = ts[-1]
-    last_seed_index_res, _, _, _ = _get_streamagg_md(store[key])
+    last_seed_index_res, _, _, _ = _get_chainagg_md(store[key])
     assert last_seed_index_res == last_seed_index_ref
     # 1st append. 2nd stremagg with 'trim_start=False'.
     ts2 = DatetimeIndex([date + "09:00", date + "09:30", date + "10:00", date + "10:30"])
     seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts) + 1)})
     seed_vdf2 = from_pandas(seed_pdf2)
     # Streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed_vdf2,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         trim_start=False,
         discard_last=True,
@@ -1392,12 +1437,15 @@ def test_vaex_seed_time_grouper_trim_start(tmp_path, reduction1, reduction2):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # 1st agg ends on a full bin (no stitching required when re-starting).
-    # For such a use case, streamagg is actually no needed.
+    # For such a use case, chainagg is actually no needed.
     date = "2020/01/01 "
     ordered_on = "ts"
     ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "10:00"])
@@ -1411,12 +1459,12 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed_vdf,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         reduction=reduction1,
     )
@@ -1430,12 +1478,12 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
     seed_pdf2 = pconcat([seed_pdf, seed_pdf2])
     seed_vdf2 = from_pandas(seed_pdf2)
     # Streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed_vdf2,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         reduction=reduction2,
     )
@@ -1445,7 +1493,7 @@ def test_vaex_seed_time_grouper_agg_first(tmp_path, reduction1, reduction2):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction", [False, True])
+@pytest.mark.parametrize("reduction", [False, True, VAEX])
 def test_vaex_seed_single_row(tmp_path, reduction):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # Single row.
@@ -1463,12 +1511,12 @@ def test_vaex_seed_single_row(tmp_path, reduction):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
-    streamagg(
+    chainagg(
         seed=seed_vdf,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         reduction=reduction,
     )
@@ -1476,7 +1524,7 @@ def test_vaex_seed_single_row(tmp_path, reduction):
     assert key not in store
 
 
-@pytest.mark.parametrize("reduction", [False, True])
+@pytest.mark.parametrize("reduction", [False, True, VAEX])
 def test_parquet_seed_single_row(tmp_path, reduction):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # Single row.
@@ -1496,14 +1544,14 @@ def test_parquet_seed_single_row(tmp_path, reduction):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
-    streamagg(
-        seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by, reduction=reduction
+    chainagg(
+        seed=seed, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by, reduction=reduction
     )
     # Test results.
     assert key not in store
 
 
-@pytest.mark.parametrize("reduction", [False, True])
+@pytest.mark.parametrize("reduction", [False, True, VAEX])
 def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # Single row in the middle of otherwise larger chunks.
@@ -1568,8 +1616,8 @@ def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
-    streamagg(
-        seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by, reduction=reduction
+    chainagg(
+        seed=seed, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by, reduction=reduction
     )
     # Test results.
     ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
@@ -1577,7 +1625,7 @@ def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction", [False, True])
+@pytest.mark.parametrize("reduction", [False, True, VAEX])
 def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
@@ -1610,12 +1658,12 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
         return agg_res
 
     # Streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed_vdf,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=by,
         post=post,
         discard_last=True,
@@ -1630,7 +1678,10 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     assert rec_res.equals(ref_res)
 
 
-@pytest.mark.parametrize("reduction1,reduction2", [(False, False), (True, True), (True, False)])
+@pytest.mark.parametrize(
+    "reduction1,reduction2",
+    [(False, False), (True, True), (True, False), (VAEX, VAEX), (VAEX, False)],
+)
 def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
     # Test with vaex seed, time grouper and 'sum' aggregation.
     # No post.
@@ -1671,12 +1722,12 @@ def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
     agg_col = "sum"
     agg = {agg_col: ("val", "sum")}
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed_vdf,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=None,
         bin_on=ordered_on,
         discard_last=True,
@@ -1702,7 +1753,7 @@ def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
         last_agg_row_res,
         binning_buffer_res,
         post_buffer_res,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
     binning_buffer_ref = {}
@@ -1726,12 +1777,12 @@ def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
     seed_pdf2 = pDataFrame({ordered_on: ts, "val": [1, 2]})
     seed_vdf = seed_vdf.concat(from_pandas(seed_pdf2))
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed_vdf,
         ordered_on=ordered_on,
         agg=agg,
         store=store,
-        key=key,
+        keys=key,
         by=None,
         bin_on=ordered_on,
         discard_last=False,
@@ -1750,7 +1801,7 @@ def test_vaex_seed_bin_on_col_sum_agg(tmp_path, reduction1, reduction2):
         _,
         _,
         _,
-    ) = _get_streamagg_md(store[key])
+    ) = _get_chainagg_md(store[key])
     last_seed_index_ref = ts[-1]
     assert last_seed_index_res == last_seed_index_ref
 
@@ -1775,7 +1826,7 @@ def test_exception_bin_on(tmp_path):
     agg = {bin_on: ("val", "sum")}
     # Streamed aggregation, check error message.
     with pytest.raises(ValueError, match="^not possible to have"):
-        streamagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+        chainagg(seed=seed, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by)
 
 
 def test_exception_unknown_agg_function(tmp_path):
@@ -1794,11 +1845,11 @@ def test_exception_unknown_agg_function(tmp_path):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "unknown")}
     with pytest.raises(ValueError, match="^aggregation function"):
-        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+        chainagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by)
 
 
-def test_exception_not_key_of_streamagg_results(tmp_path):
-    # Test error message provided key is not that of streamagg results.
+def test_exception_not_key_of_chainagg_results(tmp_path):
+    # Test error message provided key is not that of chainagg results.
     date = "2020/01/01 "
     ts = DatetimeIndex([date + "08:00", date + "08:30"])
     ordered_on = "ts_order"
@@ -1815,7 +1866,7 @@ def test_exception_not_key_of_streamagg_results(tmp_path):
     by = Grouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {"sum": ("val", "sum")}
     with pytest.raises(ValueError, match="^provided key"):
-        streamagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, key=key, by=by)
+        chainagg(seed=seed_vdf, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by)
 
 
 def test_exception_no_agg_in_keys(tmp_path):
@@ -1832,10 +1883,10 @@ def test_exception_no_agg_in_keys(tmp_path):
     store = ParquetSet(store_path, Indexer)
     # Setup aggregation.
     with pytest.raises(ValueError, match="^not possible to use a single key"):
-        streamagg(
+        chainagg(
             seed=seed_pdf,
             ordered_on=ordered_on,
-            key=Indexer("agg_res"),
+            keys=Indexer("agg_res"),
             store=store,
             by=Grouper(key=ordered_on, freq="1H", closed="left", label="left"),
         )

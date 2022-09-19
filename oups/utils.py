@@ -121,7 +121,16 @@ def tcut(data: Series, grouper: Grouper):
     # Shifting end by one more period to generate all required bins.
     end += grouper.freq
     bins = date_range(start, end, freq=grouper.freq)
-    as_binned = cut(data, bins, right=(grouper.closed == "right"))
+    try:
+        as_binned = cut(data, bins, right=(grouper.closed == "right"))
+    except IndexError:
+        # Print statements left here in case this error happen to understand
+        # what is happening.
+        print("")
+        print(f"start: {start}")
+        print(f"end: {end}")
+        print(f"first row: {data.iloc[0]}")
+        print(f"last row: {data.iloc[-1]}")
     if grouper.closed == "right":
         # If closed on 'right', change label of bin so that the label fall in
         # expected bin.
