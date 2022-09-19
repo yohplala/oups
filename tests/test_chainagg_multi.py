@@ -19,11 +19,11 @@ from pandas import Timestamp
 from pandas import concat as pconcat
 
 from oups import ParquetSet
-from oups import streamagg
+from oups import chainagg
 from oups import toplevel
-from oups.streamagg import REDUCTION_BIN_COL_PREFIX
-from oups.streamagg import VAEX
-from oups.streamagg import _setup
+from oups.chainagg import REDUCTION_BIN_COL_PREFIX
+from oups.chainagg import VAEX
+from oups.chainagg import _setup
 from oups.writer import MAX_ROW_GROUP_SIZE
 
 
@@ -677,7 +677,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
         # A pandas Series is returned, with name being that of the 'ordered_on'
         # column. Because of pandas magic, this column will then be in aggregation
         # results, and oups will be able to use it for writing data.
-        # With actual setting, without this trick, 'streamagg' could not write
+        # With actual setting, without this trick, 'chainagg' could not write
         # the results (no 'ordered_on' column in results).
         by_4_rows = 4
         ordered_on = data.name
@@ -731,7 +731,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
     }
     key_configs = {key1: key1_cf, key2: key2_cf, key3: key3_cf, key4: key4_cf}
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         store=store,
@@ -771,7 +771,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         store=store,
@@ -811,7 +811,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         store=store,
@@ -914,7 +914,7 @@ def test_exception_different_index_at_restart(tmp_path):
         "by": Grouper(key=ordered_on, freq="2T", closed="left", label="left"),
         "agg": {"first": ("val", "first"), "last": ("val", "last")},
     }
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         store=store,
@@ -937,7 +937,7 @@ def test_exception_different_index_at_restart(tmp_path):
         "agg": {"first": ("val", "first"), "max": ("val", "max")},
     }
     # Setup streamed aggregation.
-    streamagg(
+    chainagg(
         seed=seed,
         ordered_on=ordered_on,
         store=store,
@@ -959,7 +959,7 @@ def test_exception_different_index_at_restart(tmp_path):
     with pytest.raises(
         ValueError, match="^not possible to aggregate on multiple keys with existing"
     ):
-        streamagg(
+        chainagg(
             seed=seed,
             ordered_on=ordered_on,
             store=store,

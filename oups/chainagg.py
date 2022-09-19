@@ -51,7 +51,7 @@ ACCEPTED_AGG_FUNC = {FIRST, LAST, MIN, MAX, SUM}
 VAEX_AGG = {FIRST: vfirst, LAST: vlast, MIN: vmin, MAX: vmax, SUM: vsum}
 VAEX_SORT = "vaex_sort"
 # List of keys to metadata of aggregation results.
-MD_KEY_STREAMAGG = "streamagg"
+MD_KEY_CHAINAGG = "chainagg"
 MD_KEY_LAST_SEED_INDEX = "last_seed_index"
 MD_KEY_BINNING_BUFFER = "binning_buffer"
 MD_KEY_LAST_AGGREGATION_ROW = "last_aggregation_row"
@@ -76,20 +76,20 @@ def _is_stremagg_result(handle: ParquetHandle) -> bool:
     -------
     bool
         `True` if parquet file contains metadata as produced by
-        ``oups.streamagg``, which confirms this dataset has been produced with
+        ``oups.chainagg``, which confirms this dataset has been produced with
         this latter function.
     """
     # As oups specific metadata is a string produced by json library, the last
     # 'in' condition is checking if the set of characters defined by
-    # 'MD_KEY_STREAMAGG' is in a string.
+    # 'MD_KEY_CHAINAGG' is in a string.
     pf = handle.pf
     return (
         OUPS_METADATA_KEY in pf.key_value_metadata
-        and MD_KEY_STREAMAGG in pf.key_value_metadata[OUPS_METADATA_KEY]
+        and MD_KEY_CHAINAGG in pf.key_value_metadata[OUPS_METADATA_KEY]
     )
 
 
-def _get_streamagg_md(handle: ParquetHandle) -> tuple:
+def _get_chainagg_md(handle: ParquetHandle) -> tuple:
     """Retrieve and deserialize stremagg metadata from previous aggregation.
 
     Parameters
@@ -113,32 +113,32 @@ def _get_streamagg_md(handle: ParquetHandle) -> tuple:
     # Get seed index value to start new aggregation.
     # It is a value to be included when filtering seed data.
     # Trim accordingly head of seed data in this case.
-    streamagg_md = handle._oups_metadata[MD_KEY_STREAMAGG]
+    chainagg_md = handle._oups_metadata[MD_KEY_CHAINAGG]
     # De-serialize 'last_seed_index'.
-    last_seed_index = streamagg_md[MD_KEY_LAST_SEED_INDEX]
+    last_seed_index = chainagg_md[MD_KEY_LAST_SEED_INDEX]
     last_seed_index = read_json(last_seed_index, **PANDAS_DESERIALIZE).iloc[0, 0]
     # 'last_agg_row' for stitching with new aggregation results.
-    last_agg_row = read_json(streamagg_md[MD_KEY_LAST_AGGREGATION_ROW], **PANDAS_DESERIALIZE)
+    last_agg_row = read_json(chainagg_md[MD_KEY_LAST_AGGREGATION_ROW], **PANDAS_DESERIALIZE)
     # Metadata related to binning process from past binnings on prior data.
     # It is used in case 'by' is a callable.
-    if streamagg_md[MD_KEY_BINNING_BUFFER]:
+    if chainagg_md[MD_KEY_BINNING_BUFFER]:
         binning_buffer = (
-            read_json(streamagg_md[MD_KEY_BINNING_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+            read_json(chainagg_md[MD_KEY_BINNING_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
         )
     else:
         binning_buffer = {}
     # Metadata related to post-processing of prior aggregation results, to be
     # used by 'post'.
-    if streamagg_md[MD_KEY_POST_BUFFER]:
+    if chainagg_md[MD_KEY_POST_BUFFER]:
         post_buffer = (
-            read_json(streamagg_md[MD_KEY_POST_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+            read_json(chainagg_md[MD_KEY_POST_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
         )
     else:
         post_buffer = {}
     return last_seed_index, last_agg_row, binning_buffer, post_buffer
 
 
-def _set_streamagg_md(
+def _set_chainagg_md(
     key: str,
     last_seed_index,
     last_agg_row: pDataFrame,
@@ -163,7 +163,7 @@ def _set_streamagg_md(
         Last values from post-processing, that can be required when restarting
         post-processing of new aggregation results.
     """
-    # Setup metadata for a future 'streamagg' execution.
+    # Setup metadata for a future 'chainagg' execution.
     # Store a json serialized pandas series, to keep track of 'whatever the
     # object' the index is.
     last_seed_index = pDataFrame({MD_KEY_LAST_SEED_INDEX: [last_seed_index]}).to_json(
@@ -176,7 +176,7 @@ def _set_streamagg_md(
         post_buffer = pDataFrame(post_buffer, index=[0]).to_json(**PANDAS_SERIALIZE)
     # Set oups metadata.
     metadata = {
-        MD_KEY_STREAMAGG: {
+        MD_KEY_CHAINAGG: {
             MD_KEY_LAST_SEED_INDEX: last_seed_index,
             MD_KEY_BINNING_BUFFER: binning_buffer,
             MD_KEY_LAST_AGGREGATION_ROW: last_agg_row,
@@ -273,7 +273,7 @@ def _post_n_write_agg_chunks(
         agg_res = post(agg_res, isfbn, post_buffer)
     if other_metadata:
         # Set oups metadata.
-        _set_streamagg_md(key, *other_metadata, post_buffer)
+        _set_chainagg_md(key, *other_metadata, post_buffer)
     # Record data.
     write(dirpath=dirpath, data=agg_res, md_key=key, **write_config)
 
@@ -664,12 +664,12 @@ def _setup(
         # Step 2 / Process metadata if already existing aggregation results.
         # Initialize variables.
         if key in store:
-            # Prior streamagg results already in store.
+            # Prior chainagg results already in store.
             # Retrieve corresponding metadata to re-start aggregations.
             prev_agg_res = store[key]
             if not _is_stremagg_result(prev_agg_res):
-                raise ValueError(f"provided key '{key}' is not that of 'streamagg' results.")
-            seed_index_restart, last_agg_row, binning_buffer, post_buffer = _get_streamagg_md(
+                raise ValueError(f"provided key '{key}' is not that of 'chainagg' results.")
+            seed_index_restart, last_agg_row, binning_buffer, post_buffer = _get_chainagg_md(
                 prev_agg_res
             )
             seed_index_restart_set.add(seed_index_restart)
@@ -1053,7 +1053,7 @@ def _group_n_stitch(
     return key, updated_conf
 
 
-def streamagg(
+def chainagg(
     seed: Union[vDataFrame, ParquetFile],
     ordered_on: str,
     store: ParquetSet,
@@ -1107,8 +1107,8 @@ def streamagg(
           - If not specified, `by` and `bin_on` parameters in dict do not get
             default values.
           - If not specified `agg` and `post` parameters in dict get values
-            from `agg` and `post` parameters defined when calling `streamagg`.
-            If using 'post' when calling 'streamagg' and not willing to apply
+            from `agg` and `post` parameters defined when calling `chainagg`.
+            If using 'post' when calling 'chainagg' and not willing to apply
             it for one key, set it to ``None`` in key specific config.
 
     agg : Union[dict, None], default None
@@ -1209,7 +1209,7 @@ def streamagg(
     Notes
     -----
     - Result is necessarily added to a dataset from an instantiated oups
-      ``ParquetSet``. ``streamagg`` actually relies on the `advanced` update
+      ``ParquetSet``. ``chainagg`` actually relies on the `advanced` update
       feature from oups.
     - If aggregation results already exist in the instantiated oups
       ``ParquetSet``, last index from previous aggregation is retrieved, and
@@ -1251,7 +1251,7 @@ def streamagg(
       when calling ``oups.writer.write``. If additional parameters are defined
       by the user, some checks are made.
 
-        - 'ordered_on' is forced to 'streamagg' ``ordered_on`` parameter.
+        - 'ordered_on' is forced to 'chainagg' ``ordered_on`` parameter.
         - If 'duplicates_on' is not set by the user or is `None`, then it is
           set to the name of the output column for group keys defined by
           `bin_on`. The rational is that this column identifies uniquely each
@@ -1260,7 +1260,7 @@ def streamagg(
           already (if there are unique values in 'ordered_on') and the column
           containing group keys is then removed during user post-processing.
           To allow this case, if the user is setting ``duplicates_on`` as
-          additional parameter to ``streamagg``, it is not
+          additional parameter to ``chainagg``, it is not
           modified. It means omission of the column name containing the group
           keys, as defined by 'bin_on' parameter when it is set, is a
           voluntary choice from the user.
@@ -1407,7 +1407,7 @@ def streamagg(
             # No iteration has been achieved, as no data.
             return
         # Post-process & write results from last iteration, this time keeping
-        # last row, and recording metadata for a future 'streamagg' execution.
+        # last row, and recording metadata for a future 'chainagg' execution.
         # A deep copy is made for 'last_agg_row' to prevent a specific case where
         # 'agg_chuks_buffer' is a list of a single 'agg_res' dataframe of a single
         # row. In this very specific case, both 'agg_res' and 'last_agg_row' points
