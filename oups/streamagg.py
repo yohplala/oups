@@ -6,6 +6,7 @@ Created on Wed Mar  9 21:30:00 2022.
 """
 from copy import copy
 from dataclasses import dataclass
+from multiprocessing import cpu_count
 from os import path as os_path
 from typing import Callable, Dict, List, Tuple, Union
 
@@ -61,10 +62,6 @@ PANDAS_DESERIALIZE = {"orient": "table", "date_unit": "ns", "precise_float": Tru
 # Misc.
 REDUCTION_BIN_COL_PREFIX = "bin_"
 VAEX = "vaex"
-
-
-# /!\ Wip: change store to dirpath
-# when appropriate, change key to string
 
 
 def _is_stremagg_result(handle: ParquetHandle) -> bool:
@@ -1308,19 +1305,10 @@ def streamagg(
     last_seed_index, iter_data = _iter_data(
         seed, ordered_on, trim_start, seed_index_restart, discard_last, all_cols_in
     )
-    n_jobs = -1 if (parallel and len(keys) > 1) else 1
-    # WiP
-    # implement 'parallel' parameter for setting n_jobs
-    # test 'prefer=threads'?
-    with Parallel(n_jobs=n_jobs) as p_job:
+    n_keys = len(keys)
+    n_jobs = min(int(cpu_count() * 3 / 4), n_keys) if (parallel and n_keys > 1) else 1
+    with Parallel(n_jobs=n_jobs, prefer="threads") as p_job:
         for seed_chunk in iter_data:
-            # WiP parallelization "_post_n_bin".
-            # For using joblib.
-            # https://stackoverflow.com/questions/61215938/joblib-parallelization-of-function-with-multiple-keyword-arguments
-            # - ought to work with memmap.
-            # - releasing group of workers:
-            #   "Note that the 'loky' backend now used by default for process-based parallelism automatically
-            #    tries to maintain and reuse a pool of workers by it-self even for calls without the context manager."
             bins_n_conf = p_job(
                 delayed(_post_n_bin)(
                     seed_chunk=seed_chunk,
@@ -1346,6 +1334,11 @@ def streamagg(
                 )
                 for key, config in keys_config.items()
             )
+            # TODO
+            # Remove 'reduction' and vaex related stuff: is less efficient than
+            # without reduction. In this case, run '_post_n_bin' and
+            # '_group_n_stitch' in a single function (bypass update of config
+            # dict in-between).
             if reduction:
                 reduction_bins = []
                 for key, config in bins_n_conf:
@@ -1391,10 +1384,6 @@ def streamagg(
                 # Consolidate results only.
                 for key, config in bins_n_conf:
                     keys_config[key].update(config)
-            # WiP parallelization "_group_n_stitch".
-            # Send the right 'seed_chunk' to each key with the correct 'cols_to_group'?
-            # https://github.com/joblib/joblib/issues/1244
-            # https://joblib.readthedocs.io/en/latest/parallel.html#reusing-a-pool-of-workers
             agg_res_n_conf = p_job(
                 delayed(_group_n_stitch)(
                     seed_chunk=seed_chunk,

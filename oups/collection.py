@@ -233,9 +233,9 @@ class ParquetSet:
             Key specifying the location where to write the data. It has to be
             an instance of the dataclass provided at ParquetSet instantiation.
         """
-        # Keep track of intermediate partition folders, in case one get
-        # empty.
         if key in self._keys:
+            # Keep track of intermediate partition folders, in case one get
+            # empty.
             basepath = self._basepath
             dirpath = os_path.join(basepath, key.to_path)
             rmtree(dirpath)
