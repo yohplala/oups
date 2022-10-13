@@ -905,7 +905,9 @@ def _post_n_bin(
         if callable(by):
             reduction_bins = by(data=seed_chunk.loc[:, cols_to_by], buffer=binning_buffer)
         elif isinstance(by, Grouper):
-            reduction_bins = tcut(data=seed_chunk.loc[:, by.key], grouper=by).astype("datetime64")
+            reduction_bins = tcut(data=seed_chunk.loc[:, by.key], grouper=by).astype(
+                "datetime64[ns]"
+            )
         else:
             # Bin directly on existing column. Name is available with 'bins'.
             # Column will be used directly column from seed_chunk.

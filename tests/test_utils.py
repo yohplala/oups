@@ -86,6 +86,6 @@ def test_tcut(closed, label):
     )
     agg_ref = df.groupby(grouper)["a"].agg("first")
     ddf = df.copy()
-    ddf["ts"] = tcut(df["ts"], grouper).astype("datetime64")
+    ddf["ts"] = tcut(df["ts"], grouper).astype("datetime64[ns]")
     agg_res = ddf.groupby(grouper)["a"].agg("first")
     assert agg_ref.equals(agg_res)
