@@ -151,9 +151,7 @@ def chaingroupby(
     by: Union[Grouper, Callable],
     bin_on: ndarray,
     binning_buffer: dict,
-    agg: Union[
-        Dict[str, Tuple[str, str]], Dict[dtype, Tuple[List[str], Tuple[int, str], List[str]]]
-    ],
+    agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, list]],
     data: pDataFrame,
 ) -> pDataFrame:
     """Group as per by, assuming input group keys are contiguous and sorted.
@@ -277,6 +275,7 @@ def chaingroupby(
             data_dte = ZEROS_AR_INT64
             agg_res_dte = ZEROS_AR_INT64
     # Forward 'data' as numpy array, with columns in 'expected order'.
+    # WiP: rework 'jitted_cgb' to manage datetime dtype.
     jitted_cgb(
         group_sizes=group_sizes,
         data_float=data_float,  # 2d
@@ -403,9 +402,15 @@ def jitted_cgb(
     cols_in_data_int: ndarray,  # 2d
     cols_in_agg_res_int: ndarray,  # 2d
     agg_res_int: ndarray,  # 2d
+    data_dte: ndarray,  # 2d
+    agg_func_dte: ndarray,  # 1d
+    n_cols_dte: ndarray,  # 1d
+    cols_in_data_dte: ndarray,  # 2d
+    cols_in_agg_res_dte: ndarray,  # 2d
+    agg_res_dte: ndarray,  # 2d
     nan_group_indices: ndarray,  # 1d
 ):
-    """Group as per by, assuming input group keys are contiguous and sorted.
+    """Group assuming contiguity.
 
     Parameters
     ----------
@@ -413,7 +418,7 @@ def jitted_cgb(
         Array of int, indicating the size of the groups. May contain ``0`` if
         a group key without any value is in resulting aggregation array.
     data_float : ndarray
-        Array of ``float`` over which performaing aggregation functions.
+        Array of ``float`` over which performing aggregation functions.
     agg_float_func : ndarray
         One dimensional array of ``int``, specifying the aggregation function
         ids.
@@ -421,24 +426,26 @@ def jitted_cgb(
         One dimensional array of ``int``, specifying per aggregation function
         the number of columns to which applying related aggregation function
         (and consequently the number of columns in 'agg_res' to which recording
-         the aggregation results).
+        the aggregation results).
     cols_in_data_float : ndarray
-        One row per aggregation function. Per row, column indices in
-        'data_float' to which apply corresponding aggregation function.
+        Two dimensional array of ``int``, one row per aggregation function.
+        Per row, column indices in 'data_float' to which apply corresponding
+        aggregation function.
         Any value in column past the number of relevant columns is not used.
     cols_in_agg_res_float :  ndarray
-        One row per aggregation function. Per row, column indices in
-        'agg_res_float' into which storing the agrgegation result.
+        Two dimensional array of ``int``, one row per aggregation function.
+        Per row, column indices in 'agg_res_float' into which storing the
+        aggregation results.
         Any value in column past the number of relevant columns is not used.
 
     Returns
     -------
     agg_res_float : ndarray
         Results from aggregation, ``float`` dtype
-    agg_res_int : ndarray
-        Results from aggregation, ``int`` dtype
     nan_group_indices : ndarray
-        Index of row in 'agg_res' to which 'NaN' values are to be set.
+        One dimensional array containing row indices in 'agg_res' that
+        correspond to "empty" groups, i.e. for which group size has been set to
+        0.
     """
     data_row_start = 0
     nan_group_idx = 0
@@ -471,6 +478,19 @@ def jitted_cgb(
                     cols_in_agg_res_int,
                     agg_res_idx,
                     agg_res_int,
+                )
+            if len(agg_func_dte) != 0:
+                # Manage int.
+                jitted_agg_func_router(
+                    data_dte,
+                    data_row_start,
+                    data_row_end,
+                    agg_func_dte,
+                    n_cols_dte,
+                    cols_in_data_dte,
+                    cols_in_agg_res_dte,
+                    agg_res_idx,
+                    agg_res_dte,
                 )
             data_row_start = data_row_end
         else:
