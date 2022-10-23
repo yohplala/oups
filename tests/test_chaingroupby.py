@@ -28,7 +28,8 @@ from oups.chaingroupby import LAST
 from oups.chaingroupby import MAX
 from oups.chaingroupby import MIN
 from oups.chaingroupby import SUM
-from oups.chaingroupby import jitted_cgb
+from oups.chaingroupby import _histo_on_sorted
+from oups.chaingroupby import _jitted_cgb
 from oups.chaingroupby import setup_cgb_agg
 
 
@@ -231,7 +232,7 @@ def test_jitted_cgb(type_, agg_func1, agg_func2, agg_func3):
             "agg_res_dte": agg_res,
         }
     # Test.
-    jitted_cgb(group_sizes=group_sizes, **config, nan_group_indices=nan_group_indices_res)
+    _jitted_cgb(group_sizes=group_sizes, **config, nan_group_indices=nan_group_indices_res)
     # Ref. results.
     ref_res = {
         (FLOAT64, FIRST, MIN, LAST):
@@ -289,6 +290,116 @@ def test_jitted_cgb(type_, agg_func1, agg_func2, agg_func3):
     }
     assert nall(ref_res[(type_, agg_func1, agg_func2, agg_func3)] == agg_res)
     assert nall(nan_group_indices_res == array([1, 3], dtype=INT64))
+
+
+@pytest.mark.parametrize(
+    "data, bins, right, hist_ref",
+    [
+        (
+            array([1, 2, 3, 4, 7, 8, 9], dtype=INT64),
+            array([2, 5, 6, 7, 8], dtype=INT64),
+            True,
+            array([2, 0, 1, 1], dtype=INT64),
+        ),
+        (
+            array([1, 2, 3, 4, 7, 8, 9], dtype=INT64),
+            array([2, 5, 6, 7, 8], dtype=INT64),
+            False,
+            array([3, 0, 0, 1], dtype=INT64),
+        ),
+        (
+            array([1, 2, 3, 4, 7, 8, 9], dtype=INT64),
+            array([50, 60, 70, 88], dtype=INT64),
+            False,
+            array([0, 0, 0], dtype=INT64),
+        ),
+        (
+            array([10, 22, 32], dtype=INT64),
+            array([5, 6, 7, 8], dtype=INT64),
+            False,
+            array([0, 0, 0], dtype=INT64),
+        ),
+    ],
+)
+def test_sorted_histo_right(data, bins, right, hist_ref):
+    hist_res = zeros(len(bins) - 1, dtype=INT64)
+    _histo_on_sorted(data, bins, right, hist_res)
+    assert nall(hist_ref == hist_res)
+
+
+# WiP: test cases for 'by_time()' function.
+
+# label="left", closed = "left"
+
+# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:04"), Timestamp("2020/01/01 08:05"),])
+# start: Timestamp('2020-01-01 08:00:00')
+# end: Timestamp('2020-01-01 08:10:00')
+# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00', '2020-01-01 08:10:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[:-1]
+
+# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
+# start: Timestamp('2020-01-01 08:00:00')
+# end: Timestamp('2020-01-01 08:05:00')
+# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[:-1]
+
+# bin_on = Series([Timestamp("2020/01/01 08:01"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:05"),])
+# start: Timestamp('2020-01-01 08:00:00')
+# end: Timestamp('2020-01-01 08:10:00')
+# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00', '2020-01-01 08:10:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[:-1]
+
+
+# label="right", closed = "left"
+
+# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:05"),])
+# start: Timestamp('2020-01-01 08:00:00')
+# end: Timestamp('2020-01-01 08:10:00')
+# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00', '2020-01-01 08:10:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[1:]
+
+# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
+# start: Timestamp('2020-01-01 08:00:00')
+# end: Timestamp('2020-01-01 08:05:00')
+# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[1:]
+
+
+# label="left", closed = "right"
+
+# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:04"), Timestamp("2020/01/01 08:05"),])
+# start: Timestamp('2020-01-01 07:55:00')
+# end: Timestamp('2020-01-01 08:05:00')
+# bins: DatetimeIndex(['2020-01-01 07:55:00', '2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[:-1]
+
+# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
+# start: Timestamp('2020-01-01 07:55:00')
+# end: Timestamp('2020-01-01 08:05:00')
+# bins: DatetimeIndex(['2020-01-01 07:55:00', '2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
+# bins: DatetimeIndex(['2020-01-01 07:55:00', '2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[:-1]
+
+# bin_on = Series([Timestamp("2020/01/01 08:01"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
+# start: Timestamp('2020-01-01 08:00:00')
+# end: Timestamp('2020-01-01 08:05:00')
+# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[:-1]
+
+
+# label="right", closed = "right"
+
+# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:04"), Timestamp("2020/01/01 08:05"),])
+# start: Timestamp('2020-01-01 07:55:00')
+# end: Timestamp('2020-01-01 08:05:00')
+# bins: DatetimeIndex(['2020-01-01 07:55:00', '2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[1:]
+
+# bin_on = Series([Timestamp("2020/01/01 08:01"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
+# start: Timestamp('2020-01-01 08:00:00')
+# end: Timestamp('2020-01-01 08:05:00')
+# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
+# keys = bins[1:]
 
 
 # WiP
