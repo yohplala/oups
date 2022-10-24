@@ -329,9 +329,15 @@ def test_jitted_cgb(type_, agg_func1, agg_func2, agg_func3):
             False,
             array([2, 1, 0], dtype=INT64),
         ),
+        (
+            array([5, 5, 7, 7, 7], dtype=INT64),
+            array([5, 6, 7, 8], dtype=INT64),
+            False,
+            array([2, 0, 3], dtype=INT64),
+        ),
     ],
 )
-def test_sorted_histo_right(data, bins, right, hist_ref):
+def test_histo_on_ordered(data, bins, right, hist_ref):
     hist_res = zeros(len(bins) - 1, dtype=INT64)
     _histo_on_ordered(data, bins, right, hist_res)
     assert nall(hist_ref == hist_res)
