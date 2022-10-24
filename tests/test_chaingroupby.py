@@ -12,6 +12,9 @@ from numpy import max as nmax
 from numpy import ndarray
 from numpy import zeros
 from pandas import DataFrame as pDataFrame
+from pandas import DatetimeIndex
+from pandas import Grouper
+from pandas import Series
 from pandas import Timestamp as pTimestamp
 
 from oups.chaingroupby import AGG_FUNC_IDS
@@ -28,8 +31,9 @@ from oups.chaingroupby import LAST
 from oups.chaingroupby import MAX
 from oups.chaingroupby import MIN
 from oups.chaingroupby import SUM
-from oups.chaingroupby import _histo_on_sorted
+from oups.chaingroupby import _histo_on_ordered
 from oups.chaingroupby import _jitted_cgb
+from oups.chaingroupby import by_time
 from oups.chaingroupby import setup_cgb_agg
 
 
@@ -319,87 +323,183 @@ def test_jitted_cgb(type_, agg_func1, agg_func2, agg_func3):
             False,
             array([0, 0, 0], dtype=INT64),
         ),
+        (
+            array([5, 5, 6], dtype=INT64),
+            array([5, 6, 7, 8], dtype=INT64),
+            False,
+            array([2, 1, 0], dtype=INT64),
+        ),
     ],
 )
 def test_sorted_histo_right(data, bins, right, hist_ref):
     hist_res = zeros(len(bins) - 1, dtype=INT64)
-    _histo_on_sorted(data, bins, right, hist_res)
+    _histo_on_ordered(data, bins, right, hist_res)
     assert nall(hist_ref == hist_res)
 
 
-# WiP: test cases for 'by_time()' function.
-
-# label="left", closed = "left"
-
-# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:04"), Timestamp("2020/01/01 08:05"),])
-# start: Timestamp('2020-01-01 08:00:00')
-# end: Timestamp('2020-01-01 08:10:00')
-# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00', '2020-01-01 08:10:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[:-1]
-
-# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
-# start: Timestamp('2020-01-01 08:00:00')
-# end: Timestamp('2020-01-01 08:05:00')
-# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[:-1]
-
-# bin_on = Series([Timestamp("2020/01/01 08:01"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:05"),])
-# start: Timestamp('2020-01-01 08:00:00')
-# end: Timestamp('2020-01-01 08:10:00')
-# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00', '2020-01-01 08:10:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[:-1]
-
-
-# label="right", closed = "left"
-
-# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:05"),])
-# start: Timestamp('2020-01-01 08:00:00')
-# end: Timestamp('2020-01-01 08:10:00')
-# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00', '2020-01-01 08:10:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[1:]
-
-# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
-# start: Timestamp('2020-01-01 08:00:00')
-# end: Timestamp('2020-01-01 08:05:00')
-# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[1:]
-
-
-# label="left", closed = "right"
-
-# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:04"), Timestamp("2020/01/01 08:05"),])
-# start: Timestamp('2020-01-01 07:55:00')
-# end: Timestamp('2020-01-01 08:05:00')
-# bins: DatetimeIndex(['2020-01-01 07:55:00', '2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[:-1]
-
-# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
-# start: Timestamp('2020-01-01 07:55:00')
-# end: Timestamp('2020-01-01 08:05:00')
-# bins: DatetimeIndex(['2020-01-01 07:55:00', '2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
-# bins: DatetimeIndex(['2020-01-01 07:55:00', '2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[:-1]
-
-# bin_on = Series([Timestamp("2020/01/01 08:01"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
-# start: Timestamp('2020-01-01 08:00:00')
-# end: Timestamp('2020-01-01 08:05:00')
-# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[:-1]
-
-
-# label="right", closed = "right"
-
-# bin_on = Series([Timestamp("2020/01/01 08:00"), Timestamp("2020/01/01 08:04"), Timestamp("2020/01/01 08:05"),])
-# start: Timestamp('2020-01-01 07:55:00')
-# end: Timestamp('2020-01-01 08:05:00')
-# bins: DatetimeIndex(['2020-01-01 07:55:00', '2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[1:]
-
-# bin_on = Series([Timestamp("2020/01/01 08:01"), Timestamp("2020/01/01 08:03"), Timestamp("2020/01/01 08:04"),])
-# start: Timestamp('2020-01-01 08:00:00')
-# end: Timestamp('2020-01-01 08:05:00')
-# bins: DatetimeIndex(['2020-01-01 08:00:00', '2020-01-01 08:05:00'], dtype='datetime64[ns]', freq='5T')
-# keys = bins[1:]
+@pytest.mark.parametrize(
+    "bin_on, by, group_keys_ref, group_sizes_ref, n_groups_ref, n_null_groups_ref",
+    [
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:04"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="left"),
+            DatetimeIndex(
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype="datetime64[ns]", freq="5T"
+            ),
+            array([2, 1], dtype=INT64),
+            2,
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="left"),
+            DatetimeIndex(["2020-01-01 08:00:00"], dtype="datetime64[ns]", freq="5T"),
+            array([3], dtype=INT64),
+            1,
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:01"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="left"),
+            DatetimeIndex(
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype="datetime64[ns]", freq="5T"
+            ),
+            array([2, 1], dtype=INT64),
+            2,
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="right", closed="left"),
+            DatetimeIndex(
+                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"], dtype="datetime64[ns]", freq="5T"
+            ),
+            array([2, 1], dtype=INT64),
+            2,
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="right", closed="left"),
+            DatetimeIndex(["2020-01-01 08:05:00"], dtype="datetime64[ns]", freq="5T"),
+            array([3], dtype=INT64),
+            1,
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:04"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="right"),
+            DatetimeIndex(
+                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"], dtype="datetime64[ns]", freq="5T"
+            ),
+            array([1, 2], dtype=INT64),
+            2,
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="right"),
+            DatetimeIndex(
+                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"], dtype="datetime64[ns]", freq="5T"
+            ),
+            array([1, 2], dtype=INT64),
+            2,
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:01"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="right"),
+            DatetimeIndex(["2020-01-01 08:00:00"], dtype="datetime64[ns]", freq="5T"),
+            array([3], dtype=INT64),
+            1,
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:04"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="right", closed="right"),
+            DatetimeIndex(
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype="datetime64[ns]", freq="5T"
+            ),
+            array([1, 2], dtype=INT64),
+            2,
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:01"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="right", closed="right"),
+            DatetimeIndex(["2020-01-01 08:05:00"], dtype="datetime64[ns]", freq="5T"),
+            array([3], dtype=INT64),
+            1,
+            0,
+        ),
+    ],
+)
+def test_by_time(bin_on, by, group_keys_ref, group_sizes_ref, n_groups_ref, n_null_groups_ref):
+    group_keys_res, group_sizes_res, n_groups_res, n_null_groups_res = by_time(bin_on, by)
+    assert nall(group_keys_res == group_keys_ref)
+    assert nall(group_sizes_res == group_sizes_ref)
+    assert n_groups_res == n_groups_ref
+    assert n_null_groups_res == n_null_groups_ref
 
 
 # WiP

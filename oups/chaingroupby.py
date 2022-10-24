@@ -155,8 +155,8 @@ def setup_cgb_agg(
     "(l),(m),(),(n)",
     nopython=True,
 )
-def _histo_on_sorted(data: ndarray, bins: ndarray, right: bool, histo: ndarray):
-    """Histogram on sorted data.
+def _histo_on_ordered(data: ndarray, bins: ndarray, right: bool, histo: ndarray):
+    """Histogram on ordered data.
 
     Parameters
     ----------
@@ -191,20 +191,26 @@ def _histo_on_sorted(data: ndarray, bins: ndarray, right: bool, histo: ndarray):
         # No data in bins.
         return
     for (b_idx_loc,), bin_ in ndenumerate(bins[1:]):
+        prev_bin = True
         if right:
             # Right-closed bins.
             for (_d_idx_loc,), val in ndenumerate(data[_d_idx:]):
                 if val > bin_:
+                    prev_bin = False
                     break
         else:
             # Left-closed bins.
             for (_d_idx_loc,), val in ndenumerate(data[_d_idx:]):
                 if val >= bin_:
+                    prev_bin = False
                     break
         _d_idx += _d_idx_loc
         histo[b_idx_loc] = _d_idx_loc
-        if _d_idx >= data_len:
-            # Array 'data' terminated.
+        if _d_idx + 1 == data_len and prev_bin:
+            # Array 'data' terminated and loop stayed in previous bin.
+            # Then, last loop has not been accounted for.
+            # Hence a '+1' to account for it.
+            histo[b_idx_loc] = _d_idx_loc + 1
             return
 
 
@@ -218,6 +224,18 @@ def by_time(bin_on: Series, by: Grouper) -> Tuple[ndarray, ndarray, int]:
         'by'.
     by : Grouper
         Setup to define time binning as a pandas Grouper.
+
+    Returns
+    -------
+    group_keys : ndarray
+        One-dimensional array of keys (labels) of each group.
+    group_sizes : ndarray
+        One-dimensional array of `int` specifying the number of rows in
+        'bin_on' for each group. An empty group has a size 0.
+    n_groups : int
+        Number of groups.
+    n_null_groups : int
+        Number of empty groups.
     """
     start, end = gtre(
         first=bin_on.iloc[0],
@@ -229,11 +247,17 @@ def by_time(bin_on: Series, by: Grouper) -> Tuple[ndarray, ndarray, int]:
     )
     bins = date_range(start, end, freq=by.freq)
     group_keys = bins[1:] if by.label == "right" else bins[:-1]
-    group_sizes = zeros(len(group_keys))
-    _histo_on_sorted(bin_on, bins, by.closed == "right", group_sizes)
+    n_groups = len(group_keys)
+    group_sizes = zeros(n_groups, dtype=DTYPE_INT64)
+    _histo_on_ordered(
+        bin_on.to_numpy(copy=False).view(DTYPE_INT64),
+        bins.to_numpy(copy=False).view(DTYPE_INT64),
+        by.closed == "right",
+        group_sizes,
+    )
     # Count zeros.
-    n_nan_groups = count_nonzero(group_sizes == 0)
-    return group_keys, group_sizes, n_nan_groups
+    n_null_groups = count_nonzero(group_sizes == 0)
+    return group_keys, group_sizes, n_groups, n_null_groups
 
 
 def _jitted_agg_func_router(
@@ -430,7 +454,7 @@ def chaingroupby(
     by : Union[Grouper, Callable]
         Callable or pandas Grouper to perform binning.
         If a Callable, is called with following parameters:
-        ``by(binning_buffer, bin_on, group_keys, n_groups, n_nan_groups)``
+        ``by(binning_buffer, bin_on, group_keys, n_groups, n_null_groups)``
         where:
 
           - ``bin_on``, same parameter as for ``chaingroupby``.
@@ -447,7 +471,7 @@ def chaingroupby(
             row in aggregation result will be filled with null values.
           - ``n_groups``, an `int`, the number of different groups, that ``by``
             has to output.
-          - ``n_nan_groups``, an `int`, the number of groups with a null row in
+          - ``n_null_groups``, an `int`, the number of groups with a null row in
             aggregation results.
 
     by : Union[np.ndarray, Series]
@@ -480,13 +504,13 @@ def chaingroupby(
     # Both 'group_keys' and 'group_sizes' are expected to be the size of the
     # resulting aggregated array from 'groupby' operation.
     if isinstance(by, Grouper):
-        group_keys, group_sizes, n_groups, n_nan_groups = by_time(bin_on, by)
+        group_keys, group_sizes, n_groups, n_null_groups = by_time(bin_on, by)
     else:
         # 'by' binning, possibly jitted.
-        group_keys, group_sizes, n_groups, n_nan_groups = by(bin_on, binning_buffer)
+        group_keys, group_sizes, n_groups, n_null_groups = by(bin_on, binning_buffer)
     # Initialize input parameters.
     # 'agg_res' contain rows for possible empty bins.
-    nan_group_indices = zeros(n_nan_groups, dtype=DTYPE_INT64)
+    nan_group_indices = zeros(n_null_groups, dtype=DTYPE_INT64)
     if DTYPE_FLOAT64 in agg:
         # Manage float.
         (
