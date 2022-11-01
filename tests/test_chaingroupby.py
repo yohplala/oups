@@ -649,3 +649,4 @@ def test_chaingroupby_single_dtype(ar, cols):
 # Test case with single column array to check transpose things.
 # Make a simple test with a single dtype to check all actions for other dtype
 # does not perturb the overall work.
+# Test error message if 'bin_on' is None in 'chaingroupby'.
