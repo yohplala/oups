@@ -232,10 +232,6 @@ def by_time(bin_on: Series, by: Grouper) -> Tuple[ndarray, ndarray, int]:
     group_sizes : ndarray
         One-dimensional array of `int` specifying the number of rows in
         'bin_on' for each group. An empty group has a size 0.
-    n_groups : int
-        Number of groups.
-    n_null_groups : int
-        Number of empty groups.
     """
     start, end = gtre(
         first=bin_on.iloc[0],
@@ -247,17 +243,14 @@ def by_time(bin_on: Series, by: Grouper) -> Tuple[ndarray, ndarray, int]:
     )
     bins = date_range(start, end, freq=by.freq)
     group_keys = bins[1:] if by.label == "right" else bins[:-1]
-    n_groups = len(group_keys)
-    group_sizes = zeros(n_groups, dtype=DTYPE_INT64)
+    group_sizes = zeros(len(group_keys), dtype=DTYPE_INT64)
     _histo_on_ordered(
         bin_on.to_numpy(copy=False).view(DTYPE_INT64),
         bins.to_numpy(copy=False).view(DTYPE_INT64),
         by.closed == "right",
         group_sizes,
     )
-    # Count zeros.
-    n_null_groups = count_nonzero(group_sizes == 0)
-    return group_keys, group_sizes, n_groups, n_null_groups
+    return group_keys, group_sizes
 
 
 def _jitted_agg_func_router(
@@ -312,7 +305,7 @@ def _jitted_agg_func_router(
     agg_res : ndarray
         Two dimensional array, to contain the aggregation results.
     """
-    for idx_func, func in ndenumerate(agg_func):
+    for (idx_func,), func in ndenumerate(agg_func):
         n_cols_ = n_cols[idx_func]
         data_chunk = data[row_start:row_end, cols_in_data[idx_func, :n_cols_]]
         if func == ID_FIRST:
@@ -347,7 +340,7 @@ def _jitted_cgb(
     cols_in_data_dte: ndarray,  # 2d
     cols_in_agg_res_dte: ndarray,  # 2d
     agg_res_dte: ndarray,  # 2d
-    nan_group_indices: ndarray,  # 1d
+    null_group_indices: ndarray,  # 1d
 ):
     """Group assuming contiguity.
 
@@ -381,18 +374,20 @@ def _jitted_cgb(
     -------
     agg_res_float : ndarray
         Results from aggregation, ``float`` dtype
-    nan_group_indices : ndarray
+    null_group_indices : ndarray
         One dimensional array containing row indices in 'agg_res' that
         correspond to "empty" groups, i.e. for which group size has been set to
         0.
     """
     data_row_start = 0
-    nan_group_idx = 0
-    for agg_res_idx, size in ndenumerate(group_sizes):
-        (agg_res_idx,) = agg_res_idx
+    null_group_idx = 0
+    assess_float = len(agg_func_float) != 0
+    assess_int = len(agg_func_int) != 0
+    assess_dte = len(agg_func_dte) != 0
+    for (agg_res_idx,), size in ndenumerate(group_sizes):
         if size != 0:
             data_row_end = data_row_start + size
-            if len(agg_func_float) != 0:
+            if assess_float:
                 # Manage float.
                 _jitted_agg_func_router(
                     data_float,
@@ -405,7 +400,7 @@ def _jitted_cgb(
                     agg_res_idx,
                     agg_res_float,
                 )
-            if len(agg_func_int) != 0:
+            if assess_int:
                 # Manage int.
                 _jitted_agg_func_router(
                     data_int,
@@ -418,7 +413,7 @@ def _jitted_cgb(
                     agg_res_idx,
                     agg_res_int,
                 )
-            if len(agg_func_dte) != 0:
+            if assess_dte:
                 # Manage int.
                 _jitted_agg_func_router(
                     data_dte,
@@ -433,19 +428,16 @@ def _jitted_cgb(
                 )
             data_row_start = data_row_end
         else:
-            nan_group_indices[nan_group_idx] = agg_res_idx
-            nan_group_idx += 1
+            null_group_indices[null_group_idx] = agg_res_idx
+            null_group_idx += 1
 
 
 def chaingroupby(
     by: Union[Grouper, Callable],
-    bin_on: ndarray,
-    binning_buffer: dict,
     agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, list]],
     data: pDataFrame,
-    null_float=nNaN,
-    null_int=pNA,
-    null_dte=pNaT,
+    bin_on: Union[Series, str, None] = None,
+    binning_buffer: dict = None,
 ) -> pDataFrame:
     """Group as per 'by', assuming group keys are ordered.
 
@@ -454,7 +446,7 @@ def chaingroupby(
     by : Union[Grouper, Callable]
         Callable or pandas Grouper to perform binning.
         If a Callable, is called with following parameters:
-        ``by(binning_buffer, bin_on, group_keys, n_groups, n_null_groups)``
+        ``by(bin_on, binning_buffer)``
         where:
 
           - ``bin_on``, same parameter as for ``chaingroupby``.
@@ -469,20 +461,12 @@ def chaingroupby(
             number of consecutive rows for a given group as found in
             ``bin_on``. A group size, can be 0, meaning corresponding
             row in aggregation result will be filled with null values.
-          - ``n_groups``, an `int`, the number of different groups, that ``by``
-            has to output.
-          - ``n_null_groups``, an `int`, the number of groups with a null row in
-            aggregation results.
 
-    by : Union[np.ndarray, Series]
-        Array of group keys, of the same size as the input array. It does not
-        contain directly key values, but the indices of each key expected in
-        the resulting aggregated array.
-        These indices are expected sorted, and the resulting aggregated array
-        will be of length defined by ``by[-1] - by[0]``.
-        This means there can be holes within the resulting aggregated array if
-        there are holes in the indices in ``by``. However, no hole can be at
-        start or end of array.
+    bin_on : Union[Series, str, None]
+        A pandas Series over which performing the binning operation.
+        If 'by' is a pandas `Grouper`, its `key` parameter is used instead, and
+        'bin_on' can be left to `None` as per default.
+        If a `str`, then corresponding column in `data` is used.
     agg : dict
         Definition of aggregation.
         If in the form ``Dict[str, Tuple[str, str]]``, then it is reworked to
@@ -497,6 +481,18 @@ def chaingroupby(
 
         - the 2nd form is that returned by the function ``setup_cgb_agg``.
 
+    data: pDataFrame
+        A pandas Dataframe (pandas) containing the columns over which
+        performing aggregations and with same length as that of ``bin_on``.
+    binning_buffer : Union[dict, None]
+        User-chosen values from previous binning process, that can be required
+        when restarting the binning process with new seed data.
+
+    Returns
+    -------
+    pDataFrame
+        A pandas DataFrame with aggregation results. Its index is composed of
+        the group keys.
     """
     if isinstance(next(iter(agg.keys())), str):
         # Reshape aggregation definition.
@@ -504,61 +500,112 @@ def chaingroupby(
     # Both 'group_keys' and 'group_sizes' are expected to be the size of the
     # resulting aggregated array from 'groupby' operation.
     if isinstance(by, Grouper):
-        group_keys, group_sizes, n_groups, n_null_groups = by_time(bin_on, by)
+        if by.key:
+            bin_on = data.loc[:, by.key]
+        group_keys, group_sizes = by_time(bin_on, by)
     else:
+        if isinstance(bin_on, str):
+            bin_on = data.loc[:, bin_on]
+        elif bin_on is None:
+            raise ValueError("not possible to have 'bin_on' set to `None`.")
         # 'by' binning, possibly jitted.
-        group_keys, group_sizes, n_groups, n_null_groups = by(bin_on, binning_buffer)
+        group_keys, group_sizes = by(bin_on, binning_buffer)
     # Initialize input parameters.
+    n_groups = len(group_keys)
     # 'agg_res' contain rows for possible empty bins.
-    nan_group_indices = zeros(n_null_groups, dtype=DTYPE_INT64)
+    # Count zeros.
+    n_null_groups = count_nonzero(group_sizes == 0)
+    null_group_indices = zeros(n_null_groups, dtype=DTYPE_INT64)
+    # Initiate dict of result columns.
+    agg_res = {}
     if DTYPE_FLOAT64 in agg:
         # Manage float.
         (
-            agg_func_idx_float,
-            n_cols_float,
+            agg_func_idx_float,  # 1d
+            n_cols_float,  # 1d
             cols_name_in_data_float,
             cols_idx_in_data_float,
             cols_name_in_agg_res_float,
             cols_idx_in_agg_res_float,
         ) = agg[DTYPE_FLOAT64]
-        if n_cols_float:
-            data_float = data.loc[:, [cols_name_in_data_float]].to_numpy(copy=False)
-            agg_res_float = zeros((n_groups, len(cols_name_in_agg_res_float)), dtype=DTYPE_FLOAT64)
-        else:
-            data_float = ZEROS_AR_FLOAT64
-            agg_res_float = ZEROS_AR_FLOAT64
+        data_float = (
+            data.loc[:, cols_name_in_data_float].to_numpy(copy=False)
+            if len(cols_name_in_data_float) > 1
+            else data.loc[:, cols_name_in_data_float].to_numpy(copy=False).reshape(-1, 1)
+        )
+        agg_res_float = zeros((n_groups, len(cols_name_in_agg_res_float)), dtype=DTYPE_FLOAT64)
+        agg_res.update(
+            {name: agg_res_float[:, i] for i, name in enumerate(cols_name_in_agg_res_float)}
+        )
+    else:
+        agg_func_idx_float = ZEROS_AR_INT64
+        n_cols_float = ZEROS_AR_INT64
+        cols_name_in_data_float = None
+        cols_idx_in_data_float = ZEROS_AR_INT64
+        cols_name_in_agg_res_float = None
+        cols_idx_in_agg_res_float = ZEROS_AR_INT64
+        data_float = ZEROS_AR_FLOAT64
+        agg_res_float = ZEROS_AR_FLOAT64
     if DTYPE_INT64 in agg:
         # Manage int.
         (
-            agg_func_idx_int,
-            n_cols_int,
+            agg_func_idx_int,  # 1d
+            n_cols_int,  # 1d
             cols_name_in_data_int,
             cols_idx_in_data_int,
             cols_name_in_agg_res_int,
             cols_idx_in_agg_res_int,
         ) = agg[DTYPE_INT64]
-        if n_cols_int:
-            data_int = data.loc[:, [cols_name_in_data_int]].to_numpy(copy=False)
-            agg_res_int = zeros((n_groups, len(cols_name_in_agg_res_int)), dtype=DTYPE_INT64)
-        else:
-            data_int = ZEROS_AR_INT64
-            agg_res_int = ZEROS_AR_INT64
+        data_int = (
+            data.loc[:, cols_name_in_data_int].to_numpy(copy=False)
+            if len(cols_name_in_data_int) > 1
+            else data.loc[:, cols_name_in_data_int].to_numpy(copy=False).reshape(-1, 1)
+        )
+        agg_res_int = zeros((n_groups, len(cols_name_in_agg_res_int)), dtype=DTYPE_INT64)
+        agg_res.update({name: agg_res_int[:, i] for i, name in enumerate(cols_name_in_agg_res_int)})
+    else:
+        agg_func_idx_int = ZEROS_AR_INT64
+        n_cols_int = ZEROS_AR_INT64
+        cols_name_in_data_int = None
+        cols_idx_in_data_int = ZEROS_AR_INT64
+        cols_name_in_agg_res_int = None
+        cols_idx_in_agg_res_int = ZEROS_AR_INT64
+        data_int = ZEROS_AR_INT64
+        agg_res_int = ZEROS_AR_INT64
     if DTYPE_DATETIME64 in agg:
         # Manage datetime.
         (
-            agg_func_idx_dte,
-            n_cols_dte,
+            agg_func_idx_dte,  # 1d
+            n_cols_dte,  # 1d
             cols_name_in_data_dte,
             cols_idx_in_data_dte,
             cols_name_in_agg_res_dte,
             cols_idx_in_agg_res_dte,
         ) = agg[DTYPE_DATETIME64]
-        if n_cols_dte:
-            data_dte = data.loc[:, [cols_name_in_data_dte]].to_numpy(copy=False).view(DTYPE_INT64)
-            agg_res_dte = zeros((n_groups, len(cols_name_in_agg_res_dte)), dtype=DTYPE_INT64)
-        else:
-            data_dte = ZEROS_AR_INT64
-            agg_res_dte = ZEROS_AR_INT64
+        data_dte = (
+            data.loc[:, cols_name_in_data_dte].to_numpy(copy=False).view(DTYPE_INT64)
+            if len(cols_name_in_data_dte) > 1
+            else data.loc[:, cols_name_in_data_dte]
+            .to_numpy(copy=False)
+            .reshape(-1, 1)
+            .view(DTYPE_INT64)
+        )
+        agg_res_dte = zeros((n_groups, len(cols_name_in_agg_res_dte)), dtype=DTYPE_INT64)
+        agg_res.update(
+            {
+                name: agg_res_dte[:, i].view(DTYPE_DATETIME64)
+                for i, name in enumerate(cols_name_in_agg_res_dte)
+            }
+        )
+    else:
+        agg_func_idx_dte = ZEROS_AR_INT64
+        n_cols_dte = ZEROS_AR_INT64
+        cols_name_in_data_dte = None
+        cols_idx_in_data_dte = ZEROS_AR_INT64
+        cols_name_in_agg_res_dte = None
+        cols_idx_in_agg_res_dte = ZEROS_AR_INT64
+        data_dte = ZEROS_AR_INT64
+        agg_res_dte = ZEROS_AR_INT64
     # 'data_xxx' are numpy arrays, with columns in 'expected order', as defined
     # in 'cols_idx_in_data_xxx'.
     _jitted_cgb(
@@ -581,26 +628,18 @@ def chaingroupby(
         cols_in_data_dte=cols_idx_in_data_dte,  # 2d
         cols_in_agg_res_dte=cols_idx_in_agg_res_dte,  # 2d
         agg_res_dte=agg_res_dte,  # 2d
-        nan_group_indices=nan_group_indices,  # 1d
+        null_group_indices=null_group_indices,  # 1d
     )
-
-    # set 'NaN value in agg_res to include NaN of NaT value if meaning full
-    # depending dtype, if nan_n_groups != 0.
-
-    # /!\ WiP /!\
-    # 'agg_res' sent to 'jitted_cgb' of the expanded size already, with a default
-    # 0 values, that preserves dtype
-    # then default value for missing data is set depending final dtype expected:
-    #   timestamp (if NaT - forced to NaT if missing rows, not keeping 0 as not possible),
-    #   float (if NaN)
-
-    # /!\ WiP /!\ tester également 'group_indices' if relevant
-
-
-#   if group_idx[-1] != len(agg_res):
-# initialize 'agg' with new size, depending type
-
-
-# WiP
-# Rename columns as expected.
-#    return pDataFrame(index=group_keys)
+    # Assemble 'agg_res' as a pandas DataFrame.
+    agg_res = pDataFrame(agg_res, index=group_keys, copy=False)
+    agg_res.index.name = bin_on.name
+    # Set null values.
+    if n_null_groups != 0:
+        null_group_keys = group_keys[null_group_indices]
+        if DTYPE_FLOAT64 in agg:
+            agg_res.loc[null_group_keys, cols_name_in_agg_res_float] = nNaN
+        if DTYPE_INT64 in agg:
+            agg_res.loc[null_group_keys, cols_name_in_agg_res_int] = pNA
+        if DTYPE_DATETIME64 in agg:
+            agg_res.loc[null_group_keys, cols_name_in_agg_res_dte] = pNaT
+    return agg_res

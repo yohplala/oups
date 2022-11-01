@@ -157,8 +157,8 @@ def _set_chainagg_md(
         Last row from last aggregation results, required for stitching with
         aggregation results from new seed data.
     binning_buffer : dict
-        Last values from binning process, that can be required when restarting
-        the binning process with new seed data.
+        User-chosen values from previous binning process, that can be required
+        when restarting the binning process with new seed data.
     post_buffer : dict
         Last values from post-processing, that can be required when restarting
         post-processing of new aggregation results.
