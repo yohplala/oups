@@ -644,9 +644,50 @@ def test_chaingroupby_single_dtype(ar, cols):
     assert agg_res.equals(agg_res_ref)
 
 
+def test_chaingroupby_mixed_dtype():
+    # Test aggregation for a mixed dtype.
+    ar_float = array(
+        [[2.0, 20.0], [4.0, 40.0], [5.0, 50.0], [8.0, 80.0], [9.0, 90.0]], dtype=FLOAT64
+    )
+    ar_int = array([[1, 10], [3, 30], [6, 60], [7, 70], [9, 90]], dtype=INT64)
+    ar_dte = array(
+        [
+            "2020-01-01T08:00",
+            "2020-01-01T08:05",
+            "2020-01-01T08:08",
+            "2020-01-01T08:12",
+            "2020-01-01T08:14",
+        ],
+        dtype=DATETIME64,
+    )
+    time_idx = "datetime_idx"
+    data = pDataFrame(
+        {
+            "col1_f": ar_float[:, 0],
+            "col2_f": ar_float[:, 1],
+            "col3_i": ar_int[:, 0],
+            "col4_i": ar_int[:, 1],
+            time_idx: ar_dte,
+        }
+    )
+    agg = {
+        "res_first_f": ("col1_f", "first"),
+        "res_sum_f": ("col1_f", "sum"),
+        "res_last_f": ("col2_f", "last"),
+        "res_min_f": ("col3_i", "min"),
+        "res_max_f": ("col4_i", "max"),
+        "res_first_d": ("datetime_idx", "first"),
+    }
+    by = Grouper(freq="5T", closed="left", label="left", key=time_idx)
+    agg_res = chaingroupby(by=by, agg=agg, data=data)
+    agg_res_ref = data.groupby(by).agg(**agg)
+    assert agg_res.equals(agg_res_ref)
+
+
 # WiP
 # Test case test_jitted_cgb on a single column array (1d) instead of 3 columns currently.
 # Test case with single column array to check transpose things.
 # Make a simple test with a single dtype to check all actions for other dtype
 # does not perturb the overall work.
 # Test error message if 'bin_on' is None in 'chaingroupby'.
+# test error message input column in 'agg' not in input dataframe.

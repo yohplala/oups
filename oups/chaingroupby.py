@@ -87,7 +87,10 @@ def setup_cgb_agg(
     """
     cgb_agg_cfg = {}
     for out_col, (in_col, func) in agg.items():
-        dtype_ = data_dtype[in_col]
+        if in_col not in data_dtype:
+            raise KeyError(f"{in_col} not in input data.")
+        else:
+            dtype_ = data_dtype[in_col]
         try:
             tup = cgb_agg_cfg[dtype_]
         except KeyError:
