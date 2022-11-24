@@ -685,9 +685,6 @@ def test_chaingroupby_mixed_dtype():
 
 
 # WiP
-# Test case test_jitted_cgb on a single column array (1d) instead of 3 columns currently.
-# Test case with single column array to check transpose things.
-# Make a simple test with a single dtype to check all actions for other dtype
-# does not perturb the overall work.
+# Test with null values in agg_res (or modify test case above)
 # Test error message if 'bin_on' is None in 'chaingroupby'.
 # test error message input column in 'agg' not in input dataframe.

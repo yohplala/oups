@@ -609,6 +609,11 @@ def chaingroupby(
         cols_idx_in_agg_res_dte = ZEROS_AR_INT64
         data_dte = ZEROS_AR_INT64
         agg_res_dte = ZEROS_AR_INT64
+    # WiP here
+    # make a loop over agg.items()
+    # make a call to _jitted_cgb for a single dtype (not all dtypes) to simplify
+    # before for loop, manage speciticities of DETATIME64 dtype
+    # end WiP
     # 'data_xxx' are numpy arrays, with columns in 'expected order', as defined
     # in 'cols_idx_in_data_xxx'.
     _jitted_cgb(
