@@ -508,6 +508,6 @@ def chaingroupby(
             _,
             cols_name_in_agg_res,
             _,
-        ) in agg:
+        ) in agg.items():
             agg_res.loc[null_group_keys, cols_name_in_agg_res] = NULL_DICT[dtype_]
     return agg_res
