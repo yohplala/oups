@@ -121,10 +121,10 @@ def test_setup_cgb_agg():
 
 
 @pytest.mark.parametrize(
-    "type_",
+    "dtype_",
     [FLOAT64, INT64],
 )
-def test_jitted_cgb_1d(type_):
+def test_jitted_cgb_1d(dtype_):
     # Data is 1d, and aggregation result is 1d.
     # Setup.
     group_sizes = array([3, 0, 2, 0, 1], dtype=INT64)
@@ -141,7 +141,7 @@ def test_jitted_cgb_1d(type_):
             2.0,
             6.0,
         ],
-        dtype=type_,
+        dtype=dtype_,
     ).reshape(-1, 1)
     # 3 aggregation functions defined.
     agg_func = array([AGG_FUNC_IDS[FIRST]], dtype=INT64)
@@ -152,17 +152,19 @@ def test_jitted_cgb_1d(type_):
     # Column indices for output data, per aggregation function.
     agg_cols_in_res = array([[0]], dtype=INT64)
     agg_res_n_cols = nmax(agg_cols_in_res) + 1
-    agg_res = zeros((agg_res_n_rows, agg_res_n_cols), dtype=type_)
-    config = {
-        "data": data,
-        "agg_func": agg_func,
-        "n_cols": agg_func_n_cols,
-        "cols_in_data": agg_cols_in_data,
-        "cols_in_agg_res": agg_cols_in_res,
-        "agg_res": agg_res,
-    }
+    agg_res = zeros((agg_res_n_rows, agg_res_n_cols), dtype=dtype_)
     # Test.
-    _jitted_cgb(group_sizes=group_sizes, **config, null_group_indices=null_group_indices_res)
+    _jitted_cgb(
+        group_sizes,
+        data,
+        agg_func,
+        agg_func_n_cols,
+        agg_cols_in_data,
+        agg_cols_in_res,
+        True,
+        agg_res,
+        null_group_indices_res,
+    )
     # Ref. results.
     # first in data col 0.
     ref_res = (
@@ -174,7 +176,7 @@ def test_jitted_cgb_1d(type_):
                 [0.0],
                 [6.0],
             ],
-            dtype=type_,
+            dtype=dtype_,
         ),
     )
     assert nall(ref_res == agg_res)
@@ -182,7 +184,7 @@ def test_jitted_cgb_1d(type_):
 
 
 @pytest.mark.parametrize(
-    "type_, agg_func1, agg_func2, agg_func3, res_ref",
+    "dtype_, agg_func1, agg_func2, agg_func3, res_ref",
     [
         (
             FLOAT64,
@@ -214,7 +216,7 @@ def test_jitted_cgb_1d(type_):
         ),
     ],
 )
-def test_jitted_cgb_2d(type_, agg_func1, agg_func2, agg_func3, res_ref):
+def test_jitted_cgb_2d(dtype_, agg_func1, agg_func2, agg_func3, res_ref):
     # Data is 2d, and aggregation results are 2d.
     # Setup.
     group_sizes = array([3, 0, 2, 0, 1], dtype=INT64)
@@ -231,7 +233,7 @@ def test_jitted_cgb_2d(type_, agg_func1, agg_func2, agg_func3, res_ref):
             [2.0, 8.0, 1.0],
             [6.0, 4.0, 5.0],
         ],
-        dtype=FLOAT64 if type_ == FLOAT64 else INT64,
+        dtype=dtype_,
     )
     # 3 aggregation functions defined.
     agg_func = array(
@@ -248,21 +250,23 @@ def test_jitted_cgb_2d(type_, agg_func1, agg_func2, agg_func3, res_ref):
     # Irrelevant value are set to -1. It could be anything, they won't be read.
     agg_cols_in_res = array([[0, 1, -1], [2, 3, -1], [4, -1, -1]], dtype=INT64)
     agg_res_n_cols = nmax(agg_cols_in_res) + 1
-    agg_res = zeros((agg_res_n_rows, agg_res_n_cols), dtype=FLOAT64 if type_ == FLOAT64 else INT64)
-    config = {
-        "data": data,
-        "agg_func": agg_func,
-        "n_cols": agg_func_n_cols,
-        "cols_in_data": agg_cols_in_data,
-        "cols_in_agg_res": agg_cols_in_res,
-        "agg_res": agg_res,
-    }
+    agg_res = zeros((agg_res_n_rows, agg_res_n_cols), dtype=dtype_)
     # Test.
-    _jitted_cgb(group_sizes=group_sizes, **config, null_group_indices=nan_group_indices_res)
+    _jitted_cgb(
+        group_sizes,
+        data,
+        agg_func,
+        agg_func_n_cols,
+        agg_cols_in_data,
+        agg_cols_in_res,
+        True,
+        agg_res,
+        nan_group_indices_res,
+    )
     # Ref. results.
     ref_res = array(
         res_ref,
-        dtype=type_,
+        dtype=dtype_,
     )
     assert nall(ref_res == agg_res)
     assert nall(nan_group_indices_res == array([1, 3], dtype=INT64))

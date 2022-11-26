@@ -39,8 +39,8 @@ from oups.chainagg import SUM
 DTYPE_INT64 = dtype("int64")
 DTYPE_FLOAT64 = dtype("float64")
 DTYPE_DATETIME64 = dtype("datetime64[ns]")
-ZEROS_AR_FLOAT64 = zeros(0, dtype=DTYPE_FLOAT64)
-ZEROS_AR_INT64 = zeros(0, dtype=DTYPE_INT64)
+# Null values.
+NULL_DICT = {DTYPE_INT64: pNA, DTYPE_FLOAT64: nNaN, DTYPE_DATETIME64: pNaT}
 # Aggregation functions
 ID_FIRST = 0
 ID_LAST = 1
@@ -256,99 +256,43 @@ def by_time(bin_on: Series, by: Grouper) -> Tuple[ndarray, ndarray, int]:
     return group_keys, group_sizes
 
 
-def _jitted_agg_func_router(
-    data: ndarray,  # 2d
-    row_start: int,
-    row_end: int,
-    agg_func: ndarray,  # 1d
-    n_cols: ndarray,  # 1d
-    cols_in_data: ndarray,  # 2d
-    cols_in_agg_res: ndarray,  # 2d
-    agg_res_idx: int,
-    agg_res: ndarray,  # 2d
-):
-    """Aggregate data.
-
-    Parameters
-    ----------
-    data : ndarray
-        Two dimensional array, containing the data to aggregate (agrgegation
-        per column).
-    row_start : int
-        1st row index of bin in data.
-    row_end : int
-        Last row index of bin in data.
-    agg_func : ndarray[int]
-        One dimensional array of ``int``, containing the indices of the
-        aggregation functions to apply. Say length 'f'.
-    n_cols : ndarray[int]
-        One dimensional array of ``int``, with size 'f', one row per
-        aggregation function. Each row specifies for related aggregation
-        function the number of columns in data to which applying the related
-        aggregation function, hence the same number of columns resulting in
-        'agg_res' for related aggregation function.
-    cols_in_data : ndarray
-        One dimensional array of ``int``, with size 'f', one row per
-        aggregation function.
-        If number of columns specified in 'n_cols' is ``n``, then the slice
-        ``[:n]`` in the row provides the column indices in 'data'
-        to which applying related aggregation function.
-    cols_in_agg_res : ndarray
-        One dimensional array of ``int``, with size 'f', one row per
-        aggregation function.
-        If number of columns specified in 'n_cols' is ``n``, then the slice
-        ``[:n]`` in the row provides the column indices in 'agg_res'
-        into which recording aggregation results for related aggregation
-        function.
-    agg_res_idx : ndarray
-        Index of row in 'agg_res' into which recording aggregation result.
-
-    Returns
-    -------
-    agg_res : ndarray
-        Two dimensional array, to contain the aggregation results.
-    """
-    for (idx_func,), func in ndenumerate(agg_func):
-        n_cols_ = n_cols[idx_func]
-        data_chunk = data[row_start:row_end, cols_in_data[idx_func, :n_cols_]]
-        if func == ID_FIRST:
-            agg_res[agg_res_idx, cols_in_agg_res[idx_func, :n_cols_]] = data_chunk[0]
-        elif func == ID_LAST:
-            agg_res[agg_res_idx, cols_in_agg_res[idx_func, :n_cols_]] = data_chunk[-1]
-        elif func == ID_MIN:
-            agg_res[agg_res_idx, cols_in_agg_res[idx_func, :n_cols_]] = nmin(data_chunk, axis=0)
-        elif func == ID_MAX:
-            agg_res[agg_res_idx, cols_in_agg_res[idx_func, :n_cols_]] = nmax(data_chunk, axis=0)
-        elif func == ID_SUM:
-            agg_res[agg_res_idx, cols_in_agg_res[idx_func, :n_cols_]] = nsum(data_chunk, axis=0)
-
-
+@guvectorize(
+    [
+        (
+            int64[:],
+            int64[:, :],
+            int64[:],
+            int64[:],
+            int64[:, :],
+            int64[:, :],
+            boolean,
+            int64[:, :],
+            int64[:],
+        ),
+        (
+            int64[:],
+            float64[:, :],
+            int64[:],
+            int64[:],
+            int64[:, :],
+            int64[:, :],
+            boolean,
+            float64[:, :],
+            int64[:],
+        ),
+    ],
+    "(l),(m,n),(o),(o),(o,p),(o,p),(),(l,k),(i)",
+    nopython=True,
+)
 def _jitted_cgb(
-    group_sizes: ndarray,
+    group_sizes: ndarray,  # 1d
     data: ndarray,  # 2d
     agg_func: ndarray,  # 1d
     n_cols: ndarray,  # 1d
     cols_in_data: ndarray,  # 2d
     cols_in_agg_res: ndarray,  # 2d
+    assess_null_group_indices: bool,
     agg_res: ndarray,  # 2d
-    #    data_float: ndarray,  # 2d
-    #    agg_func_float: ndarray,  # 1d
-    #    n_cols_float: ndarray,  # 1d
-    #    cols_in_data_float: ndarray,  # 2d
-    #    cols_in_agg_res_float: ndarray,  # 2d
-    #    agg_res_float: ndarray,  # 2d
-    #    data_int: ndarray,  # 2d
-    #    agg_func_int: ndarray,  # 1d
-    #    n_cols_int: ndarray,  # 1d
-    #    cols_in_data_int: ndarray,  # 2d
-    #    cols_in_agg_res_int: ndarray,  # 2d
-    #    agg_res_int: ndarray,  # 2d
-    #    data_dte: ndarray,  # 2d
-    #    agg_func_dte: ndarray,  # 1d
-    #    n_cols_dte: ndarray,  # 1d
-    #    cols_in_data_dte: ndarray,  # 2d
-    #    cols_in_agg_res_dte: ndarray,  # 2d
-    #   agg_res_dte: ndarray,  # 2d
     null_group_indices: ndarray,  # 1d
 ):
     """Group assuming contiguity.
@@ -356,33 +300,36 @@ def _jitted_cgb(
     Parameters
     ----------
     group_sizes : ndarray
-        Array of int, indicating the size of the groups. May contain ``0`` if
-        a group key without any value is in resulting aggregation array.
-    data_float : ndarray
-        Array of ``float`` over which performing aggregation functions.
-    agg_float_func : ndarray
+        One dimensional array of ``int``, indicating the size of the groups.
+        May contain ``0`` if a group key without any value is in resulting
+        aggregation array.
+    data : ndarray
+        Array over which performing aggregation functions.
+    agg_func : ndarray
         One dimensional array of ``int``, specifying the aggregation function
         ids.
-    n_cols_float : ndarray
+    n_cols : ndarray
         One dimensional array of ``int``, specifying per aggregation function
         the number of columns to which applying related aggregation function
         (and consequently the number of columns in 'agg_res' to which recording
         the aggregation results).
-    cols_in_data_float : ndarray
+    cols_in_data : ndarray
         Two dimensional array of ``int``, one row per aggregation function.
-        Per row, column indices in 'data_float' to which apply corresponding
+        Per row, column indices in 'data' to which apply corresponding
         aggregation function.
         Any value in column past the number of relevant columns is not used.
-    cols_in_agg_res_float :  ndarray
+    cols_in_agg_res :  ndarray
         Two dimensional array of ``int``, one row per aggregation function.
-        Per row, column indices in 'agg_res_float' into which storing the
+        Per row, column indices in 'agg_res' into which storing the
         aggregation results.
         Any value in column past the number of relevant columns is not used.
+    assess_null_group_indices : bool
+       If `True`, assess row indices of null groups.
 
     Returns
     -------
-    agg_res_float : ndarray
-        Results from aggregation, ``float`` dtype
+    agg_res : ndarray
+        Results from aggregation, with same `dtype` than 'data' array.
     null_group_indices : ndarray
         One dimensional array containing row indices in 'agg_res' that
         correspond to "empty" groups, i.e. for which group size has been set to
@@ -390,63 +337,37 @@ def _jitted_cgb(
     """
     data_row_start = 0
     null_group_idx = 0
-    #    assess_float = len(agg_func_float) != 0
-    #    assess_int = len(agg_func_int) != 0
-    #    assess_dte = len(agg_func_dte) != 0
-    assess_null_group_indices = len(null_group_indices) != 0
     for (agg_res_idx,), size in ndenumerate(group_sizes):
         if size != 0:
             data_row_end = data_row_start + size
-            _jitted_agg_func_router(
-                data,
-                data_row_start,
-                data_row_end,
-                agg_func,
-                n_cols,
-                cols_in_data,
-                cols_in_agg_res,
-                agg_res_idx,
-                agg_res,
-            )
-            #            if assess_float:
-            # Manage float.
-            #                _jitted_agg_func_router(
-            #                    data_float,
-            #                    data_row_start,
-            #                    data_row_end,
-            #                    agg_func_float,
-            #                    n_cols_float,
-            #                    cols_in_data_float,
-            #                    cols_in_agg_res_float,
-            #                    agg_res_idx,
-            #                    agg_res_float,
-            #                )
-            #            if assess_int:
-            #                # Manage int.
-            #                _jitted_agg_func_router(
-            #                    data_int,
-            #                    data_row_start,
-            #                    data_row_end,
-            #                    agg_func_int,
-            #                    n_cols_int,
-            #                    cols_in_data_int,
-            #                    cols_in_agg_res_int,
-            #                    agg_res_idx,
-            #                    agg_res_int,
-            #                )
-            #            if assess_dte:
-            # Manage int.
-            #                _jitted_agg_func_router(
-            #                    data_dte,
-            #                    data_row_start,
-            #                    data_row_end,
-            #                    agg_func_dte,
-            #                    n_cols_dte,
-            #                    cols_in_data_dte,
-            #                    cols_in_agg_res_dte,
-            #                    agg_res_idx,
-            #                    agg_res_dte,
-            #                )
+            for (idx_func,), func in ndenumerate(agg_func):
+                n_cols_ = n_cols[idx_func]
+                data_chunk = data[data_row_start:data_row_end, cols_in_data[idx_func, :n_cols_]]
+                if func == ID_FIRST:
+                    for col_i in range(n_cols_):
+                        agg_res[agg_res_idx, cols_in_agg_res[idx_func, col_i]] = data_chunk[
+                            0, col_i
+                        ]
+                elif func == ID_LAST:
+                    for col_i in range(n_cols_):
+                        agg_res[agg_res_idx, cols_in_agg_res[idx_func, col_i]] = data_chunk[
+                            -1, col_i
+                        ]
+                elif func == ID_MIN:
+                    for col_i in range(n_cols_):
+                        agg_res[agg_res_idx, cols_in_agg_res[idx_func, col_i]] = nmin(
+                            data_chunk[:, col_i]
+                        )
+                elif func == ID_MAX:
+                    for col_i in range(n_cols_):
+                        agg_res[agg_res_idx, cols_in_agg_res[idx_func, col_i]] = nmax(
+                            data_chunk[:, col_i]
+                        )
+                elif func == ID_SUM:
+                    for col_i in range(n_cols_):
+                        agg_res[agg_res_idx, cols_in_agg_res[idx_func, col_i]] = nsum(
+                            data_chunk[:, col_i]
+                        )
             data_row_start = data_row_end
         elif assess_null_group_indices:
             null_group_indices[null_group_idx] = agg_res_idx
@@ -537,135 +458,56 @@ def chaingroupby(
     # Count zeros.
     n_null_groups = count_nonzero(group_sizes == 0)
     null_group_indices = zeros(n_null_groups, dtype=DTYPE_INT64)
+    assess_null_group_indices = True if n_null_groups else False
     # Initiate dict of result columns.
     agg_res = {}
-    if DTYPE_FLOAT64 in agg:
-        # Manage float.
-        (
-            agg_func_idx_float,  # 1d
-            n_cols_float,  # 1d
-            cols_name_in_data_float,
-            cols_idx_in_data_float,
-            cols_name_in_agg_res_float,
-            cols_idx_in_agg_res_float,
-        ) = agg[DTYPE_FLOAT64]
-        data_float = (
-            data.loc[:, cols_name_in_data_float].to_numpy(copy=False)
-            if len(cols_name_in_data_float) > 1
-            else data.loc[:, cols_name_in_data_float].to_numpy(copy=False).reshape(-1, 1)
+    for dtype_, (
+        agg_func_idx,  # 1d
+        n_cols,  # 1d
+        cols_name_in_data,
+        cols_idx_in_data,
+        cols_name_in_agg_res,
+        cols_idx_in_agg_res,
+    ) in agg.items():
+        data_single_dtype = (
+            data.loc[:, cols_name_in_data].to_numpy(copy=False)
+            if len(cols_name_in_data) > 1
+            else data.loc[:, cols_name_in_data].to_numpy(copy=False).reshape(-1, 1)
         )
-        agg_res_float = zeros((n_groups, len(cols_name_in_agg_res_float)), dtype=DTYPE_FLOAT64)
+        agg_res_single_dtype = zeros((n_groups, len(cols_name_in_agg_res)), dtype=dtype_)
         agg_res.update(
-            {name: agg_res_float[:, i] for i, name in enumerate(cols_name_in_agg_res_float)}
+            {name: agg_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_agg_res)}
         )
-    else:
-        agg_func_idx_float = ZEROS_AR_INT64
-        n_cols_float = ZEROS_AR_INT64
-        cols_name_in_data_float = None
-        cols_idx_in_data_float = ZEROS_AR_INT64
-        cols_name_in_agg_res_float = None
-        cols_idx_in_agg_res_float = ZEROS_AR_INT64
-        data_float = ZEROS_AR_FLOAT64
-        agg_res_float = ZEROS_AR_FLOAT64
-    if DTYPE_INT64 in agg:
-        # Manage int.
-        (
-            agg_func_idx_int,  # 1d
-            n_cols_int,  # 1d
-            cols_name_in_data_int,
-            cols_idx_in_data_int,
-            cols_name_in_agg_res_int,
-            cols_idx_in_agg_res_int,
-        ) = agg[DTYPE_INT64]
-        data_int = (
-            data.loc[:, cols_name_in_data_int].to_numpy(copy=False)
-            if len(cols_name_in_data_int) > 1
-            else data.loc[:, cols_name_in_data_int].to_numpy(copy=False).reshape(-1, 1)
+        if dtype_ == DTYPE_DATETIME64:
+            data_single_dtype = data_single_dtype.view(DTYPE_INT64)
+            agg_res_single_dtype = agg_res_single_dtype.view(DTYPE_INT64)
+        # 'data' are numpy arrays, with columns in 'expected order', as defined
+        # in 'cols_idx_in_data'.
+        _jitted_cgb(
+            group_sizes,  # 1d
+            data_single_dtype,  # 2d
+            agg_func_idx,  # 1d
+            n_cols,  # 1d
+            cols_idx_in_data,  # 2d
+            cols_idx_in_agg_res,  # 2d
+            assess_null_group_indices,  # bool
+            agg_res_single_dtype,  # 2d
+            null_group_indices,  # 1d
         )
-        agg_res_int = zeros((n_groups, len(cols_name_in_agg_res_int)), dtype=DTYPE_INT64)
-        agg_res.update({name: agg_res_int[:, i] for i, name in enumerate(cols_name_in_agg_res_int)})
-    else:
-        agg_func_idx_int = ZEROS_AR_INT64
-        n_cols_int = ZEROS_AR_INT64
-        cols_name_in_data_int = None
-        cols_idx_in_data_int = ZEROS_AR_INT64
-        cols_name_in_agg_res_int = None
-        cols_idx_in_agg_res_int = ZEROS_AR_INT64
-        data_int = ZEROS_AR_INT64
-        agg_res_int = ZEROS_AR_INT64
-    if DTYPE_DATETIME64 in agg:
-        # Manage datetime.
-        (
-            agg_func_idx_dte,  # 1d
-            n_cols_dte,  # 1d
-            cols_name_in_data_dte,
-            cols_idx_in_data_dte,
-            cols_name_in_agg_res_dte,
-            cols_idx_in_agg_res_dte,
-        ) = agg[DTYPE_DATETIME64]
-        data_dte = (
-            data.loc[:, cols_name_in_data_dte].to_numpy(copy=False).view(DTYPE_INT64)
-            if len(cols_name_in_data_dte) > 1
-            else data.loc[:, cols_name_in_data_dte]
-            .to_numpy(copy=False)
-            .reshape(-1, 1)
-            .view(DTYPE_INT64)
-        )
-        agg_res_dte = zeros((n_groups, len(cols_name_in_agg_res_dte)), dtype=DTYPE_INT64)
-        agg_res.update(
-            {
-                name: agg_res_dte[:, i].view(DTYPE_DATETIME64)
-                for i, name in enumerate(cols_name_in_agg_res_dte)
-            }
-        )
-    else:
-        agg_func_idx_dte = ZEROS_AR_INT64
-        n_cols_dte = ZEROS_AR_INT64
-        cols_name_in_data_dte = None
-        cols_idx_in_data_dte = ZEROS_AR_INT64
-        cols_name_in_agg_res_dte = None
-        cols_idx_in_agg_res_dte = ZEROS_AR_INT64
-        data_dte = ZEROS_AR_INT64
-        agg_res_dte = ZEROS_AR_INT64
-    # WiP here
-    # make a loop over agg.items()
-    # make a call to _jitted_cgb for a single dtype (not all dtypes) to simplify
-    # before for loop, manage speciticities of DETATIME64 dtype
-    # end WiP
-    # 'data_xxx' are numpy arrays, with columns in 'expected order', as defined
-    # in 'cols_idx_in_data_xxx'.
-    _jitted_cgb(
-        group_sizes=group_sizes,
-        data_float=data_float,  # 2d
-        agg_func_float=agg_func_idx_float,  # 1d
-        n_cols_float=n_cols_float,  # 1d
-        cols_in_data_float=cols_idx_in_data_float,  # 2d
-        cols_in_agg_res_float=cols_idx_in_agg_res_float,  # 2d
-        agg_res_float=agg_res_float,  # 2d
-        data_int=data_int,  # 2d
-        agg_func_int=agg_func_idx_int,  # 1d
-        n_cols_int=n_cols_int,  # 1d
-        cols_in_data_int=cols_idx_in_data_int,  # 2d
-        cols_in_agg_res_int=cols_idx_in_agg_res_int,  # 2d
-        agg_res_int=agg_res_int,  # 2d
-        data_dte=data_dte,  # 2d
-        agg_func_dte=agg_func_idx_dte,  # 1d
-        n_cols_dte=n_cols_dte,  # 1d
-        cols_in_data_dte=cols_idx_in_data_dte,  # 2d
-        cols_in_agg_res_dte=cols_idx_in_agg_res_dte,  # 2d
-        agg_res_dte=agg_res_dte,  # 2d
-        null_group_indices=null_group_indices,  # 1d
-    )
+        assess_null_group_indices = False
     # Assemble 'agg_res' as a pandas DataFrame.
     agg_res = pDataFrame(agg_res, index=group_keys, copy=False)
     agg_res.index.name = bin_on.name
     # Set null values.
     if n_null_groups != 0:
         null_group_keys = group_keys[null_group_indices]
-        if DTYPE_FLOAT64 in agg:
-            agg_res.loc[null_group_keys, cols_name_in_agg_res_float] = nNaN
-        if DTYPE_INT64 in agg:
-            agg_res.loc[null_group_keys, cols_name_in_agg_res_int] = pNA
-        if DTYPE_DATETIME64 in agg:
-            agg_res.loc[null_group_keys, cols_name_in_agg_res_dte] = pNaT
+        for dtype_, (
+            _,
+            _,
+            _,
+            _,
+            cols_name_in_agg_res,
+            _,
+        ) in agg:
+            agg_res.loc[null_group_keys, cols_name_in_agg_res] = NULL_DICT[dtype_]
     return agg_res
