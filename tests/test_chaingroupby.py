@@ -120,7 +120,11 @@ def test_setup_cgb_agg():
                 assert it_res == it_ref
 
 
-def test_jitted_cgb_1d():
+@pytest.mark.parametrize(
+    "type_",
+    [FLOAT64, INT64],
+)
+def test_jitted_cgb_1d(type_):
     # Data is 1d, and aggregation result is 1d.
     # Setup.
     group_sizes = array([3, 0, 2, 0, 1], dtype=INT64)
@@ -137,7 +141,7 @@ def test_jitted_cgb_1d():
             2.0,
             6.0,
         ],
-        dtype=FLOAT64,
+        dtype=type_,
     ).reshape(-1, 1)
     # 3 aggregation functions defined.
     agg_func = array([AGG_FUNC_IDS[FIRST]], dtype=INT64)
@@ -148,33 +152,14 @@ def test_jitted_cgb_1d():
     # Column indices for output data, per aggregation function.
     agg_cols_in_res = array([[0]], dtype=INT64)
     agg_res_n_cols = nmax(agg_cols_in_res) + 1
-    agg_res = zeros((agg_res_n_rows, agg_res_n_cols), dtype=FLOAT64)
-    # Define arrays for the "other" types.
-    other_data_int = zeros(0, dtype=INT64)
-    other_agg_func = zeros(0, dtype=INT64)
-    other_agg_func_n_cols = zeros(0, dtype=INT64)
-    other_agg_cols_in_data = zeros(0, dtype=INT64)
-    other_agg_cols_in_res = zeros(0, dtype=INT64)
-    other_agg_res_int = zeros(0, dtype=INT64)
+    agg_res = zeros((agg_res_n_rows, agg_res_n_cols), dtype=type_)
     config = {
-        "data_float": data,
-        "agg_func_float": agg_func,
-        "n_cols_float": agg_func_n_cols,
-        "cols_in_data_float": agg_cols_in_data,
-        "cols_in_agg_res_float": agg_cols_in_res,
-        "agg_res_float": agg_res,
-        "data_int": other_data_int,
-        "agg_func_int": other_agg_func,
-        "n_cols_int": other_agg_func_n_cols,
-        "cols_in_data_int": other_agg_cols_in_data,
-        "cols_in_agg_res_int": other_agg_cols_in_res,
-        "agg_res_int": other_agg_res_int,
-        "data_dte": other_data_int,
-        "agg_func_dte": other_agg_func,
-        "n_cols_dte": other_agg_func_n_cols,
-        "cols_in_data_dte": other_agg_cols_in_data,
-        "cols_in_agg_res_dte": other_agg_cols_in_res,
-        "agg_res_dte": other_agg_res_int,
+        "data": data,
+        "agg_func": agg_func,
+        "n_cols": agg_func_n_cols,
+        "cols_in_data": agg_cols_in_data,
+        "cols_in_agg_res": agg_cols_in_res,
+        "agg_res": agg_res,
     }
     # Test.
     _jitted_cgb(group_sizes=group_sizes, **config, null_group_indices=null_group_indices_res)
@@ -189,7 +174,7 @@ def test_jitted_cgb_1d():
                 [0.0],
                 [6.0],
             ],
-            dtype=FLOAT64,
+            dtype=type_,
         ),
     )
     assert nall(ref_res == agg_res)
@@ -197,16 +182,51 @@ def test_jitted_cgb_1d():
 
 
 @pytest.mark.parametrize(
-    "type_, agg_func1, agg_func2, agg_func3",
+    "type_, agg_func1, agg_func2, agg_func3, res_ref",
     [
-        (FLOAT64, FIRST, MIN, LAST),
-        (FLOAT64, LAST, MAX, SUM),
-        (INT64, FIRST, MIN, LAST),
-        (INT64, LAST, MAX, SUM),
-        (DATETIME64, FIRST, MIN, LAST),
+        (
+            FLOAT64,
+            FIRST,
+            MIN,
+            LAST,
+            [
+                [1, 3, 2, 1, 2],
+                [0, 0, 0, 0, 0],
+                [7, 9, 8, 1, 8],
+                [0, 0, 0, 0, 0],
+                [6, 5, 4, 5, 4],
+            ],
+        ),
+        (
+            FLOAT64,
+            LAST,
+            MAX,
+            SUM,
+            [
+                [3, 1, 5, 6, 9],
+                [0, 0, 0, 0, 0],
+                [2, 1, 8, 9, 16],
+                [0, 0, 0, 0, 0],
+                [6, 5, 4, 5, 4],
+            ],
+        ),
+        (
+            INT64,
+            FIRST,
+            MIN,
+            LAST,
+            [[1, 3, 2, 1, 2], [0, 0, 0, 0, 0], [7, 9, 8, 1, 8], [0, 0, 0, 0, 0], [6, 5, 4, 5, 4]],
+        ),
+        (
+            INT64,
+            LAST,
+            MAX,
+            SUM,
+            [[3, 1, 5, 6, 9], [0, 0, 0, 0, 0], [2, 1, 8, 9, 16], [0, 0, 0, 0, 0], [6, 5, 4, 5, 4]],
+        ),
     ],
 )
-def test_jitted_cgb_2d(type_, agg_func1, agg_func2, agg_func3):
+def test_jitted_cgb_2d(type_, agg_func1, agg_func2, agg_func3, res_ref):
     # Data is 2d, and aggregation results are 2d.
     # Setup.
     group_sizes = array([3, 0, 2, 0, 1], dtype=INT64)
@@ -241,136 +261,22 @@ def test_jitted_cgb_2d(type_, agg_func1, agg_func2, agg_func3):
     agg_cols_in_res = array([[0, 1, -1], [2, 3, -1], [4, -1, -1]], dtype=INT64)
     agg_res_n_cols = nmax(agg_cols_in_res) + 1
     agg_res = zeros((agg_res_n_rows, agg_res_n_cols), dtype=FLOAT64 if type_ == FLOAT64 else INT64)
-    # Define arrays for the "other" types.
-    other_data_float = zeros(0, dtype=FLOAT64)
-    other_data_int = zeros(0, dtype=INT64)
-    other_agg_func = zeros(0, dtype=INT64)
-    other_agg_func_n_cols = zeros(0, dtype=INT64)
-    other_agg_cols_in_data = zeros(0, dtype=INT64)
-    other_agg_cols_in_res = zeros(0, dtype=INT64)
-    other_agg_res_float = zeros(0, dtype=FLOAT64)
-    other_agg_res_int = zeros(0, dtype=INT64)
-    if type_ == FLOAT64:
-        config = {
-            "data_float": data,
-            "agg_func_float": agg_func,
-            "n_cols_float": agg_func_n_cols,
-            "cols_in_data_float": agg_cols_in_data,
-            "cols_in_agg_res_float": agg_cols_in_res,
-            "agg_res_float": agg_res,
-            "data_int": other_data_int,
-            "agg_func_int": other_agg_func,
-            "n_cols_int": other_agg_func_n_cols,
-            "cols_in_data_int": other_agg_cols_in_data,
-            "cols_in_agg_res_int": other_agg_cols_in_res,
-            "agg_res_int": other_agg_res_int,
-            "data_dte": other_data_int,
-            "agg_func_dte": other_agg_func,
-            "n_cols_dte": other_agg_func_n_cols,
-            "cols_in_data_dte": other_agg_cols_in_data,
-            "cols_in_agg_res_dte": other_agg_cols_in_res,
-            "agg_res_dte": other_agg_res_int,
-        }
-    elif type_ == INT64:
-        config = {
-            "data_float": other_data_float,
-            "agg_func_float": other_agg_func,
-            "n_cols_float": other_agg_func_n_cols,
-            "cols_in_data_float": other_agg_cols_in_data,
-            "cols_in_agg_res_float": other_agg_cols_in_res,
-            "agg_res_float": other_agg_res_float,
-            "data_int": data,
-            "agg_func_int": agg_func,
-            "n_cols_int": agg_func_n_cols,
-            "cols_in_data_int": agg_cols_in_data,
-            "cols_in_agg_res_int": agg_cols_in_res,
-            "agg_res_int": agg_res,
-            "data_dte": other_data_int,
-            "agg_func_dte": other_agg_func,
-            "n_cols_dte": other_agg_func_n_cols,
-            "cols_in_data_dte": other_agg_cols_in_data,
-            "cols_in_agg_res_dte": other_agg_cols_in_res,
-            "agg_res_dte": other_agg_res_int,
-        }
-    else:
-        config = {
-            "data_float": other_data_float,
-            "agg_func_float": other_agg_func,
-            "n_cols_float": other_agg_func_n_cols,
-            "cols_in_data_float": other_agg_cols_in_data,
-            "cols_in_agg_res_float": other_agg_cols_in_res,
-            "agg_res_float": other_agg_res_float,
-            "data_int": other_data_int,
-            "agg_func_int": other_agg_func,
-            "n_cols_int": other_agg_func_n_cols,
-            "cols_in_data_int": other_agg_cols_in_data,
-            "cols_in_agg_res_int": other_agg_cols_in_res,
-            "agg_res_int": other_agg_res_int,
-            "data_dte": data,
-            "agg_func_dte": agg_func,
-            "n_cols_dte": agg_func_n_cols,
-            "cols_in_data_dte": agg_cols_in_data,
-            "cols_in_agg_res_dte": agg_cols_in_res,
-            "agg_res_dte": agg_res,
-        }
+    config = {
+        "data": data,
+        "agg_func": agg_func,
+        "n_cols": agg_func_n_cols,
+        "cols_in_data": agg_cols_in_data,
+        "cols_in_agg_res": agg_cols_in_res,
+        "agg_res": agg_res,
+    }
     # Test.
     _jitted_cgb(group_sizes=group_sizes, **config, null_group_indices=nan_group_indices_res)
     # Ref. results.
-    ref_res = {
-        (FLOAT64, FIRST, MIN, LAST):
-        # first in data cols 0 & 2.
-        # min in data cols 1 & 2.
-        # last in col 1.
-        array(
-            [
-                [1.0, 3.0, 2.0, 1.0, 2.0],
-                [0.0, 0.0, 0.0, 0.0, 0.0],
-                [7.0, 9.0, 8.0, 1.0, 8.0],
-                [0.0, 0.0, 0.0, 0.0, 0.0],
-                [6.0, 5.0, 4.0, 5.0, 4.0],
-            ],
-            dtype=FLOAT64,
-        ),
-        (FLOAT64, LAST, MAX, SUM):
-        # last in data cols 0 & 2.
-        # max in data cols 1 & 2.
-        # sum in col 1.
-        array(
-            [
-                [3.0, 1.0, 5.0, 6.0, 9.0],
-                [0.0, 0.0, 0.0, 0.0, 0.0],
-                [2.0, 1.0, 8.0, 9.0, 16.0],
-                [0.0, 0.0, 0.0, 0.0, 0.0],
-                [6.0, 5.0, 4.0, 5.0, 4.0],
-            ],
-            dtype=FLOAT64,
-        ),
-        (INT64, FIRST, MIN, LAST):
-        # first in data cols 0 & 2.
-        # min in data cols 1 & 2.
-        # last in col 1.
-        array(
-            [[1, 3, 2, 1, 2], [0, 0, 0, 0, 0], [7, 9, 8, 1, 8], [0, 0, 0, 0, 0], [6, 5, 4, 5, 4]],
-            dtype=INT64,
-        ),
-        (INT64, LAST, MAX, SUM):
-        # last in data cols 0 & 2.
-        # max in data cols 1 & 2.
-        # sum in col 1.
-        array(
-            [[3, 1, 5, 6, 9], [0, 0, 0, 0, 0], [2, 1, 8, 9, 16], [0, 0, 0, 0, 0], [6, 5, 4, 5, 4]],
-            dtype=INT64,
-        ),
-        (DATETIME64, FIRST, MIN, LAST):
-        # first in data cols 0 & 2.
-        # min in data cols 1 & 2.
-        # last in col 1.
-        array(
-            [[1, 3, 2, 1, 2], [0, 0, 0, 0, 0], [7, 9, 8, 1, 8], [0, 0, 0, 0, 0], [6, 5, 4, 5, 4]],
-            dtype=INT64,
-        ),
-    }
-    assert nall(ref_res[(type_, agg_func1, agg_func2, agg_func3)] == agg_res)
+    ref_res = array(
+        res_ref,
+        dtype=type_,
+    )
+    assert nall(ref_res == agg_res)
     assert nall(nan_group_indices_res == array([1, 3], dtype=INT64))
 
 

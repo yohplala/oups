@@ -325,24 +325,30 @@ def _jitted_agg_func_router(
 
 def _jitted_cgb(
     group_sizes: ndarray,
-    data_float: ndarray,  # 2d
-    agg_func_float: ndarray,  # 1d
-    n_cols_float: ndarray,  # 1d
-    cols_in_data_float: ndarray,  # 2d
-    cols_in_agg_res_float: ndarray,  # 2d
-    agg_res_float: ndarray,  # 2d
-    data_int: ndarray,  # 2d
-    agg_func_int: ndarray,  # 1d
-    n_cols_int: ndarray,  # 1d
-    cols_in_data_int: ndarray,  # 2d
-    cols_in_agg_res_int: ndarray,  # 2d
-    agg_res_int: ndarray,  # 2d
-    data_dte: ndarray,  # 2d
-    agg_func_dte: ndarray,  # 1d
-    n_cols_dte: ndarray,  # 1d
-    cols_in_data_dte: ndarray,  # 2d
-    cols_in_agg_res_dte: ndarray,  # 2d
-    agg_res_dte: ndarray,  # 2d
+    data: ndarray,  # 2d
+    agg_func: ndarray,  # 1d
+    n_cols: ndarray,  # 1d
+    cols_in_data: ndarray,  # 2d
+    cols_in_agg_res: ndarray,  # 2d
+    agg_res: ndarray,  # 2d
+    #    data_float: ndarray,  # 2d
+    #    agg_func_float: ndarray,  # 1d
+    #    n_cols_float: ndarray,  # 1d
+    #    cols_in_data_float: ndarray,  # 2d
+    #    cols_in_agg_res_float: ndarray,  # 2d
+    #    agg_res_float: ndarray,  # 2d
+    #    data_int: ndarray,  # 2d
+    #    agg_func_int: ndarray,  # 1d
+    #    n_cols_int: ndarray,  # 1d
+    #    cols_in_data_int: ndarray,  # 2d
+    #    cols_in_agg_res_int: ndarray,  # 2d
+    #    agg_res_int: ndarray,  # 2d
+    #    data_dte: ndarray,  # 2d
+    #    agg_func_dte: ndarray,  # 1d
+    #    n_cols_dte: ndarray,  # 1d
+    #    cols_in_data_dte: ndarray,  # 2d
+    #    cols_in_agg_res_dte: ndarray,  # 2d
+    #   agg_res_dte: ndarray,  # 2d
     null_group_indices: ndarray,  # 1d
 ):
     """Group assuming contiguity.
@@ -384,53 +390,65 @@ def _jitted_cgb(
     """
     data_row_start = 0
     null_group_idx = 0
-    assess_float = len(agg_func_float) != 0
-    assess_int = len(agg_func_int) != 0
-    assess_dte = len(agg_func_dte) != 0
+    #    assess_float = len(agg_func_float) != 0
+    #    assess_int = len(agg_func_int) != 0
+    #    assess_dte = len(agg_func_dte) != 0
+    assess_null_group_indices = len(null_group_indices) != 0
     for (agg_res_idx,), size in ndenumerate(group_sizes):
         if size != 0:
             data_row_end = data_row_start + size
-            if assess_float:
-                # Manage float.
-                _jitted_agg_func_router(
-                    data_float,
-                    data_row_start,
-                    data_row_end,
-                    agg_func_float,
-                    n_cols_float,
-                    cols_in_data_float,
-                    cols_in_agg_res_float,
-                    agg_res_idx,
-                    agg_res_float,
-                )
-            if assess_int:
-                # Manage int.
-                _jitted_agg_func_router(
-                    data_int,
-                    data_row_start,
-                    data_row_end,
-                    agg_func_int,
-                    n_cols_int,
-                    cols_in_data_int,
-                    cols_in_agg_res_int,
-                    agg_res_idx,
-                    agg_res_int,
-                )
-            if assess_dte:
-                # Manage int.
-                _jitted_agg_func_router(
-                    data_dte,
-                    data_row_start,
-                    data_row_end,
-                    agg_func_dte,
-                    n_cols_dte,
-                    cols_in_data_dte,
-                    cols_in_agg_res_dte,
-                    agg_res_idx,
-                    agg_res_dte,
-                )
+            _jitted_agg_func_router(
+                data,
+                data_row_start,
+                data_row_end,
+                agg_func,
+                n_cols,
+                cols_in_data,
+                cols_in_agg_res,
+                agg_res_idx,
+                agg_res,
+            )
+            #            if assess_float:
+            # Manage float.
+            #                _jitted_agg_func_router(
+            #                    data_float,
+            #                    data_row_start,
+            #                    data_row_end,
+            #                    agg_func_float,
+            #                    n_cols_float,
+            #                    cols_in_data_float,
+            #                    cols_in_agg_res_float,
+            #                    agg_res_idx,
+            #                    agg_res_float,
+            #                )
+            #            if assess_int:
+            #                # Manage int.
+            #                _jitted_agg_func_router(
+            #                    data_int,
+            #                    data_row_start,
+            #                    data_row_end,
+            #                    agg_func_int,
+            #                    n_cols_int,
+            #                    cols_in_data_int,
+            #                    cols_in_agg_res_int,
+            #                    agg_res_idx,
+            #                    agg_res_int,
+            #                )
+            #            if assess_dte:
+            # Manage int.
+            #                _jitted_agg_func_router(
+            #                    data_dte,
+            #                    data_row_start,
+            #                    data_row_end,
+            #                    agg_func_dte,
+            #                    n_cols_dte,
+            #                    cols_in_data_dte,
+            #                    cols_in_agg_res_dte,
+            #                    agg_res_idx,
+            #                    agg_res_dte,
+            #                )
             data_row_start = data_row_end
-        else:
+        elif assess_null_group_indices:
             null_group_indices[null_group_idx] = agg_res_idx
             null_group_idx += 1
 
