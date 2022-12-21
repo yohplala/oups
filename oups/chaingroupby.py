@@ -27,6 +27,7 @@ from pandas import NaT as pNaT
 from pandas import Series
 from pandas import date_range
 from pandas.core.resample import _get_timestamp_range_edges as gtre
+from sortednp import isitem
 
 from oups.chainagg import FIRST
 from oups.chainagg import LAST
@@ -78,9 +79,9 @@ def setup_cgb_agg(
                    ndarray[int], 'cols_idx_in_data'
                                  2d-array, column indices in input data,
                                  per aggregation function,
-                   List[str], 'cols_name_in_agg_res'
+                   List[str], 'cols_name_in_res'
                               expected column names in aggregation result,
-                   ndarray[int], 'cols_idx_in_agg_res'
+                   ndarray[int], 'cols_idx_in_res'
                                  2d-array, column indices in aggregation
                                  results, per aggregation function.
            }``
@@ -374,6 +375,269 @@ def _jitted_cgb(
             null_group_idx += 1
 
 
+def _jitted_cgb2(
+    data: ndarray,  # 2d
+    n_cols: ndarray,  # 1d
+    cols: ndarray,  # 3d
+    next_chunk_starts: ndarray,  # 1d
+    bin_indices: ndarray,  # 1d
+    agg_res: ndarray,  # 2d
+    snap_res: ndarray,  # 2d
+    null_bin_indices: ndarray,  # 1d
+    null_snap_indices: ndarray,  # 1d
+):
+    """Group assuming contiguity.
+
+    Parameters
+    ----------
+    data : ndarray
+        Array over which performing aggregation functions.
+    n_cols : ndarray
+        One dimensional array of ``int``, specifying per aggregation function
+        the number of columns to which applying related aggregation function
+        (and consequently the number of columns in 'agg_res' to which recording
+        the aggregation results).
+    cols : ndarray
+        Three dimensional array of ``int``, one row per aggregation function.
+        Per row (2nd dimension), column indices in 'data' to which apply
+        corresponding aggregation function.
+        Any value in column past the number of relevant columns is not used.
+        In last dimension, index 0 gives indices of columns in 'data'. Index 1
+        gives indices of columns in 'xxx_res'.
+    next_chunk_starts : ndarray
+        Ordered one dimensional array of ``int``, indicating the index of the
+        1st row of next chunk (or last row index of current chunk, excluded).
+        May contain duplicates, indicating, depending the chunk type, possibly
+        an empty bin or an empty snapshot.
+    bin_indices : ndarray
+        One dimensional array of ``int``, of same size than the number of bins,
+        and indicating that a chunk at this index in 'next_chunk_starts' is a
+        bin (and not a snapshot).
+
+    Returns
+    -------
+    agg_res : ndarray
+        Results from aggregation, with same `dtype` than 'data' array, for
+        bins.
+    snap_res : ndarray
+        Results from aggregation, with same `dtype` than 'data' array
+        considering intermediate snapshots.
+    null_bin_indices : ndarray
+        One dimensional array containing row indices in 'agg_res' that
+        correspond to "empty" bins, i.e. for which bin size has been set to
+        0.
+    null_snap_indices : ndarray
+        One dimensional array containing row indices in 'snap_res' that
+        correspond to "empty" snapshots, i.e. for which snapshot size has been
+        set to 0. Input array should be set to null values, so that unused
+        rows can be identified clearly.
+    """
+    # /!\ WiP create small functions for all that will be called, and inline by Numba.
+    # Setup agg func constants.
+    if n_cols_FIRST := n_cols[ID_FIRST]:
+        assess_FIRST = True
+        cols_FIRST = cols[ID_FIRST, :n_cols_FIRST, :]
+        buffer_FIRST = zeros(n_cols_FIRST, dtype=data.dtype)
+    else:
+        assess_FIRST = False
+    if n_cols_LAST := n_cols[ID_LAST]:
+        assess_LAST = True
+        cols_LAST = cols[ID_LAST, :n_cols_LAST, :]
+    else:
+        assess_LAST = False
+    if n_cols_MIN := n_cols[ID_MIN]:
+        assess_MIN = True
+        cols_MIN = cols[ID_MIN, :n_cols_MIN, :]
+        buffer_MIN = zeros(n_cols_MIN, dtype=data.dtype)
+    else:
+        assess_MIN = False
+    if n_cols_MAX := n_cols[ID_MAX]:
+        assess_MAX = True
+        cols_MAX = cols[ID_MAX, :n_cols_MAX, :]
+        buffer_MAX = zeros(n_cols_MAX, dtype=data.dtype)
+    else:
+        assess_MAX = False
+    if n_cols_SUM := n_cols[ID_SUM]:
+        assess_SUM = True
+        cols_SUM = cols[ID_SUM, :n_cols_SUM, :]
+        buffer_SUM = zeros(n_cols_SUM, dtype=data.dtype)
+    else:
+        assess_SUM = False
+    # 'last_rows' is an array of `int`, providing the index of last row for
+    # each chunk.
+    # If a 'snapshot' chunk shares same last row than a 'bin' chunk, the
+    # 'snapshot' is expected to be listed prior to the 'bin' chunk.
+    # A 'snapshot' is an 'update'. A 'bin' is a 'reset'.
+    bin_start = chunk_start = 0
+    agg_res_idx = snap_res_idx = 0
+    null_bin_idx = null_snap_idx = 0
+    prev_is_non_null_update = False
+    for (idx,), next_chunk_start in ndenumerate(next_chunk_starts):
+        # 'reset_indices' is probably the smallest array compared to
+        # 'update_indices'.
+        # In numba, force type for value returned by 'isitem()' if needed.
+        # https://numba.pydata.org/numba-doc/0.15.1/types.html
+        is_update = not isitem(idx, bin_indices)
+        # Null chunk is identified if no new data since start of bin whatever
+        # bin or snapshot.
+        # An update without any row is not exactly a null update. Values need
+        # to be forwarded.
+        if bin_start == next_chunk_start:
+            if is_update:
+                null_snap_indices[null_snap_idx] = snap_res_idx
+                null_snap_idx += 1
+                snap_res_idx += 1
+            else:
+                null_bin_indices[null_bin_idx] = agg_res_idx
+                null_bin_idx += 1
+                agg_res_idx += 1
+                prev_is_non_null_update = False
+        else:
+            # Chunk with some rows.
+            if is_update:
+                # Make an update and record result in 'snap_res'.
+                if assess_FIRST:
+                    if prev_is_non_null_update:
+                        for col_buffer, (_, col_res) in enumerate(cols_FIRST[:]):
+                            snap_res[snap_res_idx, col_res] = buffer_FIRST[col_buffer]
+                    else:
+                        for col_buffer, (col_data, col_res) in enumerate(cols_FIRST[:]):
+                            snap_res[snap_res_idx, col_res] = buffer_FIRST[col_buffer] = data[
+                                chunk_start, col_data
+                            ]
+                if assess_LAST:
+                    for col_data, col_res in cols_LAST[:]:
+                        snap_res[snap_res_idx, col_res] = data[next_chunk_start - 1, col_data]
+                if assess_MIN:
+                    if prev_is_non_null_update:
+                        if chunk_start == next_chunk_start:
+                            # Null update.
+                            for col_buffer, (_, col_res) in enumerate(cols_MIN[:]):
+                                snap_res[snap_res_idx, col_res] = buffer_MIN[col_buffer]
+                        else:
+                            # Cumulate 'min'.
+                            for col_buffer, (col_data, col_res) in enumerate(cols_MIN[:]):
+                                snap_res[snap_res_idx, col_res] = buffer_MIN[col_buffer] = nmin(
+                                    data[chunk_start:next_chunk_start, col_data],
+                                    initial=buffer_MIN[col_buffer],
+                                )
+                    else:
+                        # 1st snapshot in current bin.
+                        # Necessarily, chunk is not empty.
+                        # Need to initialize 'buffer_MIN'.
+                        for col_buffer, (col_data, col_res) in enumerate(cols_MIN[:]):
+                            snap_res[snap_res_idx, col_res] = buffer_MIN[col_buffer] = nmin(
+                                data[chunk_start:next_chunk_start, col_data]
+                            )
+                if assess_MAX:
+                    if prev_is_non_null_update:
+                        if chunk_start == next_chunk_start:
+                            # Null update.
+                            for col_buffer, (_, col_res) in enumerate(cols_MAX[:]):
+                                snap_res[snap_res_idx, col_res] = buffer_MAX[col_buffer]
+                        else:
+                            # Cumulate 'max'.
+                            for col_buffer, (col_data, col_res) in enumerate(cols_MAX[:]):
+                                snap_res[snap_res_idx, col_res] = buffer_MAX[col_buffer] = nmax(
+                                    data[chunk_start:next_chunk_start, col_data],
+                                    initial=buffer_MAX[col_buffer],
+                                )
+                    else:
+                        # 1st snapshot in current bin.
+                        # Need to initialize 'buffer_MAX'.
+                        for col_buffer, (col_data, col_res) in enumerate(cols_MAX[:]):
+                            snap_res[snap_res_idx, col_res] = buffer_MAX[col_buffer] = nmax(
+                                data[chunk_start:next_chunk_start, col_data]
+                            )
+                if assess_SUM:
+                    if prev_is_non_null_update:
+                        if chunk_start == next_chunk_start:
+                            # Null update.
+                            for col_buffer, (_, col_res) in enumerate(cols_SUM[:]):
+                                snap_res[snap_res_idx, col_res] = buffer_SUM[col_buffer]
+                        else:
+                            # Cumulate 'sum'.
+                            for col_buffer, (col_data, col_res) in enumerate(cols_SUM[:]):
+                                snap_res[snap_res_idx, col_res] = buffer_SUM[col_buffer] = nsum(
+                                    data[chunk_start:next_chunk_start, col_data],
+                                    initial=buffer_SUM[col_buffer],
+                                )
+                    else:
+                        # 1st snapshot in current bin.
+                        # Need to initialize 'buffer_SUM'.
+                        for col_buffer, (col_data, col_res) in enumerate(cols_SUM[:]):
+                            snap_res[snap_res_idx, col_res] = buffer_SUM[col_buffer] = nsum(
+                                data[chunk_start:next_chunk_start, col_data]
+                            )
+                snap_res_idx += 1
+                prev_is_non_null_update = True
+            else:
+                # Record result in 'bin_res'.
+                # For these 'standard' aggregations', re-using results from previous updates,
+                # no need to update related buffer, as it is end of bin.
+                if assess_FIRST:
+                    if prev_is_non_null_update:
+                        for col_buffer, (_, col_res) in enumerate(cols_FIRST[:]):
+                            agg_res[agg_res_idx, col_res] = buffer_FIRST[col_buffer]
+                    else:
+                        for col_data, col_res in cols_FIRST[:]:
+                            agg_res[agg_res_idx, col_res] = data[chunk_start, col_data]
+                if assess_LAST:
+                    for col_data, col_res in cols_LAST[:]:
+                        agg_res[agg_res_idx, col_res] = data[next_chunk_start - 1, col_data]
+                if assess_MIN:
+                    if prev_is_non_null_update:
+                        # If snapshots have been managed previously in current bin,
+                        # reuse buffer, and complete to end of bin.
+                        if chunk_start == next_chunk_start:
+                            # Null chunk.
+                            for col_buffer, (_, col_res) in enumerate(cols_MIN[:]):
+                                agg_res[agg_res_idx, col_res] = buffer_MIN[col_buffer]
+                        else:
+                            for col_buffer, (col_data, col_res) in enumerate(cols_MIN[:]):
+                                agg_res[agg_res_idx, col_res] = nmin(
+                                    data[chunk_start:next_chunk_start, col_data],
+                                    initial=buffer_MIN[col_buffer],
+                                )
+                    else:
+                        for col_data, col_res in cols_MIN[:]:
+                            agg_res[agg_res_idx, col_res] = nmin(
+                                data[chunk_start:next_chunk_start, col_data]
+                            )
+                if assess_MAX:
+                    if prev_is_non_null_update:
+                        # If snapshots have been managed previously in current bin,
+                        # reuse buffer, and complete to end of bin.
+                        for col_buffer, (col_data, col_res) in enumerate(cols_MAX[:]):
+                            agg_res[agg_res_idx, col_res] = nmax(
+                                data[chunk_start:next_chunk_start, col_data],
+                                initial=buffer_MAX[col_buffer],
+                            )
+                    else:
+                        for (col_data, col_res) in cols_MAX[:]:
+                            agg_res[agg_res_idx, col_res] = nmax(
+                                data[chunk_start:next_chunk_start, col_data]
+                            )
+                if assess_SUM:
+                    if prev_is_non_null_update:
+                        # If snapshots have been managed previously in current bin,
+                        # reuse buffer, and complete to end of bin.
+                        for col_buffer, (col_data, col_res) in enumerate(cols_SUM[:]):
+                            agg_res[agg_res_idx, col_res] = nsum(
+                                data[chunk_start:next_chunk_start, col_data],
+                                initial=buffer_SUM[col_buffer],
+                            )
+                    else:
+                        for col_data, col_res in cols_SUM[:]:
+                            agg_res[agg_res_idx, col_res] = nsum(
+                                data[chunk_start:next_chunk_start, col_data]
+                            )
+                agg_res_idx += 1
+                bin_start = next_chunk_start
+                prev_is_non_null_update = False
+        chunk_start = next_chunk_start
+
+
 def chaingroupby(
     by: Union[Grouper, Callable],
     agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, list]],
@@ -441,6 +705,7 @@ def chaingroupby(
         agg = setup_cgb_agg(agg, data.dtypes.to_dict())
     # Both 'group_keys' and 'group_sizes' are expected to be the size of the
     # resulting aggregated array from 'groupby' operation.
+    # /!\ WiP: rename 'by' en 'bin_by'
     if isinstance(by, Grouper):
         if by.key:
             bin_on = data.loc[:, by.key]
@@ -452,6 +717,59 @@ def chaingroupby(
             raise ValueError("not possible to have 'bin_on' set to `None`.")
         # 'by' binning, possibly jitted.
         group_keys, group_sizes = by(bin_on, binning_buffer)
+    # WiP: to be double-checked / start
+
+    # /!\ when initializing 'next_chunk_starts' along with 'bin_indices'
+    # insertion of bin with respect to snapshot has an impact in snapshot values
+    #    x     o   o      x: value // o: no value
+    #    s,b,  s,  s      has not same value than
+    #    s     s,  s,b    here, 2 last snapshots are not empty, they forward value.
+    #                     /!\ important to fill correctly 'bin_indices'
+    # retrieve indice of insertion using 'order_on' between bins & snapshots.
+    #
+    # /!\ initialize to -1 'null_snap_indices', make it bigger,then afterwards,
+    # remove all '-1' values.
+    #
+    #    if isinstance(snap_by, Grouper):
+    #        if snap_by.key:
+    #            snap_on = data.loc[:, snap_by.key]
+    #        snap_keys, snap_sizes = by_time(snap_on, snap_by)
+    #    elif isinstance(snap_by, (Series, ndarray)):
+    #        if isinstance(snap_on, str):
+    #            snap_on = data.loc[:, snap_on]
+    #        elif snap_on is None:
+    #            snap_on = bin_on
+    # 'snap_by' binning, possibly jitted.
+    #        snap_sizes = zeros(len(snap_keys), dtype=DTYPE_INT64)
+    # /!\ si 'snap_by' est un array that corresponds to snap_keys, attention que:
+    # - par hypothèse, snapshot s rassemble toutes les valeurs qui précèdent,
+    #   snapshot key exclue (bin "right-closed)
+    # - snapshot is right-closed
+    # - sa dernière valeur doit donc être plus grande que la dernière valeur de 'snap_on'
+    #   sinon, on ne sait pas quelle est la 'snap_key' pour la dernière bin
+    # Du coup, faire la vérification que dernière snap_key est bien (strictement) plus grande
+    # que la dernière valeur de 'snap_on'.
+    #        if snap_on.dtype == DTYPE_DATETIME64:
+    #            _histo_on_ordered(
+    #                snap_on.to_numpy(copy=False).view(DTYPE_INT64),
+    #                snap_by.to_numpy(copy=False).view(DTYPE_INT64),
+    #                True,
+    #                snap_sizes,
+    #            )
+    #        else:
+    #            _histo_on_ordered(
+    #                snap_on.to_numpy(copy=False),
+    #                snap_by.to_numpy(copy=False),
+    #                True,
+    #                snap_sizes,
+    #            )
+
+    # /!\ initialize null_snap_indices to -1 and after applying jitted_cgb, remove -1 indices with
+    # nsin = nsi[~np.isin(nsi, -1)]
+
+    #        snap_by(snap_on)
+
+    # WiP: to be double-checked / end
     # Initialize input parameters.
     n_groups = len(group_keys)
     # 'agg_res' contain rows for possible empty bins.
@@ -483,6 +801,10 @@ def chaingroupby(
             agg_res_single_dtype = agg_res_single_dtype.view(DTYPE_INT64)
         # 'data' are numpy arrays, with columns in 'expected order', as defined
         # in 'cols_idx_in_data'.
+        # /!\ wip: make 'cols_idx_in_data' and 'cols_idx_res' a single array
+        # 'cols_idx', 3d:
+        #  - ar[ID_AGG_FUNC, :, 0] for cols idx in data
+        #  - ar[ID_AGG_FUNC, :, 1] for cols idx in res
         _jitted_cgb(
             group_sizes,  # 1d
             data_single_dtype,  # 2d
