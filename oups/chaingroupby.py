@@ -34,6 +34,12 @@ from oups.chainagg import LAST
 from oups.chainagg import MAX
 from oups.chainagg import MIN
 from oups.chainagg import SUM
+from oups.cumsegagg import jcsa_setup
+from oups.cumsegagg import jcumagg
+from oups.cumsegagg import jmax
+from oups.cumsegagg import jmin
+from oups.cumsegagg import jrowat
+from oups.cumsegagg import jsum
 
 
 # Some constants.
@@ -432,37 +438,13 @@ def _jitted_cgb2(
         set to 0. Input array should be set to null values, so that unused
         rows can be identified clearly.
     """
-    # /!\ WiP create small functions for all that will be called, and inline by Numba.
+    # /!\ WiP: move to 'jcumsegagg' along with test case + jit 'isin_sorted'.
     # Setup agg func constants.
-    if n_cols_FIRST := n_cols[ID_FIRST]:
-        assess_FIRST = True
-        cols_FIRST = cols[ID_FIRST, :n_cols_FIRST, :]
-        buffer_FIRST = zeros(n_cols_FIRST, dtype=data.dtype)
-    else:
-        assess_FIRST = False
-    if n_cols_LAST := n_cols[ID_LAST]:
-        assess_LAST = True
-        cols_LAST = cols[ID_LAST, :n_cols_LAST, :]
-    else:
-        assess_LAST = False
-    if n_cols_MIN := n_cols[ID_MIN]:
-        assess_MIN = True
-        cols_MIN = cols[ID_MIN, :n_cols_MIN, :]
-        buffer_MIN = zeros(n_cols_MIN, dtype=data.dtype)
-    else:
-        assess_MIN = False
-    if n_cols_MAX := n_cols[ID_MAX]:
-        assess_MAX = True
-        cols_MAX = cols[ID_MAX, :n_cols_MAX, :]
-        buffer_MAX = zeros(n_cols_MAX, dtype=data.dtype)
-    else:
-        assess_MAX = False
-    if n_cols_SUM := n_cols[ID_SUM]:
-        assess_SUM = True
-        cols_SUM = cols[ID_SUM, :n_cols_SUM, :]
-        buffer_SUM = zeros(n_cols_SUM, dtype=data.dtype)
-    else:
-        assess_SUM = False
+    assess_FIRST, cols_FIRST, buffer_FIRST = jcsa_setup(ID_FIRST, n_cols, cols, data.dtype)
+    assess_LAST, cols_LAST, buffer_LAST = jcsa_setup(ID_LAST, n_cols, cols, data.dtype)
+    assess_MIN, cols_MIN, buffer_MIN = jcsa_setup(ID_MIN, n_cols, cols, data.dtype)
+    assess_MAX, cols_MAX, buffer_MAX = jcsa_setup(ID_MAX, n_cols, cols, data.dtype)
+    assess_SUM, cols_SUM, buffer_SUM = jcsa_setup(ID_SUM, n_cols, cols, data.dtype)
     # 'last_rows' is an array of `int`, providing the index of last row for
     # each chunk.
     # If a 'snapshot' chunk shares same last row than a 'bin' chunk, the
@@ -497,78 +479,67 @@ def _jitted_cgb2(
             if is_update:
                 # Make an update and record result in 'snap_res'.
                 if assess_FIRST:
-                    if prev_is_non_null_update:
-                        for col_buffer, (_, col_res) in enumerate(cols_FIRST[:]):
-                            snap_res[snap_res_idx, col_res] = buffer_FIRST[col_buffer]
-                    else:
-                        for col_buffer, (col_data, col_res) in enumerate(cols_FIRST[:]):
-                            snap_res[snap_res_idx, col_res] = buffer_FIRST[col_buffer] = data[
-                                chunk_start, col_data
-                            ]
+                    jrowat(
+                        prev_is_non_null_update,
+                        chunk_start,
+                        cols_FIRST,
+                        data,
+                        snap_res_idx,
+                        snap_res,
+                        buffer_FIRST,
+                        True,
+                    )
                 if assess_LAST:
-                    for col_data, col_res in cols_LAST[:]:
-                        snap_res[snap_res_idx, col_res] = data[next_chunk_start - 1, col_data]
+                    # If current chunk is empty, values from buffer are used.
+                    jrowat(
+                        chunk_start == next_chunk_start,
+                        next_chunk_start - 1,
+                        cols_LAST,
+                        data,
+                        snap_res_idx,
+                        snap_res,
+                        buffer_LAST,
+                        True,
+                    )
                 if assess_MIN:
-                    if prev_is_non_null_update:
-                        if chunk_start == next_chunk_start:
-                            # Null update.
-                            for col_buffer, (_, col_res) in enumerate(cols_MIN[:]):
-                                snap_res[snap_res_idx, col_res] = buffer_MIN[col_buffer]
-                        else:
-                            # Cumulate 'min'.
-                            for col_buffer, (col_data, col_res) in enumerate(cols_MIN[:]):
-                                snap_res[snap_res_idx, col_res] = buffer_MIN[col_buffer] = nmin(
-                                    data[chunk_start:next_chunk_start, col_data],
-                                    initial=buffer_MIN[col_buffer],
-                                )
-                    else:
-                        # 1st snapshot in current bin.
-                        # Necessarily, chunk is not empty.
-                        # Need to initialize 'buffer_MIN'.
-                        for col_buffer, (col_data, col_res) in enumerate(cols_MIN[:]):
-                            snap_res[snap_res_idx, col_res] = buffer_MIN[col_buffer] = nmin(
-                                data[chunk_start:next_chunk_start, col_data]
-                            )
+                    jcumagg(
+                        jmin,
+                        prev_is_non_null_update,
+                        chunk_start,
+                        next_chunk_start,
+                        cols_MIN,
+                        data,
+                        snap_res_idx,
+                        snap_res,
+                        buffer_MIN,
+                        True,
+                    )
                 if assess_MAX:
-                    if prev_is_non_null_update:
-                        if chunk_start == next_chunk_start:
-                            # Null update.
-                            for col_buffer, (_, col_res) in enumerate(cols_MAX[:]):
-                                snap_res[snap_res_idx, col_res] = buffer_MAX[col_buffer]
-                        else:
-                            # Cumulate 'max'.
-                            for col_buffer, (col_data, col_res) in enumerate(cols_MAX[:]):
-                                snap_res[snap_res_idx, col_res] = buffer_MAX[col_buffer] = nmax(
-                                    data[chunk_start:next_chunk_start, col_data],
-                                    initial=buffer_MAX[col_buffer],
-                                )
-                    else:
-                        # 1st snapshot in current bin.
-                        # Need to initialize 'buffer_MAX'.
-                        for col_buffer, (col_data, col_res) in enumerate(cols_MAX[:]):
-                            snap_res[snap_res_idx, col_res] = buffer_MAX[col_buffer] = nmax(
-                                data[chunk_start:next_chunk_start, col_data]
-                            )
+                    jcumagg(
+                        jmax,
+                        prev_is_non_null_update,
+                        chunk_start,
+                        next_chunk_start,
+                        cols_MAX,
+                        data,
+                        snap_res_idx,
+                        snap_res,
+                        buffer_MAX,
+                        True,
+                    )
                 if assess_SUM:
-                    if prev_is_non_null_update:
-                        if chunk_start == next_chunk_start:
-                            # Null update.
-                            for col_buffer, (_, col_res) in enumerate(cols_SUM[:]):
-                                snap_res[snap_res_idx, col_res] = buffer_SUM[col_buffer]
-                        else:
-                            # Cumulate 'sum'.
-                            for col_buffer, (col_data, col_res) in enumerate(cols_SUM[:]):
-                                snap_res[snap_res_idx, col_res] = buffer_SUM[col_buffer] = nsum(
-                                    data[chunk_start:next_chunk_start, col_data],
-                                    initial=buffer_SUM[col_buffer],
-                                )
-                    else:
-                        # 1st snapshot in current bin.
-                        # Need to initialize 'buffer_SUM'.
-                        for col_buffer, (col_data, col_res) in enumerate(cols_SUM[:]):
-                            snap_res[snap_res_idx, col_res] = buffer_SUM[col_buffer] = nsum(
-                                data[chunk_start:next_chunk_start, col_data]
-                            )
+                    jcumagg(
+                        jsum,
+                        prev_is_non_null_update,
+                        chunk_start,
+                        next_chunk_start,
+                        cols_SUM,
+                        data,
+                        snap_res_idx,
+                        snap_res,
+                        buffer_SUM,
+                        True,
+                    )
                 snap_res_idx += 1
                 prev_is_non_null_update = True
             else:
@@ -576,62 +547,67 @@ def _jitted_cgb2(
                 # For these 'standard' aggregations', re-using results from previous updates,
                 # no need to update related buffer, as it is end of bin.
                 if assess_FIRST:
-                    if prev_is_non_null_update:
-                        for col_buffer, (_, col_res) in enumerate(cols_FIRST[:]):
-                            agg_res[agg_res_idx, col_res] = buffer_FIRST[col_buffer]
-                    else:
-                        for col_data, col_res in cols_FIRST[:]:
-                            agg_res[agg_res_idx, col_res] = data[chunk_start, col_data]
+                    jrowat(
+                        prev_is_non_null_update,
+                        chunk_start,
+                        cols_FIRST,
+                        data,
+                        agg_res_idx,
+                        agg_res,
+                        buffer_FIRST,
+                        False,
+                    )
                 if assess_LAST:
-                    for col_data, col_res in cols_LAST[:]:
-                        agg_res[agg_res_idx, col_res] = data[next_chunk_start - 1, col_data]
+                    # If current chunk is empty, values from buffer are used.
+                    jrowat(
+                        chunk_start == next_chunk_start,
+                        next_chunk_start - 1,
+                        cols_LAST,
+                        data,
+                        agg_res_idx,
+                        agg_res,
+                        buffer_LAST,
+                        False,
+                    )
                 if assess_MIN:
-                    if prev_is_non_null_update:
-                        # If snapshots have been managed previously in current bin,
-                        # reuse buffer, and complete to end of bin.
-                        if chunk_start == next_chunk_start:
-                            # Null chunk.
-                            for col_buffer, (_, col_res) in enumerate(cols_MIN[:]):
-                                agg_res[agg_res_idx, col_res] = buffer_MIN[col_buffer]
-                        else:
-                            for col_buffer, (col_data, col_res) in enumerate(cols_MIN[:]):
-                                agg_res[agg_res_idx, col_res] = nmin(
-                                    data[chunk_start:next_chunk_start, col_data],
-                                    initial=buffer_MIN[col_buffer],
-                                )
-                    else:
-                        for col_data, col_res in cols_MIN[:]:
-                            agg_res[agg_res_idx, col_res] = nmin(
-                                data[chunk_start:next_chunk_start, col_data]
-                            )
+                    jcumagg(
+                        jmin,
+                        prev_is_non_null_update,
+                        chunk_start,
+                        next_chunk_start,
+                        cols_MIN,
+                        data,
+                        agg_res_idx,
+                        agg_res,
+                        buffer_MIN,
+                        False,
+                    )
                 if assess_MAX:
-                    if prev_is_non_null_update:
-                        # If snapshots have been managed previously in current bin,
-                        # reuse buffer, and complete to end of bin.
-                        for col_buffer, (col_data, col_res) in enumerate(cols_MAX[:]):
-                            agg_res[agg_res_idx, col_res] = nmax(
-                                data[chunk_start:next_chunk_start, col_data],
-                                initial=buffer_MAX[col_buffer],
-                            )
-                    else:
-                        for (col_data, col_res) in cols_MAX[:]:
-                            agg_res[agg_res_idx, col_res] = nmax(
-                                data[chunk_start:next_chunk_start, col_data]
-                            )
+                    jcumagg(
+                        jmax,
+                        prev_is_non_null_update,
+                        chunk_start,
+                        next_chunk_start,
+                        cols_MAX,
+                        data,
+                        agg_res_idx,
+                        agg_res,
+                        buffer_MAX,
+                        False,
+                    )
                 if assess_SUM:
-                    if prev_is_non_null_update:
-                        # If snapshots have been managed previously in current bin,
-                        # reuse buffer, and complete to end of bin.
-                        for col_buffer, (col_data, col_res) in enumerate(cols_SUM[:]):
-                            agg_res[agg_res_idx, col_res] = nsum(
-                                data[chunk_start:next_chunk_start, col_data],
-                                initial=buffer_SUM[col_buffer],
-                            )
-                    else:
-                        for col_data, col_res in cols_SUM[:]:
-                            agg_res[agg_res_idx, col_res] = nsum(
-                                data[chunk_start:next_chunk_start, col_data]
-                            )
+                    jcumagg(
+                        jsum,
+                        prev_is_non_null_update,
+                        chunk_start,
+                        next_chunk_start,
+                        cols_SUM,
+                        data,
+                        agg_res_idx,
+                        agg_res,
+                        buffer_SUM,
+                        False,
+                    )
                 agg_res_idx += 1
                 bin_start = next_chunk_start
                 prev_is_non_null_update = False

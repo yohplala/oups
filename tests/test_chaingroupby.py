@@ -136,12 +136,12 @@ def test_jitted_cgb_1d(dtype_):
     # Define arrays for one type.
     data = array(
         [
-            1.0,
-            4.0,
-            3.0,
-            7.0,
-            2.0,
-            6.0,
+            1,
+            4,
+            3,
+            7,
+            2,
+            6,
         ],
         dtype=dtype_,
     ).reshape(-1, 1)
@@ -172,11 +172,11 @@ def test_jitted_cgb_1d(dtype_):
     ref_res = (
         array(
             [
-                [1.0],
-                [0.0],
-                [7.0],
-                [0.0],
-                [6.0],
+                [1],
+                [0],
+                [7],
+                [0],
+                [6],
             ],
             dtype=dtype_,
         ),
@@ -573,7 +573,7 @@ def test_jitted_cgb2_bin_snap_2d(dtype_):
     next_chunk_starts = array([0, 0, 1, 4, 4, 4, 4, 5, 5, 7, 8, 8, 8, 10, 10, 10, 10], dtype=INT64)
     bin_indices = array([1, 4, 5, 6, 12, 15], dtype=INT64)
     # Initializing reference result arrays.
-    # Snapshots.            0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+    # Snapshots.
     snap_ref_res = array(
         [
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # s0
@@ -596,7 +596,7 @@ def test_jitted_cgb2_bin_snap_2d(dtype_):
     # a negative value, as row index cannot be negative.
     ref_null_snap_indices = array([0, 10, -1], dtype=INT64)
     null_snap_indices = zeros(len(ref_null_snap_indices), dtype=INT64) - 1
-    # Bins.                0, 1, 2, 3, 4, 5, 6, 7, 8, 9
+    # Bins.
     bin_ref_res = array(
         [
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # b0
