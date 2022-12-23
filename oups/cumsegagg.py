@@ -12,14 +12,13 @@ from numpy import ndarray
 from numpy import ndenumerate
 from numpy import zeros
 
-from oups.chainagg import FIRST
-from oups.chainagg import LAST
-from oups.chainagg import MAX
-from oups.chainagg import MIN
-from oups.chainagg import SUM
-
 
 # Aggregation function ids.
+FIRST = "first"
+LAST = "last"
+MIN = "min"
+MAX = "max"
+SUM = "sum"
 ID_FIRST = 0
 ID_LAST = 1
 ID_MIN = 2

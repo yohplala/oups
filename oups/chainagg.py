@@ -32,6 +32,11 @@ from vaex.agg import sum as vsum
 from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.collection import ParquetSet
+from oups.cumsegagg import FIRST
+from oups.cumsegagg import LAST
+from oups.cumsegagg import MAX
+from oups.cumsegagg import MIN
+from oups.cumsegagg import SUM
 from oups.router import ParquetHandle
 from oups.utils import tcut
 from oups.writer import MAX_ROW_GROUP_SIZE
@@ -42,11 +47,7 @@ from oups.writer import write
 
 VDATAFRAME_ROW_GROUP_SIZE = 6_345_000
 # Aggregation functions.
-FIRST = "first"
-LAST = "last"
-MIN = "min"
-MAX = "max"
-SUM = "sum"
+
 ACCEPTED_AGG_FUNC = {FIRST, LAST, MIN, MAX, SUM}
 VAEX_AGG = {FIRST: vfirst, LAST: vlast, MIN: vmin, MAX: vmax, SUM: vsum}
 VAEX_SORT = "vaex_sort"
