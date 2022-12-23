@@ -86,6 +86,7 @@ repos:
                 oups/writer.py:C901
                 oups/chainagg.py:C901
                 oups/chaingroupby.py:C901
+                oups/cumsegagg.py:C901
         ]
 
   - repo: https://github.com/pycqa/pydocstyle
