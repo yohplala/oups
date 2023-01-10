@@ -99,7 +99,7 @@ def test_merge_sorted_labels_only():
     ar1 = array([1, 5, 9, 15, 19, 20, 20], dtype="int64")
     ar2 = array([2, 4, 15, 15, 18, 20], dtype="int64")
     sorted_ars, sorted_idx_ar2 = merge_sorted((ar1, ar2))
-    # Insertion indices:         1   2               6   7   8              12
+    # Insertion indices:       1  2             6   7   8              12
     ref_sorted_ars = array([1, 2, 4, 5, 9, 15, 15, 15, 18, 19, 20, 20, 20])
     ref_sorted_idx_ar2 = array([1, 2, 6, 7, 8, 12])
     # Test
@@ -114,7 +114,7 @@ def test_merge_sorted_labels_and_keys():
     ar2 = array([20, 4, 16, 17, 18, 20], dtype="int64")
     ks2 = array([2, 4, 15, 15, 18, 20], dtype="int64")
     sorted_ars, sorted_idx_ar2 = merge_sorted((ar1, ar2), (ks1, ks2))
-    # Insertion indices:         1   2               6   7   8              12
+    # Insertion indices:         1  2              6   7   8            12
     ref_sorted_ars = array([10, 20, 4, 5, 98, 12, 16, 17, 18, 32, 2, 2, 20])
     ref_sorted_idx_ar2 = array([1, 2, 6, 7, 8, 12])
     # Test
