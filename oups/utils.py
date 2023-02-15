@@ -144,7 +144,9 @@ def tcut(data: Series, grouper: Grouper):
 
 
 def merge_sorted(
-    labels: Tuple[ndarray, ndarray], keys: Tuple[ndarray, ndarray] = None
+    labels: Tuple[ndarray, ndarray],
+    keys: Tuple[ndarray, ndarray] = None,
+    ii_for_first: bool = False,
 ) -> Tuple[ndarray, ndarray]:
     """Merge sorted labels.
 
@@ -158,14 +160,21 @@ def merge_sorted(
         ``keys[0]``, resp. ``1``, are keys for ``labels[0]``, resp. ``1``.
         The default is ``None``, meaning labels themselves are used for sorted
         merge.
+    ii_for_first : bool, default False
+        Insertion indices for second array are returned by default.
+        If ``True``, insertion indices for first array are returned.
 
     Returns
     -------
     Tuple[ndarray, ndarray]
         The first array contains sorted labels from the 2 input arrays.
-        The second array contains the insertion indices for labels from the 2nd
-        input array, i.e. the index in the resulting array of values of the 2nd
-        input array.
+        The second array contains the insertion indices for labels, i.e. the
+        index in the resulting array of values, either of the 2nd input array,
+        or the 1st input array, depending 'ii_for_first'.
+
+          - by default, with 'ii_for_first' set to ``False``,  for the 2nd
+            input array,
+          - or if 'ii_for_first' set to ``True``, then for the 1st input array.
 
     Notes
     -----
@@ -188,4 +197,7 @@ def merge_sorted(
         sort_indices = argsort(concatenate(keys), kind="mergesort")
     else:
         sort_indices = argsort(concatenated, kind="mergesort")
-    return concatenated[sort_indices], nonzero(len(labels1) <= sort_indices)[0]
+    if ii_for_first:
+        return concatenated[sort_indices], nonzero(len(labels1) > sort_indices)[0]
+    else:
+        return concatenated[sort_indices], nonzero(len(labels1) <= sort_indices)[0]

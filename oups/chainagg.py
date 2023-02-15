@@ -32,11 +32,11 @@ from vaex.agg import sum as vsum
 from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.collection import ParquetSet
-from oups.cumsegagg import FIRST
-from oups.cumsegagg import LAST
-from oups.cumsegagg import MAX
-from oups.cumsegagg import MIN
-from oups.cumsegagg import SUM
+from oups.jcumsegagg import FIRST
+from oups.jcumsegagg import LAST
+from oups.jcumsegagg import MAX
+from oups.jcumsegagg import MIN
+from oups.jcumsegagg import SUM
 from oups.router import ParquetHandle
 from oups.utils import tcut
 from oups.writer import MAX_ROW_GROUP_SIZE

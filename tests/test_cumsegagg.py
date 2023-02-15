@@ -7,516 +7,483 @@ Created on Sun Mar 13 18:00:00 2022.
 import pytest
 from numpy import all as nall
 from numpy import array
-from numpy import count_nonzero
-from numpy import diff as ndiff
+from numpy import ndarray
 from numpy import zeros
+from pandas import DataFrame as pDataFrame
+from pandas import DatetimeIndex
+from pandas import Grouper
+from pandas import Series
+from pandas import Timestamp as pTimestamp
 
-from oups.cumsegagg import AGG_FUNC_IDS
-from oups.cumsegagg import ID_FIRST
-from oups.cumsegagg import ID_LAST
-from oups.cumsegagg import ID_MAX
-from oups.cumsegagg import ID_MIN
-from oups.cumsegagg import ID_SUM
-from oups.cumsegagg import jcsagg
-from oups.cumsegagg import jmax
-from oups.cumsegagg import jmin
-from oups.cumsegagg import jsum
-
-
-INT64 = "int64"
-FLOAT64 = "float64"
-
-
-@pytest.mark.parametrize(
-    "dtype_",
-    [FLOAT64, INT64],
-)
-def test_jmax(dtype_):
-    # Test 'jmax()'.
-    ar = array([], dtype=dtype_)
-    assert jmax(ar) is None
-    assert jmax(ar, 3) == 3
-    ar = array([2], dtype=dtype_)
-    assert jmax(ar) == 2
-    assert jmax(ar, 5) == 5
-    ar = array([1, 3, 2, -1], dtype=dtype_)
-    assert jmax(ar) == 3
-    assert jmax(ar, 4) == 4
+from oups.cumsegagg import DTYPE_DATETIME64
+from oups.cumsegagg import DTYPE_FLOAT64
+from oups.cumsegagg import DTYPE_INT64
+from oups.cumsegagg import _next_chunk_starts
+from oups.cumsegagg import bin_by_time
+from oups.cumsegagg import cumsegagg
+from oups.cumsegagg import setup_cgb_agg
+from oups.jcumsegagg import FIRST
+from oups.jcumsegagg import LAST
+from oups.jcumsegagg import MAX
+from oups.jcumsegagg import MIN
+from oups.jcumsegagg import SUM
 
 
-@pytest.mark.parametrize(
-    "dtype_",
-    [FLOAT64, INT64],
-)
-def test_jmin(dtype_):
-    # Test 'jmin()'.
-    ar = array([], dtype=dtype_)
-    assert jmin(ar) is None
-    assert jmin(ar, 3) == 3
-    ar = array([8], dtype=dtype_)
-    assert jmin(ar) == 8
-    assert jmin(ar, 5) == 5
-    ar = array([1, 3, 2, -1], dtype=dtype_)
-    assert jmin(ar) == -1
-    assert jmin(ar, -3) == -3
+# from pandas.testing import assert_frame_equal
+# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
 
 
-@pytest.mark.parametrize(
-    "dtype_",
-    [FLOAT64, INT64],
-)
-def test_jsum(dtype_):
-    # Test 'jsum()'.
-    ar = array([], dtype=dtype_)
-    assert jsum(ar) is None
-    assert jsum(ar, 3) == 3
-    ar = array([8], dtype=dtype_)
-    assert jsum(ar) == 8
-    assert jsum(ar, 5) == 13
-    ar = array([1, 3, 2, -1], dtype=dtype_)
-    assert jsum(ar) == 5
-    assert jsum(ar, -3) == 2
-
-
-@pytest.mark.parametrize(
-    "dtype_, agg_func_id, ref_res",
-    [
-        (FLOAT64, ID_FIRST, [0, 0, 1, 0, 7, 0, 6]),
-        (FLOAT64, ID_LAST, [0, 0, 3, 0, 2, 0, 6]),
-        (FLOAT64, ID_MIN, [0, 0, 1, 0, 2, 0, 6]),
-        (FLOAT64, ID_MAX, [0, 0, 4, 0, 7, 0, 6]),
-        (FLOAT64, ID_SUM, [0, 0, 8, 0, 9, 0, 6]),
-        (INT64, ID_FIRST, [0, 0, 1, 0, 7, 0, 6]),
-        (INT64, ID_LAST, [0, 0, 3, 0, 2, 0, 6]),
-        (INT64, ID_MIN, [0, 0, 1, 0, 2, 0, 6]),
-        (INT64, ID_MAX, [0, 0, 4, 0, 7, 0, 6]),
-        (INT64, ID_SUM, [0, 0, 8, 0, 9, 0, 6]),
-    ],
-)
-def test_jcsagg_bin_1d(dtype_, agg_func_id, ref_res):
-    # 1d data, with a single agg function. Only bins.
-    # This test case essentially validates aggregation functions in a sequence
-    # of bins.
-    # IDX  VAL  BIN  EMPTY_BIN   FIRST  LAST  MIN  MAX  SUM
-    #   0    1    2   0, 1           1    3     1    4    8
-    #   1    4    2
-    #   2    3    2   3              0    0     0    0    0
-    #   3    7    4                  7    2     2    7    9
-    #   4    2    4   5              0    0     0    0    0
-    #   5    6    6                  6    6     6    6    6
+def test_setup_cgb_agg():
+    # Test config generation for aggregation step in cumsegagg.
+    # ``{dtype: List[str], 'cols_name_in_data'
+    #                      column name in input data, with this dtype,
+    #           List[str], 'cols_name_in_agg_res'
+    #                      expected column names in aggregation result,
+    #           ndarray[int64], 'cols_idx'
+    #                           2d-array,
+    #                           Per aggregation function (row index is agg func
+    #                           id), column indices in input data, and results.
+    #           ndarray[int64], 'n_cols'
+    #                           1d-array, number of input columns in data,
+    #                           to which apply this aggregation function,
     # Setup.
-    # Number of columns onto which applying aggregation function
-    N_AGG_COLS = 1
-    # Row indices of starts for each 'next chunk'.
-    next_chunk_starts = array([0, 0, 3, 3, 5, 5, 6], dtype=INT64)
-    # Last row provides number of rows in data.
-    # 'len()' provides number of chunks, because in this case, there are only
-    # bins, no snapshot.
-    bin_res_n_rows = len(next_chunk_starts)
-    bin_res = zeros((bin_res_n_rows, N_AGG_COLS), dtype=dtype_)
-    n_nan_bins = bin_res_n_rows - count_nonzero(ndiff(next_chunk_starts, prepend=0))
-    null_bin_indices = zeros(n_nan_bins, dtype=INT64)
-    # All chunks are bins.
-    bin_indices = array(range(bin_res_n_rows), dtype=INT64)
-    # Define arrays for one type.
-    data = array([1, 4, 3, 7, 2, 6], dtype=dtype_).reshape(-1, 1)
-    # 'n_cols' is always of length of number of aggregation functions.
-    n_cols = zeros(len(AGG_FUNC_IDS), dtype=INT64)
-    # 1 column in data over which applying 'first' function.
-    n_cols[agg_func_id] = N_AGG_COLS
-    # Column indices for input data, and results, per aggregation function.
-    # Indices are 0.
-    cols = zeros((len(AGG_FUNC_IDS), N_AGG_COLS, 2), dtype=INT64)
-    # No snapshot.
-    snap_res = zeros(0, dtype=FLOAT64).reshape(0, 0)
-    null_snap_indices = zeros(0, dtype=INT64)
-    # Test.
-    jcsagg(
-        data,
-        n_cols,
-        cols,
-        next_chunk_starts,
-        bin_indices,
-        bin_res,
-        snap_res,
-        null_bin_indices,
-        null_snap_indices,
+    df = pDataFrame(
+        {
+            "val1_float": [1.1, 2.1, 3.1],
+            "val2_float": [4.1, 5.1, 6.1],
+            "val3_int": [1, 2, 3],
+            "val4_datetime": [
+                pTimestamp("2022/01/01 08:00"),
+                pTimestamp("2022/01/01 09:00"),
+                pTimestamp("2022/01/01 08:00"),
+            ],
+        }
     )
-    # Reference results.
-    ref_res_ar = array(
-        ref_res,
-        dtype=dtype_,
-    ).reshape(-1, 1)
-    assert nall(ref_res_ar == bin_res)
-    assert nall(null_bin_indices == array([0, 1, 3, 5], dtype=INT64))
+    agg_cfg = {
+        "val1_first": ("val1_float", FIRST),
+        "val2_first": ("val2_float", FIRST),
+        "val2_sum": ("val2_float", SUM),
+        "val4_first": ("val4_datetime", FIRST),
+        "val3_last": ("val3_int", LAST),
+        "val3_min": ("val3_int", MIN),
+        "val3_max": ("val3_int", MAX),
+    }
+    cgb_agg_cfg_res = setup_cgb_agg(agg_cfg, df.dtypes.to_dict())
+    cgb_agg_cfg_ref = {
+        DTYPE_FLOAT64: [
+            ["val1_float", "val2_float"],
+            ["val1_first", "val2_first", "val2_sum"],
+            array(
+                [
+                    [[0, 0], [1, 1]],
+                    [[0, 0], [0, 0]],
+                    [[0, 0], [0, 0]],
+                    [[0, 0], [0, 0]],
+                    [[1, 2], [0, 0]],
+                ],
+                dtype=DTYPE_INT64,
+            ),
+            array([2, 0, 0, 0, 1], dtype=DTYPE_INT64),
+        ],
+        DTYPE_DATETIME64: [
+            ["val4_datetime"],
+            ["val4_first"],
+            array([[[0, 0]], [[0, 0]], [[0, 0]], [[0, 0]], [[0, 0]]], dtype=DTYPE_INT64),
+            array([1, 0, 0, 0, 0], dtype=DTYPE_INT64),
+        ],
+        DTYPE_INT64: [
+            ["val3_int"],
+            ["val3_last", "val3_min", "val3_max"],
+            array([[[0, 0]], [[0, 0]], [[0, 1]], [[0, 2]], [[0, 0]]], dtype=DTYPE_INT64),
+            array([0, 1, 1, 1, 0], dtype=DTYPE_INT64),
+        ],
+    }
+    for val_res, val_ref in zip(cgb_agg_cfg_res.values(), cgb_agg_cfg_ref.values()):
+        for it_res, it_ref in zip(val_res, val_ref):
+            if isinstance(it_res, ndarray):
+                assert nall(it_res == it_ref)
+            else:
+                assert it_res == it_ref
 
 
 @pytest.mark.parametrize(
-    "dtype_, agg_func_id, ref_res",
-    [
-        (FLOAT64, ID_FIRST, [0, 0, 1, 1, 1, 1, 1]),
-        (FLOAT64, ID_LAST, [0, 0, 3, 3, 2, 2, 6]),
-        (FLOAT64, ID_MIN, [0, 0, 1, 1, 1, 1, 1]),
-        (FLOAT64, ID_MAX, [0, 0, 4, 4, 7, 7, 7]),
-        (FLOAT64, ID_SUM, [0, 0, 8, 8, 17, 17, 23]),
-        (INT64, ID_FIRST, [0, 0, 1, 1, 1, 1, 1]),
-        (INT64, ID_LAST, [0, 0, 3, 3, 2, 2, 6]),
-        (INT64, ID_MIN, [0, 0, 1, 1, 1, 1, 1]),
-        (INT64, ID_MAX, [0, 0, 4, 4, 7, 7, 7]),
-        (INT64, ID_SUM, [0, 0, 8, 8, 17, 17, 23]),
-    ],
-)
-def test_jcsagg_snap_1d(dtype_, agg_func_id, ref_res):
-    # 1d data, with a single agg function. Only snapshots.
-    # This test case essentially validates aggregation functions in a sequence
-    # of snapshots.
-    # IDX  VAL  SNAP  EMPTY_SNAP   FIRST  LAST  MIN  MAX  SUM
-    #   0    1    2     0, 1           1    3     1    4    8
-    #   1    4    2
-    #   2    3    2     3              1    3     1    4    8
-    #   3    7    4                    1    2     1    7   17
-    #   4    2    4     5              1    2     1    7   17
-    #   5    6    6                    1    6     1    7   23
-    # Setup.
-    # Number of columns onto which applying aggregation function
-    N_AGG_COLS = 1
-    # Row indices of starts for each 'next chunk'.
-    next_chunk_starts = array([0, 0, 3, 3, 5, 5, 6], dtype=INT64)
-    # Last row provides number of rows in data.
-    # 'len()' provides number of chunks, because in this case, there are only
-    # snapshots, no bin.
-    snap_res_n_rows = len(next_chunk_starts)
-    snap_res = zeros((snap_res_n_rows, N_AGG_COLS), dtype=dtype_)
-    n_nan_snaps = snap_res_n_rows - count_nonzero(ndiff(next_chunk_starts, prepend=0))
-    # Array to store null snapshot indices is oversized. We cannot really know
-    # in advance how many there will be. It is good idea to initialize it with
-    # a negative value, as row index cannot be negative.
-    potential_null_snap_indices = zeros(n_nan_snaps, dtype=INT64) - 1
-    # All chunks are snapshots. 'bin_indices' is an empty array.
-    bin_indices = zeros(0, dtype=INT64)
-    # Define arrays for one type.
-    data = array([1, 4, 3, 7, 2, 6], dtype=dtype_).reshape(-1, 1)
-    # 'n_cols' is always of length of number of aggregation functions.
-    n_cols = zeros(len(AGG_FUNC_IDS), dtype=INT64)
-    # 1 column in data over which applying 'first' function.
-    n_cols[agg_func_id] = N_AGG_COLS
-    # Column indices for input data, and results, per aggregation function.
-    # Indices are 0.
-    cols = zeros((len(AGG_FUNC_IDS), N_AGG_COLS, 2), dtype=INT64)
-    # No bin.
-    bin_res = zeros(0, dtype=FLOAT64).reshape(0, 0)
-    null_bin_indices = zeros(0, dtype=INT64)
-    # Test.
-    jcsagg(
-        data,
-        n_cols,
-        cols,
-        next_chunk_starts,
-        bin_indices,
-        bin_res,
-        snap_res,
-        null_bin_indices,
-        potential_null_snap_indices,
-    )
-    # Reference results.
-    ref_res_ar = array(
-        ref_res,
-        dtype=dtype_,
-    ).reshape(-1, 1)
-    assert nall(ref_res_ar == snap_res)
-    assert nall(potential_null_snap_indices == array([0, 1, -1, -1], dtype=INT64))
-
-
-@pytest.mark.parametrize(
-    "dtype_, agg_func_id, bin_indices_, ref_bin_res_, ref_snap_res_, ref_null_snap_indices_",
+    "data, right_edges, right, ref, n_null_chunks_ref",
     [
         (
-            FLOAT64,
-            ID_FIRST,
-            [1, 3, 5, 8, 11, 12, 16],
-            [0, 1, 7, 0, 2, 0, 5],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 5, 0, 0],
-            [0, 3, 4, 10, 11],
+            #      0  1  2  3  4  5  6
+            array([1, 2, 3, 4, 7, 8, 9], dtype=DTYPE_INT64),
+            #      2  4  4  5  6
+            array([2, 5, 6, 7, 8], dtype=DTYPE_INT64),
+            True,
+            array([2, 4, 4, 5, 6], dtype=DTYPE_INT64),
+            1,
         ),
         (
-            INT64,
-            ID_FIRST,
-            [1, 3, 5, 6, 11, 12, 17],
-            [0, 1, 7, 0, 2, 0, 5],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 5, 5, 0],
-            [0, 3, 4, 11, -1],
+            #      0  1  2  3  4  5  6
+            array([1, 2, 3, 4, 7, 8, 9], dtype=DTYPE_INT64),
+            #      1  4  4  4  5
+            array([2, 5, 6, 7, 8], dtype=DTYPE_INT64),
+            False,
+            array([1, 4, 4, 4, 5], dtype=DTYPE_INT64),
+            2,
         ),
         (
-            FLOAT64,
-            ID_LAST,
-            [1, 3, 5, 8, 11, 12, 16],
-            [0, 3, 7, 0, 11, 0, 9],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 9, 0, 0],
-            [0, 3, 4, 10, 11],
+            #      0  1  2  3  4  5  6
+            array([1, 2, 3, 4, 7, 8, 9], dtype=DTYPE_INT64),
+            #      7   7   7   7
+            array([50, 60, 70, 88], dtype=DTYPE_INT64),
+            False,
+            array([7, 7, 7, 7], dtype=DTYPE_INT64),
+            3,
         ),
         (
-            INT64,
-            ID_LAST,
-            [1, 3, 5, 8, 11, 12, 17],
-            [0, 3, 7, 0, 11, 0, 9],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 9, 9, 0],
-            [0, 3, 4, 11, -1],
+            #       0   1   2
+            array([10, 22, 32], dtype=DTYPE_INT64),
+            #      0  0  0  0
+            array([5, 6, 7, 8], dtype=DTYPE_INT64),
+            False,
+            array([0, 0, 0, 0], dtype=DTYPE_INT64),
+            4,
         ),
         (
-            FLOAT64,
-            ID_MIN,
-            [1, 3, 5, 8, 11, 12, 16],
-            [0, 1, 7, 0, 2, 0, 5],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 5, 0, 0],
-            [0, 3, 4, 10, 11],
+            #      0  1  2
+            array([5, 5, 6], dtype=DTYPE_INT64),
+            #      0  2  3  3
+            array([5, 6, 7, 8], dtype=DTYPE_INT64),
+            False,
+            array([0, 2, 3, 3], dtype=DTYPE_INT64),
+            2,
         ),
         (
-            INT64,
-            ID_MIN,
-            [1, 3, 5, 8, 11, 12, 17],
-            [0, 1, 7, 0, 2, 0, 5],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 5, 5, 0],
-            [0, 3, 4, 11, -1],
-        ),
-        (
-            FLOAT64,
-            ID_MAX,
-            [1, 3, 5, 8, 11, 12, 16],
-            [0, 4, 7, 0, 11, 0, 13],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 13, 0, 0],
-            [0, 3, 4, 10, 11],
-        ),
-        (
-            INT64,
-            ID_MAX,
-            [1, 3, 5, 8, 11, 12, 17],
-            [0, 4, 7, 0, 11, 0, 13],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 13, 13, 0],
-            [0, 3, 4, 11, -1],
-        ),
-        (
-            FLOAT64,
-            ID_SUM,
-            [1, 3, 5, 8, 11, 12, 16],
-            [0, 8, 7, 0, 19, 0, 27],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 27, 0, 0],
-            [0, 3, 4, 10, 11],
-        ),
-        (
-            INT64,
-            ID_SUM,
-            [1, 3, 5, 8, 11, 12, 17],
-            [0, 8, 7, 0, 19, 0, 27],
-            [0, 1, 7, 0, 0, 2, 2, 5, 5, 27, 27, 0],
-            [0, 3, 4, 11, -1],
+            #      0  1  2  3  4
+            array([5, 5, 7, 7, 7], dtype=DTYPE_INT64),
+            #      0  2  2  5
+            array([5, 6, 7, 8], dtype=DTYPE_INT64),
+            False,
+            array([0, 2, 2, 5], dtype=DTYPE_INT64),
+            2,
         ),
     ],
 )
-def test_jcsagg_bin_snap_1d(
-    dtype_, agg_func_id, bin_indices_, ref_bin_res_, ref_snap_res_, ref_null_snap_indices_
-):
-    # 1d data, with a single agg function. Mixing bins & snapshots.
-    # This test case validates correct reset of snapshot each time a new bin
-    # starts.
-    # IDX  VAL  BIN    SNAP           EMPTY | FIRST  LAST  MIN    MAX   SUM    res for
-    #                                       |  s| b  s| b  s| b  s| b  s| b    snaps
-    #                                s0, b0 |
-    #   0    1   b1      s1                 |  1     1     1     1     1       s1
-    #   1    4   b1      s2                 |
-    #   2    3   b1      s2                 |     1     3     1     4     8
-    #   3    7   b2      s2      s3, s4, b3 |  7  7  7  7  7  7  7  7  7  7    s2
-    #   4    2   b4      s5              s6 |  2     2     2     2     2       s5/6
-    #   5    6   b4      s7                 |
-    #   6   11   b4      s7              b5 |     2    11     2    11    19
-    #   7    5   b6      s7              s8 |  5     5     5     5     5       s7/8
-    #   8   13   b6      s9                 |
-    #   9    9   b6      s9        s10, s11 |  5  5  9  9  5  5 13 13 27 27    s9
-    #
-    # Additionally,
-    # - order of s3, s4, b3 and b4 is mixed and results have to be
-    #   the same: empty chunk, because after b2.
-    # - order of b6, s10, s11 is mixed, and results are not the same:
-    #   - if s9, b6, s10, s11: s10 & s11 are empty snapshots
-    #   - if s9, s10, s11, b6: s10 & s11 forward results from s9
-    # Setup.
-    # Number of columns onto which applying aggregation function
-    N_AGG_COLS = 1
-    # Define data array.
-    data = array([1, 4, 3, 7, 2, 6, 11, 5, 13, 9], dtype=dtype_).reshape(-1, 1)
-    # 'n_cols' is always of length of number of aggregation functions.
-    n_cols = zeros(len(AGG_FUNC_IDS), dtype=INT64)
-    # 1 column in data over which applying 'first' function.
-    n_cols[agg_func_id] = N_AGG_COLS
-    # Column indices for input data, and results, per aggregation function.
-    # Indices are 0.
-    cols = zeros((len(AGG_FUNC_IDS), N_AGG_COLS, 2), dtype=INT64)
-    # Row indices of starts for each 'next chunk'.
-    #                       0  1  2  3  4  5  6  7  8  9 10 11 12 13 14  15  16  17  18
-    #                      s0 b0 s1 b1 s2 b2 s3 s4 b3 s5 s6 b4 b5 s7 s8  s9  b6 s10 s11
-    # next_chunk_starts = [ 0, 0, 1, 3, 4, 4, 4, 4, 4, 5, 5, 7, 7, 8, 8, 10, 10, 10, 10]
-    next_chunk_starts = array(
-        [0, 0, 1, 3, 4, 4, 4, 4, 4, 5, 5, 7, 7, 8, 8, 10, 10, 10, 10], dtype=INT64
-    )
-    bin_indices = array(bin_indices_, dtype=INT64)
-    # Initializing result arrays.
-    # Snapshots.
-    snap_res_n_rows = len(ref_snap_res_)
-    snap_res = zeros((snap_res_n_rows, N_AGG_COLS), dtype=dtype_)
-    # Array to store null snapshot indices is oversized. We cannot really know
-    # in advance how many there will be. It is good idea to initialize it with
-    # a negative value, as row index cannot be negative.
-    n_nan_snaps = len(ref_null_snap_indices_)
-    null_snap_indices = zeros(n_nan_snaps, dtype=INT64) - 1
-    # Bins.
-    bin_res_n_rows = len(ref_bin_res_)
-    bin_res = zeros((bin_res_n_rows, N_AGG_COLS), dtype=dtype_)
-    ref_null_bin_indices = array([0, 3, 5], dtype=INT64)
-    null_bin_indices = zeros(len(ref_null_bin_indices), dtype=INT64)
-    # Test.
-    jcsagg(
-        data,
-        n_cols,
-        cols,
-        next_chunk_starts,
-        bin_indices,
-        bin_res,
-        snap_res,
-        null_bin_indices,
-        null_snap_indices,
-    )
-    # Reference results.
-    ref_bin_res = array(
-        ref_bin_res_,
-        dtype=dtype_,
-    ).reshape(-1, 1)
-    ref_snap_res = array(
-        ref_snap_res_,
-        dtype=dtype_,
-    ).reshape(-1, 1)
-    ref_null_snap_indices = array(
-        ref_null_snap_indices_,
-        dtype=INT64,
-    )
-    assert nall(ref_bin_res == bin_res)
-    assert nall(ref_snap_res == snap_res)
-    assert nall(null_bin_indices == ref_null_bin_indices)
-    assert nall(null_snap_indices == ref_null_snap_indices)
+def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref):
+    next_chunk_starts = zeros(len(right_edges), dtype=DTYPE_INT64)
+    n_null_chunks = zeros(1, dtype=DTYPE_INT64)
+    _next_chunk_starts(data, right_edges, right, next_chunk_starts, n_null_chunks)
+    assert nall(ref == next_chunk_starts)
+    assert n_null_chunks[0] == n_null_chunks_ref
 
 
 @pytest.mark.parametrize(
-    "dtype_",
-    [FLOAT64, INT64],
+    "bin_on, by, bin_labels_ref, next_chunk_starts_ref, n_null_bins_ref",
+    [
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:04"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="left"),
+            DatetimeIndex(
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
+            ),
+            array([2, 3], dtype=DTYPE_INT64),
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="left"),
+            DatetimeIndex(["2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"),
+            array([3], dtype=DTYPE_INT64),
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:01"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="left"),
+            DatetimeIndex(
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
+            ),
+            array([2, 3], dtype=DTYPE_INT64),
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="right", closed="left"),
+            DatetimeIndex(
+                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"], dtype=DTYPE_DATETIME64, freq="5T"
+            ),
+            array([2, 3], dtype=DTYPE_INT64),
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="right", closed="left"),
+            DatetimeIndex(["2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"),
+            array([3], dtype=DTYPE_INT64),
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:04"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="right"),
+            DatetimeIndex(
+                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"
+            ),
+            array([1, 3], dtype=DTYPE_INT64),
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="right"),
+            DatetimeIndex(
+                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"
+            ),
+            array([1, 3], dtype=DTYPE_INT64),
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:01"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="left", closed="right"),
+            DatetimeIndex(["2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"),
+            array([3], dtype=DTYPE_INT64),
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:04"),
+                    pTimestamp("2020/01/01 08:05"),
+                ]
+            ),
+            Grouper(freq="5T", label="right", closed="right"),
+            DatetimeIndex(
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
+            ),
+            array([1, 3], dtype=DTYPE_INT64),
+            0,
+        ),
+        (
+            Series(
+                [
+                    pTimestamp("2020/01/01 08:01"),
+                    pTimestamp("2020/01/01 08:03"),
+                    pTimestamp("2020/01/01 08:04"),
+                ]
+            ),
+            Grouper(freq="5T", label="right", closed="right"),
+            DatetimeIndex(["2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"),
+            array([3], dtype=DTYPE_INT64),
+            0,
+        ),
+    ],
 )
-def test_jcsagg_bin_snap_2d(dtype_):
-    # 2d data, with all agg functions, mixing bins & snapshots.
-    # This test case is to validate the iteration on column indices,
-    # i.e. use of 'cols' parameter.
-    # IDX  C0 C1 C2 BIN SNAP    EMPTY | F_C0  F_C2  L_C1  L_C2  MIC0  MIC2  MAC0  MAC1 SUMC1 SUMC2  res for
-    #                                 | s| b  s| b  s| b  s| b  s| b  s| b  s| b  s| b  s| b  s| b  snaps
-    #                          s0, b0 |
-    #   0   1  9  5  b1   s1          | 1     5     9     5     1     5     1     9     9     5     s1
-    #   1   4  7 11  b1   s2          |
-    #   2   3  3 17  b1   s2          |
-    #   3   7 12 19  b1   s2   b2, b3 | 1  1  5  5 12 12 19 19  1  1  5  5  7  7 12 12 31 31 52 52  s2
-    #   4   8  5  6  b4   s3       s4 | 8     6     5     6     8     6     8     5     5     6     s3/4
-    #   5   2 17  7  b4   s5          |
-    #   6  11  8 13  b4   s5          | 8     6     8    13     2     6    11    17    30    26
-    #   7   5 20  4  b4   s6       s7 | 8  6  6  6 20 20  4 4   2  2  4  4 11 11 20 20 50 50 30 30  s6/7
-    #   8  13  4 10  b5   s8          |
-    #   9   9  2  9  b5   s8  s9, s10 |13 13 10 10  2  2  9 9   9  9  9  9 13 13  4  4  6  6 19 19  s8/9
-    #
-    # Setup.
-    # Max number of columns onto which applying agg functions (per agg func).
-    N_AGG_COLS = 2
-    # Define data array.
-    data = array(
+def test_bin_by_time(bin_on, by, bin_labels_ref, next_chunk_starts_ref, n_null_bins_ref):
+    bins, next_chunk_starts, n_null_bins = bin_by_time(bin_on, by)
+    bin_labels = bins.left if by.label == "left" else bins.right
+    assert nall(bin_labels == bin_labels_ref)
+    assert nall(next_chunk_starts == next_chunk_starts_ref)
+    assert n_null_bins == n_null_bins_ref
+
+
+@pytest.mark.parametrize(
+    "ndata, cols",
+    [
+        (
+            array(
+                [[2.0, 20.0], [4.0, 40.0], [5.0, 50.0], [8.0, 80.0], [9.0, 90.0]],
+                dtype=DTYPE_FLOAT64,
+            ),
+            True,
+        ),
+        (array([[2, 20], [4, 40], [5, 50], [8, 80], [9, 90]], dtype=DTYPE_INT64), True),
+        (
+            array(
+                [
+                    ["2020-01-01T09:00", "2020-01-02T10:00"],
+                    ["2020-01-01T09:05", "2020-01-02T10:05"],
+                    ["2020-01-01T09:08", "2020-01-02T10:08"],
+                    ["2020-01-01T09:12", "2020-01-02T10:12"],
+                    ["2020-01-01T09:14", "2020-01-02T14:00"],
+                ],
+                dtype=DTYPE_DATETIME64,
+            ),
+            True,
+        ),
+        (array([2.0, 4.0, 5.0, 8.0, 9.0], dtype=DTYPE_FLOAT64), False),
+        (array([20, 40, 50, 80, 90], dtype=DTYPE_INT64), False),
+        (
+            array(
+                [
+                    "2020-01-01T09:00",
+                    "2020-01-01T09:05",
+                    "2020-01-01T09:08",
+                    "2020-01-01T09:12",
+                    "2020-01-01T09:14",
+                ],
+                dtype=DTYPE_DATETIME64,
+            ),
+            False,
+        ),
+    ],
+)
+def test_cumsegagg_bin_single_dtype(ndata, cols):
+    # Test binning aggregation for a single dtype.
+    ndata_dti = array(
         [
-            [1, 9, 5],
-            [4, 7, 11],
-            [3, 3, 17],
-            [7, 12, 19],
-            [8, 5, 6],
-            [2, 17, 7],
-            [11, 8, 13],
-            [5, 20, 4],
-            [13, 4, 10],
-            [9, 2, 9],
+            "2020-01-01T08:00",
+            "2020-01-01T08:05",
+            "2020-01-01T08:08",
+            "2020-01-01T08:12",
+            "2020-01-01T08:14",
         ],
-        dtype=dtype_,
+        dtype=DTYPE_DATETIME64,
     )
-    # Number of columns in data over which applying each agg functions.
-    # 'n_cols' is always of length of number of aggregation functions.
-    n_cols = zeros(len(AGG_FUNC_IDS), dtype=INT64) + N_AGG_COLS
-    # Column indices for input data, and results, per aggregation function.
-    # [[data, res], [data, res]]
-    cols = array(
+    time_idx = "datetime_idx"
+    if cols:
+        # 2-column data
+        data = pDataFrame(
+            {
+                "col1": ndata[:, 0],
+                "col2": ndata[:, 1],
+                time_idx: ndata_dti,
+            }
+        )
+        agg = {
+            "res_first": ("col1", "first"),
+            "res_last_col1": ("col1", "last"),
+            "res_last_col2": ("col2", "last"),
+        }
+    else:
+        # 1-column data
+        data = pDataFrame(
+            {
+                "col1_f": ndata,
+                time_idx: ndata_dti,
+            }
+        )
+        agg = {"res_first": ("col1_f", "first"), "res_last": ("col1_f", "last")}
+    by = Grouper(freq="5T", closed="left", label="left", key=time_idx)
+    bin_res = cumsegagg(data=data, agg=agg, bin_by=by)
+    bin_res_ref = data.groupby(by).agg(**agg)
+    assert bin_res.equals(bin_res_ref)
+
+
+def test_cumsegagg_bin_mixed_dtype():
+    # Test binning aggregation for a mixed dtype.
+    ar_float = array(
+        [[2.0, 20.0], [4.0, 40.0], [5.0, 50.0], [8.0, 80.0], [9.0, 90.0]], dtype=DTYPE_FLOAT64
+    )
+    ar_int = array([[1, 10], [3, 30], [6, 60], [7, 70], [9, 90]], dtype=DTYPE_INT64)
+    ar_dte = array(
         [
-            [[0, 0], [2, 1]],  # FIRST
-            [[1, 2], [2, 3]],  # LAST
-            [[0, 4], [2, 5]],  # MIN
-            [[0, 6], [1, 7]],  # MAX
-            [[1, 8], [2, 9]],  # SUM
+            "2020-01-01T08:00",
+            "2020-01-01T08:05",
+            "2020-01-01T08:08",
+            "2020-01-01T08:12",
+            "2020-01-01T08:14",
         ],
-        dtype=INT64,
+        dtype=DTYPE_DATETIME64,
     )
-    # Row indices of starts for each 'next chunk'.
-    #                       0  1  2  3  4  5  6  7  8  9 10 11 12  13  14  15  16
-    #                      s0 b0 s1 s2 b1 b2 b3 s3 s4 s5 s6 s7 b4  s8  s9  b5 s10
-    # next_chunk_starts = [ 0, 0, 1, 4, 4, 4, 4, 5, 5, 7, 8, 8, 8, 10, 10, 10, 10]
-    next_chunk_starts = array([0, 0, 1, 4, 4, 4, 4, 5, 5, 7, 8, 8, 8, 10, 10, 10, 10], dtype=INT64)
-    bin_indices = array([1, 4, 5, 6, 12, 15], dtype=INT64)
-    # Initializing reference result arrays.
-    # Snapshots.
-    snap_ref_res = array(
-        [
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # s0
-            [1, 5, 9, 5, 1, 5, 1, 9, 9, 5],  # s1
-            [1, 5, 12, 19, 1, 5, 7, 12, 31, 52],  # s2
-            [8, 6, 5, 6, 8, 6, 8, 5, 5, 6],  # s3
-            [8, 6, 5, 6, 8, 6, 8, 5, 5, 6],  # s4
-            [8, 6, 8, 13, 2, 6, 11, 17, 30, 26],  # s5
-            [8, 6, 20, 4, 2, 4, 11, 20, 50, 30],  # s6
-            [8, 6, 20, 4, 2, 4, 11, 20, 50, 30],  # s7
-            [13, 10, 2, 9, 9, 9, 13, 4, 6, 19],  # s8
-            [13, 10, 2, 9, 9, 9, 13, 4, 6, 19],  # s9
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # s10
-        ],
-        dtype=dtype_,
+    time_idx = "datetime_idx"
+    data = pDataFrame(
+        {
+            "col1_f": ar_float[:, 0],
+            "col2_f": ar_float[:, 1],
+            "col3_i": ar_int[:, 0],
+            "col4_i": ar_int[:, 1],
+            time_idx: ar_dte,
+        }
     )
-    snap_res = zeros(snap_ref_res.shape, dtype=dtype_)
-    # Array to store null snapshot indices is oversized. We cannot really know
-    # in advance how many there will be. It is good idea to initialize it with
-    # a negative value, as row index cannot be negative.
-    ref_null_snap_indices = array([0, 10, -1], dtype=INT64)
-    null_snap_indices = zeros(len(ref_null_snap_indices), dtype=INT64) - 1
-    # Bins.
-    bin_ref_res = array(
-        [
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # b0
-            [1, 5, 12, 19, 1, 5, 7, 12, 31, 52],  # b1
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # b2
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],  # b3
-            [8, 6, 20, 4, 2, 4, 11, 20, 50, 30],  # b4
-            [13, 10, 2, 9, 9, 9, 13, 4, 6, 19],  # b5
-        ],
-        dtype=dtype_,
-    )
-    bin_res = zeros(bin_ref_res.shape, dtype=dtype_)
-    ref_null_bin_indices = array([0, 2, 3], dtype=INT64)
-    null_bin_indices = zeros(len(ref_null_bin_indices), dtype=INT64)
-    # Test.
-    jcsagg(
-        data,
-        n_cols,
-        cols,
-        next_chunk_starts,
-        bin_indices,
-        bin_res,
-        snap_res,
-        null_bin_indices,
-        null_snap_indices,
-    )
-    assert nall(bin_ref_res == bin_res)
-    assert nall(snap_ref_res == snap_res)
-    assert nall(null_bin_indices == ref_null_bin_indices)
-    assert nall(null_snap_indices == ref_null_snap_indices)
+    agg = {
+        "res_first_f": ("col1_f", "first"),
+        "res_sum_f": ("col1_f", "sum"),
+        "res_last_f": ("col2_f", "last"),
+        "res_min_f": ("col3_i", "min"),
+        "res_max_f": ("col4_i", "max"),
+        "res_first_d": ("datetime_idx", "first"),
+    }
+    by = Grouper(freq="5T", closed="left", label="left", key=time_idx)
+    agg_res = cumsegagg(data=data, agg=agg, bin_by=by)
+    agg_res_ref = data.groupby(by).agg(**agg)
+    assert agg_res.equals(agg_res_ref)
+
+
+# WiP
+# test snapshot: as Grouper, as IntervalIndex
+# segment(): test error message: 'by.closed' should either be 'right' or 'left', nothing else.
+# Test with null values in agg_res (or modify test case above)
+# Test error message if 'bin_on' is None in 'cumsegagg'.
+# test error message input column in 'agg' not in input dataframe.
+# test snapshot:
+# with left-closed bin and snapshot included: snapshot come after bin
+# with left-closed bin and snapsht excluded: snapshot come after bin
+# Test error snap_by.key or snap_by.name not set
+# WiP test case in case snap_by is IntevalIndex: its name has to be set after a column in data.
+# WiP: test cases for 'bin_by_time'
+# Wip test error: if bin_by and snap_by both a pd Grouper, check that both key parameter
+# point on same column, otherwise, not possible possibly to compare
+# Test case snapshot with a snapshot ending exactly on a bin end,
+# and another not ending on a bin end.
+# Snapshot test case with null rows (empty snapshots)
+# Have a snapshot ending exactly on a bin end, then a next snapshot bigger than next bin
+
+# Test exception when bin_on and bin_by.key not the same value
+# Test sxeception
+#   ordered_on not set but snap_by set
+#   ordered_on different than snap_by.key
+#   ordered_on not ordered
+#   ordered_on different than bin_by.key when bin_by is a Grouper
+# Test name of 'bin_res' index: ordered_on if ordered_on is set, else bin_on
+
+
+# Test boh snapshot + bin, but in data there are
+#  - only snapshots
+#  - only bins
+#  - a mix of them
+# Make a test with empty bins
+# Make a test with empty snapshots (to check all -1 in n_max_null_snap_indices are correctly removed)
+
+# Todo Cumsegagg: remove "if" from the loop

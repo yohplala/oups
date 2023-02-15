@@ -105,6 +105,11 @@ def test_merge_sorted_labels_only():
     # Test
     assert nall(sorted_ars == ref_sorted_ars)
     assert nall(sorted_idx_ar2 == ref_sorted_idx_ar2)
+    # Test with 'ii_for_first' set to True.
+    sorted_ars, sorted_idx_ar1 = merge_sorted((ar1, ar2), ii_for_first=True)
+    ref_sorted_idx_ar1 = array([0, 3, 4, 5, 9, 10, 11])
+    assert nall(sorted_ars == ref_sorted_ars)
+    assert nall(sorted_idx_ar1 == ref_sorted_idx_ar1)
 
 
 def test_merge_sorted_labels_and_keys():
@@ -120,6 +125,11 @@ def test_merge_sorted_labels_and_keys():
     # Test
     assert nall(sorted_ars == ref_sorted_ars)
     assert nall(sorted_idx_ar2 == ref_sorted_idx_ar2)
+    # Test with 'ii_for_first' set to True.
+    sorted_ars, sorted_idx_ar1 = merge_sorted((ar1, ar2), (ks1, ks2), True)
+    ref_sorted_idx_ar1 = array([0, 3, 4, 5, 9, 10, 11])
+    assert nall(sorted_ars == ref_sorted_ars)
+    assert nall(sorted_idx_ar1 == ref_sorted_idx_ar1)
 
 
 def test_merge_sorted_exceptions_first():

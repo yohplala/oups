@@ -84,9 +84,9 @@ repos:
                 tests/*.py:D103
                 oups/__init__.py:F401
                 oups/chainagg.py:C901
-                oups/chaingroupby.py:C901
-                oups/cumsegagg.py:C901
+                oups/jcumsegagg.py:C901
                 oups/writer.py:C901
+                oups/cumsegagg.py:C901
         ]
 
   - repo: https://github.com/pycqa/pydocstyle
