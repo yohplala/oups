@@ -6,7 +6,7 @@ Created on Fri Dec 22 19:00:00 2022.
 """
 from typing import Callable
 
-from numba import jit_module
+# from numba import jit_module
 from numpy import dtype
 from numpy import ndarray
 from numpy import ndenumerate
@@ -555,4 +555,4 @@ def jcsagg(
         chunk_start = next_chunk_start
 
 
-jit_module(nopython=True, error_model="numpy")
+# jit_module(nopython=True, error_model="numpy")

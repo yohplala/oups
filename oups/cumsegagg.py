@@ -16,6 +16,7 @@ from numpy import isin as nisin
 from numpy import max as nmax
 from numpy import ndarray
 from numpy import ndenumerate
+from numpy import ones
 from numpy import zeros
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
@@ -23,6 +24,7 @@ from pandas import Grouper
 from pandas import IntervalIndex
 from pandas import NaT as pNaT
 from pandas import Series
+from pandas import Timedelta
 from pandas import date_range
 from pandas.core.resample import _get_timestamp_range_edges as gtre
 
@@ -419,9 +421,15 @@ def cumsegagg(
         (subsequent bins are then "empty" ones).
 
     """
-    if ordered_on and (data[ordered_on].diff() >= 0).all():
-        # 'ordered_on' is not an ordered column.
-        raise ValueError(f"column '{ordered_on}' is not ordered.")
+    if ordered_on:
+        if (
+            data[ordered_on].dtype == DTYPE_DATETIME64
+            and (data[ordered_on].diff() >= Timedelta(0)).all()
+            or data[ordered_on].dtype != DTYPE_DATETIME64
+            and (data[ordered_on].diff() >= 0).all()
+        ):
+            # 'ordered_on' is not an ordered column.
+            raise ValueError(f"column '{ordered_on}' is not ordered.")
     if isinstance(next(iter(agg.keys())), str):
         # Reshape aggregation definition.
         agg = setup_cgb_agg(agg, data.dtypes.to_dict())
@@ -513,7 +521,7 @@ def cumsegagg(
         n_snaps = len(snap_labels)
         # Initialize 'null_snap_indices' to -1, to identify easily those
         # which are not set, and remove them.
-        null_snap_indices = zeros(n_max_null_snaps, dtype=DTYPE_INT64) - 1
+        null_snap_indices = -ones(n_max_null_snaps, dtype=DTYPE_INT64)
         # Initiate dict of result columns.
         snap_res = {}
         # Consolidate 'next_snap_starts' into 'next_chunk_starts'.
@@ -523,14 +531,14 @@ def cumsegagg(
             next_chunk_starts, bin_indices = merge_sorted(
                 labels=(next_chunk_starts, next_snap_starts),
                 keys=(bin_ends, snap_labels),
-                ii_from_first=True,
+                ii_for_first=True,
             )
         else:
             # If sharing the same "next_starts", snapshot come before the bin.
             next_chunk_starts, bin_indices = merge_sorted(
                 labels=(next_snap_starts, next_chunk_starts),
                 keys=(snap_labels, bin_ends),
-                ii_from_first=False,
+                ii_for_first=False,
             )
     else:
         # Case 'no snapshotting'.
@@ -597,7 +605,7 @@ def cumsegagg(
         # Set null values.
         if n_max_null_snaps != 0:
             # Remove -1 indices.
-            null_snap_labels = snap_labels[n_max_null_snaps[~nisin(n_max_null_snaps, -1)]]
+            null_snap_labels = snap_labels[null_snap_indices[~nisin(null_snap_indices, -1)]]
             for dtype_, (
                 _,
                 cols_name_in_res,

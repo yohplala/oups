@@ -1495,3 +1495,11 @@ def chainagg(
     for key in keys:
         if key not in store:
             store._keys.add(key)
+
+
+# TODO
+# in test case with snapshot: when snapshot is a Grouper, make sure that stitching
+# works same as for bin: that empty snapshots are generated between 2 row groups.
+# when stitching with zig-zag grouping, make sure that logic for stitching works
+# does it mean label for previous zig-zag snapshot is to be retrieved? how to know it otherwise?
+# with a 'snap_buffer' ?

@@ -5,15 +5,19 @@ Created on Sun Mar 13 18:00:00 2022.
 @author: yoh
 """
 import pytest
+from numpy import NaN as nNaN
 from numpy import all as nall
 from numpy import array
 from numpy import ndarray
 from numpy import zeros
+from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
 from pandas import Grouper
+from pandas import NaT as pNaT
 from pandas import Series
 from pandas import Timestamp as pTimestamp
+from pandas import date_range
 
 from oups.cumsegagg import DTYPE_DATETIME64
 from oups.cumsegagg import DTYPE_FLOAT64
@@ -417,7 +421,7 @@ def test_cumsegagg_bin_mixed_dtype():
         [[2.0, 20.0], [4.0, 40.0], [5.0, 50.0], [8.0, 80.0], [9.0, 90.0]], dtype=DTYPE_FLOAT64
     )
     ar_int = array([[1, 10], [3, 30], [6, 60], [7, 70], [9, 90]], dtype=DTYPE_INT64)
-    ar_dte = array(
+    ar_dti = array(
         [
             "2020-01-01T08:00",
             "2020-01-01T08:05",
@@ -434,7 +438,7 @@ def test_cumsegagg_bin_mixed_dtype():
             "col2_f": ar_float[:, 1],
             "col3_i": ar_int[:, 0],
             "col4_i": ar_int[:, 1],
-            time_idx: ar_dte,
+            time_idx: ar_dti,
         }
     )
     agg = {
@@ -445,13 +449,122 @@ def test_cumsegagg_bin_mixed_dtype():
         "res_max_f": ("col4_i", "max"),
         "res_first_d": ("datetime_idx", "first"),
     }
-    by = Grouper(freq="5T", closed="left", label="left", key=time_idx)
-    agg_res = cumsegagg(data=data, agg=agg, bin_by=by)
-    agg_res_ref = data.groupby(by).agg(**agg)
+    bin_by = Grouper(freq="5T", closed="left", label="left", key=time_idx)
+    agg_res = cumsegagg(data=data, agg=agg, bin_by=bin_by)
+    agg_res_ref = data.groupby(bin_by).agg(**agg)
     assert agg_res.equals(agg_res_ref)
 
 
+@pytest.mark.parametrize(
+    "b_by_closed, b_by_label, s_by_closed, s_first_val, s_max_val, s_min_val, s_last_val, s_sum_qty, s_first_ts, null_s_dti",
+    [  # left closed, labels at end of bins
+        # point of observations excluded
+        (
+            "left",
+            "right",
+            "left",
+            # s1->s4  s5->s12    s13
+            [4.0] * 4 + [nNaN] * 8 + [1.1],
+            # s1->s4               s5->s12    s13
+            [4.2, 6.0, 9.8, 9.8] + [nNaN] * 8 + [1.1],
+            # s1->s4               s5->s12    s13
+            [3.9, 3.9, 3.9, 3.9] + [nNaN] * 8 + [1.1],
+            # s1->s4               s5->s12    s13
+            [3.9, 6.0, 9.8, 9.8] + [nNaN] * 8 + [1.1],
+            # s1->s4           s5->s12 s13
+            [8, 17, 23, 23] + [0] * 8 + [8],
+            # s1->s4                                s5->s12   s13
+            [pTimestamp("2020-01-01 08:10:00")] * 4
+            + [pNaT] * 8
+            + [pTimestamp("2020-01-01 09:10:00")],
+            # null_snaps_dti
+            date_range("2020-01-01 08:35:00", periods=8, freq="5T"),
+        )
+    ],
+)
+def test_cumsegagg_bin_snaps_with_null_chunks(
+    b_by_closed,
+    b_by_label,
+    s_by_closed,
+    s_first_val,
+    s_max_val,
+    s_min_val,
+    s_last_val,
+    s_sum_qty,
+    s_first_ts,
+    null_s_dti,
+):
+    # Test binning and snapshotting aggregation with null chunks.
+    # - 5 minutes snapshots
+    # - 30 minutes bins
+    # - data (1st case):
+    #  datetime  value  qty     snaps   bins  to check
+    #                                       no 5mn snapshots empty
+    #      8:10    4.0    4        s1    b1  aggregation over 2 values
+    #      8:10    4.2    3
+    #      8:12    3.9    1
+    #      8:17    5.6    7        s2        aggregation over 2 values
+    #      8:19    6.0    2
+    #      8:20    9.8    6        s3        observation point is excluded
+    #                              s4        1 constant snapshot
+    #                         s5->s10        5 empty snapshots
+    #                                    b2  1 empty bin
+    #                        s11, s12        2 empty snapshots
+    #      9:10    1.1    8       s13    b3
+    values = array([4.0, 4.2, 3.9, 5.6, 6.0, 9.8, 1.1], dtype=DTYPE_FLOAT64)
+    qties = array([4, 3, 1, 7, 2, 6, 8], dtype=DTYPE_INT64)
+    dtidx = array(
+        [
+            "2020-01-01T08:10",
+            "2020-01-01T08:10",
+            "2020-01-01T08:12",
+            "2020-01-01T08:17",
+            "2020-01-01T08:19",
+            "2020-01-01T08:20",
+            "2020-01-01T09:10",
+        ],
+        dtype=DTYPE_DATETIME64,
+    )
+    value = "value"
+    qty = "qty"
+    dti = "dti"
+    data = pDataFrame({value: values, qty: qties, dti: dtidx})
+    agg = {
+        FIRST: (value, FIRST),
+        MAX: (value, MAX),
+        MIN: (value, MIN),
+        LAST: (value, LAST),
+        SUM: (qty, SUM),
+        "ts_first": (dti, FIRST),
+    }
+    bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
+    snap_by = Grouper(freq="5T", closed=s_by_closed, key=dti)
+    bins_res, snaps_res = cumsegagg(
+        data=data, agg=agg, bin_by=bin_by, ordered_on=dti, snap_by=snap_by
+    )
+    bins_ref = data.groupby(bin_by).agg(**agg)
+    bins_ref.loc[pTimestamp("2020-01-01 09:00:00"), SUM] = pNA
+    assert bins_res.equals(bins_ref)
+    snaps_dti = date_range("2020-01-01 08:15:00", periods=len(s_first_val), freq="5T")
+    snaps_ref = pDataFrame(
+        {
+            FIRST: s_first_val,
+            MAX: s_max_val,
+            MIN: s_min_val,
+            LAST: s_last_val,
+            SUM: s_sum_qty,
+            "ts_first": s_first_ts,
+        },
+        index=snaps_dti,
+    )
+    snaps_ref.index.name = dti
+    snaps_ref.loc[null_s_dti, SUM] = pNA
+    assert snaps_res.equals(snaps_ref)
+
+
 # WiP
+# test bin & snapshot with empty bins / snaps
+# test with a single bin and several snapshots
 # test snapshot: as Grouper, as IntervalIndex
 # segment(): test error message: 'by.closed' should either be 'right' or 'left', nothing else.
 # Test with null values in agg_res (or modify test case above)
