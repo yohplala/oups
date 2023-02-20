@@ -633,14 +633,7 @@ def test_cumsegagg_bin_snaps_with_null_chunks(
 
 
 # WiP
-# 1/
-# create a flag to not allow exclude pint of observation and right closed bin:
-# in essence, last point of bin is then not visible from last observation point
-# we have bin different than last observation point value
-# it is awkward, isn't it? (create hole in data)
-#
-# 2/
-# create a test case testing snapshot and bin, similar to the one above, but on this
+# create a test case testing snapshot and bin, similar to the one above, but this
 # time starting right on the start of a bin, for instance with a point at 8:00
 # and check all logics are ok.
 #
