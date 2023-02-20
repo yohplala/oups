@@ -282,6 +282,7 @@ def cumsegagg(
     binning_buffer: dict = None,
     ordered_on: Union[str, None] = None,
     snap_by: Union[Grouper, IntervalIndex, None] = None,
+    allow_bins_snaps_disalignment: bool = False,
 ) -> Union[pDataFrame, Tuple[pDataFrame, pDataFrame]]:
     """Cumulative segmented aggregations, with optional snapshotting.
 
@@ -393,6 +394,15 @@ def cumsegagg(
               - `left`, then values at point of observation are excluded.
               - `right`, then values at point of observation are included.
 
+    allow_bins_snaps_disalignment : bool, default False
+        By default, check that ``bin_by.closed`` and ``snap_by.closed`` are set
+        to the same value. If not, an error is raised.
+        As a result of the logic when setting 'bins.closed' and 'snaps.closed'
+        to different values, incomplete snapshots can be created. The relevance
+        of such a use is not clear and for safety, this combination is not
+        possible by default.
+        To make it possible, set 'allow_bins_snaps_disalignment' `True`.
+
     Returns
     -------
     pDataFrame
@@ -484,6 +494,14 @@ def cumsegagg(
                     "not possible to set 'ordered_on' and 'snap_by.key' to different values."
                 )
         snap_on = ordered_on
+        if not allow_bins_snaps_disalignment:
+            if bins.closed != snap_by.closed:
+                raise ValueError(
+                    "as a result of the logic when setting 'bin_by.closed' and 'snap_by.closed' to "
+                    "different values, incomplete snapshots can be created. The relevance of "
+                    "such a use is not clear and for safety, this combination is not possible "
+                    "by default. To make it possible, set 'allow_bins_snaps_disalignment' `True`."
+                )
         # Define points of observation
         if isinstance(snap_by, Grouper):
             # 'snap_by' is an Grouper.
@@ -606,6 +624,10 @@ def cumsegagg(
         if n_max_null_snaps != 0:
             # Remove -1 indices.
             null_snap_labels = snap_labels[null_snap_indices[~nisin(null_snap_indices, -1)]]
+            if DTYPE_INT64 in agg:
+                # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
+                # (it is a pandas dtype, not a numpy one)
+                snap_res[agg[DTYPE_INT64][1]] = snap_res[agg[DTYPE_INT64][1]].astype("Int64")
             for dtype_, (
                 _,
                 cols_name_in_res,
