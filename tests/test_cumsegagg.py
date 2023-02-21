@@ -22,6 +22,7 @@ from pandas import date_range
 from oups.cumsegagg import DTYPE_DATETIME64
 from oups.cumsegagg import DTYPE_FLOAT64
 from oups.cumsegagg import DTYPE_INT64
+from oups.cumsegagg import DTYPE_NULLABLE_INT64
 from oups.cumsegagg import _next_chunk_starts
 from oups.cumsegagg import bin_by_time
 from oups.cumsegagg import cumsegagg
@@ -456,9 +457,10 @@ def test_cumsegagg_bin_mixed_dtype():
 
 
 @pytest.mark.parametrize(
-    "b_by_closed, b_by_label, s_by_closed, s_first_val, s_max_val, s_min_val, s_last_val, s_sum_qty, s_first_ts, null_b_dti, null_s_dti",
+    "b_by_closed, b_by_label, s_by_closed, s_first_val, s_max_val, s_min_val, s_last_val, s_sum_qty, s_first_ts, null_b_dti, start_s_dti, null_s_dti",
     [
-        #  'data' (bin left closed; right label, point of observations excluded)
+        # 1/ bin left closed; right label, point of observations excluded
+        #  'data'
         #  datetime value  qty      snaps     bins   to check
         #                                             no 5mn snapshots empty
         #      8:10   4.0    4    s1-8:15  b1-8:30   aggregation over 2 values
@@ -498,11 +500,14 @@ def test_cumsegagg_bin_mixed_dtype():
             + [pTimestamp("2020-01-01 09:30:00")],
             # null_bins_dti
             [pTimestamp("2020-01-01 09:00:00")],
+            # start_s_dti
+            "2020-01-01 08:15:00",
             # null_snaps_dti
             date_range("2020-01-01 08:35:00", periods=6, freq="5T"),
         ),
-        #  'data' (bin right closed; right label, point of observations excluded)
+        # 2/ bin right closed; right label, point of observations excluded
         #  This combination does not make that much sense.
+        #  'data'
         #  datetime value  qty      snaps      bins   to check
         #                                             no 5mn snapshots empty
         #      8:10   4.0    4    s1-8:15   b1-8:30   aggregation over 2 values
@@ -549,9 +554,104 @@ def test_cumsegagg_bin_mixed_dtype():
             + [pNaT],
             # null_bins_dti
             [],
+            # start_s_dti
+            "2020-01-01 08:15:00",
             # null_snaps_dti
             date_range("2020-01-01 08:35:00", periods=8, freq="5T").to_list()
             + [pTimestamp("2020-01-01 09:35:00")],
+        ),
+        # 3/ bin left closed; left label, point of observations included
+        #  datetime value  qty      snaps      bins   to check
+        #                                             no 5mn snapshots empty
+        #      8:10   4.0    4    s1-8:10   b1-8:00   aggregation over 2 values
+        #      8:10   4.2    3    s1        b1
+        #      8:12   3.9    1    s2-8:15   b1
+        #      8:17   5.6    7    s3-8:20   b1        aggregation over 2 values
+        #      8:19   6.0    2    s3        b1
+        #      8:20   9.8    6    s3        b1        observation point is included
+        #                         s4-8:25   b1        1 constant snapshot
+        #                         s5-8:30   b2-8:30   6 empty snapshots
+        #                               |   b2
+        #                        s10-8:55   b2
+        #      9:00   4.5    2   s11:9:00   b3-9:00   2 constant snapshots
+        #                        s12-9:05   b3
+        #      9:10   1.1    8   s13-9:10   b3        4 constant snapshots
+        #                        s14-9:15   b3
+        #                               |   b3
+        #                        s16-9:25   b3
+        #      9:30   3.2    1   s17-9:30   b4-9:30
+        (
+            "left",
+            "left",
+            "right",
+            # s1->s4    s5->s10      s11->s16    s17                           (first)
+            [4.0] * 4 + [nNaN] * 6 + [4.5] * 6 + [3.2],
+            # s1->s4               s5->s10      s11->s16    s17                (max)
+            [4.2, 4.2, 9.8, 9.8] + [nNaN] * 6 + [4.5] * 6 + [3.2],
+            # s1    s2->s4      s5->s10      s11, s12     s13->s16    s17      (min)
+            [4.0] + [3.9] * 3 + [nNaN] * 6 + [4.5, 4.5] + [1.1] * 4 + [3.2],
+            # s1->s4               s5->s10      s11, s12     s13->s16    s17   (last)
+            [4.2, 3.9, 9.8, 9.8] + [nNaN] * 6 + [4.5, 4.5] + [1.1] * 4 + [3.2],
+            # s1->s4         s5->s10   s11, s12 s13->s16   s17                 (sum)
+            [7, 8, 23, 23] + [0] * 6 + [2, 2] + [10] * 4 + [1],
+            [pTimestamp("2020-01-01 08:10:00")] * 4
+            + [pNaT] * 6
+            + [pTimestamp("2020-01-01 09:00:00")] * 6
+            + [pTimestamp("2020-01-01 09:30:00")],
+            # null_bins_dti
+            [pTimestamp("2020-01-01 08:30:00")],
+            # start_s_dti
+            "2020-01-01 08:10:00",
+            # null_snaps_dti
+            date_range("2020-01-01 08:30:00", periods=6, freq="5T"),
+        ),
+        # 4/ bin right closed; left label, point of observations included
+        #  datetime value  qty      snaps      bins   to check
+        #                                             no 5mn snapshots empty
+        #      8:10   4.0    4    s1-8:10   b1-8:00   aggregation over 2 values
+        #      8:10   4.2    3    s1        b1
+        #      8:12   3.9    1    s2-8:15   b1
+        #      8:17   5.6    7    s3-8:20   b1        aggregation over 2 values
+        #      8:19   6.0    2    s3        b1
+        #      8:20   9.8    6    s3        b1        observation point is included
+        #                         s4-8:25   b1        2 constant snapshots
+        #                         s5-8:30   b1
+        #                         s6-8:35   b2-8:30   5 empty snapshots
+        #                               |   b2
+        #                        s10-8:55   b2
+        #      9:00   4.5    2   s11:9:00   b2
+        #                        s12-9:05   b3-9:00   1 empty snapshot
+        #      9:10   1.1    8   s13-9:10   b3        4 constant snapshots
+        #                        s14-9:15   b3
+        #                               |   b3
+        #                        s16-9:25   b3
+        #      9:30   3.2    1   s17-9:30   b3
+        (
+            "right",
+            "left",
+            "right",
+            # s1->s5    s6->s10      s11, s12       s13->s17                    (first)
+            [4.0] * 5 + [nNaN] * 5 + [4.5, nNaN] + [1.1] * 5,
+            # s1, s2     s3->s5      s6->s10      s11, s12      s13->s16    s17 (max)
+            [4.2, 4.2] + [9.8] * 3 + [nNaN] * 5 + [4.5, nNaN] + [1.1] * 4 + [3.2],
+            # s1    s2->s5      s6->s10      s11, s12     s13->s16              (min)
+            [4.0] + [3.9] * 4 + [nNaN] * 5 + [4.5, nNaN] + [1.1] * 5,
+            # s1, s2     s3->s5      s6->s10      s11, s12      s13->s16    s17 (last)
+            [4.2, 3.9] + [9.8] * 3 + [nNaN] * 5 + [4.5, nNaN] + [1.1] * 4 + [3.2],
+            # s1, s2 s3->s5     s6->s10   s11, s12 s13->s16  s17                (sum)
+            [7, 8] + [23] * 3 + [0] * 5 + [2, 0] + [8] * 4 + [9],
+            [pTimestamp("2020-01-01 08:10:00")] * 5
+            + [pNaT] * 5
+            + [pTimestamp("2020-01-01 09:00:00")]
+            + [pNaT]
+            + [pTimestamp("2020-01-01 09:10:00")] * 5,
+            # null_bins_dti
+            [],
+            # start_s_dti
+            "2020-01-01 08:10:00",
+            # null_snaps_dti
+            date_range("2020-01-01 08:35:00", periods=5, freq="5T").to_list()
+            + [pTimestamp("2020-01-01 09:05:00")],
         ),
     ],
 )
@@ -566,6 +666,7 @@ def test_cumsegagg_bin_snaps_with_null_chunks(
     s_sum_qty,
     s_first_ts,
     null_b_dti,
+    start_s_dti,
     null_s_dti,
 ):
     # Test binning and snapshotting aggregation with null chunks.
@@ -614,7 +715,7 @@ def test_cumsegagg_bin_snaps_with_null_chunks(
     if null_b_dti:
         bins_ref.loc[null_b_dti, SUM] = pNA
     assert bins_res.equals(bins_ref)
-    snaps_dti = date_range("2020-01-01 08:15:00", periods=len(s_first_val), freq="5T")
+    snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5T")
     snaps_ref = pDataFrame(
         {
             FIRST: s_first_val,
@@ -627,7 +728,7 @@ def test_cumsegagg_bin_snaps_with_null_chunks(
         index=snaps_dti,
     )
     snaps_ref.index.name = dti
-    snaps_ref[SUM] = snaps_ref[SUM].astype("Int64")
+    snaps_ref[SUM] = snaps_ref[SUM].astype(DTYPE_NULLABLE_INT64)
     snaps_ref.loc[null_s_dti, SUM] = pNA
     assert snaps_res.equals(snaps_ref)
 

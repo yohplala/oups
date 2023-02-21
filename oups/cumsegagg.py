@@ -21,6 +21,7 @@ from numpy import zeros
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
 from pandas import Grouper
+from pandas import Int64Dtype
 from pandas import IntervalIndex
 from pandas import NaT as pNaT
 from pandas import Series
@@ -37,6 +38,7 @@ from oups.utils import merge_sorted
 DTYPE_INT64 = dtype("int64")
 DTYPE_FLOAT64 = dtype("float64")
 DTYPE_DATETIME64 = dtype("datetime64[ns]")
+DTYPE_NULLABLE_INT64 = Int64Dtype()
 NULL_INT64_1D_ARRAY = zeros(0, DTYPE_INT64)
 NULL_INT64_2D_ARRAY = NULL_INT64_1D_ARRAY.reshape(0, 0)
 # Null values.
@@ -395,12 +397,13 @@ def cumsegagg(
               - `right`, then values at point of observation are included.
 
     allow_bins_snaps_disalignment : bool, default False
-        By default, check that ``bin_by.closed`` and ``snap_by.closed`` are set
-        to the same value. If not, an error is raised.
+        By default, check that ``bin_by.closed`` and ``snap_by.closed`` are not
+        set simulatenously to 'right', resp. 'left'.
+        If not, an error is raised.
         As a result of the logic when setting 'bins.closed' and 'snaps.closed'
-        to different values, incomplete snapshots can be created. The relevance
-        of such a use is not clear and for safety, this combination is not
-        possible by default.
+        to 'right', resp. 'left', incomplete snapshots can be created. The
+        relevance of such a use is not clear and for safety, this combination
+        is not possible by default.
         To make it possible, set 'allow_bins_snaps_disalignment' `True`.
 
     Returns
@@ -495,10 +498,10 @@ def cumsegagg(
                 )
         snap_on = ordered_on
         if not allow_bins_snaps_disalignment:
-            if bins.closed != snap_by.closed:
+            if bins.closed == "right" and snap_by.closed == "left":
                 raise ValueError(
                     "as a result of the logic when setting 'bin_by.closed' and 'snap_by.closed' to "
-                    "different values, incomplete snapshots can be created. The relevance of "
+                    "'right' (resp. 'left'), incomplete snapshots can be created. The relevance of "
                     "such a use is not clear and for safety, this combination is not possible "
                     "by default. To make it possible, set 'allow_bins_snaps_disalignment' `True`."
                 )
@@ -627,7 +630,9 @@ def cumsegagg(
             if DTYPE_INT64 in agg:
                 # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
                 # (it is a pandas dtype, not a numpy one)
-                snap_res[agg[DTYPE_INT64][1]] = snap_res[agg[DTYPE_INT64][1]].astype("Int64")
+                snap_res[agg[DTYPE_INT64][1]] = snap_res[agg[DTYPE_INT64][1]].astype(
+                    DTYPE_NULLABLE_INT64
+                )
             for dtype_, (
                 _,
                 cols_name_in_res,
