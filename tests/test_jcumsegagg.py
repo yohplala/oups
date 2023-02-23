@@ -34,13 +34,13 @@ FLOAT64 = "float64"
 def test_jmax(dtype_):
     # Test 'jmax()'.
     ar = array([], dtype=dtype_)
-    assert jmax(ar) is None
+    assert jmax(ar, None) is None
     assert jmax(ar, 3) == 3
     ar = array([2], dtype=dtype_)
-    assert jmax(ar) == 2
+    assert jmax(ar, None) == 2
     assert jmax(ar, 5) == 5
     ar = array([1, 3, 2, -1], dtype=dtype_)
-    assert jmax(ar) == 3
+    assert jmax(ar, None) == 3
     assert jmax(ar, 4) == 4
 
 
@@ -51,13 +51,13 @@ def test_jmax(dtype_):
 def test_jmin(dtype_):
     # Test 'jmin()'.
     ar = array([], dtype=dtype_)
-    assert jmin(ar) is None
+    assert jmin(ar, None) is None
     assert jmin(ar, 3) == 3
     ar = array([8], dtype=dtype_)
-    assert jmin(ar) == 8
+    assert jmin(ar, None) == 8
     assert jmin(ar, 5) == 5
     ar = array([1, 3, 2, -1], dtype=dtype_)
-    assert jmin(ar) == -1
+    assert jmin(ar, None) == -1
     assert jmin(ar, -3) == -3
 
 
@@ -68,13 +68,13 @@ def test_jmin(dtype_):
 def test_jsum(dtype_):
     # Test 'jsum()'.
     ar = array([], dtype=dtype_)
-    assert jsum(ar) is None
+    assert jsum(ar, None) is None
     assert jsum(ar, 3) == 3
     ar = array([8], dtype=dtype_)
-    assert jsum(ar) == 8
+    assert jsum(ar, None) == 8
     assert jsum(ar, 5) == 13
     ar = array([1, 3, 2, -1], dtype=dtype_)
-    assert jsum(ar) == 5
+    assert jsum(ar, None) == 5
     assert jsum(ar, -3) == 2
 
 

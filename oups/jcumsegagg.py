@@ -4,9 +4,11 @@ Created on Fri Dec 22 19:00:00 2022.
 
 @author: yoh
 """
-from typing import Callable
 
-# from numba import jit_module
+from numba import float64
+from numba import int64
+from numba import jit
+from numba import optional
 from numpy import dtype
 from numpy import ndarray
 from numpy import ndenumerate
@@ -27,20 +29,25 @@ ID_SUM = 4
 AGG_FUNC_IDS = {FIRST: ID_FIRST, LAST: ID_LAST, MIN: ID_MIN, MAX: ID_MAX, SUM: ID_SUM}
 
 
+@jit(
+    [optional(int64)(int64[:], optional(int64)), optional(float64)(float64[:], optional(float64))],
+    nopython=True,
+)
 def jmax(ar: ndarray, initial=None):
-    """
-    Jitted max.
+    """Jitted max.
 
     Parameters
     ----------
     ar : np.ndarray
         Numpy array over which retrieving the max value.
-    initial : Union[float, int], optional
-        Include this value in the max evaluation. The default is None.
+    initial : Union[float, int, None]
+        Include this value in the max evaluation.
+        Because the function is jitted, `None` should be explicitly
+        mentioned.
 
     Returns
     -------
-    Union[float, int]
+    Union[float, int, None]
         Max value within 'ar'.
     """
     len_ar = len(ar)
@@ -57,24 +64,28 @@ def jmax(ar: ndarray, initial=None):
                 return initial
             else:
                 return max_
-    elif initial:
-        return initial
+    return initial
 
 
+@jit(
+    [optional(int64)(int64[:], optional(int64)), optional(float64)(float64[:], optional(float64))],
+    nopython=True,
+)
 def jmin(ar: ndarray, initial=None):
-    """
-    Jitted min.
+    """Jitted min.
 
     Parameters
     ----------
     ar : np.ndarray
         Numpy array over which retrieving the min value.
-    initial : Union[float, int], optional
-        Include this value in the min evaluation. The default is None.
+    initial : Union[float, int, None]
+        Include this value in the min evaluation.
+        Because the function is jitted, `None` should be explicitly
+        mentioned.
 
     Returns
     -------
-    Union[float, int]
+    Union[float, int, None]
         Min value within 'ar'.
     """
     len_ar = len(ar)
@@ -91,24 +102,28 @@ def jmin(ar: ndarray, initial=None):
                 return initial
             else:
                 return min_
-    elif initial:
-        return initial
+    return initial
 
 
+@jit(
+    [optional(int64)(int64[:], optional(int64)), optional(float64)(float64[:], optional(float64))],
+    nopython=True,
+)
 def jsum(ar: ndarray, initial=None):
-    """
-    Jitted sum.
+    """Jitted sum.
 
     Parameters
     ----------
     ar : np.ndarray
         Numpy array over which assessing the sum.
-    initial : Union[float, int], optional
-        Include this value in the sum. The default is None.
+    initial : Union[float, int, None]
+        Include this value in the sum.
+        Because the function is jitted, `None` should be explicitly
+        mentioned.
 
     Returns
     -------
-    Union[float, int]
+    Union[float, int, None]
         Sum of values in 'ar'.
     """
     len_ar = len(ar)
@@ -121,152 +136,77 @@ def jsum(ar: ndarray, initial=None):
             return sum_
         else:
             return sum_ + initial
-    elif initial:
+    return initial
+
+
+@jit(
+    [optional(int64)(int64[:], optional(int64)), optional(float64)(float64[:], optional(float64))],
+    nopython=True,
+)
+def jfirst(ar: ndarray, initial=None):
+    """Jitted first.
+
+    Parameters
+    ----------
+    ar : np.ndarray
+        Numpy array from which taking first value.
+    initial : Union[float, int, None]
+        Consider this value as previous first.
+        Because the function is jitted, `None` should be explicitly
+        mentioned.
+
+    Returns
+    -------
+    Union[float, int, None]
+        First in 'ar' if 'initial' is not provided, else 'initial'.
+    """
+    len_ar = len(ar)
+    if initial is None and len_ar > 0:
+        return ar[0]
+    else:
         return initial
 
 
-def jcumagg(
-    agg: Callable,
-    cumulate: bool,
-    chunk_start: int,
-    next_chunk_start: int,
-    cols: ndarray,
-    data: ndarray,
-    res_idx: int,
-    res: ndarray,
-    buffer: ndarray,
-    update_buffer: bool,
-):
-    """
-    Jitted cumulative aggregation (was 'snapshot').
+@jit(
+    [optional(int64)(int64[:], optional(int64)), optional(float64)(float64[:], optional(float64))],
+    nopython=True,
+)
+def jlast(ar: ndarray, initial=None):
+    """Jitted last.
 
     Parameters
     ----------
-    agg : Callable
-        Jitted reduction function.
-    cumulate : bool
-        If aggregation has to cumulate with previous aggregation results
-        (stored in buffer).
-    chunk_start : int
-        Row index for start of chunk in data.
-    next_chunk_start : int
-        Row index for start of next chunk in data.
-    cols : np.ndarray
-        2d array of ``int``, with as many rows as columns onto which
-        aggregating. Each row contains 2 values, the index of the column in
-        'data', and the index of the column in 'res'.
-    data : np.ndarray
-        2d array. Contiguous segments of rows are 'chunks'.
-    res_idx : int
-        Row index in 'res' to use for storing aggregation results.
-    res : np.ndarray (out)
-        2d array of results from the cumulative aggregation.
-    buffer : np.ndarray (in/out)
-        Buffer array, to re-use results of previous cumulative aggregations for
-        current chunk.
-    update_buffer : bool
-        In case it is an "on-going" cumulative aggregation, buffer needs to be
-        updated. If this is the last segment of a cumulative aggregation,
-        update of buffer is useless. This can be de-activated, setting this
-        parameter to ``False``.
+    ar : np.ndarray
+        Numpy array from which taking last value.
+    initial : Union[float, int, None]
+        Consider this value as previous last.
+        This value is used if 'ar' is a null array.
+        Because the function is jitted, `None` should be explicitly
+        mentioned.
+
+    Returns
+    -------
+    Union[float, int, None]
+        Last in 'ar' if 'ar' is not a null array.
     """
-    if cumulate:
-        if chunk_start == next_chunk_start:
-            # Forward past results.
-            for col_buffer, (_, col_res) in enumerate(cols):
-                res[res_idx, col_res] = buffer[col_buffer]
-        else:
-            # Cumulate.
-            if update_buffer:
-                # Case of 'snapshot'.
-                for col_buffer, (col_data, col_res) in enumerate(cols):
-                    res[res_idx, col_res] = buffer[col_buffer] = agg(
-                        data[chunk_start:next_chunk_start, col_data],
-                        initial=buffer[col_buffer],
-                    )
-            else:
-                # Case of 'bin'.
-                for col_buffer, (col_data, col_res) in enumerate(cols):
-                    res[res_idx, col_res] = agg(
-                        data[chunk_start:next_chunk_start, col_data],
-                        initial=buffer[col_buffer],
-                    )
+    len_ar = len(ar)
+    if len_ar > 0:
+        return ar[-1]
     else:
-        if update_buffer:
-            # Case of 'snapshot'.
-            # 1st aggregation: need to initialize 'buffer'.
-            for col_buffer, (col_data, col_res) in enumerate(cols):
-                res[res_idx, col_res] = buffer[col_buffer] = agg(
-                    data[chunk_start:next_chunk_start, col_data]
-                )
-        else:
-            # Case of 'bin'.
-            for col_data, col_res in cols:
-                res[res_idx, col_res] = agg(data[chunk_start:next_chunk_start, col_data])
+        return initial
 
 
-def jrowat(
-    from_buffer: bool,
-    data_idx: int,
-    cols: ndarray,
-    data: ndarray,
-    res_idx: int,
-    res: ndarray,
-    buffer: ndarray,
-    update_buffer: bool,
-):
+AGG_FUNCS = {ID_FIRST: jfirst, ID_LAST: jlast, ID_MIN: jmin, ID_MAX: jmax, ID_SUM: jsum}
+
+
+def _jcsa_setup(n_cols: ndarray, cols: ndarray, dtype_: dtype):
     """
-    Jitted row picking.
+    Return setup for the set of cumulative segmented aggregation functions.
 
     Parameters
     ----------
-    from_buffer : bool
-        If value stored in buffer has to be used instead.
-    data_idx : int
-        row index in 'data' from which retrieving the value.
-    cols : np.ndarray
-        2d array of ``int``, with as many rows as columns onto which
-        aggregating. Each row contains 2 values, the index of the column in
-        'data', and the index of the column in 'res'.
-    data : np.ndarray
-        2d array. Contiguous segments of rows are 'chunks'.
-    res_idx : int
-        Row index in 'res' to use for storing aggregation results.
-    res : np.ndarray (out)
-        2d array of results.
-    buffer : np.ndarray (in/out)
-        Buffer array, to re-use results of previous cumulative aggregations for
-        current chunk.
-    update_buffer : bool
-        In case it is an "on-going" cumulative aggregation, buffer needs to be
-        updated. If this is the last segment of a cumulative aggregation,
-        update of buffer is useless. This can be de-activated, setting this
-        parameter to ``False``.
-    """
-    if from_buffer:
-        for col_buffer, (_, col_res) in enumerate(cols):
-            res[res_idx, col_res] = buffer[col_buffer]
-    else:
-        if update_buffer:
-            # Case of 'snapshot'.
-            for col_buffer, (col_data, col_res) in enumerate(cols):
-                res[res_idx, col_res] = buffer[col_buffer] = data[data_idx, col_data]
-        else:
-            # Case of 'bin'.
-            for col_data, col_res in cols:
-                res[res_idx, col_res] = data[data_idx, col_data]
-
-
-def _jcsa_setup(agg_id: int, n_cols: ndarray, cols: ndarray, dtype_: dtype):
-    """
-    Return setup for one cumulative segmented aggregation function.
-
-    Parameters
-    ----------
-    agg_id : int
-        Id of aggregation function.
     n_cols : np.ndarray
-        1d array, specifying per aggrgation function how many columns in 'data'
+        1d array, specifying per aggregation function how many columns in 'data'
         have to be aggregated with this function.
     cols: np.ndarray
         3d array, with one row per aggregation function.
@@ -284,17 +224,19 @@ def _jcsa_setup(agg_id: int, n_cols: ndarray, cols: ndarray, dtype_: dtype):
         - bool: if the aggregation function has to be assessed.
         - Union[array, None]: array of column indices to retrieve data and store
           aggregation results.
-        - Union[array, None]: array to use as buffer.
+        - Union[array, None]: array to use as buffer between loop iteration.
+        - Union[array, None]: array to use as buffer for the calculations.
 
     """
-    n_cols_ = n_cols[agg_id]
-    if n_cols_ != 0:
-        assess = True
-        cols = cols[agg_id, :n_cols_, :]
-        buffer = zeros(n_cols_, dtype=dtype_)
-        return assess, cols, buffer
-    else:
-        return False, None, None
+    agg_func_config = []
+    for agg_id, n_cols_ in enumerate(n_cols):
+        if n_cols_ > 0:
+            func = AGG_FUNCS[agg_id]
+            cols_ = cols[agg_id, :n_cols_, :]
+            agg_func_config.append((agg_id, func, cols_))
+    buffer = zeros(cols.shape[:2], dtype=dtype_)
+    res_loc = zeros(cols.shape[:2], dtype=dtype_)
+    return tuple(agg_func_config), buffer, res_loc
 
 
 def jcsagg(
@@ -357,11 +299,7 @@ def jcsagg(
         rows can be identified clearly.
     """
     # Setup agg func constants.
-    assess_FIRST, cols_FIRST, buffer_FIRST = _jcsa_setup(ID_FIRST, n_cols, cols, data.dtype)
-    assess_LAST, cols_LAST, buffer_LAST = _jcsa_setup(ID_LAST, n_cols, cols, data.dtype)
-    assess_MIN, cols_MIN, buffer_MIN = _jcsa_setup(ID_MIN, n_cols, cols, data.dtype)
-    assess_MAX, cols_MAX, buffer_MAX = _jcsa_setup(ID_MAX, n_cols, cols, data.dtype)
-    assess_SUM, cols_SUM, buffer_SUM = _jcsa_setup(ID_SUM, n_cols, cols, data.dtype)
+    agg_func_config, buffer, res_loc = _jcsa_setup(n_cols, cols, data.dtype)
     # 'last_rows' is an array of `int`, providing the index of last row for
     # each chunk.
     # If a 'snapshot' chunk shares same last row than a 'bin' chunk, the
@@ -371,6 +309,7 @@ def jcsagg(
     bin_res_idx = snap_res_idx = 0
     null_bin_idx = null_snap_idx = 0
     # 'pinnu' was 'prev_is_non_null_update'.
+    # With 'pinnu' True, then cumulate (pass-through) previous results.
     pinnu = False
     if len(snap_res) != 0:
         # Case 'snapshots expected'.
@@ -417,142 +356,42 @@ def jcsagg(
                 pinnu = False
         else:
             # Chunk with some rows from the start of the bin.
+            data_loc = data[chunk_start:next_chunk_start]
+            # for conf in literal_unroll(red_func_config):
+            for conf in agg_func_config:
+                agg_id, func, cols = conf
+                if pinnu:
+                    if len(data_loc) == 0:
+                        # Forward past results.
+                        res_loc[agg_id, :] = buffer[agg_id, :]
+                    else:
+                        for col_buffer, (col_data, _) in enumerate(cols):
+                            res_loc[agg_id, col_buffer] = func(
+                                data_loc[:, col_data], initial=buffer[agg_id, col_buffer]
+                            )
+                else:
+                    for col_buffer, (col_data, _) in enumerate(cols):
+                        res_loc[agg_id, col_buffer] = func(data_loc[:, col_data], initial=None)
             if is_update:
-                # Make an update and record result in 'snap_res'.
-                if assess_FIRST:
-                    jrowat(
-                        pinnu,
-                        chunk_start,
-                        cols_FIRST,
-                        data,
-                        snap_res_idx,
-                        snap_res,
-                        buffer_FIRST,
-                        True,
-                    )
-                if assess_LAST:
-                    # If current chunk is empty, values from buffer are used.
-                    jrowat(
-                        chunk_start == next_chunk_start,
-                        next_chunk_start - 1,
-                        cols_LAST,
-                        data,
-                        snap_res_idx,
-                        snap_res,
-                        buffer_LAST,
-                        True,
-                    )
-                if assess_MIN:
-                    jcumagg(
-                        jmin,
-                        pinnu,
-                        chunk_start,
-                        next_chunk_start,
-                        cols_MIN,
-                        data,
-                        snap_res_idx,
-                        snap_res,
-                        buffer_MIN,
-                        True,
-                    )
-                if assess_MAX:
-                    jcumagg(
-                        jmax,
-                        pinnu,
-                        chunk_start,
-                        next_chunk_start,
-                        cols_MAX,
-                        data,
-                        snap_res_idx,
-                        snap_res,
-                        buffer_MAX,
-                        True,
-                    )
-                if assess_SUM:
-                    jcumagg(
-                        jsum,
-                        pinnu,
-                        chunk_start,
-                        next_chunk_start,
-                        cols_SUM,
-                        data,
-                        snap_res_idx,
-                        snap_res,
-                        buffer_SUM,
-                        True,
-                    )
+                # Record result in 'snap_res'.
+                for conf in agg_func_config:
+                    agg_id, func, cols = conf
+                    for col_buffer, (_, col_res) in enumerate(cols):
+                        # Case of 'snapshot': update buffer
+                        snap_res[snap_res_idx, col_res] = buffer[agg_id, col_buffer] = res_loc[
+                            agg_id, col_buffer
+                        ]
                 snap_res_idx += 1
                 pinnu = True
             else:
-                # Record result in 'bin_res'.
-                # For these 'standard' aggregations', re-using results from previous updates,
-                # no need to update related buffer, as it is end of bin.
-                if assess_FIRST:
-                    jrowat(
-                        pinnu,
-                        chunk_start,
-                        cols_FIRST,
-                        data,
-                        bin_res_idx,
-                        bin_res,
-                        buffer_FIRST,
-                        False,
-                    )
-                if assess_LAST:
-                    # If current chunk is empty, values from buffer are used.
-                    jrowat(
-                        chunk_start == next_chunk_start,
-                        next_chunk_start - 1,
-                        cols_LAST,
-                        data,
-                        bin_res_idx,
-                        bin_res,
-                        buffer_LAST,
-                        False,
-                    )
-                if assess_MIN:
-                    jcumagg(
-                        jmin,
-                        pinnu,
-                        chunk_start,
-                        next_chunk_start,
-                        cols_MIN,
-                        data,
-                        bin_res_idx,
-                        bin_res,
-                        buffer_MIN,
-                        False,
-                    )
-                if assess_MAX:
-                    jcumagg(
-                        jmax,
-                        pinnu,
-                        chunk_start,
-                        next_chunk_start,
-                        cols_MAX,
-                        data,
-                        bin_res_idx,
-                        bin_res,
-                        buffer_MAX,
-                        False,
-                    )
-                if assess_SUM:
-                    jcumagg(
-                        jsum,
-                        pinnu,
-                        chunk_start,
-                        next_chunk_start,
-                        cols_SUM,
-                        data,
-                        bin_res_idx,
-                        bin_res,
-                        buffer_SUM,
-                        False,
-                    )
+                # Record results in 'bin_res'.
+                # No need to update related buffer, as it is end of bin.
+                for conf in agg_func_config:
+                    agg_id, func, cols = conf
+                    for col_buffer, (_, col_res) in enumerate(cols):
+                        # Case of 'bin'
+                        bin_res[bin_res_idx, col_res] = res_loc[agg_id, col_buffer]
                 bin_res_idx += 1
                 bin_start = next_chunk_start
                 pinnu = False
         chunk_start = next_chunk_start
-
-
-# jit_module(nopython=True, error_model="numpy")
