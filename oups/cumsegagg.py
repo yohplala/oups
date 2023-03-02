@@ -29,7 +29,7 @@ from pandas import Timedelta
 from pandas import date_range
 from pandas.core.resample import _get_timestamp_range_edges as gtre
 
-from oups.jcumsegagg import AGG_FUNC_IDS
+from oups.jcumsegagg import AGG_FUNCS
 from oups.jcumsegagg import jcsagg
 from oups.utils import merge_sorted
 
@@ -91,7 +91,7 @@ def setup_cgb_agg(
            }``
     """
     cgb_agg_cfg = {}
-    n_agg_funcs = len(AGG_FUNC_IDS)
+    n_agg_funcs = len(AGG_FUNCS)
     # Step 1.
     for out_col, (in_col, func) in agg.items():
         if in_col not in data_dtype:
@@ -123,11 +123,11 @@ def setup_cgb_agg(
         cols_name_in_res.append(out_col)
         # Set list of function id (temporary buffer 'agg_func_idx').
         agg_func_idx = tup[2]
-        if (func_id := AGG_FUNC_IDS[func]) in agg_func_idx:
+        if (func_id := AGG_FUNCS[func]) in agg_func_idx:
             func_idx = agg_func_idx.index(func_id)
         else:
             func_idx = len(agg_func_idx)
-            agg_func_idx.append(AGG_FUNC_IDS[func])
+            agg_func_idx.append(AGG_FUNCS[func])
         # 'cols_idx'
         cols_idx = tup[3]
         if len(cols_idx) <= func_idx:
