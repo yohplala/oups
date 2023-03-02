@@ -217,7 +217,7 @@ AGG_FUNCS = {FIRST: jfirst, LAST: jlast, MIN: jmin, MAX: jmax, SUM: jsum}
 def jcsagg(
     data: ndarray,  # 2d
     n_cols: int,
-    aggs: Tuple[Tuple[Callable, ndarray, ndarray]],  # tuple of callable
+    aggs: Tuple[Tuple[Callable, ndarray, ndarray]],
     next_chunk_starts: ndarray,  # 1d
     bin_indices: ndarray,  # 1d
     bin_res: ndarray,  # 2d
