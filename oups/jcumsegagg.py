@@ -337,7 +337,7 @@ def jcsagg(
             # If no data in current chunk, 'chunk_res' is naturally forwarded
             # to next iteration, no need to update it.
             if len(chunk) != 0:
-                # for agg_func in agg_funcs:
+                # for agg in aggs:
                 for agg in literal_unroll(aggs):
                     agg_func, cols_data, cols_res = agg
                     chunk_res[cols_res] = agg_func(chunk[:, cols_data], chunk_res[cols_res], pinnu)

@@ -11,9 +11,9 @@ from numba import float64
 from numba import guvectorize
 from numba import int64
 from numpy import NaN as nNaN
+from numpy import array
 from numpy import dtype
 from numpy import isin as nisin
-from numpy import max as nmax
 from numpy import ndarray
 from numpy import ndenumerate
 from numpy import ones
@@ -47,7 +47,7 @@ NULL_DICT = {DTYPE_INT64: pNA, DTYPE_FLOAT64: nNaN, DTYPE_DATETIME64: pNaT}
 
 def setup_cgb_agg(
     agg: Dict[str, Tuple[str, str]], data_dtype: Dict[str, dtype]
-) -> Dict[dtype, Tuple[List[str], List[str], ndarray, ndarray]]:
+) -> Dict[dtype, Tuple[List[str], List[str], Tuple, int]]:
     """Construct chaingrouby aggregation configuration.
 
     Parameters
@@ -61,37 +61,35 @@ def setup_cgb_agg(
 
     Returns
     -------
-    Dict[dtype, Tuple[List[str], Tuple[int, str], List[str]]]
+    Dict[dtype,
+         Tuple[List[str],
+               List[str],
+               Tuple[Tuple[Callable, ndarray[int64], ndarray[int64]]],
+               int64
+               ]
+         ]
          Dict 'cgb_agg_cfg' in the form
          ``{dtype: List[str], 'cols_name_in_data'
                               column name in input data, with this dtype,
                    List[str], 'cols_name_in_res'
                               expected column names in aggregation result,
-                   ndarray[int64], 'cols_idx'
-                                 Three dimensional array of ``int``, one row
-                                 per aggregation function.
-                                 Row index for a given aggregation function is
-                                 defined by global constants 'ID_FIRST', etc...
-                                 Per row (2nd dimension), column indices in
-                                 'data' and 'res' to which apply corresponding
-                                 aggregation function.
-                                 Any value in column past the number of
-                                 relevant columns is not used.
-                                 In last dimension, index 0 gives indices of
-                                 columns in 'data'. Index 1 gives indices of
-                                 columns in 'res'.
-                   ndarray[int64], 'n_cols'
-                                1d-array, length corresponding to the total
-                                number of aggregation functions.
-                                Row indices correspond aggregation function
-                                indices
-                                It contains the number of input columns in
-                                data, to which apply this aggregation
-                                function.
+                   Tuple[Tuple[Callable, ndarray[int64], ndarray[int64]]],
+                              'aggs'
+                              Tuple of Tuple. One inner Tuple per aggregation
+                              function. Each one contain 3 items,
+                                - a Callable, the aggregation function
+                                - a 1st 1d numpy array with indices of columns
+                                  in 'data', to which has to be applied the
+                                  aggregation function.
+                                - a 2nd 1d numpy array with indices of columns
+                                  in 'res', to which are recoreded aggrgation
+                                  results
+                   int64, 'n_cols'
+                              Total number of columns in 'res' (summing for all
+                              aggregation function).
            }``
     """
     cgb_agg_cfg = {}
-    n_agg_funcs = len(AGG_FUNCS)
     # Step 1.
     for out_col, (in_col, func) in agg.items():
         if in_col not in data_dtype:
@@ -105,9 +103,8 @@ def setup_cgb_agg(
                 [],  # 'cols_name_in_data'
                 [],  # 'cols_name_in_res'
                 [],  # 'agg_func_idx' (temporary)
-                [],  # 'cols_idx'
-                # 'n_cols'
-                zeros(n_agg_funcs, dtype=DTYPE_INT64),
+                [],  # 'cols_data' (temporary)
+                [],  # 'cols_res' (temporary)
             ]
             tup = cgb_agg_cfg[dtype_]
         # 'in_col' / name / 1d list.
@@ -121,42 +118,35 @@ def setup_cgb_agg(
         cols_name_in_res = tup[1]
         out_col_idx = len(cols_name_in_res)
         cols_name_in_res.append(out_col)
-        # Set list of function id (temporary buffer 'agg_func_idx').
-        agg_func_idx = tup[2]
-        if (func_id := AGG_FUNCS[func]) in agg_func_idx:
-            func_idx = agg_func_idx.index(func_id)
+        # Set list of agg functions (temporary buffer).
+        agg_funcs = tup[2]
+        if (agg_func := AGG_FUNCS[func]) in agg_funcs:
+            func_idx = agg_funcs.index(agg_func)
         else:
-            func_idx = len(agg_func_idx)
-            agg_func_idx.append(AGG_FUNCS[func])
+            func_idx = len(agg_funcs)
+            agg_funcs.append(AGG_FUNCS[func])
         # 'cols_idx'
-        cols_idx = tup[3]
-        if len(cols_idx) <= func_idx:
+        cols_data = tup[3]
+        cols_res = tup[4]
+        if len(cols_data) <= func_idx:
             # Create list for this aggregation function.
-            cols_idx.append([[in_col_idx, out_col_idx]])
+            cols_data.append([in_col_idx])
+            cols_res.append([out_col_idx])
         else:
             # Add this column index for this aggregation function.
-            cols_idx[func_idx].append([in_col_idx, out_col_idx])
+            cols_data[func_idx].append(in_col_idx)
+            cols_res[func_idx].append(out_col_idx)
     # Step 2.
     for conf in cgb_agg_cfg.values():
-        # Remove 'agg_func_idx'.
-        agg_func_idx = conf.pop(2)
-        n_funcs = len(agg_func_idx)
-        cols_idx = conf[2]
-        # 'n_cols': 1d array of length the total number of existing agg funcs.
-        n_cols = conf[3]
-        for func_idx in range(n_funcs):
-            # Retrieve number of columns in input data for this aggregation
-            # function.
-            # 'agg_func_idx[func_idx]' is aggregation function id.
-            n_cols[agg_func_idx[func_idx]] = len(cols_idx[func_idx])
-        # Transform list of list into 2d array.
-        max_cols = nmax(n_cols)
-        cols = zeros((n_agg_funcs, max_cols, 2), dtype=DTYPE_INT64)
-        for func_idx in range(n_funcs):
-            # 'agg_func_idx[func_idx]' is aggregation function id.
-            func_id = agg_func_idx[func_idx]
-            cols[func_id, : n_cols[func_id], :] = cols_idx[func_idx]
-        conf[2] = cols
+        # Remove 'agg_funcs' & 'cols_idx'.
+        agg_funcs = conf.pop(2)
+        cols_data = conf.pop(2)
+        cols_res = conf.pop(2)
+        n_cols = sum(map(len, cols_res))
+        # Add back 'aggs', as tuple of tuple.
+        conf.append(tuple(zip(agg_funcs, map(array, cols_data), map(array, cols_res))))
+        # 'n_cols'.
+        conf.append(n_cols)
     return cgb_agg_cfg
 
 
@@ -569,21 +559,20 @@ def cumsegagg(
     for dtype_, (
         cols_name_in_data,
         cols_name_in_res,
-        cols_idx,
-        n_cols,  # 1d
+        aggs,
+        n_cols,
     ) in agg.items():
         data_single_dtype = (
             data.loc[:, cols_name_in_data].to_numpy(copy=False)
             if len(cols_name_in_data) > 1
             else data.loc[:, cols_name_in_data].to_numpy(copy=False).reshape(-1, 1)
         )
-        n_cols_single_dtype = len(cols_name_in_res)
-        bin_res_single_dtype = zeros((n_bins, n_cols_single_dtype), dtype=dtype_)
+        bin_res_single_dtype = zeros((n_bins, n_cols), dtype=dtype_)
         bin_res.update(
             {name: bin_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)}
         )
         if snap_by:
-            snap_res_single_dtype = zeros((n_snaps, n_cols_single_dtype), dtype=dtype_)
+            snap_res_single_dtype = zeros((n_snaps, n_cols), dtype=dtype_)
             snap_res.update(
                 {name: snap_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)}
             )
@@ -593,13 +582,11 @@ def cumsegagg(
             if snap_by:
                 snap_res_single_dtype = snap_res_single_dtype.view(DTYPE_INT64)
         # 'data' is a numpy array, with columns in 'expected order',
-        # as defined in 'cols_idx'.
-        # 'cols_idx[ID_AGG_FUNC, :, 0]' contains indices for cols in data
-        # 'cols_idx[ID_AGG_FUNC, :, 1]' contains indices for cols in res
+        # as defined in 'cols_data' & 'cols_res' embedded in 'aggs'.
         jcsagg(
             data_single_dtype,  # 2d
-            n_cols,  # 1d
-            cols_idx,  # 3d
+            n_cols,
+            aggs,
             next_chunk_starts,  # 1d
             bin_indices,  # 1d
             bin_res_single_dtype,  # 2d

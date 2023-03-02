@@ -32,6 +32,11 @@ from oups.jcumsegagg import LAST
 from oups.jcumsegagg import MAX
 from oups.jcumsegagg import MIN
 from oups.jcumsegagg import SUM
+from oups.jcumsegagg import jfirst
+from oups.jcumsegagg import jlast
+from oups.jcumsegagg import jmax
+from oups.jcumsegagg import jmin
+from oups.jcumsegagg import jsum
 
 
 # from pandas.testing import assert_frame_equal
@@ -74,39 +79,53 @@ def test_setup_cgb_agg():
         "val3_max": ("val3_int", MAX),
     }
     cgb_agg_cfg_res = setup_cgb_agg(agg_cfg, df.dtypes.to_dict())
+    # In reference results, the 3rd iterable is voluntarily a tuple, to "flag"
+    # it and unpack it when checking it ('assert' below).
     cgb_agg_cfg_ref = {
         DTYPE_FLOAT64: [
             ["val1_float", "val2_float"],
             ["val1_first", "val2_first", "val2_sum"],
-            array(
-                [
-                    [[0, 0], [1, 1]],
-                    [[0, 0], [0, 0]],
-                    [[0, 0], [0, 0]],
-                    [[0, 0], [0, 0]],
-                    [[1, 2], [0, 0]],
-                ],
-                dtype=DTYPE_INT64,
+            (
+                (jfirst, array([0, 1], dtype=DTYPE_INT64), array([0, 1], dtype=DTYPE_INT64)),
+                (
+                    jsum,
+                    array(
+                        [
+                            1,
+                        ],
+                        dtype=DTYPE_INT64,
+                    ),
+                    array([2], dtype=DTYPE_INT64),
+                ),
             ),
-            array([2, 0, 0, 0, 1], dtype=DTYPE_INT64),
+            3,
         ],
         DTYPE_DATETIME64: [
             ["val4_datetime"],
             ["val4_first"],
-            array([[[0, 0]], [[0, 0]], [[0, 0]], [[0, 0]], [[0, 0]]], dtype=DTYPE_INT64),
-            array([1, 0, 0, 0, 0], dtype=DTYPE_INT64),
+            ((jfirst, array([0], dtype=DTYPE_INT64), array([0], dtype=DTYPE_INT64)),),
+            1,
         ],
         DTYPE_INT64: [
             ["val3_int"],
             ["val3_last", "val3_min", "val3_max"],
-            array([[[0, 0]], [[0, 0]], [[0, 1]], [[0, 2]], [[0, 0]]], dtype=DTYPE_INT64),
-            array([0, 1, 1, 1, 0], dtype=DTYPE_INT64),
+            (
+                (jlast, array([0], dtype=DTYPE_INT64), array([0], dtype=DTYPE_INT64)),
+                (jmin, array([0], dtype=DTYPE_INT64), array([1], dtype=DTYPE_INT64)),
+                (jmax, array([0], dtype=DTYPE_INT64), array([2], dtype=DTYPE_INT64)),
+            ),
+            3,
         ],
     }
     for val_res, val_ref in zip(cgb_agg_cfg_res.values(), cgb_agg_cfg_ref.values()):
         for it_res, it_ref in zip(val_res, val_ref):
-            if isinstance(it_res, ndarray):
-                assert nall(it_res == it_ref)
+            if isinstance(it_ref, tuple):
+                for sub_it_res, sub_it_ref in zip(it_res, it_ref):
+                    for sub_sub_it_res, sub_sub_it_ref in zip(sub_it_res, sub_it_ref):
+                        if isinstance(sub_sub_it_ref, ndarray):
+                            nall(sub_sub_it_res == sub_sub_it_ref)
+                        else:
+                            assert sub_sub_it_res == sub_sub_it_ref
             else:
                 assert it_res == it_ref
 
