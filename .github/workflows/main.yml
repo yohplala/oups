@@ -44,7 +44,7 @@ jobs:
       # Setup poetry cache
       - name: Get poetry cache dir
         id: cache-poetry
-        run: echo "::set-output name=dir::$(poetry config cache-dir)"
+        run: echo "dir=$(poetry config cache-dir)" >> $GITHUB_OUTPUT
 
       - name: Setup poetry cache
         uses: actions/cache@v2
