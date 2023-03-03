@@ -80,6 +80,7 @@ def jlast(ar: ndarray, initial: ndarray, use_init: bool):
 @njit(
     [int64[:](int64[:, :], int64[:], boolean), float64[:](float64[:, :], float64[:], boolean)],
     cache=True,
+    parallel=True,
 )
 def jmax(ar: ndarray, initial: ndarray, use_init: bool):
     """Jitted max.
@@ -123,6 +124,7 @@ def jmax(ar: ndarray, initial: ndarray, use_init: bool):
 @njit(
     [int64[:](int64[:, :], int64[:], boolean), float64[:](float64[:, :], float64[:], boolean)],
     cache=True,
+    parallel=True,
 )
 def jmin(ar: ndarray, initial: ndarray, use_init: bool):
     """Jitted min.
@@ -166,6 +168,7 @@ def jmin(ar: ndarray, initial: ndarray, use_init: bool):
 @njit(
     [int64[:](int64[:, :], int64[:], boolean), float64[:](float64[:, :], float64[:], boolean)],
     cache=True,
+    parallel=True,
 )
 def jsum(ar: ndarray, initial: ndarray, use_init: bool):
     """Jitted sum.
