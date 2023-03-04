@@ -830,8 +830,8 @@ def test_cumsegagg_bin_snaps_with_null_chunks1(
             [nNaN] * 2 + [3.9] * 4 + [nNaN] * 8 + [1.1],
             # s1,s2      s3->s6                 s7->s14      s15        (last)
             [nNaN] * 2 + [3.9, 6.0, 9.8, 9.8] + [nNaN] * 8 + [1.1],
-            # s1,s2      s3->s6            s7->s14   s15                   (sum)
-            [nNaN] * 2 + [4, 13, 19, 19] + [0] * 8 + [8],
+            # s1,s2   s3->s6            s7->s14   s15                   (sum)
+            [0] * 2 + [4, 13, 19, 19] + [0] * 8 + [8],
             # first timestamp in bin
             [pNaT] * 2
             + [pTimestamp("2020-01-01 08:10:00")] * 4
@@ -846,6 +846,47 @@ def test_cumsegagg_bin_snaps_with_null_chunks1(
             + date_range("2020-01-01 08:35:00", periods=8, freq="5T").to_list(),
         ),
         # 3/ bin left closed; left label, point of observations included
+        #  'data'
+        #  datetime value  qty      snaps     bins   to check
+        #      8:00   4.0    4    s1-8:00  b1-8:00
+        #                         s2-8:05
+        #      8:10   4.2    3    s3-8:10  b1
+        #      8:12   3.9    1    s4-8:15  b1
+        #      8:17   5.6    7    s5-8:20  b1
+        #      8:19   6.0    2    s5       b1
+        #      8:20   9.8    6    s5       b1
+        #                         s6-8:25  b1
+        #                         s7-8:30  b2-8:30
+        #                         s8-8:35  b2
+        #                               |  b2
+        #                        s13-9:00  b3-9:00
+        #                        s14-9:05  b3
+        #      9:10   1.1    8   s15-9:10  b3
+        (
+            "left",
+            "left",
+            "right",
+            # s1->s6    s7->s14      s15                               (first)
+            [4.0] * 6 + [nNaN] * 8 + [1.1],
+            # s1, s2    s3->s6                 s7->s14      s15        (max)
+            [4.0] * 2 + [4.2, 4.2, 9.8, 9.8] + [nNaN] * 8 + [1.1],
+            # s1->s3    s4->s6      s7->s14      s15                   (min)
+            [4.0] * 3 + [3.9] * 3 + [nNaN] * 8 + [1.1],
+            # s1,s2     s3->s6                 s7->s14      s15        (last)
+            [4.0] * 2 + [4.2, 3.9, 9.8, 9.8] + [nNaN] * 8 + [1.1],
+            # s1,s2   s3->s6           s7->s14   s15                   (sum)
+            [4] * 2 + [7, 8, 23, 23] + [0] * 8 + [8],
+            # first timestamp in bin
+            [pTimestamp("2020-01-01 08:00:00")] * 6
+            + [pNaT] * 8
+            + [pTimestamp("2020-01-01 09:10:00")],
+            # null_bins_dti (label)
+            [pTimestamp("2020-01-01 08:30:00")],
+            # start_s_dti
+            "2020-01-01 08:00:00",
+            # null_snaps_dti
+            date_range("2020-01-01 08:30:00", periods=8, freq="5T"),
+        ),
         # 4/ bin right closed; left label, point of observations included
     ],
 )
@@ -926,6 +967,7 @@ def test_cumsegagg_bin_snaps_with_null_chunks2(
 
 
 # WiP
+# attempt to prepare in setup_cgb_agg the CPU dispatcher with make_jcsagg /!\ test to be done with huge dataFrame
 # create a test case testing snapshot and bin, similar to the one above, but this
 # time starting right on the start of a bin, for instance with a point at 8:00
 # and check all logics are ok.
