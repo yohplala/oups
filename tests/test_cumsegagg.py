@@ -580,6 +580,7 @@ def test_cumsegagg_bin_mixed_dtype():
             + [pTimestamp("2020-01-01 09:35:00")],
         ),
         # 3/ bin left closed; left label, point of observations included
+        #  'data'
         #  datetime value  qty      snaps      bins   to check
         #                                             no 5mn snapshots empty
         #      8:10   4.0    4    s1-8:10   b1-8:00   aggregation over 2 values
@@ -625,6 +626,7 @@ def test_cumsegagg_bin_mixed_dtype():
             date_range("2020-01-01 08:30:00", periods=6, freq="5T"),
         ),
         # 4/ bin right closed; left label, point of observations included
+        #  'data'
         #  datetime value  qty      snaps      bins   to check
         #                                             no 5mn snapshots empty
         #      8:10   4.0    4    s1-8:10   b1-8:00   aggregation over 2 values
@@ -798,6 +800,51 @@ def test_cumsegagg_bin_snaps_with_null_chunks1(
             date_range("2020-01-01 08:35:00", periods=8, freq="5T"),
         ),
         # 2/ bin right closed; right label, point of observations excluded
+        #  This combination does not make that much sense.
+        #  'data'
+        #  datetime value  qty      snaps     bins   to check
+        #      8:00   4.0    4             b1-8:00
+        #                         s1-8:05
+        #                         s2-8:10  b2-8:30
+        #      8:10   4.2    3    s3-8:15  b2
+        #      8:12   3.9    1    s3       b2
+        #      8:17   5.6    7    s4-8:20  b2
+        #      8:19   6.0    2    s4       b2
+        #      8:20   9.8    6    s5-8:25  b2
+        #                         s6-8:30  b2
+        #                         s7-8:35  b3-9:00
+        #                               |  b3
+        #                        s12-9:00  b4-9:30
+        #                        s13-9:05  b4
+        #                        s14-9:10  b4
+        #      9:10   1.1    8   s15-9:15  b4
+        (
+            "right",
+            "right",
+            "left",
+            # s1, s2     s3->s6      s7->s14      s15                   (first)
+            [nNaN] * 2 + [4.2] * 4 + [nNaN] * 8 + [1.1],
+            # s1, s2     s3->s6                 s7->s14      s15        (max)
+            [nNaN] * 2 + [4.2, 6.0, 9.8, 9.8] + [nNaN] * 8 + [1.1],
+            # s1, s2     s3->s6      s7->s14      s15                   (min)
+            [nNaN] * 2 + [3.9] * 4 + [nNaN] * 8 + [1.1],
+            # s1,s2      s3->s6                 s7->s14      s15        (last)
+            [nNaN] * 2 + [3.9, 6.0, 9.8, 9.8] + [nNaN] * 8 + [1.1],
+            # s1,s2      s3->s6            s7->s14   s15                   (sum)
+            [nNaN] * 2 + [4, 13, 19, 19] + [0] * 8 + [8],
+            # first timestamp in bin
+            [pNaT] * 2
+            + [pTimestamp("2020-01-01 08:10:00")] * 4
+            + [pNaT] * 8
+            + [pTimestamp("2020-01-01 09:10:00")],
+            # null_bins_dti (label)
+            [pTimestamp("2020-01-01 09:00:00")],
+            # start_s_dti
+            "2020-01-01 08:05:00",
+            # null_snaps_dti
+            [pTimestamp("2020-01-01 08:05:00"), pTimestamp("2020-01-01 08:10:00")]
+            + date_range("2020-01-01 08:35:00", periods=8, freq="5T").to_list(),
+        ),
         # 3/ bin left closed; left label, point of observations included
         # 4/ bin right closed; left label, point of observations included
     ],
