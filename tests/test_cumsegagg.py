@@ -888,6 +888,50 @@ def test_cumsegagg_bin_snaps_with_null_chunks1(
             date_range("2020-01-01 08:30:00", periods=8, freq="5T"),
         ),
         # 4/ bin right closed; left label, point of observations included
+        #  'data'
+        #  datetime value  qty      snaps     bins   to check
+        #      8:00   4.0    4    s1-8:00  b1-7:30
+        #                         s2-8:05  b2-8:00
+        #      8:10   4.2    3    s3-8:10  b2
+        #      8:12   3.9    1    s4-8:15  b2
+        #      8:17   5.6    7    s5-8:20  b2
+        #      8:19   6.0    2    s5       b2
+        #      8:20   9.8    6    s5       b2
+        #                         s6-8:25  b2
+        #                         s7-8:30  b2
+        #                         s8-8:35  b3-8:30
+        #                               |  b3
+        #                        s13-9:00  b3
+        #                        s14-9:05  b4-9:00
+        #      9:10   1.1    8   s15-9:10  b4
+        (
+            "right",
+            "left",
+            "right",
+            # s1, s2      s3->s7      s8->s14      s15                  (first)
+            [4.0, nNaN] + [4.2] * 5 + [nNaN] * 7 + [1.1],
+            # s1, s2      s3, s4      s5->s7      s8->s14      s15      (max)
+            [4.0, nNaN] + [4.2] * 2 + [9.8] * 3 + [nNaN] * 7 + [1.1],
+            # s1->s3           s4->s7      s8->s14      s15             (min)
+            [4.0, nNaN, 4.2] + [3.9] * 4 + [nNaN] * 7 + [1.1],
+            # s1->s4                s5->s7      s8->s14      s15        (last)
+            [4.0, nNaN, 4.2, 3.9] + [9.8] * 3 + [nNaN] * 7 + [1.1],
+            # s1->s4       s5->s7     s8->s14   s15                    (sum)
+            [4, 0, 3, 4] + [19] * 3 + [0] * 7 + [8],
+            # first timestamp in bin
+            [pTimestamp("2020-01-01 08:00:00")]
+            + [pNaT]
+            + [pTimestamp("2020-01-01 08:10:00")] * 5
+            + [pNaT] * 7
+            + [pTimestamp("2020-01-01 09:10:00")],
+            # null_bins_dti (label)
+            [pTimestamp("2020-01-01 08:30:00")],
+            # start_s_dti
+            "2020-01-01 08:00:00",
+            # null_snaps_dti
+            [pTimestamp("2020-01-01 08:05:00")]
+            + date_range("2020-01-01 08:35:00", periods=7, freq="5T").to_list(),
+        ),
     ],
 )
 def test_cumsegagg_bin_snaps_with_null_chunks2(
@@ -967,34 +1011,18 @@ def test_cumsegagg_bin_snaps_with_null_chunks2(
 
 
 # WiP
-# attempt to prepare in setup_cgb_agg the CPU dispatcher with make_jcsagg /!\ test to be done with huge dataFrame
-# create a test case testing snapshot and bin, similar to the one above, but this
-# time starting right on the start of a bin, for instance with a point at 8:00
-# and check all logics are ok.
-#
 # test exception: when bin are left closed or right closed, if observation point should be
 # included or not.
-#
-# test bin & snapshot with empty bins / snaps
 # test with a single bin and several snapshots
 # test snapshot: as Grouper, as IntervalIndex
 # segment(): test error message: 'by.closed' should either be 'right' or 'left', nothing else.
 # Test with null values in agg_res (or modify test case above)
 # Test error message if 'bin_on' is None in 'cumsegagg'.
 # test error message input column in 'agg' not in input dataframe.
-# test snapshot:
-# with left-closed bin and snapshot included: snapshot come after bin
-# with left-closed bin and snapsht excluded: snapshot come after bin
 # Test error snap_by.key or snap_by.name not set
-# WiP test case in case snap_by is IntevalIndex: its name has to be set after a column in data.
-# WiP: test cases for 'bin_by_time'
 # Wip test error: if bin_by and snap_by both a pd Grouper, check that both key parameter
 # point on same column, otherwise, not possible possibly to compare
-# Test case snapshot with a snapshot ending exactly on a bin end,
-# and another not ending on a bin end.
 # Snapshot test case with null rows (empty snapshots)
-# Have a snapshot ending exactly on a bin end, then a next snapshot bigger than next bin
-
 # Test exception when bin_on and bin_by.key not the same value
 # Test sxeception
 #   ordered_on not set but snap_by set
@@ -1002,13 +1030,7 @@ def test_cumsegagg_bin_snaps_with_null_chunks2(
 #   ordered_on not ordered
 #   ordered_on different than bin_by.key when bin_by is a Grouper
 # Test name of 'bin_res' index: ordered_on if ordered_on is set, else bin_on
-
-
 # Test boh snapshot + bin, but in data there are
 #  - only snapshots
 #  - only bins
-#  - a mix of them
-# Make a test with empty bins
-# Make a test with empty snapshots (to check all -1 in n_max_null_snap_indices are correctly removed)
-
-# Todo Cumsegagg: remove "if" from the loop
+# attempt to prepare in setup_cgb_agg the CPU dispatcher with make_jcsagg /!\ test to be done with huge dataFrame
