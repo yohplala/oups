@@ -551,9 +551,8 @@ def cumsegagg(
                 keys=(snap_labels, bin_ends),
                 ii_for_first=False,
             )
-        # Take indices of 'next_chunk_starts' corresponding to snapshots and
-        # that come right after indices of 'next_chunk_starts' corresponding to
-        # bins...
+        # Take indices of 'next_chunk_starts' corresponding to bins that are
+        # followed right after by a snapshot.
         # ('append=len(next_chunk_starts)' in 'nonzero()' allows to simulate a
         # configuration in which the last indices in 'next_chunk_starts' is
         # that of a bin, hence to detect if a snapshot is after the actual
@@ -562,9 +561,10 @@ def cumsegagg(
         indices_of_bins_followed_by_a_snaps = nonzero(
             ndiff(bin_indices, append=len(next_chunk_starts)) - 1
         )[0]
-        # ... if both share the same 'next_chunk_starts', then those are
-        # potential additional null snapshots.
-        n_potential_other_null_snaps = len(
+        # Check if the 'next_chunk_starts' for these bins equal that of the
+        # snapshot that follows. If yes, then those are potential additional
+        # null snapshots.
+        n_max_null_snaps += len(
             nonzero(
                 (
                     next_chunk_starts[indices_of_bins_followed_by_a_snaps]
@@ -573,7 +573,6 @@ def cumsegagg(
                 == 0
             )[0]
         )
-        n_max_null_snaps += n_potential_other_null_snaps
         # Initialize 'null_snap_indices' to -1, to identify easily those which
         # are not set. they will be removed in a post-processing step.
         null_snap_indices = -ones(n_max_null_snaps, dtype=DTYPE_INT64)
