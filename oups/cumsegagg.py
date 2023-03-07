@@ -12,10 +12,12 @@ from numba import guvectorize
 from numba import int64
 from numpy import NaN as nNaN
 from numpy import array
+from numpy import diff as ndiff
 from numpy import dtype
 from numpy import isin as nisin
 from numpy import ndarray
 from numpy import ndenumerate
+from numpy import nonzero
 from numpy import ones
 from numpy import zeros
 from pandas import NA as pNA
@@ -208,7 +210,7 @@ def _next_chunk_starts(
                     break
         _d_idx += _d_idx_loc
         if _d_idx == data_max_idx and prev_bin:
-            # Array 'data' terminated and loop stayed in previous bin.
+            # Array 'data' terminated and loop stayed in previous chunk.
             # Then, last loop has not been accounted for.
             # Hence a '+1' to account for it.
             next_chunk_starts[b_idx_loc:] = _d_idx + 1
@@ -268,7 +270,7 @@ def bin_by_time(on: Series, by: Grouper) -> Tuple[IntervalIndex, ndarray, int]:
 
 def cumsegagg(
     data: pDataFrame,
-    agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, list]],
+    agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, Tuple[List[str], List[str], Tuple, int]]],
     bin_by: Union[Grouper, Callable],
     bin_on: Union[str, None] = None,
     binning_buffer: dict = None,
@@ -349,8 +351,8 @@ def cumsegagg(
         In case of snapshotting (``snap_by`` is different than ``None``), the 2
         additional items are:
 
-          - ``bin_ends``, a one dimensional array, specifying with values
-            derived from ``data[ordered_on]`` column the ends of bins.
+          - ``bin_ends``, a one dimensional array, specifying the ends of bins
+            with values derived from ``data[ordered_on]`` column.
             If snapshotting, then points of observation (defined by
             ``snap_by``) can then be positioned with respect to the bin ends.
             This data allows most notably sorting snapshots with respect to
@@ -358,7 +360,8 @@ def cumsegagg(
             notably possible in case of empty snapshots and/or empty bins).
 
           - ``bin_closed``, a str, either `'right'` or `'left'`, indicating if
-            bins are left or right-closed.
+            bins are left or right-closed (i.e. if ``bin_ends`` in included or
+            excluded).
 
     bin_on : Union[str, None]
         Name of the column in `data` over which performing the binning
@@ -454,7 +457,7 @@ def cumsegagg(
         if ordered_on and ordered_on != bin_on:
             raise ValueError("not possible to set 'bin_on' and 'ordered_on' to different values.")
         bins, next_chunk_starts, n_null_bins = bin_by_time(data.loc[:, bin_on], bin_by)
-        if snap_by:
+        if snap_by is not None:
             bin_ends = bins.right
         bin_labels = bins.right if bin_by.label == "right" else bins.left
         bin_closed = bin_by.closed
@@ -469,7 +472,7 @@ def cumsegagg(
         )
         # 'bin_by' binning, possibly jitted.
         bin_by_res = bin_by(on, binning_buffer)
-        if snap_by:
+        if snap_by is not None:
             bin_labels, next_chunk_starts, n_null_bins, bin_ends, bin_closed = bin_by_res
         else:
             bin_labels, next_chunk_starts, n_null_bins = bin_by_res
@@ -478,7 +481,7 @@ def cumsegagg(
     null_bin_indices = zeros(n_null_bins, dtype=DTYPE_INT64)
     # Initiate dict of result columns.
     bin_res = {}
-    if snap_by:
+    if snap_by is not None:
         if not ordered_on:
             raise ValueError("not possible to set 'ordered_on' to `None` in case of snapshotting.")
         if isinstance(snap_by, Grouper):
@@ -507,9 +510,9 @@ def cumsegagg(
             right_edges = snap_by.right
             is_datetime = right_edges.dtype == DTYPE_DATETIME64
             _next_chunk_starts(
-                snap_on.to_numpy(copy=False).view(DTYPE_INT64)
+                data[snap_on].to_numpy(copy=False).view(DTYPE_INT64)
                 if is_datetime
-                else snap_on.to_numpy(copy=False),
+                else data[snap_on].to_numpy(copy=False),
                 right_edges.to_numpy(copy=False).view(DTYPE_INT64)
                 if is_datetime
                 else right_edges.to_numpy(copy=False),
@@ -530,9 +533,6 @@ def cumsegagg(
         snap_labels = snaps.right
         # Parameters related to bins.
         n_snaps = len(snap_labels)
-        # Initialize 'null_snap_indices' to -1, to identify easily those
-        # which are not set, and remove them.
-        null_snap_indices = -ones(n_max_null_snaps, dtype=DTYPE_INT64)
         # Initiate dict of result columns.
         snap_res = {}
         # Consolidate 'next_snap_starts' into 'next_chunk_starts'.
@@ -551,6 +551,32 @@ def cumsegagg(
                 keys=(snap_labels, bin_ends),
                 ii_for_first=False,
             )
+        # Take indices of 'next_chunk_starts' corresponding to snapshots and
+        # that come right after indices of 'next_chunk_starts' corresponding to
+        # bins...
+        # ('append=len(next_chunk_starts)' in 'nonzero()' allows to simulate a
+        # configuration in which the last indices in 'next_chunk_starts' is
+        # that of a bin, hence to detect if a snapshot is after the actual
+        # (real) last bin. Without it, a snapshot after the last bin would not
+        # be detected and if needed, accounted for.)
+        indices_of_bins_followed_by_a_snaps = nonzero(
+            ndiff(bin_indices, append=len(next_chunk_starts)) - 1
+        )[0]
+        # ... if both share the same 'next_chunk_starts', then those are
+        # potential additional null snapshots.
+        n_potential_other_null_snaps = len(
+            nonzero(
+                (
+                    next_chunk_starts[indices_of_bins_followed_by_a_snaps]
+                    - next_chunk_starts[indices_of_bins_followed_by_a_snaps + 1]
+                )
+                == 0
+            )[0]
+        )
+        n_max_null_snaps += n_potential_other_null_snaps
+        # Initialize 'null_snap_indices' to -1, to identify easily those which
+        # are not set. they will be removed in a post-processing step.
+        null_snap_indices = -ones(n_max_null_snaps, dtype=DTYPE_INT64)
     else:
         # Case 'no snapshotting'.
         bin_indices = NULL_INT64_1D_ARRAY
@@ -571,7 +597,7 @@ def cumsegagg(
         bin_res.update(
             {name: bin_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)}
         )
-        if snap_by:
+        if snap_by is not None:
             snap_res_single_dtype = zeros((n_snaps, n_cols), dtype=dtype_)
             snap_res.update(
                 {name: snap_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)}
@@ -579,7 +605,7 @@ def cumsegagg(
         if dtype_ == DTYPE_DATETIME64:
             data_single_dtype = data_single_dtype.view(DTYPE_INT64)
             bin_res_single_dtype = bin_res_single_dtype.view(DTYPE_INT64)
-            if snap_by:
+            if snap_by is not None:
                 snap_res_single_dtype = snap_res_single_dtype.view(DTYPE_INT64)
         # 'data' is a numpy array, with columns in 'expected order',
         # as defined in 'cols_data' & 'cols_res' embedded in 'aggs'.
@@ -607,7 +633,7 @@ def cumsegagg(
             _,
         ) in agg.items():
             bin_res.loc[null_bin_labels, cols_name_in_res] = NULL_DICT[dtype_]
-    if snap_by:
+    if snap_by is not None:
         snap_res = pDataFrame(snap_res, index=snap_labels, copy=False)
         snap_res.index.name = ordered_on
         # Set null values.

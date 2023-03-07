@@ -14,6 +14,7 @@ from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
 from pandas import Grouper
+from pandas import IntervalIndex
 from pandas import NaT as pNaT
 from pandas import Series
 from pandas import Timestamp as pTimestamp
@@ -511,7 +512,7 @@ def test_cumsegagg_bin_mixed_dtype():
             [3.9] * 4 + [nNaN] * 6 + [4.5, 4.5] + [1.1] * 4 + [3.2],
             # s1->s4               s5->s10      s11, s12     s13->s16    s17   (last)
             [3.9, 6.0, 9.8, 9.8] + [nNaN] * 6 + [4.5, 4.5] + [1.1] * 4 + [3.2],
-            # s1->s4           s5->s10  s11,s12  s13->s16   s17                (sum)
+            # s1->s4           s5->s10  s11, s12 s13->s16   s17                (sum)
             [8, 17, 23, 23] + [0] * 6 + [2, 2] + [10] * 4 + [1],
             [pTimestamp("2020-01-01 08:10:00")] * 4
             + [pNaT] * 6
@@ -784,9 +785,9 @@ def test_cumsegagg_bin_snaps_with_null_chunks1(
             [4.0] * 2 + [4.2, 6.0, 9.8, 9.8] + [nNaN] * 8 + [1.1],
             # s1, s2    s3->s6      s7->s14      s15                    (min)
             [4.0] * 2 + [3.9] * 4 + [nNaN] * 8 + [1.1],
-            # s1,s2     s3->s6                 s7->s14      s15         (last)
+            # s1, s2    s3->s6                 s7->s14      s15         (last)
             [4.0] * 2 + [3.9, 6.0, 9.8, 9.8] + [nNaN] * 8 + [1.1],
-            # s1,s2   s3->s6            s7->s14   s15                   (sum)
+            # s1, s2  s3->s6            s7->s14   s15                   (sum)
             [4] * 2 + [8, 17, 23, 23] + [0] * 8 + [8],
             # first timestamp in bin
             [pTimestamp("2020-01-01 08:00:00")] * 6
@@ -828,9 +829,9 @@ def test_cumsegagg_bin_snaps_with_null_chunks1(
             [nNaN] * 2 + [4.2, 6.0, 9.8, 9.8] + [nNaN] * 8 + [1.1],
             # s1, s2     s3->s6      s7->s14      s15                   (min)
             [nNaN] * 2 + [3.9] * 4 + [nNaN] * 8 + [1.1],
-            # s1,s2      s3->s6                 s7->s14      s15        (last)
+            # s1, s2     s3->s6                 s7->s14      s15        (last)
             [nNaN] * 2 + [3.9, 6.0, 9.8, 9.8] + [nNaN] * 8 + [1.1],
-            # s1,s2   s3->s6            s7->s14   s15                   (sum)
+            # s1, s2  s3->s6            s7->s14   s15                   (sum)
             [0] * 2 + [4, 13, 19, 19] + [0] * 8 + [8],
             # first timestamp in bin
             [pNaT] * 2
@@ -872,9 +873,9 @@ def test_cumsegagg_bin_snaps_with_null_chunks1(
             [4.0] * 2 + [4.2, 4.2, 9.8, 9.8] + [nNaN] * 8 + [1.1],
             # s1->s3    s4->s6      s7->s14      s15                   (min)
             [4.0] * 3 + [3.9] * 3 + [nNaN] * 8 + [1.1],
-            # s1,s2     s3->s6                 s7->s14      s15        (last)
+            # s1, s2    s3->s6                 s7->s14      s15        (last)
             [4.0] * 2 + [4.2, 3.9, 9.8, 9.8] + [nNaN] * 8 + [1.1],
-            # s1,s2   s3->s6           s7->s14   s15                   (sum)
+            # s1, s2  s3->s6           s7->s14   s15                   (sum)
             [4] * 2 + [7, 8, 23, 23] + [0] * 8 + [8],
             # first timestamp in bin
             [pTimestamp("2020-01-01 08:00:00")] * 6
@@ -1010,11 +1011,485 @@ def test_cumsegagg_bin_snaps_with_null_chunks2(
     assert snaps_res.equals(snaps_ref)
 
 
+@pytest.mark.parametrize(
+    "b_by_closed, b_by_label, s_by_closed, s_first_val, s_max_val, s_min_val, s_last_val, start_s_dti",
+    [
+        # 1/ bin left closed; left label, point of observations excluded
+        #  'data'
+        #  datetime value           snaps     bins
+        #      8:02   4.0         s1-8:05  b1-8:00
+        #                         s2-8:10  b1
+        #      8:10   4.2         s3-8:15  b1
+        #      8:12   3.9         s3-8:15  b1
+        #      8:17   5.6         s4-8:20  b1
+        #      8:19   6.0         s4       b1
+        #      8:20   9.8         s5-8:25  b1
+        (
+            "left",
+            "left",
+            "left",
+            # s1->s5                                (first)
+            [4.0] * 5,
+            # s1, s2    s3, s4, s5                  (max)
+            [4.0] * 2 + [4.2, 6.0, 9.8],
+            # s1, s2    s3->s5                      (min)
+            [4.0] * 2 + [3.9] * 3,
+            # s1, s2    s3, s4, s5                  (last)
+            [4.0] * 2 + [3.9, 6.0, 9.8],
+            # start_s_dti
+            "2020-01-01 08:05:00",
+        ),
+        # 2/ bin right closed; left label, point of observations excluded
+        #  This combination does not make that much sense.
+        #  'data'
+        #  datetime value           snaps     bins
+        #      8:02   4.0         s1-8:05  b1-8:00
+        #                         s2-8:10  b1
+        #      8:10   4.2         s3-8:15  b1
+        #      8:12   3.9         s3-8:15  b1
+        #      8:17   5.6         s4-8:20  b1
+        #      8:19   6.0         s4       b1
+        #      8:20   9.8         s5-8:25  b1
+        (
+            "right",
+            "left",
+            "left",
+            # s1->s5                                (first)
+            [4.0] * 5,
+            # s1, s2    s3, s4, s5                  (max)
+            [4.0] * 2 + [4.2, 6.0, 9.8],
+            # s1, s2    s3->s5                      (min)
+            [4.0] * 2 + [3.9] * 3,
+            # s1, s2    s3, s4, s5                  (last)
+            [4.0] * 2 + [3.9, 6.0, 9.8],
+            # start_s_dti
+            "2020-01-01 08:05:00",
+        ),
+        # 3/ bin left closed; right label, point of observations included
+        #  'data'
+        #  datetime value           snaps     bins
+        #      8:02   4.0         s1-8:05  b1-8:30
+        #      8:10   4.2         s2-8:10  b1
+        #      8:12   3.9         s3-8:15  b1
+        #      8:17   5.6         s4-8:20  b1
+        #      8:19   6.0         s4       b1
+        #      8:20   9.8         s4       b1
+        (
+            "left",
+            "right",
+            "right",
+            # s1->s4                          (first)
+            [4.0] * 4,
+            # s1->s4                          (max)
+            [4.0, 4.2, 4.2, 9.8],
+            # s1, s2    s3, s4                (min)
+            [4.0] * 2 + [3.9] * 2,
+            # s1->s4                          (last)
+            [4.0, 4.2, 3.9, 9.8],
+            # start_s_dti
+            "2020-01-01 08:05:00",
+        ),
+        # 4/ bin right closed; right label, point of observations included
+        #  'data'
+        #  datetime value           snaps     bins
+        #      8:02   4.0         s1-8:05  b1-8:30
+        #      8:10   4.2         s2-8:10  b1
+        #      8:12   3.9         s3-8:15  b1
+        #      8:17   5.6         s4-8:20  b1
+        #      8:19   6.0         s4       b1
+        #      8:20   9.8         s4       b1
+        (
+            "right",
+            "right",
+            "right",
+            # s1->s4                          (first)
+            [4.0] * 4,
+            # s1->s4                          (max)
+            [4.0, 4.2, 4.2, 9.8],
+            # s1, s2    s3, s4                (min)
+            [4.0] * 2 + [3.9] * 2,
+            # s1->s4                          (last)
+            [4.0, 4.2, 3.9, 9.8],
+            # start_s_dti
+            "2020-01-01 08:05:00",
+        ),
+    ],
+)
+def test_cumsegagg_single_bin_several_snaps(
+    b_by_closed,
+    b_by_label,
+    s_by_closed,
+    s_first_val,
+    s_max_val,
+    s_min_val,
+    s_last_val,
+    start_s_dti,
+):
+    # Test binning and snapshotting aggregation.
+    # - 5 minutes snapshots
+    # - 30 minutes bin (a single one)
+    # - 'data' as follow below
+    values = array([4.0, 4.2, 3.9, 5.6, 6.0, 9.8], dtype=DTYPE_FLOAT64)
+    dtidx = array(
+        [
+            "2020-01-01T08:02",
+            "2020-01-01T08:10",
+            "2020-01-01T08:12",
+            "2020-01-01T08:17",
+            "2020-01-01T08:19",
+            "2020-01-01T08:20",
+        ],
+        dtype=DTYPE_DATETIME64,
+    )
+    value = "value"
+    dti = "dti"
+    data = pDataFrame({value: values, dti: dtidx})
+    agg = {
+        FIRST: (value, FIRST),
+        MAX: (value, MAX),
+        MIN: (value, MIN),
+        LAST: (value, LAST),
+    }
+    bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
+    snap_by = Grouper(freq="5T", closed=s_by_closed, key=dti)
+    bins_res, snaps_res = cumsegagg(
+        data=data,
+        agg=agg,
+        bin_by=bin_by,
+        ordered_on=dti,
+        snap_by=snap_by,
+        allow_bins_snaps_disalignment=True,
+    )
+    bins_ref = data.groupby(bin_by).agg(**agg)
+    assert bins_res.equals(bins_ref)
+    snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5T")
+    snaps_ref = pDataFrame(
+        {
+            FIRST: s_first_val,
+            MAX: s_max_val,
+            MIN: s_min_val,
+            LAST: s_last_val,
+        },
+        index=snaps_dti,
+    )
+    snaps_ref.index.name = dti
+    assert snaps_res.equals(snaps_ref)
+
+
+@pytest.mark.parametrize(
+    "s_by_closed, s_res",
+    [
+        # 1/ point of observations excluded
+        #  'data'
+        #  datetime value  snaps   snaps_id       bins   to check
+        #                   8:00    s1-8:00    b1-8:30
+        #                   8:05    s2-8:05    b1
+        #                   8:06    s3-8:06    b1
+        #                           s4-8:10    b1
+        #      8:10   4.2                      b1
+        #                   8:44    s5-8:44    b2-9:00
+        #                   8:48    s6-8:48    b2
+        #                   8:52    s7-8:52    b2
+        #                           s8-8:55    b2
+        #      8:55   3.2                      b2
+        #                   9:06    s9-9:06    b3-9:30   (not existing in 'bin_res')
+        #                   9:09   s10-9:09    b3
+        #                   9:16   s11-9:16    b3
+        (
+            "left",
+            # s1->s11                          (first, max, min, last)
+            [nNaN] * 11,
+        ),
+        # 2/ point of observations included
+        #  'data'
+        #  datetime value  snaps   snaps_id       bins   to check
+        #                   8:00    s1-8:00    b1-8:30
+        #                   8:05    s2-8:05    b1
+        #                   8:06    s3-8:06    b1
+        #      8:10   4.2           s4-8:10    b1
+        #                   8:44    s5-8:44    b2-9:00
+        #                   8:48    s6-8:48    b2
+        #                   8:52    s7-8:52    b2
+        #      8:55   3.2           s8-8:55    b2
+        #                   9:06    s9-9:06    b3-9:30   (not existing in 'bin_res')
+        #                   9:09   s10-9:09    b3
+        #                   9:16   s11-9:16    b3
+        (
+            "right",
+            # s1->s3     s4      s5->s7       s8      s9->s11
+            [nNaN] * 3 + [4.2] + [nNaN] * 3 + [3.2] + [nNaN] * 3,
+        ),
+    ],
+)
+def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
+    # Test binning and snapshotting aggregation with null chunks.
+    # - 30 minutes bins
+    # - snapshots as an interval index
+    # - 'data' as follow below
+    values = array([4.2, 3.2], dtype=DTYPE_FLOAT64)
+    dtidx = array(
+        [
+            "2020-01-01T08:10",
+            "2020-01-01T08:55",
+        ],
+        dtype=DTYPE_DATETIME64,
+    )
+    value = "value"
+    dti = "dti"
+    data = pDataFrame({value: values, dti: dtidx})
+    agg = {
+        FIRST: (value, FIRST),
+        MAX: (value, MAX),
+        MIN: (value, MIN),
+        LAST: (value, LAST),
+    }
+    bin_by = Grouper(freq="30T", closed="left", label="right", key=dti)
+    snaps_dti = [
+        pTimestamp("2020-01-01 08:00:00"),
+        pTimestamp("2020-01-01 08:05:00"),
+        pTimestamp("2020-01-01 08:06:00"),
+        pTimestamp("2020-01-01 08:10:00"),
+        pTimestamp("2020-01-01 08:44:00"),
+        pTimestamp("2020-01-01 08:48:00"),
+        pTimestamp("2020-01-01 08:52:00"),
+        pTimestamp("2020-01-01 08:55:00"),
+        pTimestamp("2020-01-01 09:06:00"),
+        pTimestamp("2020-01-01 09:09:00"),
+        pTimestamp("2020-01-01 09:16:00"),
+    ]
+    snap_by = IntervalIndex.from_breaks(
+        [pTimestamp("2020-01-01 07:50:00")] + snaps_dti, closed=s_by_closed
+    )
+    bins_res, snaps_res = cumsegagg(
+        data=data,
+        agg=agg,
+        bin_by=bin_by,
+        ordered_on=dti,
+        snap_by=snap_by,
+        allow_bins_snaps_disalignment=True,
+    )
+    bins_ref = data.groupby(bin_by).agg(**agg)
+    assert bins_res.equals(bins_ref)
+    snaps_ref = pDataFrame(
+        {
+            FIRST: s_res,
+            MAX: s_res,
+            MIN: s_res,
+            LAST: s_res,
+        },
+        index=snaps_dti,
+    )
+    snaps_ref.index.name = dti
+    assert snaps_res.equals(snaps_ref)
+
+
+@pytest.mark.parametrize(
+    "b_by_closed, b_by_label, s_by_closed, s_first_val, s_max_val, s_min_val, s_last_val",
+    [
+        # 1/ bin left closed; right label, point of observations excluded
+        #  'data'
+        #  datetime value        snaps    snaps_id       bins   to check
+        #                         7:58     s1-7:58
+        #                         8:00     s2-8:00
+        #      8:00   4.0                  s3-8:13    b1-8:30
+        #      8:10   4.2                  s3         b1
+        #      8:12   3.9                  s3         b1
+        #                         8:13     s3         b1
+        #      8:17   5.6                  s4-8:20    b1
+        #      8:19   6.0                  s4         b1
+        #                         8:20     s4         b1
+        #      8:20   9.8                             b1
+        #                                  s5-8:50    b2
+        #                         8:50     s5         b2-9:00
+        #                         9:06     s6-9:06    b3-9:30
+        #      9:10   1.1                             b3
+        (
+            "left",
+            "right",
+            "left",
+            # s1, s2     s3, s4      s5, s6                           (first)
+            [nNaN] * 2 + [4.0] * 2 + [nNaN] * 2,
+            # s1, s2     s3, s4       s5, s6                          (max)
+            [nNaN] * 2 + [4.2, 6.0] + [nNaN] * 2,
+            # s1, s2     s3, s4      s5, s6                           (min)
+            [nNaN] * 2 + [3.9] * 2 + [nNaN] * 2,
+            # s1, s2     s3, s4       s5, s6                          (last)
+            [nNaN] * 2 + [3.9, 6.0] + [nNaN] * 2,
+        ),
+        # 2/ bin left closed; right label, point of observations included
+        #  'data'
+        #  datetime value        snaps    snaps_id       bins   to check
+        #                         7:58     s1-7:58
+        #      8:00   4.0                  s2-8:00    b1-8:30
+        #      8:10   4.2                  s3-8:13    b1
+        #      8:12   3.9                  s3         b1
+        #                         8:13     s3         b1
+        #      8:17   5.6                  s4-8:20    b1
+        #      8:19   6.0                  s4         b1
+        #      8:20   9.8                  s4         b1
+        #                         8:50     s5-8:50    b2-9:00
+        #                         9:06     s6-9:06    b3-9:30
+        #      9:10   1.1                             b3
+        (
+            "left",
+            "right",
+            "right",
+            # s1     s2->s4      s5, s6                           (first)
+            [nNaN] + [4.0] * 3 + [nNaN] * 2,
+            # s1     s2->s4            s5, s6                     (max)
+            [nNaN] + [4.0, 4.2, 9.8] + [nNaN] * 2,
+            # s1     s2->s4            s5, s6                     (min)
+            [nNaN] + [4.0, 3.9, 3.9] + [nNaN] * 2,
+            # s1     s2->s4            s5, s6                     (last)
+            [nNaN] + [4.0, 3.9, 9.8] + [nNaN] * 2,
+        ),
+        # 3/ bin right closed; left label, point of observations excluded
+        #  'data'
+        #  datetime value        snaps    snaps_id       bins   to check
+        #                         7:58     s1-7:58    b1
+        #                                  s2-8:00    b1
+        #      8:00   4.0                             b1-7:30
+        #      8:10   4.2                  s3-8:13    b2-8:00
+        #      8:12   3.9                  s3         b2
+        #                         8:13     s3         b2
+        #      8:17   5.6                  s4-8:20    b2
+        #      8:19   6.0                  s4         b2
+        #      8:20   9.8                             b2
+        #                         8:50     s5-8:50    b3-8:30
+        #                         9:06     s6-9:06    b4-9:00
+        #      9:10   1.1                             b4
+        (
+            "right",
+            "left",
+            "left",
+            # s1, s2     s3, s4      s5, s6                           (first)
+            [nNaN] * 2 + [4.2] * 2 + [nNaN] * 2,
+            # s1, s2     s3, s4       s5, s6                          (max)
+            [nNaN] * 2 + [4.2, 6.0] + [nNaN] * 2,
+            # s1, s2     s3, s4      s5, s6                           (min)
+            [nNaN] * 2 + [3.9] * 2 + [nNaN] * 2,
+            # s1, s2     s3, s4       s5, s6                          (last)
+            [nNaN] * 2 + [3.9, 6.0] + [nNaN] * 2,
+        ),
+        # 4/ bin right closed; left label, point of observations included
+        #  'data'
+        #  datetime value        snaps    snaps_id       bins   to check
+        #                         7:58     s1-7:58    b1
+        #      8:00   4.0                  s2-8:00    b1-7:30
+        #      8:10   4.2                  s3-8:13    b2-8:00
+        #      8:12   3.9                  s3         b2
+        #                         8:13     s3         b2
+        #      8:17   5.6                  s4-8:20    b2
+        #      8:19   6.0                  s4         b2
+        #      8:20   9.8                  s4         b2
+        #                         8:50     s5-8:50    b3-8:30
+        #                         9:06     s6-9:06    b4-9:00
+        #      9:10   1.1                             b4
+        (
+            "right",
+            "left",
+            "right",
+            # s1     s2->s4            s5, s6                     (first)
+            [nNaN] + [4.0, 4.2, 4.2] + [nNaN] * 2,
+            # s2     s2->s4            s5, s6                     (max)
+            [nNaN] + [4.0, 4.2, 9.8] + [nNaN] * 2,
+            # s1     s2->s4            s5, s6                     (min)
+            [nNaN] + [4.0, 3.9, 3.9] + [nNaN] * 2,
+            # s1     s2->s4            s5, s6                     (last)
+            [nNaN] + [4.0, 3.9, 9.8] + [nNaN] * 2,
+        ),
+    ],
+)
+def test_cumsegagg_snaps_by_as_interval_index(
+    b_by_closed, b_by_label, s_by_closed, s_first_val, s_max_val, s_min_val, s_last_val
+):
+    # Test binning and snapshotting aggregation with null chunks.
+    # - 30 minutes bins
+    # - snapshots as an interval index
+    # - 'data' as follow below
+    values = array([4.0, 4.2, 3.9, 5.6, 6.0, 9.8, 1.1], dtype=DTYPE_FLOAT64)
+    dtidx = array(
+        [
+            "2020-01-01T08:00",
+            "2020-01-01T08:10",
+            "2020-01-01T08:12",
+            "2020-01-01T08:17",
+            "2020-01-01T08:19",
+            "2020-01-01T08:20",
+            "2020-01-01T09:10",
+        ],
+        dtype=DTYPE_DATETIME64,
+    )
+    value = "value"
+    dti = "dti"
+    data = pDataFrame({value: values, dti: dtidx})
+    agg = {
+        FIRST: (value, FIRST),
+        MAX: (value, MAX),
+        MIN: (value, MIN),
+        LAST: (value, LAST),
+    }
+    bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
+    snaps_dti = [
+        pTimestamp("2020-01-01 07:58:00"),
+        pTimestamp("2020-01-01 08:00:00"),
+        pTimestamp("2020-01-01 08:13:00"),
+        pTimestamp("2020-01-01 08:20:00"),
+        pTimestamp("2020-01-01 08:50:00"),
+        pTimestamp("2020-01-01 09:06:00"),
+    ]
+    snap_by = IntervalIndex.from_breaks(
+        [pTimestamp("2020-01-01 07:50:00")] + snaps_dti, closed=s_by_closed
+    )
+    bins_res, snaps_res = cumsegagg(
+        data=data,
+        agg=agg,
+        bin_by=bin_by,
+        ordered_on=dti,
+        snap_by=snap_by,
+        allow_bins_snaps_disalignment=True,
+    )
+    bins_ref = data.groupby(bin_by).agg(**agg)
+    assert bins_res.equals(bins_ref)
+    snaps_ref = pDataFrame(
+        {
+            FIRST: s_first_val,
+            MAX: s_max_val,
+            MIN: s_min_val,
+            LAST: s_last_val,
+        },
+        index=snaps_dti,
+    )
+    snaps_ref.index.name = dti
+    assert snaps_res.equals(snaps_ref)
+
+
+def test_exception_bins_right_closed_snaps_excluded():
+    # Test exception if bins are right closed and observation points are
+    # excluded.
+    values = array([4.0], dtype=DTYPE_FLOAT64)
+    dtidx = array(["2020-01-01T08:00"], dtype=DTYPE_DATETIME64)
+    value = "value"
+    dti = "dti"
+    data = pDataFrame({value: values, dti: dtidx})
+    agg = {FIRST: (value, FIRST)}
+    bin_by = Grouper(freq="10T", closed="right", label="left", key=dti)
+    snap_by = Grouper(freq="5T", closed="left", key=dti)
+    with pytest.raises(ValueError, match="^as a result of the logic"):
+        bins_res, snaps_res = cumsegagg(
+            data=data,
+            agg=agg,
+            bin_by=bin_by,
+            ordered_on=dti,
+            snap_by=snap_by,
+        )
+
+
 # WiP
-# test exception: when bin are left closed or right closed, if observation point should be
-# included or not.
-# test with a single bin and several snapshots
-# test snapshot: as Grouper, as IntervalIndex
+# test: with dict coming from setup_cbg_agg setup independently (not an 'agg' as per pandas standard)
+# rename setup_cbg_agg into setup_cumsegagg + create a 'cumsegby' creating 'next_chunk_starts' /!\ check chainagg: what is done during binning?
+# test exception: raise error if null values in result (bins or snaps): this is not normal and hint a bug
+# test bin-by Callable with either snapshot as IntervalIndex or grouper
 # segment(): test error message: 'by.closed' should either be 'right' or 'left', nothing else.
 # Test with null values in agg_res (or modify test case above)
 # Test error message if 'bin_on' is None in 'cumsegagg'.
