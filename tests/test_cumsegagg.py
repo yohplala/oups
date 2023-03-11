@@ -9,14 +9,11 @@ from numpy import NaN as nNaN
 from numpy import all as nall
 from numpy import array
 from numpy import ndarray
-from numpy import zeros
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
-from pandas import DatetimeIndex
 from pandas import Grouper
 from pandas import IntervalIndex
 from pandas import NaT as pNaT
-from pandas import Series
 from pandas import Timestamp as pTimestamp
 from pandas import date_range
 
@@ -24,10 +21,8 @@ from oups.cumsegagg import DTYPE_DATETIME64
 from oups.cumsegagg import DTYPE_FLOAT64
 from oups.cumsegagg import DTYPE_INT64
 from oups.cumsegagg import DTYPE_NULLABLE_INT64
-from oups.cumsegagg import _next_chunk_starts
-from oups.cumsegagg import bin_by_time
 from oups.cumsegagg import cumsegagg
-from oups.cumsegagg import setup_cgb_agg
+from oups.cumsegagg import setup_csagg
 from oups.jcumsegagg import FIRST
 from oups.jcumsegagg import LAST
 from oups.jcumsegagg import MAX
@@ -44,7 +39,7 @@ from oups.jcumsegagg import jsum
 # tmp_path = os_path.expanduser('~/Documents/code/data/oups')
 
 
-def test_setup_cgb_agg():
+def test_setup_csagg():
     # Test config generation for aggregation step in cumsegagg.
     # ``{dtype: List[str], 'cols_name_in_data'
     #                      column name in input data, with this dtype,
@@ -79,10 +74,10 @@ def test_setup_cgb_agg():
         "val3_min": ("val3_int", MIN),
         "val3_max": ("val3_int", MAX),
     }
-    cgb_agg_cfg_res = setup_cgb_agg(agg_cfg, df.dtypes.to_dict())
+    csagg_cfg_res = setup_csagg(agg_cfg, df.dtypes.to_dict())
     # In reference results, the 3rd iterable is voluntarily a tuple, to "flag"
     # it and unpack it when checking it ('assert' below).
-    cgb_agg_cfg_ref = {
+    csagg_cfg_ref = {
         DTYPE_FLOAT64: [
             ["val1_float", "val2_float"],
             ["val1_first", "val2_first", "val2_sum"],
@@ -118,7 +113,7 @@ def test_setup_cgb_agg():
             3,
         ],
     }
-    for val_res, val_ref in zip(cgb_agg_cfg_res.values(), cgb_agg_cfg_ref.values()):
+    for val_res, val_ref in zip(csagg_cfg_res.values(), csagg_cfg_ref.values()):
         for it_res, it_ref in zip(val_res, val_ref):
             if isinstance(it_ref, tuple):
                 for sub_it_res, sub_it_ref in zip(it_res, it_ref):
@@ -129,228 +124,6 @@ def test_setup_cgb_agg():
                             assert sub_sub_it_res == sub_sub_it_ref
             else:
                 assert it_res == it_ref
-
-
-@pytest.mark.parametrize(
-    "data, right_edges, right, ref, n_null_chunks_ref",
-    [
-        (
-            #      0  1  2  3  4  5  6
-            array([1, 2, 3, 4, 7, 8, 9], dtype=DTYPE_INT64),
-            #      2  4  4  5  6
-            array([2, 5, 6, 7, 8], dtype=DTYPE_INT64),
-            True,
-            array([2, 4, 4, 5, 6], dtype=DTYPE_INT64),
-            1,
-        ),
-        (
-            #      0  1  2  3  4  5  6
-            array([1, 2, 3, 4, 7, 8, 9], dtype=DTYPE_INT64),
-            #      1  4  4  4  5
-            array([2, 5, 6, 7, 8], dtype=DTYPE_INT64),
-            False,
-            array([1, 4, 4, 4, 5], dtype=DTYPE_INT64),
-            2,
-        ),
-        (
-            #      0  1  2  3  4  5  6
-            array([1, 2, 3, 4, 7, 8, 9], dtype=DTYPE_INT64),
-            #      7   7   7   7
-            array([50, 60, 70, 88], dtype=DTYPE_INT64),
-            False,
-            array([7, 7, 7, 7], dtype=DTYPE_INT64),
-            3,
-        ),
-        (
-            #       0   1   2
-            array([10, 22, 32], dtype=DTYPE_INT64),
-            #      0  0  0  0
-            array([5, 6, 7, 8], dtype=DTYPE_INT64),
-            False,
-            array([0, 0, 0, 0], dtype=DTYPE_INT64),
-            4,
-        ),
-        (
-            #      0  1  2
-            array([5, 5, 6], dtype=DTYPE_INT64),
-            #      0  2  3  3
-            array([5, 6, 7, 8], dtype=DTYPE_INT64),
-            False,
-            array([0, 2, 3, 3], dtype=DTYPE_INT64),
-            2,
-        ),
-        (
-            #      0  1  2  3  4
-            array([5, 5, 7, 7, 7], dtype=DTYPE_INT64),
-            #      0  2  2  5
-            array([5, 6, 7, 8], dtype=DTYPE_INT64),
-            False,
-            array([0, 2, 2, 5], dtype=DTYPE_INT64),
-            2,
-        ),
-    ],
-)
-def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref):
-    next_chunk_starts = zeros(len(right_edges), dtype=DTYPE_INT64)
-    n_null_chunks = zeros(1, dtype=DTYPE_INT64)
-    _next_chunk_starts(data, right_edges, right, next_chunk_starts, n_null_chunks)
-    assert nall(ref == next_chunk_starts)
-    assert n_null_chunks[0] == n_null_chunks_ref
-
-
-@pytest.mark.parametrize(
-    "bin_on, by, bin_labels_ref, next_chunk_starts_ref, n_null_bins_ref",
-    [
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:00"),
-                    pTimestamp("2020/01/01 08:04"),
-                    pTimestamp("2020/01/01 08:05"),
-                ]
-            ),
-            Grouper(freq="5T", label="left", closed="left"),
-            DatetimeIndex(
-                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
-            ),
-            array([2, 3], dtype=DTYPE_INT64),
-            0,
-        ),
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:00"),
-                    pTimestamp("2020/01/01 08:03"),
-                    pTimestamp("2020/01/01 08:04"),
-                ]
-            ),
-            Grouper(freq="5T", label="left", closed="left"),
-            DatetimeIndex(["2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"),
-            array([3], dtype=DTYPE_INT64),
-            0,
-        ),
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:01"),
-                    pTimestamp("2020/01/01 08:03"),
-                    pTimestamp("2020/01/01 08:05"),
-                ]
-            ),
-            Grouper(freq="5T", label="left", closed="left"),
-            DatetimeIndex(
-                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
-            ),
-            array([2, 3], dtype=DTYPE_INT64),
-            0,
-        ),
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:00"),
-                    pTimestamp("2020/01/01 08:03"),
-                    pTimestamp("2020/01/01 08:05"),
-                ]
-            ),
-            Grouper(freq="5T", label="right", closed="left"),
-            DatetimeIndex(
-                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"], dtype=DTYPE_DATETIME64, freq="5T"
-            ),
-            array([2, 3], dtype=DTYPE_INT64),
-            0,
-        ),
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:00"),
-                    pTimestamp("2020/01/01 08:03"),
-                    pTimestamp("2020/01/01 08:04"),
-                ]
-            ),
-            Grouper(freq="5T", label="right", closed="left"),
-            DatetimeIndex(["2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"),
-            array([3], dtype=DTYPE_INT64),
-            0,
-        ),
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:00"),
-                    pTimestamp("2020/01/01 08:04"),
-                    pTimestamp("2020/01/01 08:05"),
-                ]
-            ),
-            Grouper(freq="5T", label="left", closed="right"),
-            DatetimeIndex(
-                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"
-            ),
-            array([1, 3], dtype=DTYPE_INT64),
-            0,
-        ),
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:00"),
-                    pTimestamp("2020/01/01 08:03"),
-                    pTimestamp("2020/01/01 08:04"),
-                ]
-            ),
-            Grouper(freq="5T", label="left", closed="right"),
-            DatetimeIndex(
-                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"
-            ),
-            array([1, 3], dtype=DTYPE_INT64),
-            0,
-        ),
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:01"),
-                    pTimestamp("2020/01/01 08:03"),
-                    pTimestamp("2020/01/01 08:04"),
-                ]
-            ),
-            Grouper(freq="5T", label="left", closed="right"),
-            DatetimeIndex(["2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"),
-            array([3], dtype=DTYPE_INT64),
-            0,
-        ),
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:00"),
-                    pTimestamp("2020/01/01 08:04"),
-                    pTimestamp("2020/01/01 08:05"),
-                ]
-            ),
-            Grouper(freq="5T", label="right", closed="right"),
-            DatetimeIndex(
-                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
-            ),
-            array([1, 3], dtype=DTYPE_INT64),
-            0,
-        ),
-        (
-            Series(
-                [
-                    pTimestamp("2020/01/01 08:01"),
-                    pTimestamp("2020/01/01 08:03"),
-                    pTimestamp("2020/01/01 08:04"),
-                ]
-            ),
-            Grouper(freq="5T", label="right", closed="right"),
-            DatetimeIndex(["2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"),
-            array([3], dtype=DTYPE_INT64),
-            0,
-        ),
-    ],
-)
-def test_bin_by_time(bin_on, by, bin_labels_ref, next_chunk_starts_ref, n_null_bins_ref):
-    bins, next_chunk_starts, n_null_bins = bin_by_time(bin_on, by)
-    bin_labels = bins.left if by.label == "left" else bins.right
-    assert nall(bin_labels == bin_labels_ref)
-    assert nall(next_chunk_starts == next_chunk_starts_ref)
-    assert n_null_bins == n_null_bins_ref
 
 
 @pytest.mark.parametrize(
@@ -1485,10 +1258,27 @@ def test_exception_bins_right_closed_snaps_excluded():
         )
 
 
+def test_exception_error_on_0():
+    # Test exception if there are 0 in aggregation results.
+    values = array([0.0], dtype=DTYPE_FLOAT64)
+    dtidx = array(["2020-01-01T08:00"], dtype=DTYPE_DATETIME64)
+    value = "value"
+    dti = "dti"
+    data = pDataFrame({value: values, dti: dtidx})
+    agg = {FIRST: (value, FIRST)}
+    bin_by = Grouper(freq="10T", closed="left", label="right", key=dti)
+    snap_by = Grouper(freq="5T", closed="left", key=dti)
+    with pytest.raises(ValueError, match="^at least one null value exists in 'snap_res'"):
+        bins_res, snaps_res = cumsegagg(
+            data=data,
+            agg=agg,
+            bin_by=bin_by,
+            ordered_on=dti,
+            snap_by=snap_by,
+        )
+
+
 # WiP
-# test: with dict coming from setup_cbg_agg setup independently (not an 'agg' as per pandas standard)
-# rename setup_cbg_agg into setup_cumsegagg + create a 'cumsegby' creating 'next_chunk_starts' /!\ check chainagg: what is done during binning?
-# test exception: raise error if null values in result (bins or snaps): this is not normal and hint a bug
 # test bin-by Callable with either snapshot as IntervalIndex or grouper
 # segment(): test error message: 'by.closed' should either be 'right' or 'left', nothing else.
 # Test with null values in agg_res (or modify test case above)
@@ -1499,11 +1289,15 @@ def test_exception_bins_right_closed_snaps_excluded():
 # point on same column, otherwise, not possible possibly to compare
 # Snapshot test case with null rows (empty snapshots)
 # Test exception when bin_on and bin_by.key not the same value
+# test with data empty: return None
 # Test sxeception
 #   ordered_on not set but snap_by set
 #   ordered_on different than snap_by.key
-#   ordered_on not ordered
+#   ordered_on not ordered, either datetime index or int index.
 #   ordered_on different than bin_by.key when bin_by is a Grouper
+# test exception bin_by a Grouper with a key on a not ordered column.
+# test exception if 'snap_by.closed' is not properly set to "right" or "left"
+# test exception if 'bin_closed' is not properly set to "right" or "left"
 # Test name of 'bin_res' index: ordered_on if ordered_on is set, else bin_on
 # Test boh snapshot + bin, but in data there are
 #  - only snapshots

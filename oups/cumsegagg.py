@@ -6,17 +6,11 @@ Created on Wed Dec  4 21:30:00 2021.
 """
 from typing import Callable, Dict, List, Tuple, Union
 
-from numba import boolean
-from numba import float64
-from numba import guvectorize
-from numba import int64
 from numpy import NaN as nNaN
 from numpy import array
 from numpy import diff as ndiff
 from numpy import dtype
 from numpy import isin as nisin
-from numpy import ndarray
-from numpy import ndenumerate
 from numpy import nonzero
 from numpy import ones
 from numpy import zeros
@@ -26,11 +20,10 @@ from pandas import Grouper
 from pandas import Int64Dtype
 from pandas import IntervalIndex
 from pandas import NaT as pNaT
-from pandas import Series
 from pandas import Timedelta
-from pandas import date_range
-from pandas.core.resample import _get_timestamp_range_edges as gtre
 
+from oups.binners import _next_chunk_starts
+from oups.binners import bin_by_time
 from oups.jcumsegagg import AGG_FUNCS
 from oups.jcumsegagg import jcsagg
 from oups.utils import merge_sorted
@@ -47,7 +40,7 @@ NULL_INT64_2D_ARRAY = NULL_INT64_1D_ARRAY.reshape(0, 0)
 NULL_DICT = {DTYPE_INT64: pNA, DTYPE_FLOAT64: nNaN, DTYPE_DATETIME64: pNaT}
 
 
-def setup_cgb_agg(
+def setup_csagg(
     agg: Dict[str, Tuple[str, str]], data_dtype: Dict[str, dtype]
 ) -> Dict[dtype, Tuple[List[str], List[str], Tuple, int]]:
     """Construct chaingrouby aggregation configuration.
@@ -152,122 +145,6 @@ def setup_cgb_agg(
     return cgb_agg_cfg
 
 
-@guvectorize(
-    [
-        (int64[:], int64[:], boolean, int64[:], int64[:]),
-        (float64[:], float64[:], boolean, int64[:], int64[:]),
-    ],
-    "(l),(m),(),(n),(o)",
-    nopython=True,
-)
-def _next_chunk_starts(
-    data: ndarray,
-    right_edges: ndarray,
-    right: bool,
-    next_chunk_starts: ndarray,
-    n_null_chunks: ndarray,
-):
-    """Return row indices for starts of next chunks.
-
-    Parameters
-    ----------
-    data: ndarray
-        One-dimensional array from which deriving next chunk starts, assuming
-        data is sorted (monotonic increasing data).
-    right_edges: ndarray
-        One-dimensional array of chunk right edges, sorted.
-    right : bool
-        If `True`, histogram is built considering right-closed bins.
-        If `False`, histogram is built considering left-closed bins.
-
-    Returns
-    -------
-    next_chunk_starts: ndarray
-        One-dimensional array, containing row indices for start of next chunk,
-        to bin 'data' as per 'right_edges'.
-        Size of 'next_chunk_starts' is ``len(right_edges)``.
-    n_null_chunks: ndarray
-        One-dimensional array of size 1, which single value is the number of
-        null chunks identified.
-    """
-    # Flag for counting null chunks.
-    prev_d_idx = 0
-    _d_idx = prev_d_idx = 0
-    data_max_idx = len(data) - 1
-    for (b_idx_loc,), bin_ in ndenumerate(right_edges):
-        prev_bin = True
-        if right:
-            # Right-closed bins.
-            for (_d_idx_loc,), val in ndenumerate(data[_d_idx:]):
-                if val > bin_:
-                    prev_bin = False
-                    break
-        else:
-            # Left-closed bins.
-            for (_d_idx_loc,), val in ndenumerate(data[_d_idx:]):
-                if val >= bin_:
-                    prev_bin = False
-                    break
-        _d_idx += _d_idx_loc
-        if _d_idx == data_max_idx and prev_bin:
-            # Array 'data' terminated and loop stayed in previous chunk.
-            # Then, last loop has not been accounted for.
-            # Hence a '+1' to account for it.
-            next_chunk_starts[b_idx_loc:] = _d_idx + 1
-            n_null_chunks[0] += len(next_chunk_starts[b_idx_loc:]) - 1
-            return
-        else:
-            next_chunk_starts[b_idx_loc] = _d_idx
-            if prev_d_idx == _d_idx:
-                n_null_chunks[0] += 1
-            else:
-                prev_d_idx = _d_idx
-
-
-def bin_by_time(on: Series, by: Grouper) -> Tuple[IntervalIndex, ndarray, int]:
-    """Bin as per pandas Grouper of an ordered date time index.
-
-    Parameters
-    ----------
-    on : Series
-        Ordered date time index over which performing the binning as defined
-        per 'by'.
-    by : Grouper
-        Setup to define binning as a pandas Grouper
-
-    Returns
-    -------
-    bins : IntervalIndex
-        IntervalIndex defining each bin by its left and right edges, and how
-        it is closed, right or left.
-    next_chunk_starts : ndarray
-        One-dimensional array of `int` specifying the row indices of the
-        next-bin starts, for each bin. Successive identical indices implies
-        empty bins, except the first bin in the series.
-    n_null_chunks: int
-        Number of null chunks identified in 'on'.
-    """
-    start, end = gtre(
-        first=on.iloc[0],
-        last=on.iloc[-1],
-        freq=by.freq,
-        closed=by.closed,
-        origin=by.origin,
-        offset=by.offset,
-    )
-    edges = date_range(start, end, freq=by.freq)
-    next_chunk_starts = zeros(len(edges) - 1, dtype=DTYPE_INT64)
-    n_null_chunks = zeros(1, dtype=DTYPE_INT64)
-    _next_chunk_starts(
-        on.to_numpy(copy=False).view(DTYPE_INT64),
-        edges[1:].to_numpy(copy=False).view(DTYPE_INT64),
-        by.closed == "right",
-        next_chunk_starts,
-        n_null_chunks,
-    )
-    return IntervalIndex.from_breaks(edges, closed=by.closed), next_chunk_starts, n_null_chunks[0]
-
-
 def cumsegagg(
     data: pDataFrame,
     agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, Tuple[List[str], List[str], Tuple, int]]],
@@ -277,6 +154,7 @@ def cumsegagg(
     ordered_on: Union[str, None] = None,
     snap_by: Union[Grouper, IntervalIndex, None] = None,
     allow_bins_snaps_disalignment: bool = False,
+    error_on_0: bool = True,
 ) -> Union[pDataFrame, Tuple[pDataFrame, pDataFrame]]:
     """Cumulative segmented aggregations, with optional snapshotting.
 
@@ -290,7 +168,7 @@ def cumsegagg(
     Parameters
     ----------
     data: pDataFrame
-        A pandas Dataframe containing the columns over which binning (relying
+        A pandas DataFrame containing the columns over which binning (relying
         on ``bin_on`` column), performing aggregations and optionally
         snapshotting (relying on column pointed by ``snap_by.key`` or
         ``snap_by.name`` depending if a Grouper or an IntervalIndex
@@ -302,55 +180,52 @@ def cumsegagg(
         If in the form ``Dict[str, Tuple[str, str]]`` (typically a form
         compatible with pandas aggregation), then it is transformed in the 2nd
         form ``Dict[dtype, Tuple[List[str], Tuple[int, str], List[str]]]]``.
+          - in the form ``Dict[str, Tuple[str, str]]``
+            - keys are ``str``, requested output column name
+            - values are ``tuple`` with 1st component a ``str`` for the input
+              column name, and 2nd component a ``str`` for aggregation function
+              name.
 
-        - in the form ``Dict[str, Tuple[str, str]]``
-
-          - keys are ``str``, requested output column name
-          - values are ``tuple`` with 1st component a ``str`` for the input
-            column name, and 2nd component a ``str`` for aggregation function
-            name.
-
-        - the 2nd form is that returned by the function ``setup_cgb_agg``.
+          - the 2nd form is that returned by the function ``setup_cgb_agg``.
 
     bin_by : Union[Grouper, Callable]
         Callable or pandas Grouper to perform binning.
         If a Callable, is called with following parameters:
         ``bin_by(on, binning_buffer)``
         where:
-
           - ``on``,
-
-            - either ``ordered_on`` is ``None``. ``on`` is then a pandas Series
-              made from ``data[bin_on]`` column.
+            - either ``ordered_on`` is ``None``. ``on`` is then a 1-column
+              pandas DataFrame made from ``data[bin_on]`` column.
             - or ``ordered_on`` is provided and is different than ``bin_on``.
-              Then ``on`` is a 2-column pandas Dataframe made of
-              ``data[[bin_on, ordered_on]``. Values from ``data[ordered_on]``
+              Then ``on`` is a 2-column pandas DataFrame made of
+              ``data[[bin_on, ordered_on]]``. Values from ``data[ordered_on]``
               can be used advantageously as bin labels.
               Also, values from ``data[ordered_on]`` have to be used when
-              'snap_by' is set. See below.
+              'snap_by' is set to define bin ends. See below.
 
-          - ``binning_buffer``, see corresponding parameter of this function.
+          - ``binning_buffer``, a dict that has to be modified in-place by
+             'bin_by' to keep internal parameters and to allow new faultless
+             calls to 'bin_by'.
 
         It has then to return a Tuple made of 3 or 5 items. There are 3 items
         if no snapshotting.
-
-          - ``bin_labels``, a pandas Series or one-dimensional array, which
-            values are expected to be all bin labels, incl. for empty
-            bins, as they will appear in aggregation results. Labels can be of
-            any type.
-
           - ``next_chunk_starts``, a one-dimensional array of `int`, specifying
             the row index at which the next bin starts (included) as found in
             ``bin_on``.
             If the same index appears several time, it means that corresponding
             bins are empty, except the first one. In this case, corresponding
             rows in aggregation result will be filled with null values.
-
+          - ``bin_labels``, a pandas Series or one-dimensional array, which
+            values are expected to be all bin labels, incl. for empty
+            bins, as they will appear in aggregation results. Labels can be of
+            any type.
           - ``n_null_bins``, an `int` indicating the number of empty bins.
 
         In case of snapshotting (``snap_by`` is different than ``None``), the 2
         additional items are:
-
+          - ``bin_closed``, a str, either `'right'` or `'left'`, indicating if
+            bins are left or right-closed (i.e. if ``bin_ends`` in included or
+            excluded).
           - ``bin_ends``, a one dimensional array, specifying the ends of bins
             with values derived from ``data[ordered_on]`` column.
             If snapshotting, then points of observation (defined by
@@ -358,10 +233,6 @@ def cumsegagg(
             This data allows most notably sorting snapshots with respect to
             bins in case they start/end at the same row index in data (most
             notably possible in case of empty snapshots and/or empty bins).
-
-          - ``bin_closed``, a str, either `'right'` or `'left'`, indicating if
-            bins are left or right-closed (i.e. if ``bin_ends`` in included or
-            excluded).
 
     bin_on : Union[str, None]
         Name of the column in `data` over which performing the binning
@@ -385,9 +256,8 @@ def cumsegagg(
         retrieved to serve as locations for points of observation.
         Additionally, ``snap_by.closed`` has to be set, either to `left` or
         `right`. As a convention, at point of observation, if
-
-              - `left`, then values at point of observation are excluded.
-              - `right`, then values at point of observation are included.
+          - `left`, then values at point of observation are excluded.
+          - `right`, then values at point of observation are included.
 
     allow_bins_snaps_disalignment : bool, default False
         By default, check that ``bin_by.closed`` and ``snap_by.closed`` are not
@@ -398,6 +268,13 @@ def cumsegagg(
         relevance of such a use is not clear and for safety, this combination
         is not possible by default.
         To make it possible, set 'allow_bins_snaps_disalignment' `True`.
+    error_on_0 : bool, default True
+        By default, check that there is no `0` values (either int or float) in
+        aggregation results (bins and snapshots). ``cumsegagg()`` is
+        experimental and a `0` value is likely to hint a bug. If raised, the
+        result should be double checked. Ultimately, please, report the use
+        case that is raising this error, and what would be the expected
+        behavior.
 
     Returns
     -------
@@ -412,9 +289,7 @@ def cumsegagg(
     observation". At such a point, an observation of the "on-going" bin is
     made. In case of snapshot(s) positioned exactly on segment(s) ends, at the
     same row index in data, if
-
       - the bins are left-closed, `[(`,
-
           - if points of observations are excluded, then snapshot(s) will come
             before said bin(s), that is to say, these snapshots will be equal
             to the first bin (subsequent bins are then "empty" ones).
@@ -426,19 +301,29 @@ def cumsegagg(
         that is to say, these snapshots will be equal to the first bin
         (subsequent bins are then "empty" ones).
 
+    When using 'cumsegagg' through 'chainagg' function (i.e. for chained calls
+    to 'cumsegagg') and if setting `bin_by` as a Callable, the developer should
+    take care that `bin_by` keeps in the 'buffer' parameter all the data needed
+    to:
+      - create the correct number of bins that would be in-between the data
+        processed at the previous aggregation iteration, and the new data. This
+        has to show in 'next_chunk_starts' array that is returned.
+      - appropriately label the first bin.
+        - either it is a new bin, different than the last one from previous
+          aggregation iteration. Then the label of the new bin has to be
+          different than that of the last one from previous iteration.
+        - or it is the same bin that is continuing. Then the label has be the
+          same. This ensures that when recording the new aggregation result,
+          the data from the previous iteration (last bin was in-progress, i.e.
+          incomplete) is overwritten.
+
     """
-    if ordered_on:
-        if (
-            data[ordered_on].dtype == DTYPE_DATETIME64
-            and (data[ordered_on].diff() >= Timedelta(0)).all()
-            or data[ordered_on].dtype != DTYPE_DATETIME64
-            and (data[ordered_on].diff() >= 0).all()
-        ):
-            # 'ordered_on' is not an ordered column.
-            raise ValueError(f"column '{ordered_on}' is not ordered.")
+    if not len(data):
+        # 'data' is empty. Simply return.
+        return
     if isinstance(next(iter(agg.keys())), str):
         # Reshape aggregation definition.
-        agg = setup_cgb_agg(agg, data.dtypes.to_dict())
+        agg = setup_csagg(agg, data.dtypes.to_dict())
     # All 'bin_xxx' parameters are expected to be the size of the resulting
     # aggregated array from 'groupby' operation, i.e. including empty bins.
     # 'bin_labels', 'next_chunk_starts', and if defined, 'bin_ends'.
@@ -456,7 +341,13 @@ def cumsegagg(
             raise ValueError("not possible to set both 'bin_by.key' and 'bin_on' to `None`.")
         if ordered_on and ordered_on != bin_on:
             raise ValueError("not possible to set 'bin_on' and 'ordered_on' to different values.")
-        bins, next_chunk_starts, n_null_bins = bin_by_time(data.loc[:, bin_on], bin_by)
+        elif not ordered_on:
+            # Case 'ordered_on' has not been provided but 'bin_on' has been.
+            # Then set 'ordered_on' to 'bin_on'.
+            ordered_on = bin_on
+        # /!\ WiP
+        # homogenize output from bin_by_time & bin_by_x_rows
+        next_chunk_starts, bins, n_null_bins = bin_by_time(data.loc[:, bin_on], bin_by)
         if snap_by is not None:
             bin_ends = bins.right
         bin_labels = bins.right if bin_by.label == "right" else bins.left
@@ -468,14 +359,25 @@ def cumsegagg(
         on = (
             data.loc[:, [bin_on, ordered_on]]
             if ordered_on and ordered_on != bin_on
-            else data.loc[:, bin_on]
+            else data.loc[:, [bin_on]]
         )
         # 'bin_by' binning, possibly jitted.
         bin_by_res = bin_by(on, binning_buffer)
         if snap_by is not None:
-            bin_labels, next_chunk_starts, n_null_bins, bin_ends, bin_closed = bin_by_res
+            next_chunk_starts, bin_labels, n_null_bins, bin_closed, bin_ends = bin_by_res
         else:
-            bin_labels, next_chunk_starts, n_null_bins = bin_by_res
+            next_chunk_starts, bin_labels, n_null_bins = bin_by_res
+    if ordered_on:
+        if (
+            data[ordered_on].dtype == DTYPE_DATETIME64
+            and (data[ordered_on].diff() >= Timedelta(0)).all()
+            or data[ordered_on].dtype != DTYPE_DATETIME64
+            and (data[ordered_on].diff() >= 0).all()
+        ):
+            # 'ordered_on' is not an ordered column.
+            raise ValueError(
+                f"column '{ordered_on}' is not ordered. It has to be for 'cumsegagg' to operate faultlessly."
+            )
     # Parameters related to bins.
     n_bins = len(bin_labels)
     null_bin_indices = zeros(n_null_bins, dtype=DTYPE_INT64)
@@ -483,7 +385,9 @@ def cumsegagg(
     bin_res = {}
     if snap_by is not None:
         if not ordered_on:
-            raise ValueError("not possible to set 'ordered_on' to `None` in case of snapshotting.")
+            raise ValueError(
+                "not possible to leave 'ordered_on' to `None` in case of snapshotting."
+            )
         if isinstance(snap_by, Grouper):
             if snap_by.key and snap_by.key != ordered_on:
                 raise ValueError(
@@ -501,7 +405,7 @@ def cumsegagg(
         # Define points of observation
         if isinstance(snap_by, Grouper):
             # 'snap_by' is an Grouper.
-            snaps, next_snap_starts, n_max_null_snaps = bin_by_time(data.loc[:, snap_on], snap_by)
+            next_snap_starts, snaps, n_max_null_snaps = bin_by_time(data.loc[:, snap_on], snap_by)
         else:
             # 'snap_by' is an IntervalIndex.
             snaps = snap_by
@@ -652,6 +556,16 @@ def cumsegagg(
                 _,
             ) in agg.items():
                 snap_res.loc[null_snap_labels, cols_name_in_res] = NULL_DICT[dtype_]
+    if error_on_0:
+        if snap_by is not None and snap_res.eq(0).any().any():
+            raise ValueError(
+                "at least one null value exists in 'snap_res' which is likely to hint a bug."
+            )
+        if bin_res.eq(0).any().any():
+            raise ValueError(
+                "at least one null value exists in 'bin_res' which is likely to hint a bug."
+            )
+    if snap_by is not None:
         return bin_res, snap_res
     else:
         return bin_res

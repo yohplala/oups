@@ -87,6 +87,7 @@ repos:
                 oups/jcumsegagg.py:C901
                 oups/writer.py:C901
                 oups/cumsegagg.py:C901
+                oups/binners.py:S001
         ]
 
   - repo: https://github.com/pycqa/pydocstyle
