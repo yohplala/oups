@@ -1503,3 +1503,7 @@ def chainagg(
 # when stitching with zig-zag grouping, make sure that logic for stitching works
 # does it mean label for previous zig-zag snapshot is to be retrieved? how to know it otherwise?
 # with a 'snap_buffer' ?
+
+# TODO
+# when suign a bin_by Callable such as "by_x_rows", take care to record in chainagg "bin_ends" so that it can be used later on as label if needed
+# (or last timestamp instead of bin ends)

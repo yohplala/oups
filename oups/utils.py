@@ -7,10 +7,6 @@ Created on Wed Dec  4 21:30:00 2021.
 from os import scandir
 from typing import Iterator, List, Tuple
 
-from numpy import argsort
-from numpy import concatenate
-from numpy import ndarray
-from numpy import nonzero
 from pandas import Grouper
 from pandas import Series
 from pandas import cut
@@ -141,63 +137,3 @@ def tcut(data: Series, grouper: Grouper):
         return as_binned.cat.rename_categories(as_binned.cat.categories.right)
     else:
         return as_binned.cat.rename_categories(as_binned.cat.categories.left)
-
-
-def merge_sorted(
-    labels: Tuple[ndarray, ndarray],
-    keys: Tuple[ndarray, ndarray] = None,
-    ii_for_first: bool = False,
-) -> Tuple[ndarray, ndarray]:
-    """Merge sorted labels.
-
-    Parameters
-    ----------
-    labels : Tuple[ndarray, ndarray]
-        2 1d arrays of labels to be merged together, provided as a ``tuple``.
-    keys : Tuple[ndarray, ndarray], optional
-        2 1d arrays of sorted keys according which labels can be sorted one
-        with respect to the other.
-        ``keys[0]``, resp. ``1``, are keys for ``labels[0]``, resp. ``1``.
-        The default is ``None``, meaning labels themselves are used for sorted
-        merge.
-    ii_for_first : bool, default False
-        Insertion indices for second array are returned by default.
-        If ``True``, insertion indices for first array are returned.
-
-    Returns
-    -------
-    Tuple[ndarray, ndarray]
-        The first array contains sorted labels from the 2 input arrays.
-        The second array contains the insertion indices for labels, i.e. the
-        index in the resulting array of values, either of the 2nd input array,
-        or the 1st input array, depending 'ii_for_first'.
-
-          - by default, with 'ii_for_first' set to ``False``,  for the 2nd
-            input array,
-          - or if 'ii_for_first' set to ``True``, then for the 1st input array.
-
-    Notes
-    -----
-    If a value is found in both input arrays, then value of 2nd input array
-    comes after value of 1st input array, as can be checked with insertion
-    indices.
-    """
-    labels1, labels2 = labels
-    concatenated = concatenate(labels)
-    if keys:
-        keys1, keys2 = keys
-        if len(keys1) != len(labels1):
-            raise ValueError(
-                "not possible to have arrays of different length for first labels and keys arrays."
-            )
-        if len(keys2) != len(labels2):
-            raise ValueError(
-                "not possible to have arrays of different length for second labels and keys arrays."
-            )
-        sort_indices = argsort(concatenate(keys), kind="mergesort")
-    else:
-        sort_indices = argsort(concatenated, kind="mergesort")
-    if ii_for_first:
-        return concatenated[sort_indices], nonzero(len(labels1) > sort_indices)[0]
-    else:
-        return concatenated[sort_indices], nonzero(len(labels1) <= sort_indices)[0]

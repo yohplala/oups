@@ -8,11 +8,9 @@ from typing import Callable, Dict, List, Tuple, Union
 
 from numpy import NaN as nNaN
 from numpy import array
-from numpy import diff as ndiff
 from numpy import dtype
+from numpy import full
 from numpy import isin as nisin
-from numpy import nonzero
-from numpy import ones
 from numpy import zeros
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
@@ -20,13 +18,10 @@ from pandas import Grouper
 from pandas import Int64Dtype
 from pandas import IntervalIndex
 from pandas import NaT as pNaT
-from pandas import Timedelta
 
-from oups.binners import _next_chunk_starts
-from oups.binners import bin_by_time
 from oups.jcumsegagg import AGG_FUNCS
 from oups.jcumsegagg import jcsagg
-from oups.utils import merge_sorted
+from oups.segmentby import segmentby
 
 
 # Some constants.
@@ -40,7 +35,7 @@ NULL_INT64_2D_ARRAY = NULL_INT64_1D_ARRAY.reshape(0, 0)
 NULL_DICT = {DTYPE_INT64: pNA, DTYPE_FLOAT64: nNaN, DTYPE_DATETIME64: pNaT}
 
 
-def setup_csagg(
+def setup_cumsegagg(
     agg: Dict[str, Tuple[str, str]], data_dtype: Dict[str, dtype]
 ) -> Dict[dtype, Tuple[List[str], List[str], Tuple, int]]:
     """Construct chaingrouby aggregation configuration.
@@ -150,7 +145,7 @@ def cumsegagg(
     agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, Tuple[List[str], List[str], Tuple, int]]],
     bin_by: Union[Grouper, Callable],
     bin_on: Union[str, None] = None,
-    binning_buffer: dict = None,
+    buffer: dict = None,
     ordered_on: Union[str, None] = None,
     snap_by: Union[Grouper, IntervalIndex, None] = None,
     allow_bins_snaps_disalignment: bool = False,
@@ -239,7 +234,7 @@ def cumsegagg(
         operation.
         If 'bin_by' is a pandas `Grouper`, its `key` parameter is used instead,
         and 'bin_on' is ignored.
-    binning_buffer : Union[dict, None]
+    buffer : Union[dict, None]
         User-chosen values from previous binning process, that can be required
         when restarting the binning process with new seed data.
     ordered_on : Union[str, None]
@@ -318,173 +313,39 @@ def cumsegagg(
           incomplete) is overwritten.
 
     """
-    if not len(data):
+    len_data = len(data)
+    if not len_data:
         # 'data' is empty. Simply return.
         return
     if isinstance(next(iter(agg.keys())), str):
         # Reshape aggregation definition.
-        agg = setup_csagg(agg, data.dtypes.to_dict())
-    # All 'bin_xxx' parameters are expected to be the size of the resulting
-    # aggregated array from 'groupby' operation, i.e. including empty bins.
-    # 'bin_labels', 'next_chunk_starts', and if defined, 'bin_ends'.
-    if isinstance(bin_by, Grouper):
-        # 'bin_by' is a Grouper.
-        if bin_by.key:
-            if bin_on:
-                if bin_by.key != bin_on:
-                    raise ValueError(
-                        "not possible to set 'bin_by.key' and 'bin_on' to different values."
-                    )
-            else:
-                bin_on = bin_by.key
-        elif not bin_on:
-            raise ValueError("not possible to set both 'bin_by.key' and 'bin_on' to `None`.")
-        if ordered_on and ordered_on != bin_on:
-            raise ValueError("not possible to set 'bin_on' and 'ordered_on' to different values.")
-        elif not ordered_on:
-            # Case 'ordered_on' has not been provided but 'bin_on' has been.
-            # Then set 'ordered_on' to 'bin_on'.
-            ordered_on = bin_on
-        # /!\ WiP
-        # homogenize output from bin_by_time & bin_by_x_rows
-        next_chunk_starts, bins, n_null_bins = bin_by_time(data.loc[:, bin_on], bin_by)
-        if snap_by is not None:
-            bin_ends = bins.right
-        bin_labels = bins.right if bin_by.label == "right" else bins.left
-        bin_closed = bin_by.closed
-    else:
-        # 'bin_by' is a Callable.
-        if bin_on is None:
-            raise ValueError("not possible to set 'bin_on' to `None`.")
-        on = (
-            data.loc[:, [bin_on, ordered_on]]
-            if ordered_on and ordered_on != bin_on
-            else data.loc[:, [bin_on]]
-        )
-        # 'bin_by' binning, possibly jitted.
-        bin_by_res = bin_by(on, binning_buffer)
-        if snap_by is not None:
-            next_chunk_starts, bin_labels, n_null_bins, bin_closed, bin_ends = bin_by_res
-        else:
-            next_chunk_starts, bin_labels, n_null_bins = bin_by_res
-    if ordered_on:
-        if (
-            data[ordered_on].dtype == DTYPE_DATETIME64
-            and (data[ordered_on].diff() >= Timedelta(0)).all()
-            or data[ordered_on].dtype != DTYPE_DATETIME64
-            and (data[ordered_on].diff() >= 0).all()
-        ):
-            # 'ordered_on' is not an ordered column.
-            raise ValueError(
-                f"column '{ordered_on}' is not ordered. It has to be for 'cumsegagg' to operate faultlessly."
-            )
-    # Parameters related to bins.
-    n_bins = len(bin_labels)
-    null_bin_indices = zeros(n_null_bins, dtype=DTYPE_INT64)
+        agg = setup_cumsegagg(agg, data.dtypes.to_dict())
+    (
+        next_chunk_starts,
+        bin_indices,
+        bin_labels,
+        n_null_bins,
+        snap_labels,
+        n_max_null_snaps,
+    ) = segmentby(
+        data=data,
+        bin_by=bin_by,
+        bin_on=bin_on,
+        ordered_on=ordered_on,
+        snap_by=snap_by,
+        buffer=buffer,
+    )
     # Initiate dict of result columns.
+    n_bins = len(bin_labels)
+    n_snaps = len(snap_labels)
+    null_bin_indices = zeros(n_null_bins, dtype=DTYPE_INT64)
     bin_res = {}
-    if snap_by is not None:
-        if not ordered_on:
-            raise ValueError(
-                "not possible to leave 'ordered_on' to `None` in case of snapshotting."
-            )
-        if isinstance(snap_by, Grouper):
-            if snap_by.key and snap_by.key != ordered_on:
-                raise ValueError(
-                    "not possible to set 'ordered_on' and 'snap_by.key' to different values."
-                )
-        snap_on = ordered_on
-        if not allow_bins_snaps_disalignment:
-            if bins.closed == "right" and snap_by.closed == "left":
-                raise ValueError(
-                    "as a result of the logic when setting 'bin_by.closed' and 'snap_by.closed' to "
-                    "'right' (resp. 'left'), incomplete snapshots can be created. The relevance of "
-                    "such a use is not clear and for safety, this combination is not possible "
-                    "by default. To make it possible, set 'allow_bins_snaps_disalignment' `True`."
-                )
-        # Define points of observation
-        if isinstance(snap_by, Grouper):
-            # 'snap_by' is an Grouper.
-            next_snap_starts, snaps, n_max_null_snaps = bin_by_time(data.loc[:, snap_on], snap_by)
-        else:
-            # 'snap_by' is an IntervalIndex.
-            snaps = snap_by
-            next_snap_starts = zeros(len(snaps), dtype=DTYPE_INT64)
-            n_max_null_snaps = zeros(1, dtype=DTYPE_INT64)
-            right_edges = snap_by.right
-            is_datetime = right_edges.dtype == DTYPE_DATETIME64
-            _next_chunk_starts(
-                data[snap_on].to_numpy(copy=False).view(DTYPE_INT64)
-                if is_datetime
-                else data[snap_on].to_numpy(copy=False),
-                right_edges.to_numpy(copy=False).view(DTYPE_INT64)
-                if is_datetime
-                else right_edges.to_numpy(copy=False),
-                snaps.closed == "right",
-                next_snap_starts,
-                n_max_null_snaps,
-            )
-            n_max_null_snaps = n_max_null_snaps[0]
-        # The 1st edge (out of the values) is removed.
-        snap_closed = snap_by.closed
-        if snap_closed != "left" and snap_closed != "right":
-            raise ValueError("'snap_by.closed' has to be set either to 'left' or to 'right'.")
-        if bin_closed != "left" and bin_closed != "right":
-            raise ValueError(
-                "'bin_by.closed' if a Grouper or 'bin_closed' if a Callable has to be set either to 'left' or to 'right'."
-            )
-        # 'snaps" become the labels to use for each snapshot.
-        snap_labels = snaps.right
-        # Parameters related to bins.
-        n_snaps = len(snap_labels)
-        # Initiate dict of result columns.
-        snap_res = {}
-        # Consolidate 'next_snap_starts' into 'next_chunk_starts'.
-        if bin_closed == "left" and snap_closed == "right":
-            # Bins are left-closed,and observation points are included.
-            # If sharing the same "next_starts", snapshot come after the bin.
-            next_chunk_starts, bin_indices = merge_sorted(
-                labels=(next_chunk_starts, next_snap_starts),
-                keys=(bin_ends, snap_labels),
-                ii_for_first=True,
-            )
-        else:
-            # If sharing the same "next_starts", snapshot come before the bin.
-            next_chunk_starts, bin_indices = merge_sorted(
-                labels=(next_snap_starts, next_chunk_starts),
-                keys=(snap_labels, bin_ends),
-                ii_for_first=False,
-            )
-        # Take indices of 'next_chunk_starts' corresponding to bins that are
-        # followed right after by a snapshot.
-        # ('append=len(next_chunk_starts)' in 'nonzero()' allows to simulate a
-        # configuration in which the last indices in 'next_chunk_starts' is
-        # that of a bin, hence to detect if a snapshot is after the actual
-        # (real) last bin. Without it, a snapshot after the last bin would not
-        # be detected and if needed, accounted for.)
-        indices_of_bins_followed_by_a_snaps = nonzero(
-            ndiff(bin_indices, append=len(next_chunk_starts)) - 1
-        )[0]
-        # Check if the 'next_chunk_starts' for these bins equal that of the
-        # snapshot that follows. If yes, then those are potential additional
-        # null snapshots.
-        n_max_null_snaps += len(
-            nonzero(
-                (
-                    next_chunk_starts[indices_of_bins_followed_by_a_snaps]
-                    - next_chunk_starts[indices_of_bins_followed_by_a_snaps + 1]
-                )
-                == 0
-            )[0]
-        )
-        # Initialize 'null_snap_indices' to -1, to identify easily those which
-        # are not set. they will be removed in a post-processing step.
-        null_snap_indices = -ones(n_max_null_snaps, dtype=DTYPE_INT64)
-    else:
-        # Case 'no snapshotting'.
-        bin_indices = NULL_INT64_1D_ARRAY
-        null_snap_indices = NULL_INT64_1D_ARRAY
+    snap_res = {}
+    if snap_by is None:
         snap_res_single_dtype = NULL_INT64_2D_ARRAY
+    # Initialize 'null_snap_indices' to -1, to identify easily those which
+    # are not set. they will be removed in a post-processing step.
+    null_snap_indices = full(n_max_null_snaps, -1, dtype=DTYPE_INT64)
     for dtype_, (
         cols_name_in_data,
         cols_name_in_res,

@@ -22,7 +22,7 @@ from oups.cumsegagg import DTYPE_FLOAT64
 from oups.cumsegagg import DTYPE_INT64
 from oups.cumsegagg import DTYPE_NULLABLE_INT64
 from oups.cumsegagg import cumsegagg
-from oups.cumsegagg import setup_csagg
+from oups.cumsegagg import setup_cumsegagg
 from oups.jcumsegagg import FIRST
 from oups.jcumsegagg import LAST
 from oups.jcumsegagg import MAX
@@ -74,7 +74,7 @@ def test_setup_csagg():
         "val3_min": ("val3_int", MIN),
         "val3_max": ("val3_int", MAX),
     }
-    csagg_cfg_res = setup_csagg(agg_cfg, df.dtypes.to_dict())
+    csagg_cfg_res = setup_cumsegagg(agg_cfg, df.dtypes.to_dict())
     # In reference results, the 3rd iterable is voluntarily a tuple, to "flag"
     # it and unpack it when checking it ('assert' below).
     csagg_cfg_ref = {
