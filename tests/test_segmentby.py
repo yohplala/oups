@@ -588,7 +588,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
     "bin_labels_ref, n_null_bins_ref, snap_labels_ref, n_max_null_snaps_ref",
     [
         (
-            # 'bin_by' only, as a Grouper.
+            # 1/ 'bin_by' only, as a Grouper.
             Grouper(key="dti", freq="5T", label="left", closed="left"),
             None,
             None,
@@ -602,7 +602,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             0,
         ),
         (
-            # 'bin_by' only, as a Callable.
+            # 2/ 'bin_by' only, as a Callable.
             by_x_rows,
             "ordered_on",
             None,
@@ -616,7 +616,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             0,
         ),
         (
-            # 'bin_by' and 'snap_by' both as a Grouper, left-closed
+            # 3/ 'bin_by' and 'snap_by' both as a Grouper, left-closed
             # 'snap_by' points excluded (left-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -640,7 +640,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             2,
         ),
         (
-            # 'bin_by' and 'snap_by' both as a Grouper, right-closed
+            # 4/ 'bin_by' and 'snap_by' both as a Grouper, right-closed
             # 'snap_by' points included (right-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -668,7 +668,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             4,
         ),
         (
-            # 'bin_by' as a Grouper, left-closed, and 'snap_by' as a
+            # 5/ 'bin_by' as a Grouper, left-closed, and 'snap_by' as a
             # DatetimeIndex.
             # 'snap_by' points excluded (left-closed)
             # 'data'
@@ -693,7 +693,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             2,
         ),
         (
-            # 'bin_by' as a Grouper, right-closed, and 'snap_by' as a
+            # 6/ 'bin_by' as a Grouper, right-closed, and 'snap_by' as a
             # DatetimeIndex.
             # 'snap_by' points included (right-closed)
             # 'data'
@@ -722,7 +722,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             4,
         ),
         (
-            # 'bin_by' as a Callable, left-closed.
+            # 7/ 'bin_by' as a Callable, left-closed.
             # 'snap_by' as a Grouper, points excluded (left-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -749,7 +749,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             1,
         ),
         (
-            # 'bin_by' as a Callable, right-closed.
+            # 8/ 'bin_by' as a Callable, right-closed.
             # 'snap_by' as a Grouper, points included (right-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -757,26 +757,26 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #               s2-8:06    b1
             #      8:07     s3-8:08    b1
             #      8:10     s4-8:10    b1
-            #               s5-8:12    b1
+            #               s5-8:12    b2-8:10 excl.
             #      8:13     s6-8:14    b2-8:13
             partial(by_x_rows, by=3, closed=RIGHT),
             "dti",
             None,
             Grouper(key="dti", freq="2T"),
             None,
-            #     s1 s2 s3 s4 s5 b1 s6 b2
-            #                     5     7
+            #     s1 s2 s3 s4 b1 s5 s6 b2
+            #                  4        7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
-            array([5, 7]),
+            array([4, 7]),
             DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])
             .to_series()
             .reset_index(drop=True),
             0,
             date_range("2020/01/01 08:04", periods=6, freq="2T"),
-            2,
+            3,
         ),
         (
-            # 'bin_by' as a Callable, left-closed.
+            # 9/ 'bin_by' as a Callable, left-closed.
             # 'snap_by' as a DatetimeIndex, points excluded (left-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -803,7 +803,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             1,
         ),
         (
-            # 'bin_by' as a Callable, right-closed.
+            # 10/ 'bin_by' as a Callable, right-closed.
             # 'snap_by' as a DatetimeIndex, points included (right-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -811,23 +811,23 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #               s2-8:06    b1
             #      8:07     s3-8:08    b1
             #      8:10     s4-8:10    b1
-            #               s5-8:12    b1
-            #      8:13     s6-8:14    b2-8:13
+            #               s5-8:12    b2-8:10 excl
+            #      8:13     s6-8:14    b2
             partial(by_x_rows, by=3, closed=RIGHT),
             "dti",
             "dti",
             date_range("2020/01/01 08:04", periods=6, freq="2T"),
             None,
-            #     s1 s2 s3 s4 s5 b1 s6 b2
-            #                     5     7
+            #     s1 s2 s3 s4 b1 s5 s6 b2
+            #                  4        7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
-            array([5, 7]),
+            array([4, 7]),
             DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])
             .to_series()
             .reset_index(drop=True),
             0,
             date_range("2020/01/01 08:04", periods=6, freq="2T"),
-            2,
+            3,
         ),
     ],
 )

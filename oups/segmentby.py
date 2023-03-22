@@ -292,7 +292,12 @@ def by_x_rows(
     # 'bin_ends' has no end for last bin, because it is unknown.
     # Temporarily adjust 'next_chunk_start' of last bin to last index.
     next_chunk_starts[-1] = len_on - 1
-    bin_ends = on.iloc[next_chunk_starts].reset_index(drop=True)
+    if closed == LEFT:
+        # End is start of next bin, excluded.
+        bin_ends = on.iloc[next_chunk_starts].reset_index(drop=True)
+    else:
+        # End is end of current bin, included.
+        bin_ends = on.iloc[next_chunk_starts - 1].reset_index(drop=True)
     # Reset 'next_chunk_start' of last bin.
     next_chunk_starts[-1] = len_on
     return next_chunk_starts, bin_labels, 0, closed, bin_ends, True
@@ -514,6 +519,7 @@ def segmentby(
           - 'bin_by', a Callable, either the one initially provided, or one
             dereived from a pandas Grouper.
           - 'ordered_on', a str, its definitive value.
+          - 'snap_by', if a Grouper.
 
         It has then to return a tuple made of 6 items. There are 3 items used
         whatever if snapshotting is used or not.
@@ -524,7 +530,7 @@ def segmentby(
             corresponding bins are empty, except the first one. In this case,
             corresponding rows in aggregation result will be filled with null
             values.
-          - ``chunk_labels``, a pandas Series which values are expected to be
+          - ``bin_labels``, a pandas Series which values are expected to be
             all bin labels, incl. those of empty bins, as they will appear in
             aggregation results. Labels can be of any type.
             In case of restarting the aggregation with new seed data, care
@@ -532,22 +538,22 @@ def segmentby(
             that of the last bin from previous iteration if it has been the
             same bin. Having the same label between both iteration will ensure
             that the bin with previous aggregation results is overwritten.
-          - ``n_null_chunks``, an `int` indicating the number of empty bins.
+          - ``n_null_bins``, an `int` indicating the number of empty bins.
 
         The 3 last items are used only in case of snapshotting (``snap_by`` is
         different than ``None``).
-          - ``chunk_closed``, a str, either `'right'` or `'left'`, indicating
+          - ``bin_closed``, a str, either `'right'` or `'left'`, indicating
             if bins are left or right-closed (i.e. if ``chunk_ends`` is
             included or excluded in the bin).
-          - ``chunk_ends``, an optional pandas Series, specifying the ends of
+          - ``bin_ends``, an optional pandas Series, specifying the ends of
             bins with values derived from ``data[ordered_on]`` column. If
             snapshotting, then points of observation (defined by ``snap_by``)
             are positioned with respect to the bin ends. This data allows
             sorting snapshots with respect to bins in case they start/end at
             the same row index in data.
-            ``chunk_ends`` is not required if no snapshotting. If not used, set
+            ``bin_ends`` is not required if no snapshotting. If not used, set
             to None.
-          - ``last_chunk_end_unknown``, a boolean indicating if the end of the
+          - ``last_bin_end_unknown``, a boolean indicating if the end of the
             last bin is known or not. If bins are left-closed, then it is
             possible the end of the last bin is not known. In this case, care
             is taken to position the last bin end after any last snapshot.
@@ -642,7 +648,7 @@ def segmentby(
     ) = bin_by[BIN_BY](on=on, buffer=buffer_bin)
     # Some checks.
     if bin_closed != LEFT and bin_closed != RIGHT:
-        raise ValueError(f"'chunk_closed' has to be set either to '{LEFT}' or to '{RIGHT}'.")
+        raise ValueError(f"'bin_closed' has to be set either to '{LEFT}' or to '{RIGHT}'.")
     n_bins = len(next_chunk_starts)
     if n_bins != len(bin_labels):
         raise ValueError("'next_chunk_starts' and 'chunk_labels' have to be of the same size.")
