@@ -38,7 +38,6 @@ RIGHT = "right"
 # Keys for main buffer.
 KEY_BIN = "bin"
 KEY_SNAP = "snap"
-NULL_BUFFER = {KEY_BIN: None, KEY_SNAP: None}
 # Keys for 'by_x_rows'.
 KEY_ROWS_IN_LAST_BIN = "rows_in_last_bin"
 KEY_LAST_KEY = "last_key"
@@ -438,13 +437,40 @@ def setup_segmentby(
     }
 
 
+def setup_mainbuffer(buffer: dict) -> Tuple[dict, dict]:
+    """Return 'buffer_bin' and 'buffer_snap' from main buffer.
+
+    Parameters
+    ----------
+    buffer : dict
+        Main buffer, either containing only values for 'buffer_bin', or only
+        two keys `"bin"` and `"snap"` providing a separate dict for each of the
+        binning and snapshotting processes.
+
+    Returns
+    -------
+    Tuple[dict, dict]
+        The first dict is the binning buffer.
+        The second dict is the snapshotting buffer.
+    """
+    if buffer is not None:
+        if KEY_SNAP in buffer:
+            return buffer[KEY_BIN], buffer[KEY_SNAP]
+        elif KEY_BIN in buffer:
+            return buffer[KEY_BIN], None
+        else:
+            return buffer
+    else:
+        return None, None
+
+
 def segmentby(
     data: pDataFrame,
     bin_by: Union[Grouper, Callable, dict],
     bin_on: Optional[str] = None,
     ordered_on: Optional[str] = None,
     snap_by: Optional[Union[Grouper, IntervalIndex]] = None,
-    buffer: Optional[dict] = NULL_BUFFER,
+    buffer: Optional[dict] = None,
 ) -> Tuple[ndarray, ndarray, Series, int, Series, int]:
     """Identify starts of segments in data, either bins or optionally snapshots.
 
@@ -539,7 +565,7 @@ def segmentby(
     snap_by : Union[Grouper, Series, None]
         Values positioning the points of observation, either derived from a
         pandas Grouper, or contained in a pandas Series.
-    buffer : Union[dict, NULL_BUFFER]
+    buffer : Optional[dict], default None
         Dict of 2 dict.
           - first dict, with key `"bin"` embed values from previous binning
             process, set by 'bin_by' when it is a Callable, or by the internal
@@ -549,9 +575,6 @@ def segmentby(
             snapshotting process, set by 'by_scale'. Similarly, these values are
             required to allow restarting the snapshotting process with new seed
             data.
-
-        Default value ``NULL_VALUE`` is a dict with these two keys.
-        ``{KEY_BIN:None, KEY_SNAP:None}``
 
     Returns
     -------
@@ -588,6 +611,7 @@ def segmentby(
     """
     if not isinstance(bin_by, dict):
         bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
+    buffer_bin, buffer_snap = setup_mainbuffer(buffer)
     ordered_on = bin_by[ORDERED_ON]
     if ordered_on:
         # Check 'ordered_on' is an ordered column.
@@ -609,7 +633,7 @@ def segmentby(
         bin_closed,
         bin_ends,
         last_bin_end_unknown,
-    ) = bin_by[BIN_BY](on=on, buffer=buffer[KEY_BIN])
+    ) = bin_by[BIN_BY](on=on, buffer=buffer_bin)
     # Some checks.
     if bin_closed != LEFT and bin_closed != RIGHT:
         raise ValueError("'chunk_closed' has to be set either to 'left' or to 'right'.")
@@ -624,9 +648,14 @@ def segmentby(
         snap_by = bin_by[SNAP_BY]
     if snap_by is not None:
         # Define points of observation
-        (next_snap_starts, _, n_max_null_snaps, _, snap_ends, _,) = by_scale(
-            on=data.loc[:, ordered_on], by=snap_by, closed=bin_closed, buffer=buffer[KEY_SNAP]
-        )
+        (
+            next_snap_starts,
+            _,
+            n_max_null_snaps,
+            _,
+            snap_ends,
+            _,
+        ) = by_scale(on=data.loc[:, ordered_on], by=snap_by, closed=bin_closed, buffer=buffer_snap)
         # Consolidate 'next_snap_starts' into 'next_chunk_starts'.
         # If bins are left-closed, the end of the last bin can possibly be
         # unknown yet.

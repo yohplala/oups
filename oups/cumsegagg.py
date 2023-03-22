@@ -337,7 +337,7 @@ def cumsegagg(
     )
     # Initiate dict of result columns.
     n_bins = len(bin_labels)
-    n_snaps = len(snap_labels)
+    n_snaps = len(snap_labels) if snap_labels is not None else 0
     null_bin_indices = zeros(n_null_bins, dtype=DTYPE_INT64)
     bin_res = {}
     snap_res = {}

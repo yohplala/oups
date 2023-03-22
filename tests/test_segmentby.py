@@ -23,9 +23,7 @@ from oups.segmentby import BIN_BY
 from oups.segmentby import KEY_BIN
 from oups.segmentby import KEY_LAST_KEY
 from oups.segmentby import KEY_ROWS_IN_LAST_BIN
-from oups.segmentby import KEY_SNAP
 from oups.segmentby import LEFT
-from oups.segmentby import NULL_BUFFER
 from oups.segmentby import NULL_INT64_1D_ARRAY
 from oups.segmentby import ON_COLS
 from oups.segmentby import ORDERED_ON
@@ -595,7 +593,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             None,
             None,
             None,
-            NULL_BUFFER,
+            None,
             array([1, 2, 4]),
             NULL_INT64_1D_ARRAY,
             DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:05", "2020/01/01 08:10"]),
@@ -609,7 +607,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             "ordered_on",
             None,
             None,
-            {KEY_BIN: {KEY_LAST_KEY: 1, KEY_ROWS_IN_LAST_BIN: 1}, KEY_SNAP: None},
+            {KEY_BIN: {KEY_LAST_KEY: 1, KEY_ROWS_IN_LAST_BIN: 1}},
             array([3, 4]),
             NULL_INT64_1D_ARRAY,
             Series([1, 3]),
@@ -631,7 +629,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             None,
             None,
             Grouper(key="dti", freq="2T"),
-            NULL_BUFFER,
+            None,
             #     b1 s1 s2 s3 b2 s4 s5 b3
             #      0           4        7
             array([1, 1, 2, 2, 2, 3, 4, 4]),
@@ -656,7 +654,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             None,
             None,
             Grouper(key="dti", freq="2T", closed="right"),
-            NULL_BUFFER,
+            None,
             #     s1 b1 s2 s3 s4 b2 s5 s6 b3
             #         1           5        8
             array([1, 1, 1, 2, 3, 3, 3, 4, 4]),
@@ -684,7 +682,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             None,
             None,
             date_range("2020/01/01 08:06", periods=5, freq="2T"),
-            NULL_BUFFER,
+            None,
             #     b1 s1 s2 s3 b2 s4 s5 b3
             #      0           4        7
             array([1, 1, 2, 2, 2, 3, 4, 4]),
@@ -710,7 +708,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             None,
             None,
             date_range("2020/01/01 08:04", periods=6, freq="2T"),
-            NULL_BUFFER,
+            None,
             #     s1 b1 s2 s3 s4 b2 s5 s6 b3
             #         1           5        8
             array([1, 1, 1, 2, 3, 3, 3, 4, 4]),
@@ -738,7 +736,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             "dti",
             None,
             Grouper(key="dti", freq="2T"),
-            NULL_BUFFER,
+            None,
             #     s1 s2 s3 s4 b1 s5 b2
             #                  4     6
             array([1, 2, 2, 3, 3, 4, 4]),
@@ -765,7 +763,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             "dti",
             None,
             Grouper(key="dti", freq="2T"),
-            NULL_BUFFER,
+            None,
             #     s1 s2 s3 s4 s5 b1 s6 b2
             #                     5     7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
@@ -792,7 +790,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             "dti",
             "dti",
             date_range("2020/01/01 08:06", periods=5, freq="2T"),
-            NULL_BUFFER,
+            None,
             #     s1 s2 s3 s4 b1 s5 b2
             #                  4     6
             array([1, 2, 2, 3, 3, 4, 4]),
@@ -819,7 +817,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             "dti",
             "dti",
             date_range("2020/01/01 08:04", periods=6, freq="2T"),
-            NULL_BUFFER,
+            None,
             #     s1 s2 s3 s4 s5 b1 s6 b2
             #                     5     7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
