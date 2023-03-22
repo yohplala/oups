@@ -866,7 +866,7 @@ def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
         ),
     ],
 )
-def test_cumsegagg_snapby_as_intervalindex(
+def test_cumsegagg_binby_grouper_snapby_intervalindex(
     b_by_closed, b_by_label, s_first_val, s_max_val, s_min_val, s_last_val
 ):
     # Test binning and snapshotting aggregation with null chunks.
@@ -1054,6 +1054,41 @@ def test_cumsegagg_binby_callable_snapby_intervalindex(
     assert snaps_res.equals(snaps_ref)
 
 
+def test_exit_on_null_data():
+    # Test exception if a col in 'agg' does not exist in data.
+    data = pDataFrame({"val": []})
+    agg = {FIRST: ("val", FIRST)}
+    bin_by = Grouper(freq="10T", closed="left", label="right", key="val")
+    snap_by = Grouper(freq="5T", closed="left", key="val")
+    none_res = cumsegagg(
+        data=data,
+        agg=agg,
+        bin_by=bin_by,
+        snap_by=snap_by,
+    )
+    assert none_res is None
+
+
+def test_exception_col_not_existing():
+    # Test exception if a col in 'agg' does not exist in data.
+    values = array([1.0], dtype=DTYPE_FLOAT64)
+    dtidx = array(["2020-01-01T08:00"], dtype=DTYPE_DATETIME64)
+    value = "value"
+    dti = "dti"
+    data = pDataFrame({value: values, dti: dtidx})
+    agg = {FIRST: (f"{value}_", FIRST)}
+    bin_by = Grouper(freq="10T", closed="left", label="right", key=dti)
+    snap_by = Grouper(freq="5T", closed="left", key=dti)
+    with pytest.raises(ValueError, match="^column 'value_' does not"):
+        bins_res, snaps_res = cumsegagg(
+            data=data,
+            agg=agg,
+            bin_by=bin_by,
+            ordered_on=dti,
+            snap_by=snap_by,
+        )
+
+
 def test_exception_error_on_0():
     # Test exception if there are 0 in aggregation results.
     values = array([0.0], dtype=DTYPE_FLOAT64)
@@ -1075,9 +1110,6 @@ def test_exception_error_on_0():
 
 
 # WiP
-# test bin-by Callable with either snapshot as IntervalIndex or grouper
-# test error message input column in 'agg' not in input dataframe.
-# test with data empty: return None
 # Test exception in segmentby if by Callable, 'bin_closed' has to be set
 # Test exception ordered_on not ordered, either datetime index or int index. (in 'segmentby()')
 # Simplify docstring of 'cumsegagg' now that 'segmentby' has been created.

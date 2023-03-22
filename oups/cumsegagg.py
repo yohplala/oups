@@ -83,7 +83,7 @@ def setup_cumsegagg(
     # Step 1.
     for out_col, (in_col, func) in agg.items():
         if in_col not in data_dtype:
-            raise KeyError(f"{in_col} not in input data.")
+            raise ValueError(f"column '{in_col}' does not exist in input data.")
         else:
             dtype_ = data_dtype[in_col]
         try:
