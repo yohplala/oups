@@ -950,3 +950,4 @@ def test_exception_error_on_0():
 # test error message input column in 'agg' not in input dataframe.
 # test with data empty: return None
 # Test exception ordered_on not ordered, either datetime index or int index. (in 'segmentby()')
+# Simplify docstring of 'cumsegagg' now that 'segmentby' has been created.

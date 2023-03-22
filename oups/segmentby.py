@@ -437,7 +437,7 @@ def setup_segmentby(
     }
 
 
-def setup_mainbuffer(buffer: dict) -> Tuple[dict, dict]:
+def setup_mainbuffer(buffer: dict, with_snapshot: Optional[bool] = False) -> Tuple[dict, dict]:
     """Return 'buffer_bin' and 'buffer_snap' from main buffer.
 
     Parameters
@@ -446,6 +446,8 @@ def setup_mainbuffer(buffer: dict) -> Tuple[dict, dict]:
         Main buffer, either containing only values for 'buffer_bin', or only
         two keys `"bin"` and `"snap"` providing a separate dict for each of the
         binning and snapshotting processes.
+    with_snapshot : bool, default False
+        Boolean ``True`` if snapshotting process is requested.
 
     Returns
     -------
@@ -454,12 +456,12 @@ def setup_mainbuffer(buffer: dict) -> Tuple[dict, dict]:
         The second dict is the snapshotting buffer.
     """
     if buffer is not None:
-        if KEY_SNAP in buffer:
+        if with_snapshot:
             return buffer[KEY_BIN], buffer[KEY_SNAP]
         elif KEY_BIN in buffer:
             return buffer[KEY_BIN], None
         else:
-            return buffer
+            return buffer, None
     else:
         return None, None
 
@@ -550,19 +552,19 @@ def segmentby(
             possible the end of the last bin is not known. In this case, care
             is taken to position the last bin end after any last snapshot.
 
-    bin_on : Union[str, None]
+    bin_on : Optional[str], default None
         Name of the column in `data` over which performing the binning
         operation.
         If 'bin_by' is a pandas `Grouper`, its `key` parameter is used instead.
         If 'bin_on' is set, its consistence with ``bin_by.key`` parameter is
         then checked.
-    ordered_on : Union[str, None]
+    ordered_on : Optional[str], default None
         Name of an existing ordered column in 'data'. When setting it, it is
         then forwarded to 'bin_by' Callable.
         This parameter is compulsory if 'snap_by' is set. Values derived from
         'snap_by' (either a Grouper or a Series) are compared to ``bin_ends``,
         themselves derived from ``data[ordered_on]``.
-    snap_by : Union[Grouper, Series, None]
+    snap_by : Optional[Union[Grouper, Series]], default None
         Values positioning the points of observation, either derived from a
         pandas Grouper, or contained in a pandas Series.
     buffer : Optional[dict], default None
@@ -611,7 +613,11 @@ def segmentby(
     """
     if not isinstance(bin_by, dict):
         bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
-    buffer_bin, buffer_snap = setup_mainbuffer(buffer)
+    if bin_by[SNAP_BY] is not None:
+        # 'bin_by[SNAP_BY]' is not none if 'snap_by' is a Grouper.
+        # Otherwise, it can be a DatetimeIndex for instance or a Series.
+        snap_by = bin_by[SNAP_BY]
+    buffer_bin, buffer_snap = setup_mainbuffer(buffer, snap_by is not None)
     ordered_on = bin_by[ORDERED_ON]
     if ordered_on:
         # Check 'ordered_on' is an ordered column.
@@ -636,16 +642,12 @@ def segmentby(
     ) = bin_by[BIN_BY](on=on, buffer=buffer_bin)
     # Some checks.
     if bin_closed != LEFT and bin_closed != RIGHT:
-        raise ValueError("'chunk_closed' has to be set either to 'left' or to 'right'.")
+        raise ValueError(f"'chunk_closed' has to be set either to '{LEFT}' or to '{RIGHT}'.")
     n_bins = len(next_chunk_starts)
     if n_bins != len(bin_labels):
         raise ValueError("'next_chunk_starts' and 'chunk_labels' have to be of the same size.")
     if bin_ends is not None and n_bins != len(bin_ends):
         raise ValueError("'next_chunk_starts' and 'chunk_ends' have to be of the same size.")
-    if bin_by[SNAP_BY] is not None:
-        # 'bin_by[SNAP_BY]' is not none if 'snap_by' is a Grouper.
-        # Otherwise, it can be a DatetimeIndex for instance or a Series.
-        snap_by = bin_by[SNAP_BY]
     if snap_by is not None:
         # Define points of observation
         (
