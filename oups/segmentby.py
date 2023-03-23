@@ -19,12 +19,12 @@ from numpy import full
 from numpy import ndarray
 from numpy import ndenumerate
 from numpy import nonzero
-from numpy import timedelta64
 from numpy import zeros
 from pandas import DataFrame as pDataFrame
 from pandas import Grouper
 from pandas import IntervalIndex
 from pandas import Series
+from pandas import Timedelta
 from pandas import date_range
 from pandas.core.resample import _get_timestamp_range_edges as gtre
 
@@ -630,22 +630,14 @@ def segmentby(
     if ordered_on:
         # Check 'ordered_on' is an ordered column.
         if not (
-            data[ordered_on].dtype == DTYPE_DATETIME64
-            and (
-                ndiff(
-                    data[ordered_on].to_numpy(copy=False),
-                    prepend=data[ordered_on].iloc[0].to_numpy(),
-                )
-                >= timedelta64(0)
-            ).all()
-            or data[ordered_on].dtype != DTYPE_DATETIME64
-            and (
-                ndiff(
-                    data[ordered_on].to_numpy(copy=False),
-                    prepend=data[ordered_on].iloc[0],
-                )
-                >= 0
-            ).all()
+            (
+                data[ordered_on].dtype == DTYPE_DATETIME64
+                and (data[ordered_on].diff().iloc[1:] >= Timedelta(0)).all()
+            )
+            or (
+                data[ordered_on].dtype != DTYPE_DATETIME64
+                and (data[ordered_on].diff().iloc[1:] >= 0).all()
+            )
         ):
             raise ValueError(
                 f"column '{ordered_on}' is not ordered. It has to be for 'cumsegagg' to operate faultlessly."
