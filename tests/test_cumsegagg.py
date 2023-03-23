@@ -1107,9 +1107,3 @@ def test_exception_error_on_0():
             ordered_on=dti,
             snap_by=snap_by,
         )
-
-
-# WiP
-# Test exception in segmentby if by Callable, 'bin_closed' has to be set
-# Test exception ordered_on not ordered, either datetime index or int index. (in 'segmentby()')
-# Simplify docstring of 'cumsegagg' now that 'segmentby' has been created.

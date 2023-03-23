@@ -903,7 +903,7 @@ def test_segmentby_with_outer_setup():
     assert n_max_null_snaps == 2
 
 
-def test_segmentby_exceptions():
+def test_segmentby_binby_exceptions():
     # Check when 'next_chunk_starts', 'chunk_labels' and 'chunk_ends' from
     # 'bin_by' as a Callable are not all of the same length.
     bin_on = "dti"
@@ -911,13 +911,35 @@ def test_segmentby_exceptions():
     data = pDataFrame({bin_on: dti, "ordered_on": range(len(dti))})
 
     def by_wrong_starts_labels(on, buffer=None):
-        return array([0, 1, 2]), Series(["a", "o"]), 0, LEFT, array([1]), True
+        # 'next_chunk_starts' and 'chunk_labels' not the same size.
+        return arange(1), Series(["a", "o"]), 0, LEFT, arange(2), True
 
     with pytest.raises(ValueError, match="^'next_chunk_starts' and 'chunk_labels'"):
         segmentby(data=data, bin_by=by_wrong_starts_labels, bin_on=bin_on)
 
     def by_wrong_starts_ends(on, buffer=None):
-        return array([0, 1, 2]), Series(["a", "o", "u"]), 0, LEFT, array([1]), True
+        # 'next_chunk_starts' and 'chunk_ends' not the same size.
+        return arange(3), Series(["a", "o", "u"]), 0, LEFT, arange(1), True
 
     with pytest.raises(ValueError, match="^'next_chunk_starts' and 'chunk_ends'"):
         segmentby(data=data, bin_by=by_wrong_starts_ends, bin_on=bin_on)
+
+    def by_wrong_closed(on, buffer=None):
+        # 'closed' not 'left' or 'right'.
+        return arange(2), Series(["a", "o"]), 0, "invented", arange(2), True
+
+    with pytest.raises(ValueError, match="^'bin_closed' has to be set either"):
+        segmentby(data=data, bin_by=by_wrong_closed, bin_on=bin_on)
+
+
+def test_segmentby_orderedon_exceptions():
+    # Check when 'ordered_on' is not ordered.
+    bin_on = "ordered_on"
+    bin_by = Grouper(key=bin_on, freq="2T")
+    ordered_on = bin_on
+    # 'ordered_on' is a DatetimeIndex.
+    unordered = DatetimeIndex(["2020/01/01 08:00", "2020/01/01 09:00", "2020/01/01 07:00"])
+    data = pDataFrame({ordered_on: unordered})
+
+    with pytest.raises(ValueError, match="^column 'ordered_on' is not ordered"):
+        segmentby(data=data, bin_by=bin_by, bin_on=bin_on, ordered_on=ordered_on)

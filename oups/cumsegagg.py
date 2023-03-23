@@ -4,7 +4,7 @@ Created on Wed Dec  4 21:30:00 2021.
 
 @author: yoh
 """
-from typing import Callable, Dict, List, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 from numpy import NaN as nNaN
 from numpy import array
@@ -14,10 +14,11 @@ from numpy import isin as nisin
 from numpy import zeros
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
+from pandas import DatetimeIndex
 from pandas import Grouper
 from pandas import Int64Dtype
-from pandas import IntervalIndex
 from pandas import NaT as pNaT
+from pandas import Series
 
 from oups.jcumsegagg import AGG_FUNCS
 from oups.jcumsegagg import jcsagg
@@ -144,97 +145,54 @@ def cumsegagg(
     data: pDataFrame,
     agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, Tuple[List[str], List[str], Tuple, int]]],
     bin_by: Union[Grouper, Callable],
-    bin_on: Union[str, None] = None,
-    buffer: dict = None,
-    ordered_on: Union[str, None] = None,
-    snap_by: Union[Grouper, IntervalIndex, None] = None,
-    allow_bins_snaps_disalignment: bool = False,
-    error_on_0: bool = True,
+    bin_on: Optional[str] = None,
+    buffer: Optional[dict] = None,
+    ordered_on: Optional[str] = None,
+    snap_by: Optional[Union[Grouper, Series, DatetimeIndex]] = None,
+    error_on_0: Optional[bool] = True,
 ) -> Union[pDataFrame, Tuple[pDataFrame, pDataFrame]]:
     """Cumulative segmented aggregations, with optional snapshotting.
 
     In this function, "snapshotting" is understood as the action of making
     isolated observations. When using snapshots, values derived from
-    ``snap_by`` Grouper (or contained in ``snap_by`` IntervalIndex) are
-    considered the "points of isolated observation". At a given point, an
-    observation of the "on-going" segment (aka bin) is made.
-    Because segments are continuous, any row of the dataset falls in a segment.
+    ``snap_by`` Grouper (or contained in ``snap_by`` Series) are considered the
+    "points of isolated observation".
+    At a given point, an observation of the "on-going" segment (aka bin) is
+    made. Because segments are contiguous, any row of the dataset falls in a
+    segment.
 
     Parameters
     ----------
     data: pDataFrame
         A pandas DataFrame containing the columns over which binning (relying
         on ``bin_on`` column), performing aggregations and optionally
-        snapshotting (relying on column pointed by ``snap_by.key`` or
-        ``snap_by.name`` depending if a Grouper or an IntervalIndex
-        respectively).
+        snapshotting (relying on column pointed by 'ordered_on' and optionally
+        ``snap_by.key`` if is a Grouper).
         If using snapshots ('snap_by' parameter), then the column pointed by
-        ``snap_by.key`` (or ``snap_by.name``) has to be ordered.
+        ``snap_by.key`` has to be ordered.
     agg : dict
         Definition of aggregation.
         If in the form ``Dict[str, Tuple[str, str]]`` (typically a form
         compatible with pandas aggregation), then it is transformed in the 2nd
-        form ``Dict[dtype, Tuple[List[str], Tuple[int, str], List[str]]]]``.
+        form ``Dict[dtype, Tuple[List[str], List[str], Tuple, int]]``.
           - in the form ``Dict[str, Tuple[str, str]]``
             - keys are ``str``, requested output column name
             - values are ``tuple`` with 1st component a ``str`` for the input
               column name, and 2nd component a ``str`` for aggregation function
               name.
 
-          - the 2nd form is that returned by the function ``setup_cgb_agg``.
+          - the 2nd form is that returned by the function ``setup_cumsegagg``.
 
     bin_by : Union[Grouper, Callable]
         Callable or pandas Grouper to perform binning.
-        If a Callable, is called with following parameters:
-        ``bin_by(on, binning_buffer)``
-        where:
-          - ``on``,
-            - either ``ordered_on`` is ``None``. ``on`` is then a 1-column
-              pandas DataFrame made from ``data[bin_on]`` column.
-            - or ``ordered_on`` is provided and is different than ``bin_on``.
-              Then ``on`` is a 2-column pandas DataFrame made of
-              ``data[[bin_on, ordered_on]]``. Values from ``data[ordered_on]``
-              can be used advantageously as bin labels.
-              Also, values from ``data[ordered_on]`` have to be used when
-              'snap_by' is set to define bin ends. See below.
-
-          - ``binning_buffer``, a dict that has to be modified in-place by
-             'bin_by' to keep internal parameters and to allow new faultless
-             calls to 'bin_by'.
-
-        It has then to return a Tuple made of 3 or 5 items. There are 3 items
-        if no snapshotting.
-          - ``next_chunk_starts``, a one-dimensional array of `int`, specifying
-            the row index at which the next bin starts (included) as found in
-            ``bin_on``.
-            If the same index appears several time, it means that corresponding
-            bins are empty, except the first one. In this case, corresponding
-            rows in aggregation result will be filled with null values.
-          - ``bin_labels``, a pandas Series or one-dimensional array, which
-            values are expected to be all bin labels, incl. for empty
-            bins, as they will appear in aggregation results. Labels can be of
-            any type.
-          - ``n_null_bins``, an `int` indicating the number of empty bins.
-
-        In case of snapshotting (``snap_by`` is different than ``None``), the 2
-        additional items are:
-          - ``bin_closed``, a str, either `'right'` or `'left'`, indicating if
-            bins are left or right-closed (i.e. if ``bin_ends`` in included or
-            excluded).
-          - ``bin_ends``, a one dimensional array, specifying the ends of bins
-            with values derived from ``data[ordered_on]`` column.
-            If snapshotting, then points of observation (defined by
-            ``snap_by``) can then be positioned with respect to the bin ends.
-            This data allows most notably sorting snapshots with respect to
-            bins in case they start/end at the same row index in data (most
-            notably possible in case of empty snapshots and/or empty bins).
-
-    bin_on : Union[str, None]
+        If a Callable, is called with following parameters, please see
+        description in 'segmentby' docstring.
+    bin_on : Optional[str], default None
         Name of the column in `data` over which performing the binning
         operation.
         If 'bin_by' is a pandas `Grouper`, its `key` parameter is used instead,
         and 'bin_on' is ignored.
-    buffer : Union[dict, None]
+    buffer : Optional[dict], default None
         User-chosen values from previous binning process, that can be required
         when restarting the binning process with new seed data.
     ordered_on : Union[str, None]
@@ -243,28 +201,18 @@ def cumsegagg(
         This parameter is compulsory if 'snap_by' is set. Values derived from
         'snap_by' (either a Grouper or a Series) are compared to ``bin_ends``,
         themselves derived from ``data[ordered_on]``.
-    snap_by : Union[Grouper, IntervalIndex, None]
+    snap_by : Optional[Union[Grouper, Series, DatetimeIndex]], default None
         Values positioning the points of observation, either derived from a
-        pandas Grouper, or contained in a pandas IntervalIndex.
-        In case 'snap_by' is an IntervalIndex, it should contain one Interval
-        per point of observation. Only the "ends", i.e. the right edges are
-        retrieved to serve as locations for points of observation.
-        Additionally, ``snap_by.closed`` has to be set, either to `left` or
-        `right`. As a convention, at point of observation, if
-          - `left`, then values at point of observation are excluded.
-          - `right`, then values at point of observation are included.
+        pandas Grouper, or contained in a pandas Series.
+        In case 'snap_by' is a Series, values  serve as locations for points of
+        observation.
+        Additionally, ``closed`` value defined by 'bin_on' specifies if points
+        of observations are included or excluded. As "should be logical", if
+          - `left`, then values at points of observation are excluded.
+          - `right`, then values at points of observation are included.
 
-    allow_bins_snaps_disalignment : bool, default False
-        By default, check that ``bin_by.closed`` and ``snap_by.closed`` are not
-        set simulatenously to 'right', resp. 'left'.
-        If not, an error is raised.
-        As a result of the logic when setting 'bins.closed' and 'snaps.closed'
-        to 'right', resp. 'left', incomplete snapshots can be created. The
-        relevance of such a use is not clear and for safety, this combination
-        is not possible by default.
-        To make it possible, set 'allow_bins_snaps_disalignment' `True`.
     error_on_0 : bool, default True
-        By default, check that there is no `0` values (either int or float) in
+        By default, check that there is no `0` value (either int or float) in
         aggregation results (bins and snapshots). ``cumsegagg()`` is
         experimental and a `0` value is likely to hint a bug. If raised, the
         result should be double checked. Ultimately, please, report the use
@@ -273,28 +221,19 @@ def cumsegagg(
 
     Returns
     -------
-    pDataFrame
+    Union[pDataFrame, Tuple[pDataFrame, pDataFrame]]
         A pandas DataFrame with aggregation results. Its index is composed of
         the bin labels.
+        If a tuple, then the first DataFrame is that for the bins, and the
+        second that for the snapshots.
 
     Notes
     -----
-    When using snapshots, values derived from ``snap_by`` Grouper (or right
-    edges of ``snap_by`` IntervalIndex) are considered the "points of isolated
-    observation". At such a point, an observation of the "on-going" bin is
-    made. In case of snapshot(s) positioned exactly on segment(s) ends, at the
-    same row index in data, if
-      - the bins are left-closed, `[(`,
-          - if points of observations are excluded, then snapshot(s) will come
-            before said bin(s), that is to say, these snapshots will be equal
-            to the first bin (subsequent bins are then "empty" ones).
-          - if points of observations are included, then snapshot(s) will come
-            after said bin(s), that is to say, these will be "empty" snapshots.
-
-      - the bins are right-closed, `)]`, whatever if the points of observations
-        are included or excluded, snapshot(s) will come before said bin(s),
-        that is to say, these snapshots will be equal to the first bin
-        (subsequent bins are then "empty" ones).
+    When using snapshots, values derived from ``snap_by`` are considered the
+    "points of isolated observation". At such a point, an observation of the
+    "on-going" bin is made. In case of snapshot(s) positioned exactly on
+    segment(s) ends, at the same row index in data, snapshot will come "before"
+    the bin.
 
     When using 'cumsegagg' through 'chainagg' function (i.e. for chained calls
     to 'cumsegagg') and if setting `bin_by` as a Callable, the developer should
