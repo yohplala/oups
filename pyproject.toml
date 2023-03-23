@@ -7,9 +7,9 @@ license = "Apache-2.0"
 repository = "https://github.com/yohplala/oups"
 
 [tool.poetry.dependencies]
-python = ">=3.9, <3.10"
+python = ">=3.10"
 sortedcontainers = "^2.4.0"
-#llvmlite = "^0.37.0" # no wheel for python 3.9 if below.
+llvmlite = "^0.39.0" # no wheel for python 3.9 if below.
 #pyarrow = "7.0.0" # force pyarrow to 6.0.1 as 7.0.0 is available, but no packages yet?
 pandas = "^1.4.4"
 cramjam = "^2.5.0"
@@ -20,6 +20,8 @@ vaex-core = "^4.12.0"
 vaex-server = "^0.8.1"
 #blake3 = "^0.2.1" # remove next time upgrading vaex
 joblib = "^1.2.0"
+numba = "^0.56.4"
+#sortednp = "0.4.0" # remove when sortednp not used anylonger
 
 [tool.poetry.dev-dependencies]
 pre-commit = "^2.16.0"

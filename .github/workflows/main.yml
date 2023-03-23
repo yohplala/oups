@@ -22,7 +22,7 @@ jobs:
       - name: Set up Python environment
         uses: actions/setup-python@v2
         with:
-          python-version: "3.9"
+          python-version: "3.10"
 
       # Install dependencies
       # setuptools required by pre-commit
@@ -44,7 +44,7 @@ jobs:
       # Setup poetry cache
       - name: Get poetry cache dir
         id: cache-poetry
-        run: echo "::set-output name=dir::$(poetry config cache-dir)"
+        run: echo "dir=$(poetry config cache-dir)" >> $GITHUB_OUTPUT
 
       - name: Setup poetry cache
         uses: actions/cache@v2

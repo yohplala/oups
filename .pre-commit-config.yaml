@@ -40,7 +40,7 @@ repos:
         ]
 
   - repo: https://github.com/pycqa/isort
-    rev: 5.10.1
+    rev: 5.12.0
     hooks:
       - id: isort
         args: [
@@ -84,6 +84,9 @@ repos:
                 tests/*.py:D103
                 oups/__init__.py:F401
                 oups/writer.py:C901
+                oups/jcumsegagg.py:C901
+                oups/segmentby.py:C901
+                oups/cumsegagg.py:C901
                 oups/chainagg.py:C901
         ]
 
