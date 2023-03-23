@@ -943,3 +943,9 @@ def test_segmentby_orderedon_exceptions():
 
     with pytest.raises(ValueError, match="^column 'ordered_on' is not ordered"):
         segmentby(data=data, bin_by=bin_by, bin_on=bin_on, ordered_on=ordered_on)
+    # 'ordered_on' are int values.
+    unordered = [0, 4, 3]
+    data = pDataFrame({ordered_on: unordered})
+
+    with pytest.raises(ValueError, match="^column 'ordered_on' is not ordered"):
+        segmentby(data=data, bin_by=bin_by, bin_on=bin_on, ordered_on=ordered_on)

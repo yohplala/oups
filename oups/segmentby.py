@@ -642,7 +642,7 @@ def segmentby(
             and (
                 ndiff(
                     data[ordered_on].to_numpy(copy=False),
-                    prepend=data[ordered_on].iloc[0].to_numpy(),
+                    prepend=data[ordered_on].iloc[0],
                 )
                 >= 0
             ).all()
