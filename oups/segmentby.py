@@ -126,20 +126,24 @@ def by_scale(
     closed: Optional[str] = None,
     buffer: Optional[dict] = None,
 ) -> Tuple[ndarray, Series, int, str, Series, bool]:
-    """Segment an ordered DatetimeIndex as per pandas Grouper .
+    """Segment an ordered DatetimeIndex or Series.
 
     Parameters
     ----------
     on : Series
         Ordered date time index over which performing the binning as defined
         per 'by'.
-    by : Grouper
-        Setup to define binning as a pandas Grouper
+    by : Grouper or Series
+        Setup to define binning as a pandas Grouper, or values contained in a
+        Series.
     closed : str, default None
         Optional string, specifying if intervals defined by 'by' are left or
         right closed. This parameter is not used if 'by' is a pandas Grouper.
     buffer : dict
-        Dict to keep parameters allowing chaining calls to 'by_scale':
+        Dict to keep parameters allowing chaining calls to 'by_scale',
+        containing 2 keys.
+          - ``last_key``, last value in previous iteration, derived from 'by'.
+          - ``last_data_value``,
 
     Returns
     -------
@@ -165,7 +169,7 @@ def by_scale(
 
     """
     if isinstance(by, Grouper):
-        first = on.iloc[0]
+        first = buffer[KEY_LAST_KEY] if buffer and KEY_LAST_KEY in buffer else on.iloc[0]
         # In case 'by' is for snapshotting, and 'closed' is not set, take care
         # to use 'closed' provided.
         closed = by.closed if closed is None else closed
@@ -180,10 +184,20 @@ def by_scale(
         edges = date_range(start, end, freq=by.freq)
         chunk_ends = edges[1:]
         chunk_labels = chunk_ends if by.label == RIGHT else edges[:-1]
+        if buffer is not None:
+            buffer[KEY_LAST_KEY] = edges[-1]
     else:
         # Case 'by' is a Series.
-        chunk_ends = by
+        if buffer is not None:
+            if KEY_LAST_KEY in buffer:
+                # use of intricate way to insert 'key_last_key', compatible
+                # with both Series and DatetimeIndex.
+                by = Series([buffer[KEY_LAST_KEY], *by])
+            # Use of intricate way to get last element, compatible with both
+            # Series and DatetimeIndex
+            buffer[KEY_LAST_KEY] = by[len(by) - 1]
         chunk_labels = by
+        chunk_ends = by
     if chunk_ends.dtype == DTYPE_DATETIME64:
         next_chunk_starts, n_null_chunks = _next_chunk_starts(
             on.to_numpy(copy=False).view(DTYPE_INT64),
@@ -192,9 +206,7 @@ def by_scale(
         )
     else:
         next_chunk_starts, n_null_chunks = _next_chunk_starts(
-            on.to_numpy(copy=False),
-            chunk_ends.to_numpy(copy=False),
-            closed == RIGHT,
+            on.to_numpy(copy=False), chunk_ends.to_numpy(copy=False), closed == RIGHT
         )
     return next_chunk_starts, chunk_labels, n_null_chunks, closed, chunk_ends, False
 

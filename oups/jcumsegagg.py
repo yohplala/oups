@@ -276,6 +276,10 @@ def jcsagg(
         set to 0. Input array should be set to null values, so that unused
         rows can be identified clearly.
     """
+    # /!\ WiP for restart
+    # check len(bin_indices) == len(bin_res) or if bin_indices[-1] == len(bin_res) -1
+    # i.e. check if last bin ends sharp on data, or if last bin is un-finished
+    # If last bin is unfinished, and bin_res > 0, then record last state in last row of bin_res.
     data_dtype = data.dtype
     chunk_res = zeros(n_cols, data_dtype)
     bin_start = chunk_start = 0
@@ -286,6 +290,13 @@ def jcsagg(
         # Case 'snapshots expected'.
         # Setup identification of bins (vs snapshots).
         some_snaps = True
+        # /!\ WiP for restart
+        # do not check bin_indices, but len(bin_res)
+        # there could be no bin_indices (meaning there is a single unfinished bin in the data)
+        # but state at end of data for this single unfinished bin is still to be recorded
+        # in bin_res
+        # do not record / manage bin only if len(bin_res) is 0.
+        # create a corresponding test case with len(bin_indices) = 0 and len(bin_res) = 1
         if len(bin_indices) > 0:
             # Case 'there are bins'.
             # If a 'snapshot' chunk shares same last row than a 'bin'
