@@ -280,6 +280,12 @@ def jcsagg(
     # check len(bin_indices) == len(bin_res) or if bin_indices[-1] == len(bin_res) -1
     # i.e. check if last bin ends sharp on data, or if last bin is un-finished
     # If last bin is unfinished, and bin_res > 0, then record last state in last row of bin_res.
+    # /!\ n_null_bins becomes a n_max_null_bins with restart:
+    # the first bin indices can have next_chun_start at 0 (meaning emptybin)
+    # but with chunk_res (from previous iter) != 0
+    # correct n_null_bin in 'cumsegagg' depending reset state / reset_state should be output
+    # is given by pinnu, make a 'return pinnu'
+    # pinnu should be renamed 'reset' ?
     data_dtype = data.dtype
     chunk_res = zeros(n_cols, data_dtype)
     bin_start = chunk_start = 0

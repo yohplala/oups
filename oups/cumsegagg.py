@@ -312,6 +312,9 @@ def cumsegagg(
                 snap_res_single_dtype = snap_res_single_dtype.view(DTYPE_INT64)
         # 'data' is a numpy array, with columns in 'expected order',
         # as defined in 'cols_data' & 'cols_res' embedded in 'aggs'.
+        # /!\ WiP for restart, need to tell jcsagg about pinnu
+        #     also rework in jcsagg: need to always print on exit in last bin the
+        #     content of temporary buffer 'chunk_res'.
         jcsagg(
             data_single_dtype,  # 2d
             n_cols,

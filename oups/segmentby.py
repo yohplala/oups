@@ -185,17 +185,17 @@ def by_scale(
         chunk_ends = edges[1:]
         chunk_labels = chunk_ends if by.label == RIGHT else edges[:-1]
         if buffer is not None:
-            buffer[KEY_LAST_KEY] = edges[-1]
+            buffer[KEY_LAST_KEY] = edges[-2]
     else:
         # Case 'by' is a Series.
         if buffer is not None:
-            if KEY_LAST_KEY in buffer:
+            if KEY_LAST_KEY in buffer and (last_key := buffer[KEY_LAST_KEY]) != by[0]:
                 # use of intricate way to insert 'key_last_key', compatible
                 # with both Series and DatetimeIndex.
-                by = Series([buffer[KEY_LAST_KEY], *by])
-            # Use of intricate way to get last element, compatible with both
-            # Series and DatetimeIndex
-            buffer[KEY_LAST_KEY] = by[len(by) - 1]
+                by = Series([last_key, *by])
+            # Use of intricate way to get last-but-one element, compatible with
+            # both Series and DatetimeIndex
+            buffer[KEY_LAST_KEY] = by[len(by) - 2]
         chunk_labels = by
         chunk_ends = by
     if chunk_ends.dtype == DTYPE_DATETIME64:
