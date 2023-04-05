@@ -21,8 +21,8 @@ from oups.cumsegagg import DTYPE_DATETIME64
 from oups.cumsegagg import DTYPE_INT64
 from oups.segmentby import BIN_BY
 from oups.segmentby import KEY_BIN
-from oups.segmentby import KEY_LAST_KEY
-from oups.segmentby import KEY_ROWS_IN_LAST_BIN
+from oups.segmentby import KEY_LAST_BIN_LABEL
+from oups.segmentby import KEY_RESTART_KEY
 from oups.segmentby import LEFT
 from oups.segmentby import NULL_INT64_1D_ARRAY
 from oups.segmentby import ON_COLS
@@ -41,7 +41,7 @@ from oups.segmentby import setup_segmentby
 
 
 @pytest.mark.parametrize(
-    "data, right_edges, right, ref, n_null_chunks_ref",
+    "data, right_edges, right, ref, n_null_chunks_ref, edges_traversed_ref",
     [
         (
             #      0  1  2  3  4  5  6
@@ -51,6 +51,7 @@ from oups.segmentby import setup_segmentby
             True,
             array([2, 4, 4, 5, 6], dtype=DTYPE_INT64),
             1,
+            False,
         ),
         (
             #      0  1  2  3  4  5  6
@@ -60,6 +61,7 @@ from oups.segmentby import setup_segmentby
             False,
             array([1, 4, 4, 4, 5], dtype=DTYPE_INT64),
             2,
+            False,
         ),
         (
             #      0  1  2  3  4  5  6
@@ -67,8 +69,9 @@ from oups.segmentby import setup_segmentby
             #      7   7   7   7
             array([50, 60, 70, 88], dtype=DTYPE_INT64),
             False,
-            array([7, 7, 7, 7], dtype=DTYPE_INT64),
-            3,
+            array([7], dtype=DTYPE_INT64),
+            0,
+            True,
         ),
         (
             #       0   1   2
@@ -78,6 +81,7 @@ from oups.segmentby import setup_segmentby
             False,
             array([0, 0, 0, 0], dtype=DTYPE_INT64),
             4,
+            False,
         ),
         (
             #      0  1  2
@@ -85,8 +89,19 @@ from oups.segmentby import setup_segmentby
             #      0  2  3  3
             array([5, 6, 7, 8], dtype=DTYPE_INT64),
             False,
-            array([0, 2, 3, 3], dtype=DTYPE_INT64),
-            2,
+            array([0, 2, 3], dtype=DTYPE_INT64),
+            1,
+            True,
+        ),
+        (
+            #      0  1  2
+            array([5, 5, 6], dtype=DTYPE_INT64),
+            #      2  3  3  3
+            array([5, 6, 7, 8], dtype=DTYPE_INT64),
+            True,
+            array([2, 3], dtype=DTYPE_INT64),
+            0,
+            True,
         ),
         (
             #      0  1  2  3  4
@@ -96,13 +111,15 @@ from oups.segmentby import setup_segmentby
             False,
             array([0, 2, 2, 5], dtype=DTYPE_INT64),
             2,
+            True,
         ),
     ],
 )
-def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref):
-    next_chunk_starts, n_null_chunks = _next_chunk_starts(data, right_edges, right)
-    assert nall(ref == next_chunk_starts)
+def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edges_traversed_ref):
+    next_chunk_starts, n_null_chunks, edges_traversed = _next_chunk_starts(data, right_edges, right)
+    assert nall(next_chunk_starts == ref)
     assert n_null_chunks == n_null_chunks_ref
+    assert edges_traversed == edges_traversed_ref
 
 
 @pytest.mark.parametrize(
@@ -284,72 +301,92 @@ def test_by_scale(
         n_null_chunks,
         by_closed,
         chunk_ends,
-        unknown_last_chunk_end,
+        unknown_last_bin_end,
     ) = by_scale(on, by)
     assert nall(chunk_labels == chunk_labels_ref)
     assert nall(chunk_ends == chunk_ends_ref)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
     assert n_null_chunks == n_null_chunks_ref
     assert by_closed == by.closed
-    assert not unknown_last_chunk_end
+    assert not unknown_last_bin_end
 
 
 @pytest.mark.parametrize(
-    "len_data, x_rows, buffer_in, buffer_out, chunk_starts_ref, next_chunk_starts_ref, "
-    "set_first_key",
+    "len_data, x_rows, closed, buffer_in, buffer_out, chunk_starts_ref,"
+    "next_chunk_starts_ref, set_first_key, unknown_last_bin_end_ref",
     [
-        (3, 4, None, None, array([0]), array([3]), False),
-        (7, 4, None, None, array([0, 4]), array([4, 7]), False),
-        (8, 4, None, None, array([0, 4]), array([4, 8]), False),
+        (3, 4, LEFT, None, None, array([0]), array([3]), False, True),
+        (7, 4, LEFT, None, None, array([0, 4]), array([4, 7]), False, True),
+        (7, 4, RIGHT, None, None, array([0, 4]), array([4, 7]), False, True),
+        (8, 4, LEFT, None, None, array([0, 4]), array([4, 8]), False, True),
+        (8, 4, RIGHT, None, None, array([0, 4]), array([4, 8]), False, False),
         (
             3,
             4,
-            {KEY_ROWS_IN_LAST_BIN: 1, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
+            LEFT,
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
             array([0]),
             array([3]),
             True,
+            True,
         ),
         (
             7,
             4,
-            {KEY_ROWS_IN_LAST_BIN: 1, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 11:00")},
+            LEFT,
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 11:00")},
             array([0, 3]),
             array([3, 7]),
             True,
+            True,
         ),
         (
             7,
             4,
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 3, KEY_LAST_KEY: pTimestamp("2022/01/01 12:00")},
+            LEFT,
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 12:00")},
             array([0, 4]),
             array([4, 7]),
             False,
-        ),
-        (
-            8,
-            4,
-            {KEY_ROWS_IN_LAST_BIN: 1, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 1, KEY_LAST_KEY: pTimestamp("2022/01/01 15:00")},
-            array([0, 3, 7]),
-            array([3, 7, 8]),
             True,
         ),
         (
             8,
             4,
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 12:00")},
+            LEFT,
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 15:00")},
+            array([0, 3, 7]),
+            array([3, 7, 8]),
+            True,
+            True,
+        ),
+        (
+            8,
+            4,
+            LEFT,
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 12:00")},
             array([0, 4]),
             array([4, 8]),
             False,
+            True,
         ),
     ],
 )
 def test_by_x_rows(
-    len_data, x_rows, buffer_in, buffer_out, chunk_starts_ref, next_chunk_starts_ref, set_first_key
+    len_data,
+    x_rows,
+    closed,
+    buffer_in,
+    buffer_out,
+    chunk_starts_ref,
+    next_chunk_starts_ref,
+    set_first_key,
+    unknown_last_bin_end_ref,
 ):
     start = pTimestamp("2022/01/01 08:00")
     dummy_data = arange(len_data)
@@ -358,27 +395,31 @@ def test_by_x_rows(
     )
     chunk_labels_ref = data.iloc[chunk_starts_ref, -1].reset_index(drop=True)
     chunk_ends_idx = next_chunk_starts_ref.copy()
-    chunk_ends_idx[-1] = len_data - 1
-    chunk_ends_ref = data.iloc[chunk_ends_idx, -1].reset_index(drop=True)
+    if closed == LEFT:
+        chunk_ends_idx[-1] = len_data - 1
+        chunk_ends_ref = data.iloc[chunk_ends_idx, -1].reset_index(drop=True)
+    else:
+        chunk_ends_idx -= 1
+        chunk_ends_ref = data.iloc[chunk_ends_idx, -1].reset_index(drop=True)
     if buffer_out is not None and set_first_key:
-        chunk_labels_ref.iloc[0] = buffer_in[KEY_LAST_KEY]
+        chunk_labels_ref.iloc[0] = buffer_in[KEY_LAST_BIN_LABEL]
     (
         next_chunk_starts,
         chunk_labels,
         n_null_chunks,
         chunk_closed,
         chunk_ends,
-        unknown_last_chunk_end,
-    ) = by_x_rows(data, x_rows, LEFT, buffer_in)
+        unknown_last_bin_end,
+    ) = by_x_rows(data, x_rows, closed=closed, buffer=buffer_in)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
     assert nall(chunk_labels == chunk_labels_ref)
     assert not n_null_chunks
-    assert chunk_closed == LEFT
+    assert chunk_closed == closed
     # 'chunk_ends' is expected to be the same than 'chunk_labels'.
     assert nall(chunk_ends == chunk_ends_ref)
     if buffer_out is not None:
         assert buffer_in == buffer_out
-    assert unknown_last_chunk_end
+    assert unknown_last_bin_end == unknown_last_bin_end_ref
 
 
 def test_mergesort_labels_and_keys():
@@ -509,16 +550,12 @@ def test_setup_segmentby(
     res = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
     if isinstance(bin_by, Grouper):
         on = Series(date_range("2020/01/01 08:01", periods=3, freq="3T"))
-        (next_chunk_starts, _, _, _, _, _,) = res[
-            BIN_BY
-        ](on=on)
+        (next_chunk_starts, _, _, _, _, _) = res[BIN_BY](on=on)
     else:
         on = pDataFrame(
             {"dti": date_range("2020/01/01 08:01", periods=3, freq="3T"), "ordered_on": [1, 2, 3]}
         )
-        (next_chunk_starts, _, _, _, _, _,) = res[
-            BIN_BY
-        ](on=on)
+        (next_chunk_starts, _, _, _, _, _) = res[BIN_BY](on=on)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
     assert res[ON_COLS] == on_cols_ref
     assert res[ORDERED_ON] == ordered_on_ref
@@ -607,7 +644,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             "ordered_on",
             None,
             None,
-            {KEY_BIN: {KEY_LAST_KEY: 1, KEY_ROWS_IN_LAST_BIN: 1}},
+            {KEY_BIN: {KEY_LAST_BIN_LABEL: 1, KEY_RESTART_KEY: 1}},
             array([3, 4]),
             NULL_INT64_1D_ARRAY,
             Series([1, 3]),

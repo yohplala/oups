@@ -372,3 +372,44 @@ def cumsegagg(
         return bin_res, snap_res
     else:
         return bin_res
+    #
+    # Development notes regarding restart.
+    # Managing a restart is how managing the first bin which was likely
+    # incomplete at previous iteration.
+    #
+    # Segmentation ('segmentby()')
+    # ----------------------------
+    #
+    # 1/ From this step, 'next_chunk_starts' should not end with an empty bin.
+    # It will be check in 'segmentby()'. All empty bins at end of
+    # 'next_chunk_starts' have to be trimmed.
+    # Rationale is that when restarting after several empty bins, it *may* be
+    # that some new data was actually in these bins, empty at previous
+    # iteration.
+    #
+    # 2/ At this step, the 'restart_key' is a key that enables a restart from
+    # last not empty bin of previous iteration, that was likely incomplete.
+    # That it was actually complete or not does not raise trouble. It will be
+    # check at next iteration in 'cumsegagg()'. If there is no new data in this
+    # bin at new iteration, it will be discarded from new iteation.
+    #
+    # 3/ If using snapshots, in consolidated 'next_chunk_starts' &
+    # 'bin_indices',
+    #  - the two last indices in 'next_chunk_starts' have to cover the full
+    #    data (this should be ensured directly by 'bin_by()' functions or
+    #    an error should be raised).
+    #  - the last index should be forced to be that of a bin (to avoid during
+    #    the cumulative aggregation step that the last snapshot is empty)
+    #
+    # Cumulative segmented aggregation ('cumsegagg()')
+    # ------------------------------------------------
+    #
+    # 1/ Before starting 'jcumsegagg()', the first bin is checked to be empty
+    # or not (last bin from previous iteration was then complete).
+    # - if it is empty in this new iteration, it is discarded, i.e. following
+    #   parameters are forwarded to 'jcumsegagg()':
+    #    - trimmed 'next_chunk_starts[1:]'
+    #    - 'bin_res' reduced by one element.
+    #    - 'n_null_bin' reduced by one.
+    # - if it is not empty in this new iteration, previous aggregation results
+    #   'chunk_res', need to be re-used and 'pinnu' has to be set to ``True``.

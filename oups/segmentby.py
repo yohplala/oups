@@ -39,8 +39,8 @@ RIGHT = "right"
 KEY_BIN = "bin"
 KEY_SNAP = "snap"
 # Keys for 'by_x_rows'.
-KEY_ROWS_IN_LAST_BIN = "rows_in_last_bin"
-KEY_LAST_KEY = "last_key"
+KEY_LAST_BIN_LABEL = "last_bin_label"
+KEY_RESTART_KEY = "restart_key"
 # Keys for 'bin_by' when a dict
 ON_COLS = "on_cols"
 BIN_BY = "bin_by"
@@ -50,8 +50,8 @@ SNAP_BY = "snap_by"
 
 @njit(
     [
-        "Tuple((int64[:], int64))(int64[:], int64[:], boolean)",
-        "Tuple((int64[:], int64))(float64[:], float64[:], boolean)",
+        "Tuple((int64[:], int64, boolean))(int64[:], int64[:], boolean)",
+        "Tuple((int64[:], int64, boolean))(float64[:], float64[:], boolean)",
     ],
 )
 def _next_chunk_starts(
@@ -74,13 +74,18 @@ def _next_chunk_starts(
 
     Returns
     -------
-    next_chunk_starts: ndarray
+    next_chunk_starts : ndarray
         One-dimensional array, containing row indices for start of next chunk,
         to bin 'data' as per 'right_edges'.
-        Size of 'next_chunk_starts' is ``len(right_edges)``.
-    n_null_chunks: ndarray
+        If last right edges are out of 'data', the 'next chunk starts' for the
+        resulting empty bins are not returned.
+        Size of 'next_chunk_starts' is smaller than or equal to
+        ``len(right_edges)``.
+    n_null_chunks : ndarray
         One-dimensional array of size 1, which single value is the number of
         null chunks identified.
+    data_traversed : boolean
+        Specifies if 'data' has been completely traversed or not.
     """
     # Output variables
     next_chunk_starts = zeros(len(right_edges), dtype=DTYPE_INT64)
@@ -108,21 +113,26 @@ def _next_chunk_starts(
             # Array 'data' terminated and loop stayed in previous chunk.
             # Then, last loop has not been accounted for.
             # Hence a '+1' to account for it.
-            next_chunk_starts[b_idx_loc:] = _d_idx + 1
-            n_null_chunks += len(next_chunk_starts[b_idx_loc:]) - 1
-            return next_chunk_starts, n_null_chunks
+            next_chunk_starts[b_idx_loc] = _d_idx + 1
+            # Previous code to return all bins, including the empty ones
+            # defined by the last values in 'right_edges'.
+            # next_chunk_starts[b_idx_loc:] = _d_idx + 1
+            # n_null_chunks += len(next_chunk_starts[b_idx_loc:]) - 1
+            # Do not return empty bins at end of data.
+            return next_chunk_starts[: b_idx_loc + 1], n_null_chunks, True
         else:
             next_chunk_starts[b_idx_loc] = _d_idx
             if prev_d_idx == _d_idx:
                 n_null_chunks += 1
             else:
                 prev_d_idx = _d_idx
-    return next_chunk_starts, n_null_chunks
+    # Array 'right_edges' is terminated, before 'data' is ended.
+    return next_chunk_starts, n_null_chunks, False
 
 
 def by_scale(
     on: Series,
-    by: Union[Grouper, Series],
+    by: Union[Grouper, Series, Tuple[Series]],
     closed: Optional[str] = None,
     buffer: Optional[dict] = None,
 ) -> Tuple[ndarray, Series, int, str, Series, bool]:
@@ -133,17 +143,20 @@ def by_scale(
     on : Series
         Ordered date time index over which performing the binning as defined
         per 'by'.
-    by : Grouper or Series
+    by : Grouper or Series or tuple of 2 Series
         Setup to define binning as a pandas Grouper, or values contained in a
         Series.
+        If a Series, values are used both as ends and labels of chunks.
+        If a tuple of 2 Series, values in first Series are labels of chunks,
+        and second Series are ends of chunks.
     closed : str, default None
         Optional string, specifying if intervals defined by 'by' are left or
-        right closed. This parameter is not used if 'by' is a pandas Grouper.
+        right closed. This parameter overrides 'by.closed' if 'by' is a pandas
+        Grouper.
     buffer : dict
-        Dict to keep parameters allowing chaining calls to 'by_scale',
-        containing 2 keys.
-          - ``last_key``, last value in previous iteration, derived from 'by'.
-          - ``last_data_value``,
+        Dict to keep parameters allowing chaining calls to 'by_scale', with
+        ``restart_key``, keeping track of the end of the on-but-last chunk from
+        previous iteration, derived from 'by'.
 
     Returns
     -------
@@ -165,11 +178,36 @@ def by_scale(
             pandas Grouper.
           - ``unknown_last_chunk_end``, a boolean, always `False`, specifying
             that the last bin end is known. This is because bin ends are fully
-            specified as per 'by' pandas Grouper.
+            specified as per 'by' pandas Grouper or Series.
+
+    Notes
+    -----
+    If running ``by_scale()`` with a buffer, setting of value for key
+    `"restart_key`" depends if last value derived from 'by' (either a Grouper
+    or a Series) lies before the last value in 'on'.
+      - If it lies before, then this last value derived from 'by' is the
+        restart key.
+      - If it lies after, then the one-but-last value derived from 'by' is the
+        restart key.
 
     """
+    # Rationale for selecting the "restart key value".
+    # - For a correct restart at iteration N+1, the restart point needs to be
+    #   that of the last bin at iteration N that has been "in-progress". The
+    #   restart is said correct because it restarts on new data, where
+    #   aggregation at iteration N stopped. There is no omission of new data,
+    #   nor omission of possibly empty bins till new data.
+    # - At iteration N,
+    #     - if last value derived from 'by' is after last value in
+    #       "on", then at next iteration, N+1, new data can be used, which
+    #       still lies before this last value derived from 'by' at iteration N.
+    #       To make sure this new data is correctly managed, we need to restart
+    #       from one-but-last value derived from 'by' at iteration N.
+    #     - if last value derived from 'by' is before last value in "on", then
+    #       at next iteration, N+1, we are sure no new data will appear before
+    #       it. This last value can be safely used as restart value.
     if isinstance(by, Grouper):
-        first = buffer[KEY_LAST_KEY] if buffer and KEY_LAST_KEY in buffer else on.iloc[0]
+        first = buffer[KEY_RESTART_KEY] if buffer and KEY_RESTART_KEY in buffer else on.iloc[0]
         # In case 'by' is for snapshotting, and 'closed' is not set, take care
         # to use 'closed' provided.
         closed = by.closed if closed is None else closed
@@ -184,30 +222,45 @@ def by_scale(
         edges = date_range(start, end, freq=by.freq)
         chunk_ends = edges[1:]
         chunk_labels = chunk_ends if by.label == RIGHT else edges[:-1]
-        if buffer is not None:
-            buffer[KEY_LAST_KEY] = edges[-2]
     else:
+        if isinstance(by, tuple):
+            chunk_labels, chunk_ends = by
+            if len(chunk_labels) != len(chunk_ends):
+                raise ValueError("number of chunk labels has to be equal to number of chunk ends.")
+        else:
+            chunk_labels = chunk_ends = by
         # Case 'by' is a Series.
-        if buffer is not None:
-            if KEY_LAST_KEY in buffer and (last_key := buffer[KEY_LAST_KEY]) != by[0]:
-                # use of intricate way to insert 'key_last_key', compatible
-                # with both Series and DatetimeIndex.
-                by = Series([last_key, *by])
-            # Use of intricate way to get last-but-one element, compatible with
-            # both Series and DatetimeIndex
-            buffer[KEY_LAST_KEY] = by[len(by) - 2]
-        chunk_labels = by
-        chunk_ends = by
+        if (
+            buffer is not None
+            and KEY_RESTART_KEY in buffer
+            and buffer[KEY_RESTART_KEY] != chunk_ends[0]
+        ):
+            raise ValueError(
+                f"first value expected in 'by' to restart correctly is {buffer[KEY_RESTART_KEY]}"
+            )
     if chunk_ends.dtype == DTYPE_DATETIME64:
-        next_chunk_starts, n_null_chunks = _next_chunk_starts(
+        next_chunk_starts, n_null_chunks, data_traversed = _next_chunk_starts(
             on.to_numpy(copy=False).view(DTYPE_INT64),
             chunk_ends.to_numpy(copy=False).view(DTYPE_INT64),
             closed == RIGHT,
         )
     else:
-        next_chunk_starts, n_null_chunks = _next_chunk_starts(
+        next_chunk_starts, n_null_chunks, data_traversed = _next_chunk_starts(
             on.to_numpy(copy=False), chunk_ends.to_numpy(copy=False), closed == RIGHT
         )
+    n_chunks = len(next_chunk_starts)
+    if data_traversed:
+        chunk_labels = chunk_labels[:n_chunks]
+        chunk_ends = chunk_ends[:n_chunks]
+        if buffer is not None and n_chunks > 1:
+            # Use of intricate way to get last or last-but-one element, compatible
+            # with both Series and DatetimeIndex
+            # Get one-but-last element.
+            # Initialize only if there are more than 2 elements at least.
+            buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 2]
+    elif buffer is not None:
+        # Get last element.
+        buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
     return next_chunk_starts, chunk_labels, n_null_chunks, closed, chunk_ends, False
 
 
@@ -236,10 +289,11 @@ def by_x_rows(
         How is closed the segments, either "left" or "right".
     buffer : dict, default None
         Dict to keep 2 parameters allowing chaining calls to 'by_x_rows':
-          - 'rows_in_last_bin', an int specifying the number of rows in last
+          - 'restart_key', an int specifying the number of rows in last
             (and possibly incomplete) bin from the previous call to
             'bin_x_rows'.
-          - 'last_key', key of last (possibly incomplete) bin.
+          - 'last_bin_label', label of the last bin, that will be re-used in
+            next iteration.
 
     Returns
     -------
@@ -249,7 +303,8 @@ def by_x_rows(
             specifying for each bin the row indice at which starts the next
             bin.
           - ``bin_labels``, a pandas Series specifying for each bin its label.
-            Labels are first value in bin taken in last column of 'on'.
+            Labels are first value in bin taken in last column of 'on' (which
+            is supposed to be an ordered column).
           - ``n_null_bins``, an int, always ``0``.
 
         The 3 last items are used only if both bins and snapshots are generated
@@ -261,11 +316,11 @@ def by_x_rows(
             indicating the "position" of the bin end, which is marked by the
             start of the next bin, excluded. The end of the last bin being
             unknown by definition (because is excluded), the last value is not
-            relevant. This information is flagged by ``unknown_last_bin_end```.
-          - ``unknown_last_bin_end``, a boolean, always `True`, specifying that
-            the last bin end is unknown. This is because bins are lef-closed,
-            meaning that their end is excluded. Hence, the last bin is always
-            "in-progress".
+            relevant. It is forced anyhow in 'segmentby()' to be last.
+          - ``unknown_last_bin_end``, a boolean specifying if the last bin end
+            is unknown. It is ``True`` if bins are lef-closed, meaning that
+            their end is excluded. Hence, the last bin is always "in-progress".
+            It is ``False`` if they are right-closed.
 
     """
     len_on = len(on)
@@ -274,9 +329,7 @@ def by_x_rows(
         on = on.iloc[:, -1]
     # Derive number of rows in first bins (cannot be 0) and number of bins.
     rows_in_last_bin = (
-        buffer[KEY_ROWS_IN_LAST_BIN]
-        if (buffer is not None and KEY_ROWS_IN_LAST_BIN in buffer)
-        else 0
+        buffer[KEY_RESTART_KEY] if (buffer is not None and KEY_RESTART_KEY in buffer) else 0
     )
     rows_in_first_bin = min(by - rows_in_last_bin if rows_in_last_bin != by else by, len_on)
     n_rows_for_new_bins = len_on - rows_in_first_bin
@@ -292,27 +345,37 @@ def by_x_rows(
     # Correct start of 1st chunk.
     chunk_starts[0] = 0
     bin_labels = on.iloc[chunk_starts].reset_index(drop=True)
+    n_rows_in_last_bin = (
+        rows_in_first_bin + rows_in_last_bin
+        if n_bins == 1
+        else n_rows_for_new_bins
+        if n_rows_for_new_bins <= by
+        else fmod(n_rows_for_new_bins, by) or by
+    )
     if buffer is not None:
         # Correct 1st label if not a new bin.
-        if KEY_LAST_KEY in buffer and rows_in_first_bin != by:
-            bin_labels.iloc[0] = buffer[KEY_LAST_KEY]
+        if KEY_LAST_BIN_LABEL in buffer and rows_in_first_bin != by:
+            bin_labels.iloc[0] = buffer[KEY_LAST_BIN_LABEL]
         # Update 'buffer[rows_in_last_bin]' with number of rows in last bin for
         # next run.
-        buffer[KEY_ROWS_IN_LAST_BIN] = fmod(n_rows_for_new_bins, by) or by
-        # Update'buffer[last_key]' with last bin label.
-        buffer[KEY_LAST_KEY] = bin_labels.iloc[-1]
-    # 'bin_ends' has no end for last bin, because it is unknown.
-    # Temporarily adjust 'next_chunk_start' of last bin to last index.
-    next_chunk_starts[-1] = len_on - 1
+        buffer[KEY_RESTART_KEY] = n_rows_in_last_bin
+        # Update'buffer[restart_key]' with last bin label.
+        buffer[KEY_LAST_BIN_LABEL] = bin_labels.iloc[-1]
     if closed == LEFT:
-        # End is start of next bin, excluded.
+        # Case 'left, end is start of next bin, excluded,
+        # 'bin_ends' has no end for last bin, because it is unknown.
+        # Temporarily adjust 'next_chunk_start' of last bin to last index.
+        next_chunk_starts[-1] = len_on - 1
         bin_ends = on.iloc[next_chunk_starts].reset_index(drop=True)
-    else:
-        # End is end of current bin, included.
-        bin_ends = on.iloc[next_chunk_starts - 1].reset_index(drop=True)
+        unknown_last_bin_end = True
     # Reset 'next_chunk_start' of last bin.
     next_chunk_starts[-1] = len_on
-    return next_chunk_starts, bin_labels, 0, closed, bin_ends, True
+    if closed == RIGHT:
+        # Case 'right', end is end of current bin, included.
+        bin_ends = on.iloc[next_chunk_starts - 1].reset_index(drop=True)
+        # Bin end is unknown if last bin does not end exactly.
+        unknown_last_bin_end = True if n_rows_in_last_bin != by else False
+    return next_chunk_starts, bin_labels, 0, closed, bin_ends, unknown_last_bin_end
 
 
 def mergesort(
@@ -662,7 +725,7 @@ def segmentby(
         n_null_bins,
         bin_closed,
         bin_ends,
-        last_bin_end_unknown,
+        unknown_last_bin_end,
     ) = bin_by[BIN_BY](on=on, buffer=buffer_bin)
     # Some checks.
     if bin_closed != LEFT and bin_closed != RIGHT:
@@ -674,14 +737,9 @@ def segmentby(
         raise ValueError("'next_chunk_starts' and 'chunk_ends' have to be of the same size.")
     if snap_by is not None:
         # Define points of observation
-        (
-            next_snap_starts,
-            _,
-            n_max_null_snaps,
-            _,
-            snap_ends,
-            _,
-        ) = by_scale(on=data.loc[:, ordered_on], by=snap_by, closed=bin_closed, buffer=buffer_snap)
+        (next_snap_starts, _, n_max_null_snaps, _, snap_ends, _) = by_scale(
+            on=data.loc[:, ordered_on], by=snap_by, closed=bin_closed, buffer=buffer_snap
+        )
         # Consolidate 'next_snap_starts' into 'next_chunk_starts'.
         # If bins are left-closed, the end of the last bin can possibly be
         # unknown yet.
@@ -698,7 +756,7 @@ def segmentby(
         next_chunk_starts, bin_indices = mergesort(
             labels=(next_snap_starts, next_chunk_starts),
             keys=(snap_ends, bin_ends),
-            force_last_from_second=last_bin_end_unknown,
+            force_last_from_second=unknown_last_bin_end,
         )
         # Take indices of 'next_chunk_starts' corresponding to bins that are
         # followed right after by a snapshot.
