@@ -301,14 +301,14 @@ def test_by_scale(
         n_null_chunks,
         by_closed,
         chunk_ends,
-        unknown_last_bin_end,
+        unknown_last_chunk_end,
     ) = by_scale(on, by)
     assert nall(chunk_labels == chunk_labels_ref)
     assert nall(chunk_ends == chunk_ends_ref)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
     assert n_null_chunks == n_null_chunks_ref
     assert by_closed == by.closed
-    assert not unknown_last_bin_end
+    assert not unknown_last_chunk_end
 
 
 @pytest.mark.parametrize(

@@ -128,6 +128,7 @@ def test_by_scale(
             n_null_chunks,
             by_closed,
             chunk_ends,
+            unknown_chunk_end,
         ) = by_scale(on[start_idx:end_idx], by, closed=closed, buffer=buffer)
         assert nall(chunk_labels == chunk_labels_refs[i])
         assert nall(chunk_ends == chunk_ends_refs[i])
@@ -138,11 +139,12 @@ def test_by_scale(
         # numpy Timestamp instead.
         assert buffer[KEY_RESTART_KEY].to_numpy() == buffer_refs[i][KEY_RESTART_KEY].to_numpy()
         start_idx = end_idx
+    assert not unknown_chunk_end
     assert by_closed == by.closed
 
 
 @pytest.mark.parametrize(
-    "by, closed, end_indices, chunk_labels_refs, next_chunk_starts_refs, chunk_ends_refs, buffer_refs",
+    "by, closed, end_indices, bin_labels_refs, next_bin_starts_refs, bin_ends_refs, unknown_bin_end_refs, buffer_refs",
     [
         (
             4,
@@ -169,6 +171,7 @@ def test_by_scale(
                     ["2020-01-01 08:50:00", "2020-01-01 08:50:00"], dtype=DTYPE_DATETIME64
                 ),
             ],
+            [True, True, True],
             [
                 {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00")},
                 {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
@@ -181,9 +184,10 @@ def test_by_x_rows(
     by,
     closed,
     end_indices,
-    chunk_labels_refs,
-    next_chunk_starts_refs,
-    chunk_ends_refs,
+    bin_labels_refs,
+    next_bin_starts_refs,
+    bin_ends_refs,
+    unknown_bin_end_refs,
     buffer_refs,
 ):
     on = Series(
@@ -203,16 +207,18 @@ def test_by_x_rows(
     buffer = {}
     for i, end_idx in enumerate(end_indices):
         (
-            next_chunk_starts,
-            chunk_labels,
-            n_null_chunks,
+            next_bin_starts,
+            bin_labels,
+            n_null_bins,
             by_closed,
-            chunk_ends,
+            bin_ends,
+            unknown_bin_end,
         ) = by_x_rows(on[start_idx:end_idx], by, buffer=buffer)
-        assert nall(chunk_labels == chunk_labels_refs[i])
-        assert nall(chunk_ends == chunk_ends_refs[i])
-        assert nall(next_chunk_starts == next_chunk_starts_refs[i])
-        assert not n_null_chunks
+        assert nall(bin_labels == bin_labels_refs[i])
+        assert nall(bin_ends == bin_ends_refs[i])
+        assert nall(next_bin_starts == next_bin_starts_refs[i])
+        assert not n_null_bins
+        assert unknown_bin_end == unknown_bin_end_refs[i]
         assert buffer[KEY_RESTART_KEY] == buffer_refs[i][KEY_RESTART_KEY]
         assert buffer[KEY_LAST_BIN_LABEL] == buffer_refs[i][KEY_LAST_BIN_LABEL]
         start_idx = end_idx

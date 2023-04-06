@@ -177,8 +177,8 @@ def by_scale(
           - ``chunk_ends``, a pandas Series containing bin ends, as per 'by'
             pandas Grouper.
           - ``unknown_last_chunk_end``, a boolean, always `False`, specifying
-            that the last bin end is known. This is because bin ends are fully
-            specified as per 'by' pandas Grouper or Series.
+            that the last chunk end is known. This is because chunk ends are
+            fully specified as per 'by' pandas Grouper or Series.
 
     Notes
     -----
