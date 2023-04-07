@@ -11,12 +11,13 @@ from pandas import DatetimeIndex
 from pandas import Grouper
 from pandas import Series
 from pandas import Timestamp as pTimestamp
+from pandas import date_range
 
-from oups.cumsegagg import DTYPE_DATETIME64
 from oups.cumsegagg import DTYPE_INT64
 from oups.segmentby import KEY_LAST_BIN_LABEL
 from oups.segmentby import KEY_RESTART_KEY
 from oups.segmentby import LEFT
+from oups.segmentby import RIGHT
 from oups.segmentby import by_scale
 from oups.segmentby import by_x_rows
 
@@ -33,29 +34,9 @@ from oups.segmentby import by_x_rows
             None,
             [3, 6, 9],
             [
-                DatetimeIndex(
-                    ["2020-01-01 08:00:00", "2020-01-01 08:05:00", "2020-01-01 08:10:00"],
-                    dtype=DTYPE_DATETIME64,
-                    freq="5T",
-                ),
-                DatetimeIndex(
-                    ["2020-01-01 08:10:00", "2020-01-01 08:15:00", "2020-01-01 08:20:00"],
-                    dtype=DTYPE_DATETIME64,
-                    freq="5T",
-                ),
-                DatetimeIndex(
-                    [
-                        "2020-01-01 08:20:00",
-                        "2020-01-01 08:25:00",
-                        "2020-01-01 08:30:00",
-                        "2020-01-01 08:35:00",
-                        "2020-01-01 08:40:00",
-                        "2020-01-01 08:45:00",
-                        "2020-01-01 08:50:00",
-                    ],
-                    dtype=DTYPE_DATETIME64,
-                    freq="5T",
-                ),
+                date_range(start="2020-01-01 08:00:00", end="2020-01-01 08:10:00", freq="5T"),
+                date_range(start="2020-01-01 08:10:00", end="2020-01-01 08:20:00", freq="5T"),
+                date_range(start="2020-01-01 08:20:00", end="2020-01-01 08:50:00", freq="5T"),
             ],
             [
                 array([2, 2, 3], dtype=DTYPE_INT64),
@@ -64,33 +45,77 @@ from oups.segmentby import by_x_rows
             ],
             [1, 1, 5],
             [
-                DatetimeIndex(
-                    ["2020-01-01 08:05:00", "2020-01-01 08:10:00", "2020-01-01 08:15:00"],
-                    dtype=DTYPE_DATETIME64,
-                    freq="5T",
-                ),
-                DatetimeIndex(
-                    ["2020-01-01 08:15:00", "2020-01-01 08:20:00", "2020-01-01 08:25:00"],
-                    dtype=DTYPE_DATETIME64,
-                    freq="5T",
-                ),
-                DatetimeIndex(
-                    [
-                        "2020-01-01 08:25:00",
-                        "2020-01-01 08:30:00",
-                        "2020-01-01 08:35:00",
-                        "2020-01-01 08:40:00",
-                        "2020-01-01 08:45:00",
-                        "2020-01-01 08:50:00",
-                        "2020-01-01 08:55:00",
-                    ],
-                    dtype=DTYPE_DATETIME64,
-                    freq="5T",
-                ),
+                date_range(start="2020-01-01 08:05:00", end="2020-01-01 08:15:00", freq="5T"),
+                date_range(start="2020-01-01 08:15:00", end="2020-01-01 08:25:00", freq="5T"),
+                date_range(start="2020-01-01 08:25:00", end="2020-01-01 08:55:00", freq="5T"),
             ],
             [
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:20:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
+            ],
+        ),
+        (
+            Grouper(freq="5T", label="left", closed="left"),
+            None,
+            [2, 7, 9],  # check specific restart key when chunk has a single incomplete bin.
+            [
+                DatetimeIndex(
+                    ["2020-01-01 08:00:00"],
+                    freq="5T",
+                ),
+                date_range(start="2020-01-01 08:00:00", end="2020-01-01 08:40:00", freq="5T"),
+                date_range(start="2020-01-01 08:40:00", end="2020-01-01 08:50:00", freq="5T"),
+            ],
+            [
+                array([2], dtype=DTYPE_INT64),
+                array([0, 0, 1, 3, 4, 4, 4, 4, 5], dtype=DTYPE_INT64),
+                array([1, 1, 2], dtype=DTYPE_INT64),
+            ],
+            [0, 5, 1],
+            [
+                DatetimeIndex(
+                    ["2020-01-01 08:05:00"],
+                    freq="5T",
+                ),
+                date_range(start="2020-01-01 08:05:00", end="2020-01-01 08:45:00", freq="5T"),
+                date_range(start="2020-01-01 08:45:00", end="2020-01-01 08:55:00", freq="5T"),
+            ],
+            [
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:00:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:40:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
+            ],
+        ),
+        (
+            Grouper(freq="5T", label="left", closed="left"),
+            RIGHT,  # check 'closed' parameter overrides 'by_closed' parameter.
+            [1, 7, 9],  # check specific restart key when chunk has a single incomplete bin.
+            [
+                DatetimeIndex(
+                    ["2020-01-01 07:55:00"],
+                    freq="5T",
+                ),
+                date_range(start="2020-01-01 07:55:00", end="2020-01-01 08:35:00", freq="5T"),
+                date_range(start="2020-01-01 08:35:00", end="2020-01-01 08:45:00", freq="5T"),
+            ],
+            [
+                array([1], dtype=DTYPE_INT64),
+                array([0, 1, 1, 3, 4, 5, 5, 5, 6], dtype=DTYPE_INT64),
+                array([0, 1, 2], dtype=DTYPE_INT64),
+            ],
+            [0, 4, 1],
+            [
+                DatetimeIndex(
+                    ["2020-01-01 08:00:00"],
+                    freq="5T",
+                ),
+                date_range(start="2020-01-01 08:00:00", end="2020-01-01 08:40:00", freq="5T"),
+                date_range(start="2020-01-01 08:40:00", end="2020-01-01 08:50:00", freq="5T"),
+            ],
+            [
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:00:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:40:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
         ),
@@ -140,7 +165,10 @@ def test_by_scale(
         assert buffer[KEY_RESTART_KEY].to_numpy() == buffer_refs[i][KEY_RESTART_KEY].to_numpy()
         start_idx = end_idx
     assert not unknown_chunk_end
-    assert by_closed == by.closed
+    if closed:
+        assert by_closed == closed
+    else:
+        assert by_closed == by.closed
 
 
 @pytest.mark.parametrize(
@@ -151,13 +179,9 @@ def test_by_scale(
             LEFT,
             [3, 6, 9],
             [
-                DatetimeIndex(["2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64),
-                DatetimeIndex(
-                    ["2020-01-01 08:00:00", "2020-01-01 08:16:00"], dtype=DTYPE_DATETIME64
-                ),
-                DatetimeIndex(
-                    ["2020-01-01 08:16:00", "2020-01-01 08:50:00"], dtype=DTYPE_DATETIME64
-                ),
+                DatetimeIndex(["2020-01-01 08:00:00"]),
+                DatetimeIndex(["2020-01-01 08:00:00", "2020-01-01 08:16:00"]),
+                DatetimeIndex(["2020-01-01 08:16:00", "2020-01-01 08:50:00"]),
             ],
             [
                 array([3], dtype=DTYPE_INT64),
@@ -165,11 +189,9 @@ def test_by_scale(
                 array([2, 3], dtype=DTYPE_INT64),
             ],
             [
-                DatetimeIndex(["2020-01-01 08:12"], dtype=DTYPE_DATETIME64),
-                DatetimeIndex(["2020-01-01 08:16", "2020-01-01 08:21:00"], dtype=DTYPE_DATETIME64),
-                DatetimeIndex(
-                    ["2020-01-01 08:50:00", "2020-01-01 08:50:00"], dtype=DTYPE_DATETIME64
-                ),
+                DatetimeIndex(["2020-01-01 08:12"]),
+                DatetimeIndex(["2020-01-01 08:16", "2020-01-01 08:21:00"]),
+                DatetimeIndex(["2020-01-01 08:50:00", "2020-01-01 08:50:00"]),
             ],
             [True, True, True],
             [
@@ -227,8 +249,8 @@ def test_by_x_rows(
 
 # by_scale: with a 1st chunk having a single incomplete bin to check it is correctly managed.
 # normally, buffer should not be started?
-# by_x_rows: restart with end_indices falling exactly on bin ends
 # by_scale: restart with end_indices falling exactly on bin ends
+# by_x_rows: restart with end_indices falling exactly on bin ends
 # in by_scale, test 'closed' (important to confirm restart_key is ok, with way is generated 'first' for a date range)
 # by_scale: test with 'by' as a Series
 # in by_x_rows, test 'closed'

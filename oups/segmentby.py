@@ -220,6 +220,8 @@ def by_scale(
             offset=by.offset,
         )
         edges = date_range(start, end, freq=by.freq)
+        print("edges")
+        print(edges)
         chunk_ends = edges[1:]
         chunk_labels = chunk_ends if by.label == RIGHT else edges[:-1]
     else:
@@ -252,14 +254,24 @@ def by_scale(
     if data_traversed:
         chunk_labels = chunk_labels[:n_chunks]
         chunk_ends = chunk_ends[:n_chunks]
-        if buffer is not None and n_chunks > 1:
-            # Use of intricate way to get last or last-but-one element, compatible
-            # with both Series and DatetimeIndex
-            # Get one-but-last element.
-            # Initialize only if there are more than 2 elements at least.
-            buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 2]
+        if buffer is not None:
+            if closed == RIGHT:
+                buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
+            else:
+                if n_chunks > 1:
+                    # Use of intricate way to get last or last-but-one element,
+                    # compatible with both Series and DatetimeIndex
+                    # Get one-but-last element.
+                    # Initialize this way if there are more than 2 elements at
+                    # least.
+                    buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 2]
+                else:
+                    # If there is a single incomplete bin, take first element
+                    # in 'on'.
+                    buffer[KEY_RESTART_KEY] = on.iloc[0]
     elif buffer is not None:
-        # Get last element.
+        # Data is not traversed.
+        # Keep last chunk end.
         buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
     return next_chunk_starts, chunk_labels, n_null_chunks, closed, chunk_ends, False
 
