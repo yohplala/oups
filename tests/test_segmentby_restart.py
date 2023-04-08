@@ -15,6 +15,7 @@ from pandas import date_range
 
 from oups.cumsegagg import DTYPE_INT64
 from oups.segmentby import KEY_LAST_BIN_LABEL
+from oups.segmentby import KEY_LAST_ON_VALUE
 from oups.segmentby import KEY_RESTART_KEY
 from oups.segmentby import LEFT
 from oups.segmentby import RIGHT
@@ -29,7 +30,7 @@ from oups.segmentby import by_x_rows
 @pytest.mark.parametrize(
     "by, closed, end_indices, chunk_labels_refs, next_chunk_starts_refs, n_null_chunks_refs, chunk_ends_refs, buffer_refs",
     [
-        (
+        (  # 0
             # Check with a 3rd chunk starting with several empty bins.
             Grouper(freq="5T", label="left", closed="left"),
             None,
@@ -56,7 +57,7 @@ from oups.segmentby import by_x_rows
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
         ),
-        (
+        (  # 1
             # Check specific restart key when chunk has a single incomplete bin.
             Grouper(freq="5T", label="left", closed="left"),
             None,
@@ -89,7 +90,7 @@ from oups.segmentby import by_x_rows
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
         ),
-        (
+        (  # 2
             # Check 'closed' parameter overrides 'by_closed' parameter.
             # Check specific restart key when chunk has a single incomplete bin.
             Grouper(freq="5T", label="left", closed="left"),
@@ -123,7 +124,7 @@ from oups.segmentby import by_x_rows
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
         ),
-        (
+        (  # 3
             # Check with a 3rd chunk starting with several empty bins.
             Grouper(freq="5T", label="left", closed="right"),
             None,
@@ -150,21 +151,99 @@ from oups.segmentby import by_x_rows
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
         ),
-        (
+        (  # 4
             # Check with a Series.
+            # Specific case, 1st & 2nd Series end before end of data.
+            # and 2nd & 3rd Series restart after last data from previous iteration.
             [
                 DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
-                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:21")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:18")]),
                 DatetimeIndex(
                     [
-                        pTimestamp("2020/01/01 08:21"),
+                        pTimestamp("2020/01/01 08:18"),
                         pTimestamp("2020/01/01 08:36"),
                         pTimestamp("2020/01/01 08:50"),
                     ]
                 ),
             ],
+            # 'left' means end is excluded.
             LEFT,
             [3, 6, 9],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:18")]),
+                DatetimeIndex(
+                    [
+                        pTimestamp("2020/01/01 08:18"),
+                        pTimestamp("2020/01/01 08:36"),
+                        pTimestamp("2020/01/01 08:50"),
+                    ]
+                ),
+            ],
+            [
+                array([0, 2], dtype=DTYPE_INT64),
+                array([0, 2], dtype=DTYPE_INT64),
+                array([0, 0, 2], dtype=DTYPE_INT64),
+            ],
+            [1, 1, 2],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:18")]),
+                DatetimeIndex(
+                    [
+                        pTimestamp("2020/01/01 08:18"),
+                        pTimestamp("2020/01/01 08:36"),
+                        pTimestamp("2020/01/01 08:50"),
+                    ]
+                ),
+            ],
+            [
+                {
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:06:00"),
+                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:12:00"),
+                },
+                {
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:18:00"),
+                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:21:00"),
+                },
+                {
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00"),
+                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:50:00"),
+                },
+            ],
+        ),
+        (  # 5
+            # Check with a Series.
+            # Series end after data, and even after start of data at next iter.
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:16")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
+            ],
+            # 'left' means end is excluded.
+            LEFT,
+            [3, 6, 9],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:16")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
+            ],
+            [
+                array([0, 3], dtype=DTYPE_INT64),
+                array([1, 3], dtype=DTYPE_INT64),
+                array([2, 3], dtype=DTYPE_INT64),
+            ],
+            [1, 0, 0],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:16")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
+            ],
+            [
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:42:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:52:00")},
+            ],
         ),
     ],
 )
@@ -193,6 +272,10 @@ def test_by_scale(
     )
     start_idx = 0
     buffer = {}
+    if isinstance(by, Grouper):
+        if closed is None:
+            closed = by.closed
+        by = [by] * 3
     for i, end_idx in enumerate(end_indices):
         (
             next_chunk_starts,
@@ -201,7 +284,7 @@ def test_by_scale(
             by_closed,
             chunk_ends,
             unknown_chunk_end,
-        ) = by_scale(on[start_idx:end_idx], by, closed=closed, buffer=buffer)
+        ) = by_scale(on[start_idx:end_idx], by[i], closed=closed, buffer=buffer)
         assert nall(chunk_labels == chunk_labels_refs[i])
         assert nall(chunk_ends == chunk_ends_refs[i])
         assert nall(next_chunk_starts == next_chunk_starts_refs[i])
@@ -212,10 +295,7 @@ def test_by_scale(
         assert buffer[KEY_RESTART_KEY].to_numpy() == buffer_refs[i][KEY_RESTART_KEY].to_numpy()
         start_idx = end_idx
     assert not unknown_chunk_end
-    if closed:
-        assert by_closed == closed
-    else:
-        assert by_closed == by.closed
+    assert by_closed == closed
 
 
 @pytest.mark.parametrize(

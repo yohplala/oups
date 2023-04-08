@@ -27,6 +27,9 @@ numba = "^0.56.4"
 pre-commit = "^2.16.0"
 pytest = "^6.2.5"
 
+[tool.poetry.group.dev.dependencies]
+black = "^23.3.0"
+
 [build-system]
 requires = [
     "setuptools",

@@ -223,10 +223,7 @@ def by_scale(
                 raise ValueError(
                     f"first value expected in 'by' to restart correctly is {buffer[KEY_RESTART_KEY]}"
                 )
-            if KEY_LAST_ON_VALUE in buffer and (
-                (closed == RIGHT and chunk_ends[1] < buffer[KEY_LAST_ON_VALUE])
-                or (closed == LEFT and chunk_ends[1] <= buffer[KEY_LAST_ON_VALUE])
-            ):
+            if KEY_LAST_ON_VALUE in buffer:
                 # In the specific case 'on' has not been traversed completely
                 # at previous iteration, the chunk for the remaining of the
                 # data has no label, and will not appear in the results. But it
@@ -241,9 +238,15 @@ def by_scale(
                 # If it is not, then the remaining aggregated data from
                 # previous iteration is not usable, as it aggregates over
                 # several chunks.
-                raise ValueError(
-                    f"2nd chunk end in 'by' has to be larger than value {buffer[KEY_LAST_ON_VALUE]} to restart correctly."
-                )
+                if (closed == RIGHT and chunk_ends[1] < buffer[KEY_LAST_ON_VALUE]) or (
+                    closed == LEFT and chunk_ends[1] <= buffer[KEY_LAST_ON_VALUE]
+                ):
+                    raise ValueError(
+                        "2nd chunk end in 'by' has to be larger than value "
+                        f"{buffer[KEY_LAST_ON_VALUE]} to restart correctly."
+                    )
+                else:
+                    del buffer[KEY_LAST_ON_VALUE]
     if chunk_ends.dtype == DTYPE_DATETIME64:
         next_chunk_starts, n_null_chunks, data_traversed = _next_chunk_starts(
             on.to_numpy(copy=False).view(DTYPE_INT64),
@@ -274,9 +277,14 @@ def by_scale(
         chunk_labels = chunk_labels[:n_chunks]
         chunk_ends = chunk_ends[:n_chunks]
         if buffer is not None:
-            if closed == RIGHT:
+            if closed == RIGHT or not isinstance(by, Grouper):
                 # Use of intricate way to get last or last-but-one element,
                 # compatible with both Series and DatetimeIndex
+                # Take last end
+                # - either if a Grouper, as it is enough for generating edges
+                #   at next iteration.
+                # - of if a Series, because Series only needs to restart from
+                #   this point then.
                 buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
             else:
                 if n_chunks > 1:
