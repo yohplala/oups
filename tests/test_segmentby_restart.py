@@ -245,6 +245,146 @@ from oups.segmentby import by_x_rows
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:52:00")},
             ],
         ),
+        (  # 6
+            # Check with a Series, ends are included by use of 'right'.
+            # Specific case, 1st & 2nd Series end before end of data.
+            # and 2nd & 3rd Series restart after last data from previous
+            # iteration.
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:18")]),
+                DatetimeIndex(
+                    [
+                        pTimestamp("2020/01/01 08:18"),
+                        pTimestamp("2020/01/01 08:36"),
+                        pTimestamp("2020/01/01 08:50"),
+                    ]
+                ),
+            ],
+            # 'right' means end is included.
+            RIGHT,
+            [3, 6, 9],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:18")]),
+                DatetimeIndex(
+                    [
+                        pTimestamp("2020/01/01 08:18"),
+                        pTimestamp("2020/01/01 08:36"),
+                        pTimestamp("2020/01/01 08:50"),
+                    ]
+                ),
+            ],
+            [
+                array([1, 2], dtype=DTYPE_INT64),
+                array([0, 2], dtype=DTYPE_INT64),
+                array([0, 0, 3], dtype=DTYPE_INT64),
+            ],
+            [0, 1, 2],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:18")]),
+                DatetimeIndex(
+                    [
+                        pTimestamp("2020/01/01 08:18"),
+                        pTimestamp("2020/01/01 08:36"),
+                        pTimestamp("2020/01/01 08:50"),
+                    ]
+                ),
+            ],
+            [
+                {
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:06:00"),
+                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:12:00"),
+                },
+                {
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:18:00"),
+                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:21:00"),
+                },
+                {
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00"),
+                },
+            ],
+        ),
+        (  # 7
+            # Check with a Series, ends are included by use of 'right'.
+            # Series end after data, and even after start of data at next iter.
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:16")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
+            ],
+            # 'right' means end is excluded.
+            RIGHT,
+            [3, 6, 9],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:16")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
+            ],
+            [
+                array([1, 3], dtype=DTYPE_INT64),
+                array([2, 3], dtype=DTYPE_INT64),
+                array([2, 3], dtype=DTYPE_INT64),
+            ],
+            [0, 0, 0],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:16")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
+            ],
+            [
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:42:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:52:00")},
+            ],
+        ),
+        (  # 8
+            # Check with a Series, with a single point per chunk.
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
+                DatetimeIndex(
+                    [
+                        pTimestamp("2020/01/01 08:03"),
+                        pTimestamp("2020/01/01 08:36"),
+                    ]
+                ),
+            ],
+            # 'left' means end is excluded.
+            LEFT,
+            [3, 6, 9],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:03"), pTimestamp("2020/01/01 08:36")]),
+            ],
+            [
+                array([1], dtype=DTYPE_INT64),
+                array([0], dtype=DTYPE_INT64),
+                array([0, 0], dtype=DTYPE_INT64),
+            ],
+            [0, 1, 2],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:03"), pTimestamp("2020/01/01 08:36")]),
+            ],
+            [
+                {
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:03:00"),
+                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:12:00"),
+                },
+                {
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:03:00"),
+                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:21:00"),
+                },
+                {
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:36:00"),
+                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:50:00"),
+                },
+            ],
+        ),
     ],
 )
 def test_by_scale(
@@ -381,22 +521,10 @@ def test_by_x_rows(
 #                 raise ValueError(
 #                    f"2nd chunk end in 'by' has to be larger than value {buffer[KEY_LAST_ON_VALUE]} to restart correctly."
 #                )
-#
-#
-# by_scale: with a 1st chunk having a single incomplete bin to check it is correctly managed.
-# normally, buffer should not be started?
-# by_scale: restart with end_indices falling exactly on bin ends
 # by_x_rows: restart with end_indices falling exactly on bin ends
-# in by_scale, test 'closed' (important to confirm restart_key is ok, with way is generated 'first' for a date range)
-# by_scale: test with 'by' as a Series
 # in by_x_rows, test 'closed'
 # Test with 'by_x_rows' ending exactly on the right number of rows to check it is ok
-# Test exception if 'by' when a Series, does not restart with correct value for safe restart
 # Test case when there is a single point (only if using by as a Series - with Grouper, there is necessarily two point: start and ends.)
-# Do a restart with several empty chunk
-# Do a restart with several values before the end of the 1st chunk
-# Test a Grouper, closed right/left, how key_last_key is taken into account?
 # Move restart test case for 'by_x_rows' into this file
-
 # check in segmentby(): check no empty bins after running biny from user
 # raise error if it is detected.

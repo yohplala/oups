@@ -238,8 +238,9 @@ def by_scale(
                 # If it is not, then the remaining aggregated data from
                 # previous iteration is not usable, as it aggregates over
                 # several chunks.
-                if (closed == RIGHT and chunk_ends[1] < buffer[KEY_LAST_ON_VALUE]) or (
-                    closed == LEFT and chunk_ends[1] <= buffer[KEY_LAST_ON_VALUE]
+                if len(chunk_ends) > 1 and (
+                    (closed == RIGHT and chunk_ends[1] < buffer[KEY_LAST_ON_VALUE])
+                    or (closed == LEFT and chunk_ends[1] <= buffer[KEY_LAST_ON_VALUE])
                 ):
                     raise ValueError(
                         "2nd chunk end in 'by' has to be larger than value "
@@ -277,16 +278,9 @@ def by_scale(
         chunk_labels = chunk_labels[:n_chunks]
         chunk_ends = chunk_ends[:n_chunks]
         if buffer is not None:
-            if closed == RIGHT or not isinstance(by, Grouper):
-                # Use of intricate way to get last or last-but-one element,
-                # compatible with both Series and DatetimeIndex
-                # Take last end
-                # - either if a Grouper, as it is enough for generating edges
-                #   at next iteration.
-                # - of if a Series, because Series only needs to restart from
-                #   this point then.
-                buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
-            else:
+            if closed == LEFT and isinstance(by, Grouper):
+                # Use of intricate way to get last or last-but-one element in
+                # 'chunk_ends', compatible with both Series and DatetimeIndex.
                 if n_chunks > 1:
                     # Get one-but-last element.
                     # Initialize this way if there are more than 2 elements at
@@ -296,6 +290,13 @@ def by_scale(
                     # If there is a single incomplete bin, take first element
                     # in 'on'.
                     buffer[KEY_RESTART_KEY] = on.iloc[0]
+            else:
+                # Take last end
+                # - either if 'by' is a Grouper, as it is enough for generating
+                #   edges at next iteration.
+                # - or if 'by' is a Series, because Series only needs to
+                #   restart from this point then.
+                buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
     elif buffer is not None:
         # Data is not traversed.
         # This can only happen if 'by' is not a Grouper.
