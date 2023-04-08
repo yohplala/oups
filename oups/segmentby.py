@@ -41,6 +41,7 @@ KEY_SNAP = "snap"
 # Keys for 'by_x_rows'.
 KEY_LAST_BIN_LABEL = "last_bin_label"
 KEY_RESTART_KEY = "restart_key"
+KEY_LAST_ON_VALUE = "last_on_value"
 # Keys for 'bin_by' when a dict
 ON_COLS = "on_cols"
 BIN_BY = "bin_by"
@@ -191,21 +192,6 @@ def by_scale(
         restart key.
 
     """
-    # Rationale for selecting the "restart key value".
-    # - For a correct restart at iteration N+1, the restart point needs to be
-    #   that of the last bin at iteration N that has been "in-progress". The
-    #   restart is said correct because it restarts on new data, where
-    #   aggregation at iteration N stopped. There is no omission of new data,
-    #   nor omission of possibly empty bins till new data.
-    # - At iteration N,
-    #     - if last value derived from 'by' is after last value in
-    #       "on", then at next iteration, N+1, new data can be used, which
-    #       still lies before this last value derived from 'by' at iteration N.
-    #       To make sure this new data is correctly managed, we need to restart
-    #       from one-but-last value derived from 'by' at iteration N.
-    #     - if last value derived from 'by' is before last value in "on", then
-    #       at next iteration, N+1, we are sure no new data will appear before
-    #       it. This last value can be safely used as restart value.
     if isinstance(by, Grouper):
         first = buffer[KEY_RESTART_KEY] if buffer and KEY_RESTART_KEY in buffer else on.iloc[0]
         # In case 'by' is for snapshotting, and 'closed' is not set, take care
@@ -220,26 +206,44 @@ def by_scale(
             offset=by.offset,
         )
         edges = date_range(start, end, freq=by.freq)
-        print("edges")
-        print(edges)
         chunk_ends = edges[1:]
         chunk_labels = chunk_ends if by.label == RIGHT else edges[:-1]
     else:
+        # Case 'by' is a Series.
+        if closed is None:
+            raise ValueError(f"'closed' has to be set to {LEFT} or {RIGHT}.")
         if isinstance(by, tuple):
             chunk_labels, chunk_ends = by
             if len(chunk_labels) != len(chunk_ends):
                 raise ValueError("number of chunk labels has to be equal to number of chunk ends.")
         else:
             chunk_labels = chunk_ends = by
-        # Case 'by' is a Series.
-        if (
-            buffer is not None
-            and KEY_RESTART_KEY in buffer
-            and buffer[KEY_RESTART_KEY] != chunk_ends[0]
-        ):
-            raise ValueError(
-                f"first value expected in 'by' to restart correctly is {buffer[KEY_RESTART_KEY]}"
-            )
+        if buffer is not None and KEY_RESTART_KEY in buffer:
+            if buffer[KEY_RESTART_KEY] != chunk_ends[0]:
+                raise ValueError(
+                    f"first value expected in 'by' to restart correctly is {buffer[KEY_RESTART_KEY]}"
+                )
+            if KEY_LAST_ON_VALUE in buffer and (
+                (closed == RIGHT and chunk_ends[1] < buffer[KEY_LAST_ON_VALUE])
+                or (closed == LEFT and chunk_ends[1] <= buffer[KEY_LAST_ON_VALUE])
+            ):
+                # In the specific case 'on' has not been traversed completely
+                # at previous iteration, the chunk for the remaining of the
+                # data has no label, and will not appear in the results. But it
+                # will be calculated during the aggregation phase
+                # ('cumsegagg()'), and kept in a temporary variable
+                # ('chunk_res').
+                # In this case, at next iteration, with new chunk ends, a
+                # specific check is managed here to ensure correctness of the
+                # restart.
+                # For this new iteration, the 2nd chunk end should necessarily
+                # be after the last value in 'on' from previous iteration.
+                # If it is not, then the remaining aggregated data from
+                # previous iteration is not usable, as it aggregates over
+                # several chunks.
+                raise ValueError(
+                    f"2nd chunk end in 'by' has to be larger than value {buffer[KEY_LAST_ON_VALUE]} to restart correctly."
+                )
     if chunk_ends.dtype == DTYPE_DATETIME64:
         next_chunk_starts, n_null_chunks, data_traversed = _next_chunk_starts(
             on.to_numpy(copy=False).view(DTYPE_INT64),
@@ -251,16 +255,31 @@ def by_scale(
             on.to_numpy(copy=False), chunk_ends.to_numpy(copy=False), closed == RIGHT
         )
     n_chunks = len(next_chunk_starts)
+    # Rationale for selecting the "restart key".
+    # - For a correct restart at iteration N+1, the restart point needs to be
+    #   that of the last bin at iteration N that has been "in-progress". The
+    #   restart is said correct because it restarts on new data, where
+    #   aggregation at iteration N stopped. There is no omission of new data,
+    #   nor omission of possibly empty bins till new data.
+    # - At iteration N,
+    #     - if last value derived from 'by' is after last value in
+    #       "on", then at next iteration, N+1, new data can be used, which
+    #       still lies before this last value derived from 'by' at iteration N.
+    #       To make sure this new data is correctly managed, we need to restart
+    #       from one-but-last value derived from 'by' at iteration N.
+    #     - if last value derived from 'by' is before last value in "on", then
+    #       at next iteration, N+1, we are sure no new data will appear before
+    #       it. This last value can be safely used as restart value.
     if data_traversed:
         chunk_labels = chunk_labels[:n_chunks]
         chunk_ends = chunk_ends[:n_chunks]
         if buffer is not None:
             if closed == RIGHT:
+                # Use of intricate way to get last or last-but-one element,
+                # compatible with both Series and DatetimeIndex
                 buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
             else:
                 if n_chunks > 1:
-                    # Use of intricate way to get last or last-but-one element,
-                    # compatible with both Series and DatetimeIndex
                     # Get one-but-last element.
                     # Initialize this way if there are more than 2 elements at
                     # least.
@@ -271,8 +290,10 @@ def by_scale(
                     buffer[KEY_RESTART_KEY] = on.iloc[0]
     elif buffer is not None:
         # Data is not traversed.
+        # This can only happen if 'by' is not a Grouper.
         # Keep last chunk end.
         buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
+        buffer[KEY_LAST_ON_VALUE] = on.iloc[-1]
     return next_chunk_starts, chunk_labels, n_null_chunks, closed, chunk_ends, False
 
 

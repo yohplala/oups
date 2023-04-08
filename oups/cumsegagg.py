@@ -413,3 +413,19 @@ def cumsegagg(
     #    - 'n_null_bin' reduced by one.
     # - if it is not empty in this new iteration, previous aggregation results
     #   'chunk_res', need to be re-used and 'pinnu' has to be set to ``True``.
+    #
+    # 2/ In the specific case data is not traversed completely during
+    # segmentation step, with 'by_scale()' (in case 'by' is a Series ending in
+    # within 'on'.)
+    # We don't know what label to provide the remaining of the data in 'on'.
+    # In this case, no corresponding bin (or snapshot) is generated
+    # in 'next_chunk_starts', but in 'cumsegagg()', 'chunk_res' does be updated
+    # with this remaining data and the updated value is recoded (but this
+    # value does not appear in 'bin_res' and 'snap_res')
+    # In this case, a specific check in 'by_scale()' is required to ensure
+    # correct restart: at next iteration, there should be no bin end before the
+    # last timestamp at previous iteration in 'on'. (because this data will
+    # then not be correctly accounted)
+    # At a upper level, if this appears, one can re-use 'restart_key' to trim
+    # correctly the data (with additional data from previous iteration), and
+    # force a restart from scratch in 'cumsegagg()' (with 'pinnu' set False)

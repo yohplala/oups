@@ -30,6 +30,7 @@ from oups.segmentby import by_x_rows
     "by, closed, end_indices, chunk_labels_refs, next_chunk_starts_refs, n_null_chunks_refs, chunk_ends_refs, buffer_refs",
     [
         (
+            # Check with a 3rd chunk starting with several empty bins.
             Grouper(freq="5T", label="left", closed="left"),
             None,
             [3, 6, 9],
@@ -56,9 +57,10 @@ from oups.segmentby import by_x_rows
             ],
         ),
         (
+            # Check specific restart key when chunk has a single incomplete bin.
             Grouper(freq="5T", label="left", closed="left"),
             None,
-            [2, 7, 9],  # check specific restart key when chunk has a single incomplete bin.
+            [2, 7, 9],
             [
                 DatetimeIndex(
                     ["2020-01-01 08:00:00"],
@@ -88,9 +90,11 @@ from oups.segmentby import by_x_rows
             ],
         ),
         (
+            # Check 'closed' parameter overrides 'by_closed' parameter.
+            # Check specific restart key when chunk has a single incomplete bin.
             Grouper(freq="5T", label="left", closed="left"),
-            RIGHT,  # check 'closed' parameter overrides 'by_closed' parameter.
-            [1, 7, 9],  # check specific restart key when chunk has a single incomplete bin.
+            RIGHT,
+            [1, 7, 9],
             [
                 DatetimeIndex(
                     ["2020-01-01 07:55:00"],
@@ -118,6 +122,49 @@ from oups.segmentby import by_x_rows
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:40:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
+        ),
+        (
+            # Check with a 3rd chunk starting with several empty bins.
+            Grouper(freq="5T", label="left", closed="right"),
+            None,
+            [3, 6, 9],
+            [
+                date_range(start="2020-01-01 07:55:00", end="2020-01-01 08:10:00", freq="5T"),
+                date_range(start="2020-01-01 08:10:00", end="2020-01-01 08:20:00", freq="5T"),
+                date_range(start="2020-01-01 08:20:00", end="2020-01-01 08:45:00", freq="5T"),
+            ],
+            [
+                array([1, 2, 2, 3], dtype=DTYPE_INT64),
+                array([1, 2, 3], dtype=DTYPE_INT64),
+                array([0, 0, 0, 1, 2, 3], dtype=DTYPE_INT64),
+            ],
+            [1, 0, 3],
+            [
+                date_range(start="2020-01-01 08:00:00", end="2020-01-01 08:15:00", freq="5T"),
+                date_range(start="2020-01-01 08:15:00", end="2020-01-01 08:25:00", freq="5T"),
+                date_range(start="2020-01-01 08:25:00", end="2020-01-01 08:50:00", freq="5T"),
+            ],
+            [
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:15:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:25:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
+            ],
+        ),
+        (
+            # Check with a Series.
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:21")]),
+                DatetimeIndex(
+                    [
+                        pTimestamp("2020/01/01 08:21"),
+                        pTimestamp("2020/01/01 08:36"),
+                        pTimestamp("2020/01/01 08:50"),
+                    ]
+                ),
+            ],
+            LEFT,
+            [3, 6, 9],
         ),
     ],
 )
@@ -247,6 +294,15 @@ def test_by_x_rows(
     assert by_closed == closed
 
 
+# by_scale: test exception if 'by' is a Series:
+#             raise ValueError(
+#                f"first value expected in 'by' to restart correctly is {buffer[KEY_RESTART_KEY]}"
+# by_scale: test this exception
+#                 raise ValueError(
+#                    f"2nd chunk end in 'by' has to be larger than value {buffer[KEY_LAST_ON_VALUE]} to restart correctly."
+#                )
+#
+#
 # by_scale: with a 1st chunk having a single incomplete bin to check it is correctly managed.
 # normally, buffer should not be started?
 # by_scale: restart with end_indices falling exactly on bin ends

@@ -312,6 +312,28 @@ def test_by_scale(
 
 
 @pytest.mark.parametrize(
+    "by, closed, exception_mess",
+    [
+        (DatetimeIndex([pTimestamp("2020/01/01 08:00")]), None, "^'closed' has to be set"),
+        (
+            # Labels
+            (
+                DatetimeIndex([pTimestamp("2020/01/01 08:00")]),
+                # Ends
+                date_range("2020/01/01 08:00", periods=2, freq="3T"),
+            ),
+            RIGHT,
+            "^number of chunk labels",
+        ),
+    ],
+)
+def test_by_scale_exceptions_if_datetimeindex(by, closed, exception_mess):
+    on = Series(date_range("2020/01/01 07:59", "2020/01/01 07:09", freq="2T"))
+    with pytest.raises(ValueError, match=exception_mess):
+        by_scale(on, by, closed)
+
+
+@pytest.mark.parametrize(
     "len_data, x_rows, closed, buffer_in, buffer_out, chunk_starts_ref,"
     "next_chunk_starts_ref, set_first_key, unknown_last_bin_end_ref",
     [
@@ -460,27 +482,26 @@ def test_mergesort_labels_and_keys_force_last():
     assert nall(sorted_idx_labels2 == ref_sorted_idx_labels2)
 
 
-def test_mergesort_exceptions_first():
+@pytest.mark.parametrize(
+    "labels1, labels2, exception_mess",
+    [
+        (
+            array([10, 5], dtype="int64"),
+            array([20], dtype="int64"),
+            "^not possible to have arrays of different length for first",
+        ),
+        (
+            array([10], dtype="int64"),
+            array([20, 5], dtype="int64"),
+            "^not possible to have arrays of different length for second",
+        ),
+    ],
+)
+def test_mergesort_exceptions_array_length(labels1, labels2, exception_mess):
     # Test data
-    labels1 = array([10, 5], dtype="int64")
     keys1 = array([1], dtype="int64")
-    labels2 = array([20], dtype="int64")
     keys2 = array([2], dtype="int64")
-    with pytest.raises(
-        ValueError, match="^not possible to have arrays of different length for first"
-    ):
-        mergesort((labels1, labels2), (keys1, keys2))
-
-
-def test_mergesort_exceptions_second():
-    # Test data
-    labels1 = array([10], dtype="int64")
-    keys1 = array([1], dtype="int64")
-    labels2 = array([20, 5], dtype="int64")
-    keys2 = array([2], dtype="int64")
-    with pytest.raises(
-        ValueError, match="^not possible to have arrays of different length for second"
-    ):
+    with pytest.raises(ValueError, match=exception_mess):
         mergesort((labels1, labels2), (keys1, keys2))
 
 
