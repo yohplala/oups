@@ -215,13 +215,16 @@ def by_scale(
         if isinstance(by, tuple):
             chunk_labels, chunk_ends = by
             if len(chunk_labels) != len(chunk_ends):
-                raise ValueError("number of chunk labels has to be equal to number of chunk ends.")
+                raise ValueError(
+                    "number of chunk labels has to be " "equal to number of chunk ends."
+                )
         else:
             chunk_labels = chunk_ends = by
         if buffer is not None and KEY_RESTART_KEY in buffer:
             if buffer[KEY_RESTART_KEY] != chunk_ends[0]:
                 raise ValueError(
-                    f"first value expected in 'by' to restart correctly is {buffer[KEY_RESTART_KEY]}"
+                    "first value expected in 'by' to restart "
+                    f"correctly is {buffer[KEY_RESTART_KEY]}"
                 )
             if KEY_LAST_ON_VALUE in buffer:
                 # In the specific case 'on' has not been traversed completely
@@ -238,6 +241,8 @@ def by_scale(
                 # If it is not, then the remaining aggregated data from
                 # previous iteration is not usable, as it aggregates over
                 # several chunks.
+                # If there is a single chunk end, then it is that of previous
+                # iteration, nothing to check.
                 if len(chunk_ends) > 1 and (
                     (closed == RIGHT and chunk_ends[1] < buffer[KEY_LAST_ON_VALUE])
                     or (closed == LEFT and chunk_ends[1] <= buffer[KEY_LAST_ON_VALUE])

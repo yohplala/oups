@@ -252,10 +252,10 @@ from oups.segmentby import by_x_rows
             # iteration.
             [
                 DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
-                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:18")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:12")]),
                 DatetimeIndex(
                     [
-                        pTimestamp("2020/01/01 08:18"),
+                        pTimestamp("2020/01/01 08:12"),
                         pTimestamp("2020/01/01 08:36"),
                         pTimestamp("2020/01/01 08:50"),
                     ]
@@ -266,10 +266,10 @@ from oups.segmentby import by_x_rows
             [3, 6, 9],
             [
                 DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
-                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:18")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:12")]),
                 DatetimeIndex(
                     [
-                        pTimestamp("2020/01/01 08:18"),
+                        pTimestamp("2020/01/01 08:12"),
                         pTimestamp("2020/01/01 08:36"),
                         pTimestamp("2020/01/01 08:50"),
                     ]
@@ -277,16 +277,16 @@ from oups.segmentby import by_x_rows
             ],
             [
                 array([1, 2], dtype=DTYPE_INT64),
-                array([0, 2], dtype=DTYPE_INT64),
+                array([0, 0], dtype=DTYPE_INT64),
                 array([0, 0, 3], dtype=DTYPE_INT64),
             ],
-            [0, 1, 2],
+            [0, 2, 2],
             [
                 DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:06")]),
-                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:18")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:06"), pTimestamp("2020/01/01 08:12")]),
                 DatetimeIndex(
                     [
-                        pTimestamp("2020/01/01 08:18"),
+                        pTimestamp("2020/01/01 08:12"),
                         pTimestamp("2020/01/01 08:36"),
                         pTimestamp("2020/01/01 08:50"),
                     ]
@@ -298,7 +298,7 @@ from oups.segmentby import by_x_rows
                     KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:12:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:18:00"),
+                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:12:00"),
                     KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:21:00"),
                 },
                 {
@@ -439,6 +439,65 @@ def test_by_scale(
 
 
 @pytest.mark.parametrize(
+    "by, closed, end_indices, exception_mess",
+    [
+        (  # 0
+            # 'by' as a Series, 1st value in 2nd chuunk of 'by' is not
+            # the same as last value from previous iteration.
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:03"), pTimestamp("2020/01/01 08:06")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:07")]),
+            ],
+            LEFT,
+            (3, 6),
+            "^first value expected in 'by'",
+        ),
+        (  # 1
+            # 'by' as a Series, 'closed' is 'left'.
+            # Last value in 'on' at 1st iter. is after 2nd value of 'by' in 2nd
+            # chunk.
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:03"), pTimestamp("2020/01/01 08:12")]),
+            ],
+            LEFT,
+            (3, 6),
+            "^2nd chunk end in 'by'",
+        ),
+        (  # 2
+            # 'by' as a Series, 'closed' is 'right'.
+            # Last value in 'on' at 1st iter. is after 2nd value of 'by' in 2nd
+            # chunk.
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:03"), pTimestamp("2020/01/01 08:11")]),
+            ],
+            RIGHT,
+            (3, 6),
+            "^2nd chunk end in 'by'",
+        ),
+    ],
+)
+def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
+    on = Series(
+        [
+            pTimestamp("2020/01/01 08:00"),  # 0
+            pTimestamp("2020/01/01 08:03"),
+            pTimestamp("2020/01/01 08:12"),  # 2
+            pTimestamp("2020/01/01 08:15"),  # 3
+            pTimestamp("2020/01/01 08:16"),
+            pTimestamp("2020/01/01 08:21"),  # 5
+        ]
+    )
+    buffer = {}
+    end1, end2 = end_indices
+    # 1st run, ok
+    by_scale(on[0:end1], by[0], closed=closed, buffer=buffer)
+    with pytest.raises(ValueError, match=exception_mess):
+        by_scale(on[end1:end2], by[1], closed=closed, buffer=buffer)
+
+
+@pytest.mark.parametrize(
     "by, closed, end_indices, bin_labels_refs, next_bin_starts_refs, bin_ends_refs, unknown_bin_end_refs, buffer_refs",
     [
         (
@@ -514,13 +573,6 @@ def test_by_x_rows(
     assert by_closed == closed
 
 
-# by_scale: test exception if 'by' is a Series:
-#             raise ValueError(
-#                f"first value expected in 'by' to restart correctly is {buffer[KEY_RESTART_KEY]}"
-# by_scale: test this exception
-#                 raise ValueError(
-#                    f"2nd chunk end in 'by' has to be larger than value {buffer[KEY_LAST_ON_VALUE]} to restart correctly."
-#                )
 # by_x_rows: restart with end_indices falling exactly on bin ends
 # in by_x_rows, test 'closed'
 # Test with 'by_x_rows' ending exactly on the right number of rows to check it is ok
@@ -528,3 +580,4 @@ def test_by_x_rows(
 # Move restart test case for 'by_x_rows' into this file
 # check in segmentby(): check no empty bins after running biny from user
 # raise error if it is detected.
+# split 'by_scale' into 'by_pgrouper' and 'by_scale'
