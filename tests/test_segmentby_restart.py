@@ -525,7 +525,33 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
                 {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
                 {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:50")},
             ],
-        )
+        ),
+        (
+            4,
+            RIGHT,
+            [4, 6, 9],
+            [
+                DatetimeIndex(["2020-01-01 08:00:00"]),
+                DatetimeIndex(["2020-01-01 08:16:00"]),
+                DatetimeIndex(["2020-01-01 08:16:00", "2020-01-01 08:50:00"]),
+            ],
+            [
+                array([4], dtype=DTYPE_INT64),
+                array([2], dtype=DTYPE_INT64),
+                array([2, 3], dtype=DTYPE_INT64),
+            ],
+            [
+                DatetimeIndex(["2020-01-01 08:15:00"]),
+                DatetimeIndex(["2020-01-01 08:21:00"]),
+                DatetimeIndex(["2020-01-01 08:41:00", "2020-01-01 08:50:00"]),
+            ],
+            [False, True, True],
+            [
+                {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00")},
+                {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
+                {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:50")},
+            ],
+        ),
     ],
 )
 def test_by_x_rows(
@@ -561,7 +587,7 @@ def test_by_x_rows(
             by_closed,
             bin_ends,
             unknown_bin_end,
-        ) = by_x_rows(on[start_idx:end_idx], by, buffer=buffer)
+        ) = by_x_rows(on[start_idx:end_idx], by, closed=closed, buffer=buffer)
         assert nall(bin_labels == bin_labels_refs[i])
         assert nall(bin_ends == bin_ends_refs[i])
         assert nall(next_bin_starts == next_bin_starts_refs[i])

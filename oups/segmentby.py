@@ -375,15 +375,26 @@ def by_x_rows(
         # Keep only last column, supposed to be `ordered_on` column.
         on = on.iloc[:, -1]
     # Derive number of rows in first bins (cannot be 0) and number of bins.
-    rows_in_last_bin = (
-        buffer[KEY_RESTART_KEY] if (buffer is not None and KEY_RESTART_KEY in buffer) else 0
+    if buffer is not None and KEY_RESTART_KEY in buffer:
+        # Case 'restart'.
+        rows_in_prev_last_bin = buffer[KEY_RESTART_KEY]
+        rows_in_continued_bin = (
+            min(len_on, by - rows_in_prev_last_bin) if rows_in_prev_last_bin != by else 0
+        )
+    else:
+        # Case 'start from scratch'.
+        rows_in_prev_last_bin = 0
+        rows_in_continued_bin = 0
+    n_rows_for_new_bins = len_on - rows_in_continued_bin
+    n_bins = (
+        ceil(n_rows_for_new_bins / by) + 1
+        if rows_in_continued_bin
+        else ceil(n_rows_for_new_bins / by)
     )
-    rows_in_first_bin = min(by - rows_in_last_bin if rows_in_last_bin != by else by, len_on)
-    n_rows_for_new_bins = len_on - rows_in_first_bin
-    n_bins = ceil(n_rows_for_new_bins / by) + 1
     # Define 'next_chunk_starts'.
+    first_next_chunk_start = rows_in_continued_bin if rows_in_continued_bin else min(by, len_on)
     next_chunk_starts = arange(
-        start=rows_in_first_bin, stop=n_bins * by + rows_in_first_bin, step=by
+        start=first_next_chunk_start, stop=(n_bins - 1) * by + first_next_chunk_start + 1, step=by
     )
     # Make a copy and arrange for deriving 'chunk_starts', required for
     # defining bin labels. 'bin_labels' are derived from last column (is then
@@ -392,16 +403,19 @@ def by_x_rows(
     # Correct start of 1st chunk.
     chunk_starts[0] = 0
     bin_labels = on.iloc[chunk_starts].reset_index(drop=True)
-    n_rows_in_last_bin = (
-        rows_in_first_bin + rows_in_last_bin
-        if n_bins == 1
-        else n_rows_for_new_bins
-        if n_rows_for_new_bins <= by
-        else fmod(n_rows_for_new_bins, by) or by
-    )
+    if n_rows_for_new_bins:
+        # Case 'there are new bins'.
+        n_rows_in_last_bin = (
+            n_rows_for_new_bins
+            if n_rows_for_new_bins <= by
+            else fmod(n_rows_for_new_bins, by) or by
+        )
+    else:
+        # Case 'there are not'.
+        n_rows_in_last_bin = rows_in_continued_bin + rows_in_prev_last_bin
     if buffer is not None:
         # Correct 1st label if not a new bin.
-        if KEY_LAST_BIN_LABEL in buffer and rows_in_first_bin != by:
+        if KEY_LAST_BIN_LABEL in buffer and rows_in_continued_bin:
             bin_labels.iloc[0] = buffer[KEY_LAST_BIN_LABEL]
         # Update 'buffer[rows_in_last_bin]' with number of rows in last bin for
         # next run.
