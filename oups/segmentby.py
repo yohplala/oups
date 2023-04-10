@@ -441,7 +441,7 @@ def by_x_rows(
 
 def mergesort(
     labels: Tuple[ndarray, ndarray],
-    keys: Optional[Tuple[ndarray, ndarray]] = None,
+    keys: Tuple[ndarray, ndarray],
     force_last_from_second: Optional[bool] = False,
 ) -> Tuple[ndarray, ndarray]:
     """Mergesort labels from keys.
@@ -755,6 +755,13 @@ def segmentby(
     returned by 'bin_by' are expected to be all of the same size, i.e. the
     total number of bins that are expected, including empty ones.
     """
+    # /!\ WiP start
+    # check in segmentby(): check no empty bins after running biny from user
+    # raise error if it is detected.
+    # split 'by_scale' into 'by_pgrouper' and 'by_scale'
+    # test restart with bin AND snap to make sure it makes sense.
+    # test cases restart with both cases: one with unknown_bin_end True, another with False, then restart.
+    # /!\ WiP end
     if not isinstance(bin_by, dict):
         bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
     if bin_by[SNAP_BY] is not None:

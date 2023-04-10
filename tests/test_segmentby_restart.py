@@ -6,7 +6,9 @@ Created on Sun Mar 13 18:00:00 2022.
 """
 import pytest
 from numpy import all as nall
+from numpy import arange
 from numpy import array
+from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
 from pandas import Grouper
 from pandas import Series
@@ -14,13 +16,16 @@ from pandas import Timestamp as pTimestamp
 from pandas import date_range
 
 from oups.cumsegagg import DTYPE_INT64
+from oups.segmentby import KEY_BIN
 from oups.segmentby import KEY_LAST_BIN_LABEL
 from oups.segmentby import KEY_LAST_ON_VALUE
 from oups.segmentby import KEY_RESTART_KEY
 from oups.segmentby import LEFT
+from oups.segmentby import NULL_INT64_1D_ARRAY
 from oups.segmentby import RIGHT
 from oups.segmentby import by_scale
 from oups.segmentby import by_x_rows
+from oups.segmentby import segmentby
 
 
 # from pandas.testing import assert_frame_equal
@@ -526,7 +531,8 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
                 {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:50")},
             ],
         ),
-        (
+        (  # 1
+            # Bin end falling exactly on chunk end.
             4,
             RIGHT,
             [4, 6, 9],
@@ -546,6 +552,33 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
                 DatetimeIndex(["2020-01-01 08:41:00", "2020-01-01 08:50:00"]),
             ],
             [False, True, True],
+            [
+                {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00")},
+                {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
+                {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:50")},
+            ],
+        ),
+        (  # 2
+            # Bin end falling exactly on chunk end.
+            4,
+            LEFT,
+            [4, 6, 9],
+            [
+                DatetimeIndex(["2020-01-01 08:00:00"]),
+                DatetimeIndex(["2020-01-01 08:16:00"]),
+                DatetimeIndex(["2020-01-01 08:16:00", "2020-01-01 08:50:00"]),
+            ],
+            [
+                array([4], dtype=DTYPE_INT64),
+                array([2], dtype=DTYPE_INT64),
+                array([2, 3], dtype=DTYPE_INT64),
+            ],
+            [
+                DatetimeIndex(["2020-01-01 08:15:00"]),
+                DatetimeIndex(["2020-01-01 08:21:00"]),
+                DatetimeIndex(["2020-01-01 08:50:00", "2020-01-01 08:50:00"]),
+            ],
+            [True, True, True],
             [
                 {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00")},
                 {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
@@ -599,11 +632,154 @@ def test_by_x_rows(
     assert by_closed == closed
 
 
-# by_x_rows: restart with end_indices falling exactly on bin ends
-# in by_x_rows, test 'closed'
-# Test with 'by_x_rows' ending exactly on the right number of rows to check it is ok
-# Test case when there is a single point (only if using by as a Series - with Grouper, there is necessarily two point: start and ends.)
-# Move restart test case for 'by_x_rows' into this file
-# check in segmentby(): check no empty bins after running biny from user
-# raise error if it is detected.
-# split 'by_scale' into 'by_pgrouper' and 'by_scale'
+@pytest.mark.parametrize(
+    "len_data, x_rows, closed, buffer_in, buffer_out, chunk_starts_ref,"
+    "next_chunk_starts_ref, unknown_last_bin_end_ref",
+    [
+        (
+            3,
+            4,
+            LEFT,
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            array([0]),
+            array([3]),
+            True,
+        ),
+        (
+            7,
+            4,
+            LEFT,
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 11:00")},
+            array([0, 3]),
+            array([3, 7]),
+            True,
+        ),
+        (
+            7,
+            4,
+            LEFT,
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 12:00")},
+            array([0, 4]),
+            array([4, 7]),
+            True,
+        ),
+        (
+            8,
+            4,
+            LEFT,
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 15:00")},
+            array([0, 3, 7]),
+            array([3, 7, 8]),
+            True,
+        ),
+        (
+            8,
+            4,
+            LEFT,
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 12:00")},
+            array([0, 4]),
+            array([4, 8]),
+            True,
+        ),
+    ],
+)
+def test_by_x_rows_single_shots(
+    len_data,
+    x_rows,
+    closed,
+    buffer_in,
+    buffer_out,
+    chunk_starts_ref,
+    next_chunk_starts_ref,
+    unknown_last_bin_end_ref,
+):
+    start = pTimestamp("2022/01/01 08:00")
+    dummy_data = arange(len_data)
+    data = pDataFrame(
+        {"dummy_data": dummy_data, "dti": date_range(start, periods=len_data, freq="1H")}
+    )
+    chunk_labels_ref = data.iloc[chunk_starts_ref, -1].reset_index(drop=True)
+    chunk_ends_idx = next_chunk_starts_ref.copy()
+    if closed == LEFT:
+        chunk_ends_idx[-1] = len_data - 1
+        chunk_ends_ref = data.iloc[chunk_ends_idx, -1].reset_index(drop=True)
+    else:
+        chunk_ends_idx -= 1
+        chunk_ends_ref = data.iloc[chunk_ends_idx, -1].reset_index(drop=True)
+    if buffer_in[KEY_RESTART_KEY] != x_rows:
+        chunk_labels_ref.iloc[0] = buffer_in[KEY_LAST_BIN_LABEL]
+    (
+        next_chunk_starts,
+        chunk_labels,
+        n_null_chunks,
+        chunk_closed,
+        chunk_ends,
+        unknown_last_bin_end,
+    ) = by_x_rows(data, x_rows, closed=closed, buffer=buffer_in)
+    assert nall(next_chunk_starts == next_chunk_starts_ref)
+    assert nall(chunk_labels == chunk_labels_ref)
+    assert not n_null_chunks
+    assert chunk_closed == closed
+    # 'chunk_ends' is expected to be the same than 'chunk_labels'.
+    assert nall(chunk_ends == chunk_ends_ref)
+    assert buffer_in == buffer_out
+    assert unknown_last_bin_end == unknown_last_bin_end_ref
+
+
+@pytest.mark.parametrize(
+    "bin_by, bin_on, ordered_on, snap_by, buffer, next_chunk_starts_ref, bin_indices_ref, "
+    "bin_labels_ref, n_null_bins_ref, snap_labels_ref, n_max_null_snaps_ref",
+    [
+        (
+            # 2/ 'bin_by' only, as a Callable.
+            by_x_rows,
+            "ordered_on",
+            None,
+            None,
+            {KEY_BIN: {KEY_LAST_BIN_LABEL: 1, KEY_RESTART_KEY: 1}},
+            array([3, 4]),
+            NULL_INT64_1D_ARRAY,
+            Series([1, 3]),
+            0,
+            None,
+            0,
+        ),
+    ],
+)
+def test_segmentby(
+    bin_by,
+    bin_on,
+    ordered_on,
+    snap_by,
+    buffer,
+    next_chunk_starts_ref,
+    bin_indices_ref,
+    bin_labels_ref,
+    n_null_bins_ref,
+    snap_labels_ref,
+    n_max_null_snaps_ref,
+):
+    dti = date_range("2020/01/01 08:04", periods=4, freq="3T")
+    data = pDataFrame({"dti": dti, "ordered_on": range(len(dti))})
+    (
+        next_chunk_starts,
+        bin_indices,
+        bin_labels,
+        n_null_bins,
+        snap_labels,
+        n_max_null_snaps,
+    ) = segmentby(data, bin_by, bin_on, ordered_on, snap_by, buffer)
+    assert nall(next_chunk_starts_ref == next_chunk_starts)
+    assert nall(bin_indices_ref == bin_indices)
+    assert bin_labels_ref.equals(bin_labels)
+    assert n_null_bins_ref == n_null_bins
+    if snap_labels_ref is None:
+        assert snap_labels is None
+    else:
+        assert snap_labels_ref.equals(snap_labels)
+    assert n_max_null_snaps_ref == n_max_null_snaps

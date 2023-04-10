@@ -409,8 +409,13 @@ def cumsegagg(
     # - if it is empty in this new iteration, it is discarded, i.e. following
     #   parameters are forwarded to 'jcumsegagg()':
     #    - trimmed 'next_chunk_starts[1:]'
-    #    - 'bin_res' reduced by one element.
+    #    - 'bin_res' reduced by one element (and bin_labels)
     #    - 'n_null_bin' reduced by one.
+    # - to check it is empty, 2 checks are required:
+    #     size is different than 0 AND label is different than label of last
+    #     bin at prrevious iteration.
+    #     ('by_x_rows' restarts directly on a new bin if the previous
+    #      ended right on the last value of previous iter.)
     # - if it is not empty in this new iteration, previous aggregation results
     #   'chunk_res', need to be re-used and 'pinnu' has to be set to ``True``.
     #
