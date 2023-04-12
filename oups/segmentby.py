@@ -755,13 +755,9 @@ def segmentby(
     returned by 'bin_by' are expected to be all of the same size, i.e. the
     total number of bins that are expected, including empty ones.
     """
-    # /!\ WiP start
-    # check in segmentby(): check no empty bins after running biny from user
-    # raise error if it is detected.
-    # split 'by_scale' into 'by_pgrouper' and 'by_scale'
-    # test restart with bin AND snap to make sure it makes sense.
-    # test cases restart with both cases: one with unknown_bin_end True, another with False, then restart.
-    # /!\ WiP end
+    # TODO : split 'by_scale' into 'by_pgrouper' and 'by_scale'.
+    # TODO : make some tests validating use of 'by_scale' as 'bin_by' parameter.
+    # (when user-provided 'bin_by' is  a Series or a tuple of Series)
     if not isinstance(bin_by, dict):
         bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
     if bin_by[SNAP_BY] is not None:
@@ -795,7 +791,11 @@ def segmentby(
         bin_ends,
         unknown_last_bin_end,
     ) = bin_by[BIN_BY](on=on, buffer=buffer_bin)
-    # Some checks.
+    # Check consistency of 'bin_by' results.
+    # TODO : consider transitioning 'bin_by' and 'snap_by' into a class.
+    # Integrate below checks within a template class.
+    # Some checks may probably be managed at class instantiation.
+    # Others at runtime.
     if bin_closed != LEFT and bin_closed != RIGHT:
         raise ValueError(f"'bin_closed' has to be set either to '{LEFT}' or to '{RIGHT}'.")
     n_bins = len(next_chunk_starts)
@@ -803,6 +803,15 @@ def segmentby(
         raise ValueError("'next_chunk_starts' and 'chunk_labels' have to be of the same size.")
     if bin_ends is not None and n_bins != len(bin_ends):
         raise ValueError("'next_chunk_starts' and 'chunk_ends' have to be of the same size.")
+    if next_chunk_starts[-2] == len(on) and buffer is not None:
+        # In case a user-provided 'bin_by()' Callable is used, check if there
+        # are empty trailing bins. If there are, and that restart are expected
+        # (use of 'buffer'), then raise error, this it not allowed.
+        raise ValueError(
+            "there is at least one empty trailing bin. "
+            "This is not possible if planning to restart on new "
+            "data in a next iteration."
+        )
     if snap_by is not None:
         # Define points of observation
         (next_snap_starts, _, n_max_null_snaps, _, snap_ends, _) = by_scale(

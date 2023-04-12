@@ -736,7 +736,7 @@ def test_by_x_rows_single_shots(
     "bin_labels_ref, n_null_bins_ref, snap_labels_ref, n_max_null_snaps_ref",
     [
         (
-            # 2/ 'bin_by' only, as a Callable.
+            # 0/ 'bin_by' only, as a Callable.
             by_x_rows,
             "ordered_on",
             None,
@@ -783,3 +783,32 @@ def test_segmentby(
     else:
         assert snap_labels_ref.equals(snap_labels)
     assert n_max_null_snaps_ref == n_max_null_snaps
+
+
+def test_segmentby_exception_trailing_empty_bin(
+    bin_by,
+):
+    bin_on = "dti"
+    dti = date_range("2020/01/01 08:04", periods=4, freq="3T")
+    data = pDataFrame({bin_on: dti, "ordered_on": range(len(dti))})
+    len_data = len(data)
+
+    def by_empty_trailing_bin(on, buffer=None):
+        # 'next_chunk_starts' ends with an empty bin.
+        return (
+            array([1, len_data, len_data]),
+            Series(["a", "o", "u"]),
+            1,
+            LEFT,
+            dti[[1, len_data - 1, len_data - 1]],
+            False,
+        )
+
+    with pytest.raises(ValueError, match="^there is at least one empty trailing bin."):
+        segmentby(data=data, bin_by=by_empty_trailing_bin, bin_on=bin_on, buffer={})
+
+
+# /!\ WiP start
+# test restart with bin AND snap to make sure it makes sense.
+# test cases restart with both cases: one with unknown_bin_end True, another with False, then restart.
+# /!\ WiP end
