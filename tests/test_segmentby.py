@@ -17,9 +17,9 @@ from pandas import Series
 from pandas import Timestamp as pTimestamp
 from pandas import date_range
 
-from oups.cumsegagg import DTYPE_DATETIME64
-from oups.cumsegagg import DTYPE_INT64
 from oups.segmentby import BIN_BY
+from oups.segmentby import DTYPE_DATETIME64
+from oups.segmentby import DTYPE_INT64
 from oups.segmentby import LEFT
 from oups.segmentby import NULL_INT64_1D_ARRAY
 from oups.segmentby import ON_COLS

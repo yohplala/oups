@@ -425,7 +425,7 @@ def cumsegagg(
     # We don't know what label to provide the remaining of the data in 'on'.
     # In this case, no corresponding bin (or snapshot) is generated
     # in 'next_chunk_starts', but in 'cumsegagg()', 'chunk_res' does be updated
-    # with this remaining data and the updated value is recoded (but this
+    # with this remaining data and the updated value is recorded (but this
     # value does not appear in 'bin_res' and 'snap_res')
     # In this case, a specific check in 'by_scale()' is required to ensure
     # correct restart: at next iteration, there should be no bin end before the
@@ -434,3 +434,18 @@ def cumsegagg(
     # At a upper level, if this appears, one can re-use 'restart_key' to trim
     # correctly the data (with additional data from previous iteration), and
     # force a restart from scratch in 'cumsegagg()' (with 'pinnu' set False)
+    #
+    # Questions:
+    #  - in cumsegagg, when restarting with 3 empty chunks, assuming the
+    #    there are 2 'snaps', and the 3rd is a 'bin' (which was in progress at
+    #    prev iter.)
+    #    With proposed methodo, it is not enough to simply let the 'in-progress data'
+    #    from previous iteration. the new intermediate chunk needs to be created.
+    #
+    #  We should really just restart jcsagg directly, without removing empyt bins
+    #  If values are the same, then they are the same and that's it.
+    # 'pinnu' should be forwarded with its last value / should work.
+    # length will be detected 0
+    # Make test
+    #   - with empty snap at prev iter, then new empty snaps at next iter then end of bin.
+    #   - with non empty snap at prev iter, then new empty one (res forwarded?) at next iter then end of bin

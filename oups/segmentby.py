@@ -600,6 +600,9 @@ def setup_mainbuffer(buffer: dict, with_snapshot: Optional[bool] = False) -> Tup
     """
     if buffer is not None:
         if with_snapshot:
+            if KEY_BIN not in buffer:
+                buffer[KEY_BIN] = {}
+                buffer[KEY_SNAP] = {}
             return buffer[KEY_BIN], buffer[KEY_SNAP]
         elif KEY_BIN in buffer:
             return buffer[KEY_BIN], None

@@ -15,10 +15,13 @@ from pandas import Series
 from pandas import Timestamp as pTimestamp
 from pandas import date_range
 
-from oups.cumsegagg import DTYPE_INT64
+from oups.segmentby import DTYPE_DATETIME64
+from oups.segmentby import DTYPE_INT64
+from oups.segmentby import KEY_BIN
 from oups.segmentby import KEY_LAST_BIN_LABEL
 from oups.segmentby import KEY_LAST_ON_VALUE
 from oups.segmentby import KEY_RESTART_KEY
+from oups.segmentby import KEY_SNAP
 from oups.segmentby import LEFT
 from oups.segmentby import NULL_INT64_1D_ARRAY
 from oups.segmentby import RIGHT
@@ -27,9 +30,6 @@ from oups.segmentby import by_x_rows
 from oups.segmentby import segmentby
 from oups.segmentby import setup_segmentby
 
-
-# from oups.segmentby import KEY_SNAP
-# from oups.segmentby import KEY_BIN
 
 # from pandas.testing import assert_frame_equal
 # tmp_path = os_path.expanduser('~/Documents/code/data/oups')
@@ -437,10 +437,7 @@ def test_by_scale(
         assert nall(chunk_ends == chunk_ends_refs[i])
         assert nall(next_chunk_starts == next_chunk_starts_refs[i])
         assert n_null_chunks == n_null_chunks_refs[i]
-        # 'freq' attribute is gonna be deprecated for pandas Timestamp,
-        # but is present in resulting Timestamp in 'buffer'. Hence comparing
-        # numpy Timestamp instead.
-        assert buffer[KEY_RESTART_KEY].to_numpy() == buffer_refs[i][KEY_RESTART_KEY].to_numpy()
+        assert buffer == buffer_refs[i]
         start_idx = end_idx
     assert not unknown_chunk_end
     assert by_closed == closed
@@ -763,25 +760,22 @@ def test_segmentby_exception_trailing_empty_bin():
         (
             # 0/ 'bin_by' only, as a Callable.
             #  'data'
-            #   dti  odr  bins
-            #  8:00    0     1
-            #  8:05    1
-            #  8:10    2
-            #  8:15    3-0
-            #  8:20    4     2
-            #  8:25    5
-            #  8:30    6-0
-            #  8:35    7
-            #  8:40    8     3
-            #  8:45    9
-            #  8:50   10
-            #  8:55   11
+            #   dti  odr  slices  bins
+            #  8:10    0             1
+            #  8:10    1
+            #  8:12    2
+            #  8:17    3       0
+            #  8:19    4             2
+            #  8:20    5
+            #  9:00    6       0
+            #  9:10    7
+            #  9:30    8             3
             by_x_rows,
             "ordered_on",
             None,
             None,
-            [3, 6, 12],
-            [[3], [1, 3], [2, 6]],
+            [3, 6, 9],
+            [[3], [1, 3], [2, 3]],
             [NULL_INT64_1D_ARRAY] * 3,
             [[0], [0, 4], [4, 8]],
             [0] * 3,
@@ -790,7 +784,95 @@ def test_segmentby_exception_trailing_empty_bin():
             [
                 {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: 0},
                 {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: 4},
-                {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: 8},
+                {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: 8},
+            ],
+        ),
+        (
+            # 1/ 'bin_by' and 'snap_by' as Grouper.
+            #    'bin_by', 20T, is a multiple of 'snap_by', 10T
+            #   dti  odr  slices  bins     snaps
+            #                      1-8:00
+            #  8:10    0
+            #  8:10    1
+            #  8:12    2
+            #  8:17    3       0
+            #  8:19    4
+            #  8:20    5           2-8:20   1-8:20 (excl.)
+            #                               2-8:30
+            #                      3-8:40   3-8:40
+            #                               4-8:50
+            #  9:00    6       0   4-9:00   5-9:00 (excl.)
+            #  9:10    7                    6-9:10 (excl.)
+            #                      5-9:20   7-9:20
+            #  9:30    8                    8-9:30 (excl.)
+            #                               9-9:40
+            Grouper(freq="20T", label="left", closed="left", key="dti"),
+            None,
+            None,
+            Grouper(freq="10T", label="right", closed="left", key="dti"),
+            [3, 6, 9],
+            # next_chunk_starts
+            [
+                #         b
+                array([3, 3]),
+                #         b     b
+                array([2, 2, 3, 3]),
+                #      s  s  b  s  s  b  s  s  b  s  s  b
+                array([0, 0, 0, 0, 0, 0, 1, 2, 2, 2, 3, 3]),
+            ],
+            # bin_indices
+            [array([1]), array([1, 3]), array([2, 5, 8, 11])],
+            # bin_labels
+            [
+                DatetimeIndex(["2020-01-01 08:00"], freq="20T"),
+                DatetimeIndex(["2020-01-01 08:00", "2020-01-01 08:20"], freq="20T"),
+                DatetimeIndex(
+                    [
+                        "2020-01-01 08:20",
+                        "2020-01-01 08:40",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:20",
+                    ],
+                    freq="20T",
+                ),
+            ],
+            # n_null_bins
+            [0, 0, 2],
+            # snap_labels
+            [
+                DatetimeIndex(["2020-01-01 08:20"], freq="10T"),
+                DatetimeIndex(["2020-01-01 08:20", "2020-01-01 08:30"], freq="10T"),
+                DatetimeIndex(
+                    [
+                        "2020-01-01 08:30",
+                        "2020-01-01 08:40",
+                        "2020-01-01 08:50",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:10",
+                        "2020-01-01 09:20",
+                        "2020-01-01 09:30",
+                        "2020-01-01 09:40",
+                    ],
+                    freq="10T",
+                ),
+            ],
+            # n_max_null_snaps
+            [0, 0, 7],
+            [
+                # First 'restart_key' is 1st value in data in this case because
+                # there is a single bin. This applies to snapshot as well.
+                {
+                    KEY_BIN: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10")},
+                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10")},
+                },
+                {
+                    KEY_BIN: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:20")},
+                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:20")},
+                },
+                {
+                    KEY_BIN: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:20")},
+                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:30")},
+                },
             ],
         ),
     ],
@@ -809,7 +891,20 @@ def test_segmentby(
     n_max_null_snaps_refs,
     buffer_refs,
 ):
-    dti = date_range("2020/01/01 08:00", periods=12, freq="5T")
+    dti = array(
+        [
+            "2020-01-01T08:10",
+            "2020-01-01T08:10",
+            "2020-01-01T08:12",
+            "2020-01-01T08:17",
+            "2020-01-01T08:19",
+            "2020-01-01T08:20",
+            "2020-01-01T09:00",
+            "2020-01-01T09:10",
+            "2020-01-01T09:30",
+        ],
+        dtype=DTYPE_DATETIME64,
+    )
     data = pDataFrame({"dti": dti, "ordered_on": range(len(dti))})
     start_idx = 0
     buffer = {}
@@ -827,7 +922,7 @@ def test_segmentby(
         assert nall(bin_indices == bin_indices_refs[i])
         assert nall(bin_labels == bin_labels_refs[i])
         assert n_null_bins == n_null_bins_refs[i]
-        assert snap_labels == snap_labels_refs[i]
+        assert nall(snap_labels == snap_labels_refs[i])
         assert n_max_null_snaps == n_max_null_snaps_refs[i]
         assert buffer == buffer_refs[i]
         start_idx = end_idx
