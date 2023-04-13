@@ -758,6 +758,9 @@ def segmentby(
     # TODO : split 'by_scale' into 'by_pgrouper' and 'by_scale'.
     # TODO : make some tests validating use of 'by_scale' as 'bin_by' parameter.
     # (when user-provided 'bin_by' is  a Series or a tuple of Series)
+    # TODO : consider transitioning 'bin_by' and 'snap_by' into a class.
+    # Probably, below initiatialization is to be part of a template class, to
+    # be run at child class instantiation.
     if not isinstance(bin_by, dict):
         bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
     if bin_by[SNAP_BY] is not None:
@@ -803,7 +806,7 @@ def segmentby(
         raise ValueError("'next_chunk_starts' and 'chunk_labels' have to be of the same size.")
     if bin_ends is not None and n_bins != len(bin_ends):
         raise ValueError("'next_chunk_starts' and 'chunk_ends' have to be of the same size.")
-    if next_chunk_starts[-2] == len(on) and buffer is not None:
+    if n_bins > 1 and buffer is not None and next_chunk_starts[-2] == len(on):
         # In case a user-provided 'bin_by()' Callable is used, check if there
         # are empty trailing bins. If there are, and that restart are expected
         # (use of 'buffer'), then raise error, this it not allowed.
@@ -814,7 +817,7 @@ def segmentby(
         )
     if snap_by is not None:
         # Define points of observation
-        (next_snap_starts, _, n_max_null_snaps, _, snap_ends, _) = by_scale(
+        (next_snap_starts, snap_labels, n_max_null_snaps, _, snap_ends, _) = by_scale(
             on=data.loc[:, ordered_on], by=snap_by, closed=bin_closed, buffer=buffer_snap
         )
         # Consolidate 'next_snap_starts' into 'next_chunk_starts'.
@@ -859,6 +862,6 @@ def segmentby(
         )
     else:
         bin_indices = NULL_INT64_1D_ARRAY
-        snap_ends = None
+        snap_labels = None
         n_max_null_snaps = 0
-    return next_chunk_starts, bin_indices, bin_labels, n_null_bins, snap_ends, n_max_null_snaps
+    return next_chunk_starts, bin_indices, bin_labels, n_null_bins, snap_labels, n_max_null_snaps

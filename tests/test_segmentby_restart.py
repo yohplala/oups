@@ -785,9 +785,7 @@ def test_segmentby(
     assert n_max_null_snaps_ref == n_max_null_snaps
 
 
-def test_segmentby_exception_trailing_empty_bin(
-    bin_by,
-):
+def test_segmentby_exception_trailing_empty_bin():
     bin_on = "dti"
     dti = date_range("2020/01/01 08:04", periods=4, freq="3T")
     data = pDataFrame({bin_on: dti, "ordered_on": range(len(dti))})

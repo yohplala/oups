@@ -396,7 +396,7 @@ def test_cumsegagg_bin_snap_with_null_chunks(
         "ts_first": (dti, FIRST),
     }
     bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
-    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti)
+    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti, label="right")
     bins_res, snaps_res = cumsegagg(
         data=data,
         agg=agg,
@@ -560,7 +560,7 @@ def test_cumsegagg_bin_snap_with_null_chunks_other(
         "ts_first": (dti, FIRST),
     }
     bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
-    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti)
+    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti, label="right")
     bins_res, snaps_res = cumsegagg(
         data=data,
         agg=agg,
@@ -677,7 +677,7 @@ def test_cumsegagg_single_bin_several_snaps(
         LAST: (value, LAST),
     }
     bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
-    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti)
+    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti, label="right")
     bins_res, snaps_res = cumsegagg(
         data=data,
         agg=agg,
@@ -1099,7 +1099,7 @@ def test_exception_error_on_0():
     data = pDataFrame({value: values, dti: dtidx})
     agg = {FIRST: (value, FIRST)}
     bin_by = Grouper(freq="10T", closed="left", label="right", key=dti)
-    snap_by = Grouper(freq="5T", closed="left", key=dti)
+    snap_by = Grouper(freq="5T", closed="left", key=dti, label="right")
     with pytest.raises(ValueError, match="^at least one null value exists in 'snap_res'"):
         bins_res, snaps_res = cumsegagg(
             data=data,

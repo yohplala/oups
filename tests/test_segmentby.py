@@ -605,7 +605,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             Grouper(key="dti", freq="5T", label="right", closed="left"),
             None,
             None,
-            Grouper(key="dti", freq="2T"),
+            Grouper(key="dti", freq="2T", label="right"),
             #     b1 s1 s2 s3 b2 s4 s5 b3
             #      0           4        7
             array([1, 1, 2, 2, 2, 3, 4, 4]),
@@ -629,7 +629,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             Grouper(key="dti", freq="5T", label="right", closed="right"),
             None,
             None,
-            Grouper(key="dti", freq="2T", closed="right"),
+            Grouper(key="dti", freq="2T", label="right", closed="right"),
             #     s1 b1 s2 s3 s4 b2 s5 s6 b3
             #         1           5        8
             array([1, 1, 1, 2, 3, 3, 3, 4, 4]),
@@ -708,7 +708,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             partial(by_x_rows, by=3),
             "dti",
             None,
-            Grouper(key="dti", freq="2T"),
+            Grouper(key="dti", freq="2T", label="right"),
             #     s1 s2 s3 s4 b1 s5 b2
             #                  4     6
             array([1, 2, 2, 3, 3, 4, 4]),
@@ -734,7 +734,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             partial(by_x_rows, by=3, closed=RIGHT),
             "dti",
             None,
-            Grouper(key="dti", freq="2T"),
+            Grouper(key="dti", freq="2T", label="right"),
             #     s1 s2 s3 s4 b1 s5 s6 b2
             #                  4        7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
@@ -844,7 +844,7 @@ def test_segmentby_with_outer_setup():
     #      8:10     s4-8:12    b3-8:15
     #      8:13     s5-8:14    b3
     bin_by = Grouper(key="dti", freq="5T", label="right", closed="left")
-    snap_by = Grouper(key="dti", freq="2T")
+    snap_by = Grouper(key="dti", freq="2T", label="right")
     bin_by = setup_segmentby(bin_by=bin_by, snap_by=snap_by)
     dti = date_range("2020/01/01 08:04", periods=4, freq="3T")
     data = pDataFrame({"dti": dti, "ordered_on": range(len(dti))})
