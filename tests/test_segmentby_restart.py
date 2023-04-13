@@ -16,7 +16,6 @@ from pandas import Timestamp as pTimestamp
 from pandas import date_range
 
 from oups.cumsegagg import DTYPE_INT64
-from oups.segmentby import KEY_BIN
 from oups.segmentby import KEY_LAST_BIN_LABEL
 from oups.segmentby import KEY_LAST_ON_VALUE
 from oups.segmentby import KEY_RESTART_KEY
@@ -26,7 +25,11 @@ from oups.segmentby import RIGHT
 from oups.segmentby import by_scale
 from oups.segmentby import by_x_rows
 from oups.segmentby import segmentby
+from oups.segmentby import setup_segmentby
 
+
+# from oups.segmentby import KEY_SNAP
+# from oups.segmentby import KEY_BIN
 
 # from pandas.testing import assert_frame_equal
 # tmp_path = os_path.expanduser('~/Documents/code/data/oups')
@@ -731,60 +734,6 @@ def test_by_x_rows_single_shots(
     assert unknown_last_bin_end == unknown_last_bin_end_ref
 
 
-@pytest.mark.parametrize(
-    "bin_by, bin_on, ordered_on, snap_by, buffer, next_chunk_starts_ref, bin_indices_ref, "
-    "bin_labels_ref, n_null_bins_ref, snap_labels_ref, n_max_null_snaps_ref",
-    [
-        (
-            # 0/ 'bin_by' only, as a Callable.
-            by_x_rows,
-            "ordered_on",
-            None,
-            None,
-            {KEY_BIN: {KEY_LAST_BIN_LABEL: 1, KEY_RESTART_KEY: 1}},
-            array([3, 4]),
-            NULL_INT64_1D_ARRAY,
-            Series([1, 3]),
-            0,
-            None,
-            0,
-        ),
-    ],
-)
-def test_segmentby(
-    bin_by,
-    bin_on,
-    ordered_on,
-    snap_by,
-    buffer,
-    next_chunk_starts_ref,
-    bin_indices_ref,
-    bin_labels_ref,
-    n_null_bins_ref,
-    snap_labels_ref,
-    n_max_null_snaps_ref,
-):
-    dti = date_range("2020/01/01 08:04", periods=4, freq="3T")
-    data = pDataFrame({"dti": dti, "ordered_on": range(len(dti))})
-    (
-        next_chunk_starts,
-        bin_indices,
-        bin_labels,
-        n_null_bins,
-        snap_labels,
-        n_max_null_snaps,
-    ) = segmentby(data, bin_by, bin_on, ordered_on, snap_by, buffer)
-    assert nall(next_chunk_starts_ref == next_chunk_starts)
-    assert nall(bin_indices_ref == bin_indices)
-    assert bin_labels_ref.equals(bin_labels)
-    assert n_null_bins_ref == n_null_bins
-    if snap_labels_ref is None:
-        assert snap_labels is None
-    else:
-        assert snap_labels_ref.equals(snap_labels)
-    assert n_max_null_snaps_ref == n_max_null_snaps
-
-
 def test_segmentby_exception_trailing_empty_bin():
     bin_on = "dti"
     dti = date_range("2020/01/01 08:04", periods=4, freq="3T")
@@ -804,6 +753,84 @@ def test_segmentby_exception_trailing_empty_bin():
 
     with pytest.raises(ValueError, match="^there is at least one empty trailing bin."):
         segmentby(data=data, bin_by=by_empty_trailing_bin, bin_on=bin_on, buffer={})
+
+
+@pytest.mark.parametrize(
+    "bin_by, bin_on, ordered_on, snap_by, end_indices, "
+    "next_chunk_starts_refs, bin_indices_refs, bin_labels_refs, n_null_bins_refs, "
+    "snap_labels_refs, n_max_null_snaps_refs, buffer_refs",
+    [
+        (
+            # 0/ 'bin_by' only, as a Callable.
+            #  'data'
+            #   dti  odr  bins
+            #  8:00    0     1
+            #  8:05    1
+            #  8:10    2
+            #  8:15    3-0
+            #  8:20    4     2
+            #  8:25    5
+            #  8:30    6-0
+            #  8:35    7
+            #  8:40    8     3
+            #  8:45    9
+            #  8:50   10
+            #  8:55   11
+            by_x_rows,
+            "ordered_on",
+            None,
+            None,
+            [3, 6, 12],
+            [[3], [1, 3], [2, 6]],
+            [NULL_INT64_1D_ARRAY] * 3,
+            [[0], [0, 4], [4, 8]],
+            [0] * 3,
+            [None] * 3,
+            [0] * 3,
+            [
+                {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: 0},
+                {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: 4},
+                {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: 8},
+            ],
+        ),
+    ],
+)
+def test_segmentby(
+    bin_by,
+    bin_on,
+    ordered_on,
+    snap_by,
+    end_indices,
+    next_chunk_starts_refs,
+    bin_indices_refs,
+    bin_labels_refs,
+    n_null_bins_refs,
+    snap_labels_refs,
+    n_max_null_snaps_refs,
+    buffer_refs,
+):
+    dti = date_range("2020/01/01 08:00", periods=12, freq="5T")
+    data = pDataFrame({"dti": dti, "ordered_on": range(len(dti))})
+    start_idx = 0
+    buffer = {}
+    bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
+    for i, end_idx in enumerate(end_indices):
+        (
+            next_chunk_starts,
+            bin_indices,
+            bin_labels,
+            n_null_bins,
+            snap_labels,
+            n_max_null_snaps,
+        ) = segmentby(data[start_idx:end_idx], bin_by, snap_by=snap_by, buffer=buffer)
+        assert nall(next_chunk_starts == next_chunk_starts_refs[i])
+        assert nall(bin_indices == bin_indices_refs[i])
+        assert nall(bin_labels == bin_labels_refs[i])
+        assert n_null_bins == n_null_bins_refs[i]
+        assert snap_labels == snap_labels_refs[i]
+        assert n_max_null_snaps == n_max_null_snaps_refs[i]
+        assert buffer == buffer_refs[i]
+        start_idx = end_idx
 
 
 # /!\ WiP start
