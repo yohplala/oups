@@ -279,6 +279,10 @@ def by_scale(
     #     - if last value derived from 'by' is before last value in "on", then
     #       at next iteration, N+1, we are sure no new data will appear before
     #       it. This last value can be safely used as restart value.
+    # TODO: when splitting 'by_scale()' into 'by_pgrouper()' and 'by_scale()',
+    # for 'by_pgrouper()', the using for 'restart_key' the last value in 'on'
+    # is complies whatever the 'closed' parameter (I think). This simplifies
+    # below code.
     if data_traversed:
         chunk_labels = chunk_labels[:n_chunks]
         chunk_ends = chunk_ends[:n_chunks]
@@ -768,7 +772,7 @@ def segmentby(
         bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
     if bin_by[SNAP_BY] is not None:
         # 'bin_by[SNAP_BY]' is not none if 'snap_by' is a Grouper.
-        # Otherwise, it can be a DatetimeIndex for instance or a Series.
+        # Otherwise, it can be a DatetimeIndex or a Series.
         snap_by = bin_by[SNAP_BY]
     buffer_bin, buffer_snap = setup_mainbuffer(buffer, snap_by is not None)
     ordered_on = bin_by[ORDERED_ON]
