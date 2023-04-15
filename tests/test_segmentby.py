@@ -545,7 +545,7 @@ def test_setup_segmentby(
             None,
             None,
             None,
-            "not possible to set 'bin_on' to `None`.",
+            "not possible to set both 'bin_on' and 'ordered_on'.",
         ),
         (
             Grouper(key="dti1", freq="5T", label="left", closed="left"),

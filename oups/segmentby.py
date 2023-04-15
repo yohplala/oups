@@ -556,8 +556,8 @@ def setup_segmentby(
         bin_by = partial(by_scale, by=bin_by)
     else:
         # 'bin_by' is a Callable.
-        if bin_on is None:
-            raise ValueError("not possible to set 'bin_on' to `None`.")
+        if bin_on is None and ordered_on is None:
+            raise ValueError("not possible to set both 'bin_on' and 'ordered_on' to `None`.")
     if snap_by is not None:
         if isinstance(snap_by, Grouper):
             if snap_by.key:
@@ -578,7 +578,11 @@ def setup_segmentby(
             )
     return {
         BIN_BY: bin_by,
-        ON_COLS: [bin_on, ordered_on] if ordered_on and ordered_on != bin_on else bin_on,
+        ON_COLS: [bin_on, ordered_on]
+        if ordered_on and bin_on and ordered_on != bin_on
+        else bin_on
+        if bin_on
+        else ordered_on,
         ORDERED_ON: ordered_on,
         SNAP_BY: snap_by if isinstance(snap_by, Grouper) else None,
     }

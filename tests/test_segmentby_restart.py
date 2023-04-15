@@ -977,6 +977,94 @@ def test_segmentby_exception_trailing_empty_bin():
                 },
             ],
         ),
+        (
+            # 3/ 'bin_by' using 'by_x_rows', 'snap_by' as '15T' Grouper.
+            #   dti  odr  slices  bins     snaps
+            #  8:10    0           1-8:10
+            #  8:10    1
+            #  8:12    2
+            #                               1-8:15
+            #  8:17    3       0
+            #  8:19    4           2-8:19
+            #  8:20    5
+            #                               2-8:30
+            #                               3-8:45
+            #                               4-9:00
+            #  9:00    6       0
+            #  9:10    7
+            #                               5-9:15
+            #                               6-9:30
+            #  9:30    8           3-9:30
+            #                               7-9:45
+            by_x_rows,
+            None,
+            "dti",
+            Grouper(freq="15T", label="right", closed="left", key="dti"),
+            [3, 6, 9],
+            # next_chunk_starts
+            [
+                #         b
+                array([3, 3]),
+                #         b     b
+                array([0, 1, 3, 3]),
+                #      s  s  s  s  s  b  s  b
+                array([0, 0, 0, 2, 2, 2, 3, 3]),
+            ],
+            # bin_indices
+            [array([1]), array([1, 3]), array([5, 7])],
+            # bin_labels
+            [
+                DatetimeIndex(["2020-01-01 08:10"]),
+                DatetimeIndex(["2020-01-01 08:10", "2020-01-01 08:19"]),
+                DatetimeIndex(
+                    ["2020-01-01 08:19", "2020-01-01 09:30"],
+                ),
+            ],
+            # n_null_bins
+            [0, 0, 0],
+            # snap_labels
+            [
+                DatetimeIndex(["2020-01-01 08:15"]),
+                DatetimeIndex(["2020-01-01 08:15", "2020-01-01 08:30"]),
+                DatetimeIndex(
+                    [
+                        "2020-01-01 08:30",
+                        "2020-01-01 08:45",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:15",
+                        "2020-01-01 09:30",
+                        "2020-01-01 09:45",
+                    ]
+                ),
+            ],
+            # n_max_null_snaps
+            [0, 1, 4],
+            [
+                # First 'restart_key' is 1st value in data in this case because
+                # there is a single snap.
+                {
+                    KEY_BIN: {
+                        KEY_RESTART_KEY: 3,
+                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:10"),
+                    },
+                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10")},
+                },
+                {
+                    KEY_BIN: {
+                        KEY_RESTART_KEY: 2,
+                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:19"),
+                    },
+                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:15")},
+                },
+                {
+                    KEY_BIN: {
+                        KEY_RESTART_KEY: 1,
+                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:30"),
+                    },
+                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:30")},
+                },
+            ],
+        ),
     ],
 )
 def test_segmentby(
