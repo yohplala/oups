@@ -210,6 +210,8 @@ def by_scale(
         chunk_labels = chunk_ends if by.label == RIGHT else edges[:-1]
     else:
         # Case 'by' is a Series.
+        # TODO: in case of restart, trim values in 'by' that are earlier than
+        # 'restart_key'.
         if closed is None:
             raise ValueError(f"'closed' has to be set to {LEFT} or {RIGHT}.")
         if isinstance(by, tuple):
@@ -685,8 +687,7 @@ def segmentby(
             In case of restarting the aggregation with new seed data, care
             should be taken so that the label of the first bin is the same as
             that of the last bin from previous iteration if it has been the
-            same bin. Having the same label between both iteration will ensure
-            that the bin with previous aggregation results is overwritten.
+            same bin.
           - ``n_null_bins``, an `int` indicating the number of empty bins.
 
         The 3 last items are used only in case of snapshotting (``snap_by`` is
@@ -741,30 +742,30 @@ def segmentby(
 
     Notes
     -----
+    When implementing `bin_by` Callable the developer should take care that
+    ``next_chunk_starts``, ``chunk_labels`` and``chunk_ends`` that are returned
+    by 'bin_by' are expected to be all of the same size, i.e. the total number
+    of bins that are expected, including empty ones.
+
+    Also, when implementing it for repetitive callse, care should be taken
+    that `bin_by` keeps in the 'buffer' parameter all the data needed to:
+      - create the correct number of bins that would be in-between the data
+        processed at the previous aggregation iteration, and the new data.
+        This has to show in 'next_chunk_starts' array that is returned.
+      - start with same bin label as previous iteration.
+
+    Having the same bin label between both iterations will ensure:
+      - that the bin with previous aggregation results is overwritten.
+      - even if this bin is empty, in the case of snapshotting, it is necessary
+        when this bin ends that new empty snapshots before its end correctly
+        forward past results, and that new empty snapshots after this end are
+        correctly accounted for as empty chunks.
+
     When using snapshots, values defined by ``snap_by`` are considered the
     "points of isolated observation". At such a point, an observation of the
     "on-going" bin is made. In case of snapshot(s) positioned exactly on
     segment(s) ends, at the same row index in data, the observation point will
     always come before the bin end.
-
-    When implementing `bin_by` Callable for repetitive calls, the developer
-    should take care that `bin_by` keeps in the 'buffer' parameter all the data
-    needed to:
-      - create the correct number of bins that would be in-between the data
-        processed at the previous aggregation iteration, and the new data. This
-        has to show in 'next_chunk_starts' array that is returned.
-      - appropriately label the first bin.
-        - either it is a new bin, different than the last one from previous
-          aggregation iteration. Then the label of the new bin has to be
-          different than that of the last one from previous iteration.
-        - or it is the same bin that is continuing. Then the label has be the
-          same. This ensures that when recording the new aggregation result,
-          the data from the previous iteration (last bin was in-progress, i.e.
-          incomplete) is overwritten.
-
-    Also, ``next_chunk_starts``, ``chunk_labels`` and``chunk_ends`` that are
-    returned by 'bin_by' are expected to be all of the same size, i.e. the
-    total number of bins that are expected, including empty ones.
     """
     # TODO : split 'by_scale' into 'by_pgrouper' and 'by_scale'.
     # TODO : make some tests validating use of 'by_scale' as 'bin_by' parameter.
