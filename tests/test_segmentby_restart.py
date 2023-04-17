@@ -38,7 +38,8 @@ from oups.segmentby import setup_segmentby
 @pytest.mark.parametrize(
     "by, closed, end_indices, chunk_labels_refs, next_chunk_starts_refs, n_null_chunks_refs, chunk_ends_refs, buffer_refs",
     [
-        (  # 0
+        (
+            # 0
             # Check with a 3rd chunk starting with several empty bins.
             Grouper(freq="5T", label="left", closed="left"),
             None,
@@ -65,7 +66,8 @@ from oups.segmentby import setup_segmentby
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
         ),
-        (  # 1
+        (
+            # 1
             # Check specific restart key when chunk has a single incomplete bin.
             Grouper(freq="5T", label="left", closed="left"),
             None,
@@ -98,7 +100,8 @@ from oups.segmentby import setup_segmentby
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
         ),
-        (  # 2
+        (
+            # 2
             # Check 'closed' parameter overrides 'by_closed' parameter.
             # Check specific restart key when chunk has a single incomplete bin.
             Grouper(freq="5T", label="left", closed="left"),
@@ -132,7 +135,8 @@ from oups.segmentby import setup_segmentby
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
         ),
-        (  # 3
+        (
+            # 3
             # Check with a 3rd chunk starting with several empty bins.
             Grouper(freq="5T", label="left", closed="right"),
             None,
@@ -159,7 +163,8 @@ from oups.segmentby import setup_segmentby
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
             ],
         ),
-        (  # 4
+        (
+            # 4
             # Check with a Series.
             # Specific case, 1st & 2nd Series end before end of data.
             # and 2nd & 3rd Series restart after last data from previous iteration.
@@ -220,7 +225,8 @@ from oups.segmentby import setup_segmentby
                 },
             ],
         ),
-        (  # 5
+        (
+            # 5
             # Check with a Series.
             # Series end after data, and even after start of data at next iter.
             [
@@ -253,7 +259,8 @@ from oups.segmentby import setup_segmentby
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:52:00")},
             ],
         ),
-        (  # 6
+        (
+            # 6
             # Check with a Series, ends are included by use of 'right'.
             # Specific case, 1st & 2nd Series end before end of data.
             # and 2nd & 3rd Series restart after last data from previous
@@ -314,7 +321,8 @@ from oups.segmentby import setup_segmentby
                 },
             ],
         ),
-        (  # 7
+        (
+            # 7
             # Check with a Series, ends are included by use of 'right'.
             # Series end after data, and even after start of data at next iter.
             [
@@ -347,7 +355,8 @@ from oups.segmentby import setup_segmentby
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:52:00")},
             ],
         ),
-        (  # 8
+        (
+            # 8
             # Check with a Series, with a single point per chunk.
             [
                 DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
@@ -393,6 +402,43 @@ from oups.segmentby import setup_segmentby
                 },
             ],
         ),
+        (
+            # 7
+            # Check with a single Series, providing all observation points,
+            # at all iterations. It should then be trimmed correctly.
+            DatetimeIndex(
+                [
+                    pTimestamp("2020/01/01 08:00"),
+                    pTimestamp("2020/01/01 08:16"),
+                    pTimestamp("2020/01/01 08:42"),
+                    pTimestamp("2020/01/01 08:52"),
+                ]
+            ),
+            # 'right' means end is excluded.
+            RIGHT,
+            [3, 6, 9],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:16")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
+            ],
+            [
+                array([1, 3], dtype=DTYPE_INT64),
+                array([2, 3], dtype=DTYPE_INT64),
+                array([2, 3], dtype=DTYPE_INT64),
+            ],
+            [0, 0, 0],
+            [
+                DatetimeIndex([pTimestamp("2020/01/01 08:00"), pTimestamp("2020/01/01 08:16")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
+                DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
+            ],
+            [
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:42:00")},
+                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:52:00")},
+            ],
+        ),
     ],
 )
 def test_by_scale(
@@ -424,6 +470,8 @@ def test_by_scale(
         if closed is None:
             closed = by.closed
         by = [by] * 3
+    elif not isinstance(by, list):
+        by = [by] * 3
     for i, end_idx in enumerate(end_indices):
         (
             next_chunk_starts,
@@ -446,7 +494,8 @@ def test_by_scale(
 @pytest.mark.parametrize(
     "by, closed, end_indices, exception_mess",
     [
-        (  # 0
+        (
+            # 0
             # 'by' as a Series, 1st value in 2nd chuunk of 'by' is not
             # the same as last value from previous iteration.
             [
@@ -455,9 +504,10 @@ def test_by_scale(
             ],
             LEFT,
             (3, 6),
-            "^first value expected in 'by'",
+            "^'by' needs to contain value",
         ),
-        (  # 1
+        (
+            # 1
             # 'by' as a Series, 'closed' is 'left'.
             # Last value in 'on' at 1st iter. is after 2nd value of 'by' in 2nd
             # chunk.
@@ -469,7 +519,8 @@ def test_by_scale(
             (3, 6),
             "^2nd chunk end in 'by'",
         ),
-        (  # 2
+        (
+            # 2
             # 'by' as a Series, 'closed' is 'right'.
             # Last value in 'on' at 1st iter. is after 2nd value of 'by' in 2nd
             # chunk.
@@ -506,6 +557,7 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
     "by, closed, end_indices, bin_labels_refs, next_bin_starts_refs, bin_ends_refs, unknown_bin_end_refs, buffer_refs",
     [
         (
+            # 0
             4,
             LEFT,
             [3, 6, 9],
@@ -531,7 +583,8 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
                 {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:50")},
             ],
         ),
-        (  # 1
+        (
+            # 1
             # Bin end falling exactly on chunk end.
             4,
             RIGHT,
@@ -558,7 +611,8 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
                 {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:50")},
             ],
         ),
-        (  # 2
+        (
+            # 2
             # Bin end falling exactly on chunk end.
             4,
             LEFT,
@@ -731,7 +785,7 @@ def test_by_x_rows_single_shots(
     assert unknown_last_bin_end == unknown_last_bin_end_ref
 
 
-def test_segmentby_exception_trailing_empty_bin():
+def test_segmentby_exceptions():
     bin_on = "dti"
     dti = date_range("2020/01/01 08:04", periods=4, freq="3T")
     data = pDataFrame({bin_on: dti, "ordered_on": range(len(dti))})
@@ -750,6 +804,20 @@ def test_segmentby_exception_trailing_empty_bin():
 
     with pytest.raises(ValueError, match="^there is at least one empty trailing bin."):
         segmentby(data=data, bin_by=by_empty_trailing_bin, bin_on=bin_on, buffer={})
+
+    def by_data_not_traversed(on, buffer=None):
+        # 'next_chunk_starts' ends without covering full size of 'data'.
+        return (
+            array([1, len_data - 1]),
+            Series(["a", "o"]),
+            0,
+            LEFT,
+            dti[[1, len_data - 2]],
+            False,
+        )
+
+    with pytest.raises(ValueError, match="^series of bins have to cover the full"):
+        segmentby(data=data, bin_by=by_data_not_traversed, bin_on=bin_on, buffer={})
 
 
 @pytest.mark.parametrize(

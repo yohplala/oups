@@ -210,8 +210,6 @@ def by_scale(
         chunk_labels = chunk_ends if by.label == RIGHT else edges[:-1]
     else:
         # Case 'by' is a Series.
-        # TODO: in case of restart, trim values in 'by' that are earlier than
-        # 'restart_key'.
         if closed is None:
             raise ValueError(f"'closed' has to be set to {LEFT} or {RIGHT}.")
         if isinstance(by, tuple):
@@ -224,16 +222,24 @@ def by_scale(
             chunk_labels = chunk_ends = by
         if buffer is not None and KEY_RESTART_KEY in buffer:
             if buffer[KEY_RESTART_KEY] != chunk_ends[0]:
-                raise ValueError(
-                    "first value expected in 'by' to restart "
-                    f"correctly is {buffer[KEY_RESTART_KEY]}"
-                )
+                # In case of restart, if first value in 'chunk_ends' is not the
+                # the one that was used in last at last iteration, try first to
+                # trim values in 'by' that are earlier than 'restart_key'.
+                n_chunk_ends_init = len(chunk_ends)
+                chunk_ends = chunk_ends[chunk_ends >= buffer[KEY_RESTART_KEY]]
+                if buffer[KEY_RESTART_KEY] != chunk_ends[0]:
+                    raise ValueError(
+                        f"'by' needs to contain value {buffer[KEY_RESTART_KEY]} "
+                        "to restart correctly."
+                    )
+                n_first_chunks_to_remove = n_chunk_ends_init - len(chunk_ends)
+                chunk_labels = chunk_labels[n_first_chunks_to_remove:]
             if KEY_LAST_ON_VALUE in buffer:
                 # In the specific case 'on' has not been traversed completely
                 # at previous iteration, the chunk for the remaining of the
-                # data has no label, and will not appear in the results. But it
-                # will be calculated during the aggregation phase
-                # ('cumsegagg()'), and kept in a temporary variable
+                # data has no label, and will not appear in the snapshot
+                # results. But it will be calculated during the aggregation
+                # phase ('cumsegagg()'), and kept in a temporary variable
                 # ('chunk_res').
                 # In this case, at next iteration, with new chunk ends, a
                 # specific check is managed here to ensure correctness of the
@@ -756,10 +762,16 @@ def segmentby(
 
     Having the same bin label between both iterations will ensure:
       - that the bin with previous aggregation results is overwritten.
-      - even if this bin is empty, in the case of snapshotting, it is necessary
-        when this bin ends that new empty snapshots before its end correctly
-        forward past results, and that new empty snapshots after this end are
-        correctly accounted for as empty chunks.
+      - even if this bin is empty at restart, in the case of snapshotting, it
+        is necessary when this bin ends that new empty snapshots before its end
+        correctly forward past results, and that new empty snapshots after this
+        end are correctly accounted for as empty chunks.
+
+    Still for repetitive calls of 'bin_by', care has to be taken that:
+      - the last bin is not an empty one.
+      - the last bin does cover the full size of data.
+
+    If not, exceptions will be raised.
 
     When using snapshots, values defined by ``snap_by`` are considered the
     "points of isolated observation". At such a point, an observation of the
@@ -816,8 +828,14 @@ def segmentby(
     n_bins = len(next_chunk_starts)
     if n_bins != len(bin_labels):
         raise ValueError("'next_chunk_starts' and 'chunk_labels' have to be of the same size.")
-    if bin_ends is not None and n_bins != len(bin_ends):
+    if n_bins != len(bin_ends):
         raise ValueError("'next_chunk_starts' and 'chunk_ends' have to be of the same size.")
+    if isinstance(buffer, dict) and next_chunk_starts[-1] != len(data):
+        raise ValueError(
+            "series of bins have to cover the full length of 'data'. "
+            f"But last bin ends at row {next_chunk_starts[-1]} "
+            f"excluded, while size of data is {len(data)}."
+        )
     if n_bins > 1 and buffer is not None and next_chunk_starts[-2] == len(on):
         # In case a user-provided 'bin_by()' Callable is used, check if there
         # are empty trailing bins. If there are, and that restart are expected

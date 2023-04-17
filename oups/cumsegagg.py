@@ -387,25 +387,39 @@ def cumsegagg(
     # that some new data was actually in these bins, empty at previous
     # iteration.
     #
-    # 2/ At this step, the 'restart_key' is a key that enables a restart from
-    # last not empty bin of previous iteration, that was likely incomplete.
-    # That it was actually complete or not does not raise trouble. It will be
-    # check at next iteration in 'cumsegagg()'. If there is no new data in this
-    # bin at new iteration, it will be discarded from new iteation.
+    # 2/ If restarting, bins produced by the user-defined 'bin_by()' have to
+    # cover the full size of data, meaning last item in 'next_chunk_starts' is
+    # equal to length of data.
+    # The rationale is that if there is no bin going till the end of data, then
+    # we are not sure the next bin (at next iteration) would not lie within
+    # these last values in data at current iteration.
+    # This is identified as a risk situation.
+    # A check is then performed and an exception is raised if this situation
+    # occurs.
+    # This requirement is not applied to 'snap_by' (in case using a Series).
+    # Because it is applied to 'bin_by', then 'chunk_res' will contain
+    # aggregation results over the last values in data, it is not lost.
+    # In the existing 'snap_by' (either by Grouper or by series),
+    #  - either if a Grouper, then last snapshot ends after end of data
+    #  - or if a Series, at restart, if 2nd snapshot ends before last value in
+    #    data at previous iteration, then an exception is raised.
     #
-    # 3/ If using snapshots, in consolidated 'next_chunk_starts' &
-    # 'bin_indices',
-    #  - the two last indices in 'next_chunk_starts' have to cover the full
-    #    data (this should be ensured directly by 'bin_by()' functions or
-    #    an error should be raised).
-    #  - the last index should be forced to be that of a bin (to avoid during
-    #    the cumulative aggregation step that the last snapshot is empty)
+    # 3/ The 'restart_key' is a key that enables a restart from last not empty
+    # bin of previous iteration, that was likely incomplete.
+    # That it was actually complete or not does not raise trouble.
+    # At next iteration in 'cumsegagg()', if it is empty, it will then be
+    # identified as such. It is kept however for one reason. In case of empty
+    # snapshots that precedes and follows this 1st bin, it is necessary to
+    # position the bin end. For empty snapshots that precede this bin end,
+    # past results are forwarded. For empty snapshots that follow this bin end,
+    # this results in empty snapshots.
+    #
     #
     # Cumulative segmented aggregation ('cumsegagg()')
     # ------------------------------------------------
     #
-    # 1/ Before starting 'jcumsegagg()', the first bin is checked to be empty
-    # or not (last bin from previous iteration was then complete).
+    # 1/ (won't do) Before starting 'jcumsegagg()', the first bin is checked to
+    # be empty or not (last bin from previous iteration was then complete).
     # - if it is empty in this new iteration, it is discarded, i.e. following
     #   parameters are forwarded to 'jcumsegagg()':
     #    - trimmed 'next_chunk_starts[1:]'
@@ -419,9 +433,9 @@ def cumsegagg(
     # - if it is not empty in this new iteration, previous aggregation results
     #   'chunk_res', need to be re-used and 'pinnu' has to be set to ``True``.
     #
-    # 2/ In the specific case data is not traversed completely during
-    # segmentation step, with 'by_scale()' (in case 'by' is a Series ending in
-    # within 'on'.)
+    # 2/ (won't do) In the specific case data is not traversed completely
+    # during segmentation step, with 'by_scale()' (in case 'by' is a Series
+    # ending in within 'on'.)
     # We don't know what label to provide the remaining of the data in 'on'.
     # In this case, no corresponding bin (or snapshot) is generated
     # in 'next_chunk_starts', but in 'cumsegagg()', 'chunk_res' does be updated
