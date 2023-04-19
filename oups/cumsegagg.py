@@ -262,6 +262,7 @@ def cumsegagg(
     (
         next_chunk_starts,
         bin_indices,
+        first_bin_is_new,
         bin_labels,
         n_null_bins,
         snap_labels,
@@ -285,6 +286,8 @@ def cumsegagg(
     # Initialize 'null_snap_indices' to -1, to identify easily those which
     # are not set. they will be removed in a post-processing step.
     null_snap_indices = full(n_max_null_snaps, -1, dtype=DTYPE_INT64)
+    # /!\ WiP process 'first_bin_is_new'.
+    # /!\
     for dtype_, (
         cols_name_in_data,
         cols_name_in_res,
@@ -418,20 +421,9 @@ def cumsegagg(
     # Cumulative segmented aggregation ('cumsegagg()')
     # ------------------------------------------------
     #
-    # 1/ (won't do) Before starting 'jcumsegagg()', the first bin is checked to
-    # be empty or not (last bin from previous iteration was then complete).
-    # - if it is empty in this new iteration, it is discarded, i.e. following
-    #   parameters are forwarded to 'jcumsegagg()':
-    #    - trimmed 'next_chunk_starts[1:]'
-    #    - 'bin_res' reduced by one element (and bin_labels)
-    #    - 'n_null_bin' reduced by one.
-    # - to check it is empty, 2 checks are required:
-    #     size is different than 0 AND label is different than label of last
-    #     bin at prrevious iteration.
-    #     ('by_x_rows' restarts directly on a new bin if the previous
-    #      ended right on the last value of previous iter.)
-    # - if it is not empty in this new iteration, previous aggregation results
-    #   'chunk_res', need to be re-used and 'pinnu' has to be set to ``True``.
+    # 1/ (to do to ease coding of 'bin_by'!) Before starting 'jcumsegagg()',
+    #    it is checked the bin has changed or not (from its label) to set
+    #    accordingly pinnu
     #
     # 2/ (won't do) In the specific case data is not traversed completely
     # during segmentation step, with 'by_scale()' (in case 'by' is a Series
@@ -463,3 +455,9 @@ def cumsegagg(
     # Make test
     #   - with empty snap at prev iter, then new empty snaps at next iter then end of bin.
     #   - with non empty snap at prev iter, then new empty one (res forwarded?) at next iter then end of bin
+    # replay also test case segmentby() 5
+    # 5/ 'bin_by' using 'by_x_rows', 'snap_by' as Series.
+    #    In this test case, 'unknown_bin_end' is False after 1st data
+    #    chunk.
+    #    Last rows in 'data' are not accounted for in 1st series of
+    #    snapshots (8:20 snasphot not present), but is in 2nd series.

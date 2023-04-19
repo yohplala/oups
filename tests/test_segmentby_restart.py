@@ -36,7 +36,8 @@ from oups.segmentby import setup_segmentby
 
 
 @pytest.mark.parametrize(
-    "by, closed, end_indices, chunk_labels_refs, next_chunk_starts_refs, n_null_chunks_refs, chunk_ends_refs, buffer_refs",
+    "by, closed, end_indices, chunk_labels_refs, next_chunk_starts_refs, "
+    "n_null_chunks_refs, chunk_ends_refs, first_bins, buffer_refs",
     [
         (
             # 0
@@ -60,6 +61,7 @@ from oups.segmentby import setup_segmentby
                 date_range(start="2020-01-01 08:15:00", end="2020-01-01 08:25:00", freq="5T"),
                 date_range(start="2020-01-01 08:25:00", end="2020-01-01 08:55:00", freq="5T"),
             ],
+            [True, False, False],
             [
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:20:00")},
@@ -94,6 +96,7 @@ from oups.segmentby import setup_segmentby
                 date_range(start="2020-01-01 08:05:00", end="2020-01-01 08:45:00", freq="5T"),
                 date_range(start="2020-01-01 08:45:00", end="2020-01-01 08:55:00", freq="5T"),
             ],
+            [True, False, False],
             [
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:00:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:40:00")},
@@ -129,6 +132,7 @@ from oups.segmentby import setup_segmentby
                 date_range(start="2020-01-01 08:00:00", end="2020-01-01 08:40:00", freq="5T"),
                 date_range(start="2020-01-01 08:40:00", end="2020-01-01 08:50:00", freq="5T"),
             ],
+            [True, False, False],
             [
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:00:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:40:00")},
@@ -157,6 +161,7 @@ from oups.segmentby import setup_segmentby
                 date_range(start="2020-01-01 08:15:00", end="2020-01-01 08:25:00", freq="5T"),
                 date_range(start="2020-01-01 08:25:00", end="2020-01-01 08:50:00", freq="5T"),
             ],
+            [True, False, False],
             [
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:15:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:25:00")},
@@ -210,6 +215,7 @@ from oups.segmentby import setup_segmentby
                     ]
                 ),
             ],
+            [True, False, False],
             [
                 {
                     KEY_RESTART_KEY: pTimestamp("2020-01-01 08:06:00"),
@@ -253,6 +259,7 @@ from oups.segmentby import setup_segmentby
                 DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
                 DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
             ],
+            [True, False, False],
             [
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:42:00")},
@@ -307,6 +314,7 @@ from oups.segmentby import setup_segmentby
                     ]
                 ),
             ],
+            [True, False, False],
             [
                 {
                     KEY_RESTART_KEY: pTimestamp("2020-01-01 08:06:00"),
@@ -349,6 +357,7 @@ from oups.segmentby import setup_segmentby
                 DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
                 DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
             ],
+            [True, False, False],
             [
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:42:00")},
@@ -387,6 +396,7 @@ from oups.segmentby import setup_segmentby
                 DatetimeIndex([pTimestamp("2020/01/01 08:03")]),
                 DatetimeIndex([pTimestamp("2020/01/01 08:03"), pTimestamp("2020/01/01 08:36")]),
             ],
+            [True, False, False],
             [
                 {
                     KEY_RESTART_KEY: pTimestamp("2020-01-01 08:03:00"),
@@ -433,6 +443,7 @@ from oups.segmentby import setup_segmentby
                 DatetimeIndex([pTimestamp("2020/01/01 08:16"), pTimestamp("2020/01/01 08:42")]),
                 DatetimeIndex([pTimestamp("2020/01/01 08:42"), pTimestamp("2020/01/01 08:52")]),
             ],
+            [True, False, False],
             [
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00")},
                 {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:42:00")},
@@ -449,6 +460,7 @@ def test_by_scale(
     next_chunk_starts_refs,
     n_null_chunks_refs,
     chunk_ends_refs,
+    first_bins,
     buffer_refs,
 ):
     on = Series(
@@ -469,8 +481,7 @@ def test_by_scale(
     if isinstance(by, Grouper):
         if closed is None:
             closed = by.closed
-        by = [by] * 3
-    elif not isinstance(by, list):
+    if not isinstance(by, list):
         by = [by] * 3
     for i, end_idx in enumerate(end_indices):
         (
@@ -480,11 +491,13 @@ def test_by_scale(
             by_closed,
             chunk_ends,
             unknown_chunk_end,
+            first_bin_is_new,
         ) = by_scale(on[start_idx:end_idx], by[i], closed=closed, buffer=buffer)
         assert nall(chunk_labels == chunk_labels_refs[i])
         assert nall(chunk_ends == chunk_ends_refs[i])
         assert nall(next_chunk_starts == next_chunk_starts_refs[i])
         assert n_null_chunks == n_null_chunks_refs[i]
+        assert first_bin_is_new == first_bins[i]
         assert buffer == buffer_refs[i]
         start_idx = end_idx
     assert not unknown_chunk_end
@@ -554,7 +567,8 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
 
 
 @pytest.mark.parametrize(
-    "by, closed, end_indices, bin_labels_refs, next_bin_starts_refs, bin_ends_refs, unknown_bin_end_refs, buffer_refs",
+    "by, closed, end_indices, bin_labels_refs, next_bin_starts_refs, bin_ends_refs, "
+    "unknown_bin_end_refs, first_bins, buffer_refs",
     [
         (
             # 0
@@ -577,6 +591,7 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
                 DatetimeIndex(["2020-01-01 08:50:00", "2020-01-01 08:50:00"]),
             ],
             [True, True, True],
+            [True, False, False],
             [
                 {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00")},
                 {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
@@ -605,6 +620,7 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
                 DatetimeIndex(["2020-01-01 08:41:00", "2020-01-01 08:50:00"]),
             ],
             [False, True, True],
+            [True, True, False],
             [
                 {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00")},
                 {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
@@ -633,6 +649,7 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
                 DatetimeIndex(["2020-01-01 08:50:00", "2020-01-01 08:50:00"]),
             ],
             [True, True, True],
+            [True, True, False],
             [
                 {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00")},
                 {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
@@ -649,6 +666,7 @@ def test_by_x_rows(
     next_bin_starts_refs,
     bin_ends_refs,
     unknown_bin_end_refs,
+    first_bins,
     buffer_refs,
 ):
     on = Series(
@@ -674,21 +692,22 @@ def test_by_x_rows(
             by_closed,
             bin_ends,
             unknown_bin_end,
+            first_bin_is_new,
         ) = by_x_rows(on[start_idx:end_idx], by, closed=closed, buffer=buffer)
         assert nall(bin_labels == bin_labels_refs[i])
         assert nall(bin_ends == bin_ends_refs[i])
         assert nall(next_bin_starts == next_bin_starts_refs[i])
         assert not n_null_bins
         assert unknown_bin_end == unknown_bin_end_refs[i]
-        assert buffer[KEY_RESTART_KEY] == buffer_refs[i][KEY_RESTART_KEY]
-        assert buffer[KEY_LAST_BIN_LABEL] == buffer_refs[i][KEY_LAST_BIN_LABEL]
+        assert first_bin_is_new == first_bins[i]
+        assert buffer == buffer_refs[i]
         start_idx = end_idx
     assert by_closed == closed
 
 
 @pytest.mark.parametrize(
     "len_data, x_rows, closed, buffer_in, buffer_out, chunk_starts_ref,"
-    "next_chunk_starts_ref, unknown_last_bin_end_ref",
+    "next_chunk_starts_ref, unknown_last_bin_end_ref, first_bin_new_ref",
     [
         (
             3,
@@ -699,6 +718,7 @@ def test_by_x_rows(
             array([0]),
             array([3]),
             True,
+            False,
         ),
         (
             7,
@@ -709,6 +729,7 @@ def test_by_x_rows(
             array([0, 3]),
             array([3, 7]),
             True,
+            False,
         ),
         (
             7,
@@ -718,6 +739,7 @@ def test_by_x_rows(
             {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 12:00")},
             array([0, 4]),
             array([4, 7]),
+            True,
             True,
         ),
         (
@@ -729,6 +751,7 @@ def test_by_x_rows(
             array([0, 3, 7]),
             array([3, 7, 8]),
             True,
+            False,
         ),
         (
             8,
@@ -738,6 +761,7 @@ def test_by_x_rows(
             {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 12:00")},
             array([0, 4]),
             array([4, 8]),
+            True,
             True,
         ),
     ],
@@ -751,6 +775,7 @@ def test_by_x_rows_single_shots(
     chunk_starts_ref,
     next_chunk_starts_ref,
     unknown_last_bin_end_ref,
+    first_bin_new_ref,
 ):
     start = pTimestamp("2022/01/01 08:00")
     dummy_data = arange(len_data)
@@ -774,6 +799,7 @@ def test_by_x_rows_single_shots(
         chunk_closed,
         chunk_ends,
         unknown_last_bin_end,
+        first_bin_is_new,
     ) = by_x_rows(data, x_rows, closed=closed, buffer=buffer_in)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
     assert nall(chunk_labels == chunk_labels_ref)
@@ -781,8 +807,9 @@ def test_by_x_rows_single_shots(
     assert chunk_closed == closed
     # 'chunk_ends' is expected to be the same than 'chunk_labels'.
     assert nall(chunk_ends == chunk_ends_ref)
-    assert buffer_in == buffer_out
     assert unknown_last_bin_end == unknown_last_bin_end_ref
+    assert first_bin_is_new == first_bin_new_ref
+    assert buffer_in == buffer_out
 
 
 def test_segmentby_exceptions():
@@ -800,6 +827,7 @@ def test_segmentby_exceptions():
             LEFT,
             dti[[1, len_data - 1, len_data - 1]],
             False,
+            False,
         )
 
     with pytest.raises(ValueError, match="^there is at least one empty trailing bin."):
@@ -814,6 +842,7 @@ def test_segmentby_exceptions():
             LEFT,
             dti[[1, len_data - 2]],
             False,
+            False,
         )
 
     with pytest.raises(ValueError, match="^series of bins have to cover the full"):
@@ -821,8 +850,8 @@ def test_segmentby_exceptions():
 
 
 @pytest.mark.parametrize(
-    "bin_by, bin_on, ordered_on, snap_by, end_indices, "
-    "next_chunk_starts_refs, bin_indices_refs, bin_labels_refs, n_null_bins_refs, "
+    "bin_by, bin_on, ordered_on, snap_by, end_indices, next_chunk_starts_refs, "
+    "bin_indices_refs, first_bin_refs, bin_labels_refs, n_null_bins_refs, "
     "snap_labels_refs, n_max_null_snaps_refs, buffer_refs",
     [
         (
@@ -845,6 +874,7 @@ def test_segmentby_exceptions():
             [3, 6, 9],
             [[3], [1, 3], [2, 3]],
             [NULL_INT64_1D_ARRAY] * 3,
+            [True, False, False],
             [[0], [0, 4], [4, 8]],
             [0] * 3,
             [None] * 3,
@@ -890,6 +920,7 @@ def test_segmentby_exceptions():
             ],
             # bin_indices
             [array([1]), array([1, 3]), array([2, 5, 8, 11])],
+            [True, False, False],
             # bin_labels
             [
                 DatetimeIndex(["2020-01-01 08:00"], freq="20T"),
@@ -995,6 +1026,7 @@ def test_segmentby_exceptions():
             ],
             # bin_indices
             [array([2]), array([2, 4]), array([2, 4, 7, 9])],
+            [True, False, False],
             # bin_labels
             [
                 DatetimeIndex(["2020-01-01 08:00"], freq="20T"),
@@ -1080,6 +1112,7 @@ def test_segmentby_exceptions():
             ],
             # bin_indices
             [array([1]), array([1, 3]), array([5, 7])],
+            [True, False, False],
             # bin_labels
             [
                 DatetimeIndex(["2020-01-01 08:10"]),
@@ -1135,6 +1168,7 @@ def test_segmentby_exceptions():
         ),
         (
             # 4/ 'bin_by' using 'by_x_rows', 'snap_by' as Series.
+            #    In this test case, 'unknown_bin_end' is True.
             #   dti  odr  slices  bins     snaps
             #  8:10    0           1-8:10
             #  8:10    1
@@ -1185,6 +1219,7 @@ def test_segmentby_exceptions():
             ],
             # bin_indices
             [array([2]), array([1, 4]), array([5, 7])],
+            [True, False, False],
             # bin_labels
             [
                 DatetimeIndex(["2020-01-01 08:10"]),
@@ -1238,6 +1273,111 @@ def test_segmentby_exceptions():
                 },
             ],
         ),
+        (
+            # 5/ 'bin_by' using 'by_x_rows', 'snap_by' as Series.
+            #    In this test case, 'unknown_bin_end' is False after 1st data
+            #    chunk.
+            #    Last rows in 'data' are not accounted for in 1st series of
+            #    snapshots (8:20 snasphot not present), but is in 2nd series.
+            #   dti  odr  slices  bins     snaps
+            #  8:10    0           1-8:10
+            #  8:10    1
+            #                               1-8:12 (excl.)
+            #  8:12    2
+            #                               2-8:15
+            #  8:17    3
+            #  8:19    4       0   2-8:19
+            #                               3-8:20 (excl.)
+            #  8:20    5
+            #                               4-8:35
+            #                               5-8:40
+            #                               6-9:00 (excl.)
+            #  9:00    6
+            #  9:10    7
+            #                               7-9:11
+            #                               8-9:20
+            #  9:30    8           3-9:30
+            #                               9-9:40
+            #                              10-9:44
+            by_x_rows,
+            None,
+            "dti",
+            [
+                DatetimeIndex(["2020-01-01 08:12", "2020-01-01 08:15"]),
+                DatetimeIndex(
+                    [
+                        "2020-01-01 08:15",
+                        "2020-01-01 08:20",
+                        "2020-01-01 08:35",
+                        "2020-01-01 08:40",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:11",
+                        "2020-01-01 09:20",
+                        "2020-01-01 09:40",
+                        "2020-01-01 09:44",
+                    ]
+                ),
+            ],
+            [4, 9],
+            # next_chunk_starts
+            [
+                #            b
+                array([2, 3, 4]),
+                #                           b     b
+                array([0, 1, 2, 2, 2, 4, 4, 4, 5, 5]),
+            ],
+            # bin_indices
+            [array([2]), array([7, 9])],
+            [True, True, False],
+            # bin_labels
+            [
+                DatetimeIndex(["2020-01-01 08:10"]),
+                DatetimeIndex(
+                    ["2020-01-01 08:19", "2020-01-01 09:30"],
+                ),
+            ],
+            # n_null_bins
+            [0, 0],
+            # snap_labels
+            [
+                DatetimeIndex(["2020-01-01 08:12", "2020-01-01 08:15"]),
+                DatetimeIndex(
+                    [
+                        "2020-01-01 08:15",
+                        "2020-01-01 08:20",
+                        "2020-01-01 08:35",
+                        "2020-01-01 08:40",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:11",
+                        "2020-01-01 09:20",
+                        "2020-01-01 09:40",
+                    ]
+                ),
+            ],
+            # n_max_null_snaps
+            [0, 4],
+            [
+                # First 'restart_key' is 1st value in data in this case because
+                # there is a single snap.
+                {
+                    KEY_BIN: {
+                        KEY_RESTART_KEY: 4,
+                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:10"),
+                    },
+                    KEY_SNAP: {
+                        KEY_RESTART_KEY: pTimestamp("2020-01-01 08:15"),
+                        KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:17"),
+                    },
+                },
+                {
+                    KEY_BIN: {
+                        KEY_RESTART_KEY: 1,
+                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:30"),
+                    },
+                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:40")},
+                },
+            ],
+        ),
     ],
 )
 def test_segmentby(
@@ -1248,6 +1388,7 @@ def test_segmentby(
     end_indices,
     next_chunk_starts_refs,
     bin_indices_refs,
+    first_bin_refs,
     bin_labels_refs,
     n_null_bins_refs,
     snap_labels_refs,
@@ -1276,6 +1417,7 @@ def test_segmentby(
         (
             next_chunk_starts,
             bin_indices,
+            first_bin_is_new,
             bin_labels,
             n_null_bins,
             snap_labels,
@@ -1288,14 +1430,10 @@ def test_segmentby(
         )
         assert nall(next_chunk_starts == next_chunk_starts_refs[i])
         assert nall(bin_indices == bin_indices_refs[i])
+        assert first_bin_is_new == first_bin_refs[i]
         assert nall(bin_labels == bin_labels_refs[i])
         assert n_null_bins == n_null_bins_refs[i]
         assert nall(snap_labels == snap_labels_refs[i])
         assert n_max_null_snaps == n_max_null_snaps_refs[i]
         assert buffer == buffer_refs[i]
         start_idx = end_idx
-
-
-# /!\ WiP start
-# test cases restart with both cases: one with unknown_bin_end True, another with False, then restart.
-# /!\ WiP end
