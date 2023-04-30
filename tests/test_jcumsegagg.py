@@ -9,6 +9,7 @@ from numpy import all as nall
 from numpy import array
 from numpy import count_nonzero
 from numpy import diff as ndiff
+from numpy import ones
 from numpy import zeros
 
 from oups.jcumsegagg import jcsagg
@@ -214,6 +215,7 @@ def test_jcsagg_bin_1d_no_void(dtype_, agg_func, ref_res):
     N_AGG_COLS = 1
     # Row indices of starts for each 'next chunk'.
     next_chunk_starts = array([3, 5, 6], dtype=INT64)
+    chunk_res = zeros(N_AGG_COLS, dtype=dtype_)
     # Last row provides number of rows in data.
     # 'len()' provides number of chunks, because in this case, there are only
     # bins, no snapshot.
@@ -238,12 +240,11 @@ def test_jcsagg_bin_1d_no_void(dtype_, agg_func, ref_res):
     # Test.
     jcsagg(
         data,
-        N_AGG_COLS,
         aggs,
-        # cols_data,
-        # cols_res,
         next_chunk_starts,
         bin_indices,
+        False,
+        chunk_res,
         bin_res,
         snap_res,
         null_bin_indices,
@@ -255,6 +256,7 @@ def test_jcsagg_bin_1d_no_void(dtype_, agg_func, ref_res):
         dtype=dtype_,
     ).reshape(-1, 1)
     assert nall(ref_res_ar == bin_res)
+    assert nall(ref_res_ar[-1] == chunk_res)
     assert nall(null_bin_indices == zeros(0, dtype=INT64))
     assert nall(snap_res == zeros(0, dtype=FLOAT64).reshape(0, 0))
     assert nall(null_snap_indices == zeros(0, dtype=INT64))
@@ -291,6 +293,7 @@ def test_jcsagg_bin_1d_with_void(dtype_, agg_func, ref_res):
     N_AGG_COLS = 1
     # Row indices of starts for each 'next chunk'.
     next_chunk_starts = array([0, 0, 3, 3, 5, 5, 6], dtype=INT64)
+    chunk_res = zeros(N_AGG_COLS, dtype=dtype_)
     # Last row provides number of rows in data.
     # 'len()' provides number of chunks, because in this case, there are only
     # bins, no snapshot.
@@ -316,10 +319,11 @@ def test_jcsagg_bin_1d_with_void(dtype_, agg_func, ref_res):
     # Test.
     jcsagg(
         data,
-        N_AGG_COLS,
         aggs,
         next_chunk_starts,
         bin_indices,
+        False,
+        chunk_res,
         bin_res,
         snap_res,
         null_bin_indices,
@@ -331,6 +335,7 @@ def test_jcsagg_bin_1d_with_void(dtype_, agg_func, ref_res):
         dtype=dtype_,
     ).reshape(-1, 1)
     assert nall(ref_res_ar == bin_res)
+    assert nall(ref_res_ar[-1] == chunk_res)
     assert nall(null_bin_indices == array([0, 1, 3, 5], dtype=INT64))
     assert nall(snap_res == zeros(0, dtype=FLOAT64).reshape(0, 0))
     assert nall(null_snap_indices == zeros(0, dtype=INT64))
@@ -367,6 +372,7 @@ def test_jcsagg_snap_1d_no_void(dtype_, agg_func, ref_res):
     N_AGG_COLS = 1
     # Row indices of starts for each 'next chunk'.
     next_chunk_starts = array([3, 5, 6], dtype=INT64)
+    chunk_res = zeros(N_AGG_COLS, dtype=dtype_)
     # Last row provides number of rows in data.
     # 'len()' provides number of chunks, because in this case, there are only
     # snapshots, no bin.
@@ -391,10 +397,11 @@ def test_jcsagg_snap_1d_no_void(dtype_, agg_func, ref_res):
     # Test.
     jcsagg(
         data,
-        N_AGG_COLS,
         aggs,
         next_chunk_starts,
         bin_indices,
+        False,
+        chunk_res,
         bin_res,
         snap_res,
         null_bin_indices,
@@ -406,6 +413,7 @@ def test_jcsagg_snap_1d_no_void(dtype_, agg_func, ref_res):
         dtype=dtype_,
     ).reshape(-1, 1)
     assert nall(ref_res_ar == snap_res)
+    assert nall(ref_res_ar[-1] == chunk_res)
     assert nall(null_snap_indices == zeros(0, dtype=INT64))
     assert nall(bin_res == zeros(0, dtype=FLOAT64).reshape(0, 0))
     assert nall(null_bin_indices == zeros(0, dtype=INT64))
@@ -442,6 +450,7 @@ def test_jcsagg_snap_1d_with_void(dtype_, agg_func, ref_res):
     N_AGG_COLS = 1
     # Row indices of starts for each 'next chunk'.
     next_chunk_starts = array([0, 0, 3, 3, 5, 5, 6], dtype=INT64)
+    chunk_res = zeros(N_AGG_COLS, dtype=dtype_)
     # Last row provides number of rows in data.
     # 'len()' provides number of chunks, because in this case, there are only
     # snapshots, no bin.
@@ -470,10 +479,11 @@ def test_jcsagg_snap_1d_with_void(dtype_, agg_func, ref_res):
     # Test.
     jcsagg(
         data,
-        N_AGG_COLS,
         aggs,
         next_chunk_starts,
         bin_indices,
+        False,
+        chunk_res,
         bin_res,
         snap_res,
         null_bin_indices,
@@ -485,98 +495,246 @@ def test_jcsagg_snap_1d_with_void(dtype_, agg_func, ref_res):
         dtype=dtype_,
     ).reshape(-1, 1)
     assert nall(ref_res_ar == snap_res)
+    assert nall(ref_res_ar[-1] == chunk_res)
     assert nall(potential_null_snap_indices == array([0, 1, -1, -1], dtype=INT64))
     assert nall(bin_res == zeros(0, dtype=FLOAT64).reshape(0, 0))
     assert nall(null_bin_indices == zeros(0, dtype=INT64))
 
 
 @pytest.mark.parametrize(
-    "dtype_, agg_func, bin_indices_, ref_bin_res_, ref_snap_res_, ref_null_snap_indices_",
+    "dtype_, agg_func, bin_indices_, preserve_res, ref_bin_res_,"
+    " ref_snap_res_, ref_null_bin_indices_, ref_null_snap_indices_",
     [
         (
+            # 0
             FLOAT64,
             jfirst,
             [1, 3, 5, 8, 11, 12, 16],
+            False,
             [0, 1, 7, 0, 2, 0, 5],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 5, 0, 0],
+            [0, 3, 5],
             [0, 3, 4, 10, 11],
         ),
         (
+            # 1
             INT64,
             jfirst,
             [1, 3, 5, 6, 11, 12, 17],
+            False,
             [0, 1, 7, 0, 2, 0, 5],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 5, 5, 0],
+            [0, 3, 5],
             [0, 3, 4, 11, -1],
         ),
         (
+            # 2
             FLOAT64,
             jlast,
             [1, 3, 5, 8, 11, 12, 16],
+            False,
             [0, 3, 7, 0, 11, 0, 9],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 9, 0, 0],
+            [0, 3, 5],
             [0, 3, 4, 10, 11],
         ),
         (
+            # 3
             INT64,
             jlast,
             [1, 3, 5, 8, 11, 12, 17],
+            False,
             [0, 3, 7, 0, 11, 0, 9],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 9, 9, 0],
+            [0, 3, 5],
             [0, 3, 4, 11, -1],
         ),
         (
+            # 4
             FLOAT64,
             jmin,
             [1, 3, 5, 8, 11, 12, 16],
+            False,
             [0, 1, 7, 0, 2, 0, 5],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 5, 0, 0],
+            [0, 3, 5],
             [0, 3, 4, 10, 11],
         ),
         (
+            # 5
             INT64,
             jmin,
             [1, 3, 5, 8, 11, 12, 17],
+            False,
             [0, 1, 7, 0, 2, 0, 5],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 5, 5, 0],
+            [0, 3, 5],
             [0, 3, 4, 11, -1],
         ),
         (
+            # 6
             FLOAT64,
             jmax,
             [1, 3, 5, 8, 11, 12, 16],
+            False,
             [0, 4, 7, 0, 11, 0, 13],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 13, 0, 0],
+            [0, 3, 5],
             [0, 3, 4, 10, 11],
         ),
         (
+            # 7
             INT64,
             jmax,
             [1, 3, 5, 8, 11, 12, 17],
+            False,
             [0, 4, 7, 0, 11, 0, 13],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 13, 13, 0],
+            [0, 3, 5],
             [0, 3, 4, 11, -1],
         ),
         (
+            # 8
             FLOAT64,
             jsum,
             [1, 3, 5, 8, 11, 12, 16],
+            False,
             [0, 8, 7, 0, 19, 0, 27],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 27, 0, 0],
+            [0, 3, 5],
             [0, 3, 4, 10, 11],
         ),
         (
+            # 9
             INT64,
             jsum,
             [1, 3, 5, 8, 11, 12, 17],
+            False,
             [0, 8, 7, 0, 19, 0, 27],
             [0, 1, 7, 0, 0, 2, 2, 5, 5, 27, 27, 0],
+            [0, 3, 5],
             [0, 3, 4, 11, -1],
+        ),
+        (
+            # 10
+            FLOAT64,
+            jfirst,
+            [1, 3, 5, 8, 11, 12, 16],
+            True,
+            [1, 1, 7, 0, 2, 0, 5],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 5, 0, 0],
+            [3, 5, -1],
+            [3, 4, 10, 11, -1],
+        ),
+        (
+            # 11
+            INT64,
+            jfirst,
+            [1, 3, 5, 6, 11, 12, 17],
+            True,
+            [1, 1, 7, 0, 2, 0, 5],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 5, 5, 0],
+            [3, 5, -1],
+            [3, 4, 11, -1, -1],
+        ),
+        (
+            # 12
+            FLOAT64,
+            jlast,
+            [1, 3, 5, 8, 11, 12, 16],
+            True,
+            [1, 3, 7, 0, 11, 0, 9],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 9, 0, 0],
+            [3, 5, -1],
+            [3, 4, 10, 11, -1],
+        ),
+        (
+            # 13
+            INT64,
+            jlast,
+            [1, 3, 5, 8, 11, 12, 17],
+            True,
+            [1, 3, 7, 0, 11, 0, 9],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 9, 9, 0],
+            [3, 5, -1],
+            [3, 4, 11, -1, -1],
+        ),
+        (
+            # 14
+            FLOAT64,
+            jmin,
+            [1, 3, 5, 8, 11, 12, 16],
+            True,
+            [1, 1, 7, 0, 2, 0, 5],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 5, 0, 0],
+            [3, 5, -1],
+            [3, 4, 10, 11, -1],
+        ),
+        (
+            # 15
+            INT64,
+            jmin,
+            [1, 3, 5, 8, 11, 12, 17],
+            True,
+            [1, 1, 7, 0, 2, 0, 5],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 5, 5, 0],
+            [3, 5, -1],
+            [3, 4, 11, -1, -1],
+        ),
+        (
+            # 16
+            FLOAT64,
+            jmax,
+            [1, 3, 5, 8, 11, 12, 16],
+            True,
+            [1, 4, 7, 0, 11, 0, 13],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 13, 0, 0],
+            [3, 5, -1],
+            [3, 4, 10, 11, -1],
+        ),
+        (
+            # 17
+            INT64,
+            jmax,
+            [1, 3, 5, 8, 11, 12, 17],
+            True,
+            [1, 4, 7, 0, 11, 0, 13],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 13, 13, 0],
+            [3, 5, -1],
+            [3, 4, 11, -1, -1],
+        ),
+        (  # 18
+            FLOAT64,
+            jsum,
+            [1, 3, 5, 8, 11, 12, 16],
+            True,
+            [1, 8, 7, 0, 19, 0, 27],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 27, 0, 0],
+            [3, 5, -1],
+            [3, 4, 10, 11, -1],
+        ),
+        (
+            # 19
+            INT64,
+            jsum,
+            [1, 3, 5, 8, 11, 12, 17],
+            True,
+            [1, 8, 7, 0, 19, 0, 27],
+            [1, 1, 7, 0, 0, 2, 2, 5, 5, 27, 27, 0],
+            [3, 5, -1],
+            [3, 4, 11, -1, -1],
         ),
     ],
 )
 def test_jcsagg_bin_snap_1d(
-    dtype_, agg_func, bin_indices_, ref_bin_res_, ref_snap_res_, ref_null_snap_indices_
+    dtype_,
+    agg_func,
+    bin_indices_,
+    preserve_res,
+    ref_bin_res_,
+    ref_snap_res_,
+    ref_null_bin_indices_,
+    ref_null_snap_indices_,
 ):
     # 1d data, with a single agg function. Mixing bins & snapshots.
     # This test case validates correct reset of snapshot each time a new bin
@@ -622,6 +780,7 @@ def test_jcsagg_bin_snap_1d(
         [0, 0, 1, 3, 4, 4, 4, 4, 4, 5, 5, 7, 7, 8, 8, 10, 10, 10, 10], dtype=INT64
     )
     bin_indices = array(bin_indices_, dtype=INT64)
+    chunk_res = ones(N_AGG_COLS, dtype=dtype_)
     # Initializing result arrays.
     # Snapshots.
     snap_res_n_rows = len(ref_snap_res_)
@@ -629,20 +788,19 @@ def test_jcsagg_bin_snap_1d(
     # Array to store null snapshot indices is oversized. We cannot really know
     # in advance how many there will be. It is good idea to initialize it with
     # a negative value, as row index cannot be negative.
-    n_nan_snaps = len(ref_null_snap_indices_)
-    null_snap_indices = zeros(n_nan_snaps, dtype=INT64) - 1
+    null_snap_indices = zeros(len(ref_null_snap_indices_), dtype=INT64) - 1
     # Bins.
     bin_res_n_rows = len(ref_bin_res_)
     bin_res = zeros((bin_res_n_rows, N_AGG_COLS), dtype=dtype_)
-    ref_null_bin_indices = array([0, 3, 5], dtype=INT64)
-    null_bin_indices = zeros(len(ref_null_bin_indices), dtype=INT64)
+    null_bin_indices = zeros(len(ref_null_bin_indices_), dtype=INT64) - 1
     # Test.
     jcsagg(
         data,
-        N_AGG_COLS,
         aggs,
         next_chunk_starts,
         bin_indices,
+        preserve_res,
+        chunk_res,
         bin_res,
         snap_res,
         null_bin_indices,
@@ -653,6 +811,7 @@ def test_jcsagg_bin_snap_1d(
         ref_bin_res_,
         dtype=dtype_,
     ).reshape(-1, 1)
+    ref_null_bin_indices = array(ref_null_bin_indices_, dtype=INT64)
     ref_snap_res = array(
         ref_snap_res_,
         dtype=dtype_,
@@ -663,6 +822,10 @@ def test_jcsagg_bin_snap_1d(
     )
     assert nall(ref_bin_res == bin_res)
     assert nall(ref_snap_res == snap_res)
+    # In this test case, last chunks are empty snapshots, that follow a bin.
+    # Hence they do not account for last value in 'chunk_res'.
+    # Instead, this last value is that of the last bin.
+    assert nall(ref_bin_res[-1] == chunk_res)
     assert nall(null_bin_indices == ref_null_bin_indices)
     assert nall(null_snap_indices == ref_null_snap_indices)
 
@@ -773,15 +936,17 @@ def test_jcsagg_bin_snap_2d(dtype_):
         dtype=dtype_,
     )
     bin_res = zeros(bin_ref_res.shape, dtype=dtype_)
+    chunk_res = zeros(bin_res.shape[1], dtype=dtype_)
     ref_null_bin_indices = array([0, 2, 3], dtype=INT64)
     null_bin_indices = zeros(len(ref_null_bin_indices), dtype=INT64)
     # Test.
     jcsagg(
         data,
-        bin_res.shape[1],
         aggs,
         next_chunk_starts,
         bin_indices,
+        False,
+        chunk_res,
         bin_res,
         snap_res,
         null_bin_indices,
@@ -789,5 +954,6 @@ def test_jcsagg_bin_snap_2d(dtype_):
     )
     assert nall(bin_ref_res == bin_res)
     assert nall(snap_ref_res == snap_res)
+    assert nall(bin_ref_res[-1] == chunk_res)
     assert nall(null_bin_indices == ref_null_bin_indices)
     assert nall(null_snap_indices == ref_null_snap_indices)

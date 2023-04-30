@@ -768,9 +768,9 @@ def segmentby(
             function ``by_scale`` if 'bin_by' is a Grouper. These values are
             required when restarting the binning process with new seed data.
           - second dict, with key `"snap"` embed values from previous
-            snapshotting process, set by 'by_scale'. Similarly, these values are
-            required to allow restarting the snapshotting process with new seed
-            data.
+            snapshotting process, set by 'by_scale'. Similarly, these values
+            are required to allow restarting the snapshotting process with new
+            seed data.
 
     Returns
     -------
@@ -850,7 +850,8 @@ def segmentby(
             )
         ):
             raise ValueError(
-                f"column '{ordered_on}' is not ordered. It has to be for 'cumsegagg' to operate faultlessly."
+                f"column '{ordered_on}' is not ordered. It has to be for "
+                "'cumsegagg' to operate faultlessly."
             )
     on = data.loc[:, bin_by[ON_COLS]]
     # 'bin_by' binning.
@@ -884,7 +885,8 @@ def segmentby(
     if n_bins > 1 and buffer is not None and next_chunk_starts[-2] == len(on):
         # In case a user-provided 'bin_by()' Callable is used, check if there
         # are empty trailing bins. If there are, and that restart are expected
-        # (use of 'buffer'), then raise error, this it not allowed.
+        # (use of 'buffer'), then raise error, this it not allowed, as it would
+        # lead to wrong results in 'jcumsegagg()'.
         raise ValueError(
             "there is at least one empty trailing bin. "
             "This is not possible if planning to restart on new "
