@@ -219,7 +219,6 @@ AGG_FUNCS = {FIRST: jfirst, LAST: jlast, MIN: jmin, MAX: jmax, SUM: jsum}
 @njit
 def jcsagg(
     data: ndarray,  # 2d
-    # n_cols: int,
     aggs: Tuple[Tuple[Callable, ndarray, ndarray]],
     next_chunk_starts: ndarray,  # 1d
     bin_indices: ndarray,  # 1d
@@ -290,14 +289,16 @@ def jcsagg(
 
     Notes
     -----
-    In case of a 'restart', for the implemented logic to work, it is curcial
+    In case of a 'restart', for the implemented logic to work, it is crucial
     that in the previous iteration, last been has not been an empty one.
     In current implementation, if 'preserve_res' parameter is ``True``, then
     'chunk_res' contains valid results which are forwarded into current
     iteration.
     But if last bin from previous iteration has been empty, then 'chunk_res'
-    does not contain valid results to be forwarded.
+    does not contain relevant results to be forwarded.
     """
+    # 'pinnu' is 'prev_is_non_null_update'. It is renamed 'preserve_res'.
+    # With 'preserve_res' True, then cumulate (pass-through) previous results.
     # TODO: check if last index in "next_chunk_array" is size of data.
     # If not, do a last iteration to cover the complete input data, and simply
     # keep in 'chunk_res'. Possibly, activate this behavior only if a flag is
@@ -306,9 +307,8 @@ def jcsagg(
     # TODO: when creation 'null_bin_indices' and 'null_snap_indices', only
     # trim the trailing '-1' if there are less null indices than their initial
     # size.
-    #
-    # 'pinnu' is 'prev_is_non_null_update'. It is renamed 'preserve_res'.
-    # With 'preserve_res' True, then cumulate (pass-through) previous results.
+    # TODO: integrate in 'jcsagg()' a loopover the dtypes, with all input
+    # arrays for a dtype at same positions in different input tuples.
     bin_start = -1 if preserve_res else 0
     chunk_start = 0
     bin_res_idx = snap_res_idx = 0
