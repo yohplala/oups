@@ -22,6 +22,7 @@ from pandas import Series
 
 from oups.jcumsegagg import AGG_FUNCS
 from oups.jcumsegagg import jcsagg
+from oups.segmentby import ORDERED_ON
 from oups.segmentby import segmentby
 
 
@@ -141,6 +142,22 @@ def setup_cumsegagg(
         # 'n_cols'.
         conf.append(n_cols)
     return cgb_agg_cfg
+
+
+def setup_chunk_res(agg: Dict[dtype, tuple]) -> pDataFrame:
+    """Initialize on-row DataFrame for storing the first 'cunk_res'."""
+    chunk_res = {}
+    for dtype_, (
+        _,
+        cols_name_in_res,
+        _,
+        n_cols,
+    ) in agg.items():
+        chunk_res_single_dtype = zeros(n_cols, dtype=dtype_)
+        chunk_res.update(
+            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)}
+        )
+    return pDataFrame(chunk_res, copy=False)
 
 
 def cumsegagg(
@@ -369,14 +386,19 @@ def cumsegagg(
         snap_by=snap_by,
         buffer=buffer,
     )
+    if isinstance(bin_by, dict):
+        # If 'bin_by' is a dict, then setup has been managed separately, and
+        # 'cumsegagg' may be running without 'bin_on' and 'ordered_on'
+        # parameters. force 'ordered_on' as it is re-used below.
+        ordered_on = bin_by[ORDERED_ON]
     # Initiate dict of result columns.
     # Setup 'chunk_res'.
-    if isinstance(buffer, dict) and KEY_LAST_CHUNK_RES in buffer:
-        first_run = False
-        chunk_res = buffer[KEY_LAST_CHUNK_RES]
-    else:
-        first_run = True
-        chunk_res = {}
+    chunk_res_prev = (
+        buffer[KEY_LAST_CHUNK_RES]
+        if isinstance(buffer, dict) and KEY_LAST_CHUNK_RES in buffer
+        else setup_chunk_res(agg)
+    )
+    chunk_res = {}
     # Setup 'bin_res'.
     n_bins = len(bin_labels)
     null_bin_indices = full(n_max_null_bins, -1, dtype=DTYPE_INT64)
@@ -404,15 +426,12 @@ def cumsegagg(
             else data.loc[:, cols_name_in_data].to_numpy(copy=False).reshape(-1, 1)
         )
         # Setup 'chunk_res_single_dtype'.
-        if first_run:
-            chunk_res_single_dtype = zeros(n_cols, dtype=dtype_)
-            chunk_res.update(
-                {name: [chunk_res_single_dtype[i]] for i, name in enumerate(cols_name_in_res)}
-            )
-        else:
-            chunk_res_single_dtype = (
-                chunk_res.loc[:, cols_name_in_res].to_numpy(copy=False).reshape(n_cols)
-            )
+        chunk_res_single_dtype = (
+            chunk_res_prev.loc[:, cols_name_in_res].to_numpy(copy=False).reshape(n_cols)
+        )
+        chunk_res.update(
+            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)}
+        )
         # Setup 'bin_res_single_dtype'.
         bin_res_single_dtype = zeros((n_bins, n_cols), dtype=dtype_)
         bin_res.update(
@@ -452,13 +471,17 @@ def cumsegagg(
             null_snap_indices,  # 1d
         )
     # Assemble 'bin_res' as a pandas DataFrame.
-    if isinstance(buffer, dict) and first_run:
+    if isinstance(buffer, dict):
         buffer[KEY_LAST_CHUNK_RES] = pDataFrame(chunk_res, copy=False)
     bin_res = pDataFrame(bin_res, index=bin_labels, copy=False)
     bin_res.index.name = ordered_on if ordered_on else bin_on
     # Set null values.
     if n_max_null_bins != 0:
         null_bin_labels = bin_labels[null_bin_indices[~nisin(null_bin_indices, -1)]]
+        if DTYPE_INT64 in agg:
+            # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
+            # (it is a pandas dtype, not a numpy one)
+            bin_res[agg[DTYPE_INT64][1]] = bin_res[agg[DTYPE_INT64][1]].astype(DTYPE_NULLABLE_INT64)
         for dtype_, (
             _,
             cols_name_in_res,

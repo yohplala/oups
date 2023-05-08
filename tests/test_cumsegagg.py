@@ -406,6 +406,7 @@ def test_cumsegagg_bin_snap_with_null_chunks(
     )
     bins_ref = data.groupby(bin_by).agg(**agg)
     if null_b_dti:
+        bins_ref[SUM] = bins_ref[SUM].astype(DTYPE_NULLABLE_INT64)
         bins_ref.loc[null_b_dti, SUM] = pNA
     assert bins_res.equals(bins_ref)
     snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5T")
@@ -570,6 +571,7 @@ def test_cumsegagg_bin_snap_with_null_chunks_other(
     )
     bins_ref = data.groupby(bin_by).agg(**agg)
     if null_b_dti:
+        bins_ref[SUM] = bins_ref[SUM].astype(DTYPE_NULLABLE_INT64)
         bins_ref.loc[null_b_dti, SUM] = pNA
     assert bins_res.equals(bins_ref)
     snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5T")
