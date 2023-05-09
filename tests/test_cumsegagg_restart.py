@@ -4,6 +4,7 @@ Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
 """
+from functools import partial
 
 import pytest
 from numpy import array
@@ -22,6 +23,7 @@ from oups.cumsegagg import cumsegagg
 from oups.cumsegagg import setup_cumsegagg
 from oups.jcumsegagg import FIRST
 from oups.jcumsegagg import SUM
+from oups.segmentby import by_x_rows
 from oups.segmentby import setup_segmentby
 
 
@@ -30,9 +32,10 @@ from oups.segmentby import setup_segmentby
 
 
 @pytest.mark.parametrize(
-    "end_indices, bin_by, last_chunk_res_ref, indices_of_null_res",
+    "end_indices, bin_by, ordered_on, last_chunk_res_ref, indices_of_null_res, bin_res_ref",
     [
         # 1/ 15mn bin left closed; right label
+        # 2nd iter. starting on empty bin b3.
         #  'data'
         #  datetime value  qty  bins     row_idx (group)
         #      8:10   4.0    4  b1-8:15  0 (0)
@@ -49,16 +52,94 @@ from oups.segmentby import setup_segmentby
         (
             [6, 11],
             Grouper(freq="15T", key="dti", closed="left", label="right"),
+            None,
             [pDataFrame({FIRST: [5.6], SUM: [15]}), pDataFrame({FIRST: [3.2], SUM: [1]})],
             [
                 pTimestamp("2020-01-01 08:45:00"),
                 pTimestamp("2020-01-01 09:00:00"),
                 pTimestamp("2020-01-01 09:30:00"),
             ],
-        )
+            None,
+        ),
+        # 2/ 15mn bin left closed; right label
+        #  'data'
+        #  datetime value  qty  bins     row_idx (group)
+        #      8:10   4.0    4  b1-8:15  0 (0)
+        #      8:10   4.2    3  b1
+        #      8:12   3.9    1  b1
+        #      8:17   5.6    7  b2-8:30
+        #      8:19   6.0    2  b2       4
+        #      8:20   9.8    6  b2       1
+        #                       b3-8:45  2 (1)
+        #      9:00   4.5    2  b4-9:00
+        #      9:10   1.1    8  b4
+        #                       b5-9:15
+        #      9:30   3.2    1  b6-9:30
+        (
+            [5, 11],
+            Grouper(freq="15T", key="dti", closed="left", label="right"),
+            None,
+            [pDataFrame({FIRST: [5.6], SUM: [9]}), pDataFrame({FIRST: [3.2], SUM: [1]})],
+            [
+                pTimestamp("2020-01-01 08:45:00"),
+                pTimestamp("2020-01-01 09:00:00"),
+                pTimestamp("2020-01-01 09:30:00"),
+            ],
+            None,
+        ),
+        # 3/ 6-rows bin left closed
+        # Testing 'first_bin_is_new' parameter 'True' at iter. 2.
+        #  'data'
+        #  datetime value  qty  bins     row_idx (group)
+        #      8:10   4.0    4  b1-8:10  0 (0)
+        #      8:10   4.2    3  b1
+        #      8:12   3.9    1  b1
+        #      8:17   5.6    7  b1
+        #      8:19   6.0    2  b1
+        #      8:20   9.8    6  b1       5
+        #      9:00   4.5    2  b2-9:00  1
+        #      9:10   1.1    8  b2
+        #      9:30   3.2    1  b2
+        (
+            [6, 11],
+            partial(by_x_rows, by=6, closed="left"),
+            "dti",
+            [pDataFrame({FIRST: [4.0], SUM: [23]}), pDataFrame({FIRST: [4.5], SUM: [11]})],
+            [],
+            pDataFrame(
+                {FIRST: [4.0, 4.5], SUM: [23, 11]},
+                index=[pTimestamp("2020-01-01 08:10:00"), pTimestamp("2020-01-01 09:00:00")],
+            ),
+        ),
+        # 4/ 6-rows bin left closed
+        # Testing 'first_bin_is_new' parameter 'False' at iter. 2.
+        #  'data'
+        #  datetime value  qty  bins     row_idx (group)
+        #      8:10   4.0    4  b1-8:10  0 (0)
+        #      8:10   4.2    3  b1
+        #      8:12   3.9    1  b1
+        #      8:17   5.6    7  b1
+        #      8:19   6.0    2  b1       5
+        #      8:20   9.8    6  b1       1
+        #      9:00   4.5    2  b2-9:00
+        #      9:10   1.1    8  b2
+        #      9:30   3.2    1  b2
+        (
+            [5, 11],
+            partial(by_x_rows, by=6, closed="left"),
+            "dti",
+            [pDataFrame({FIRST: [4.0], SUM: [17]}), pDataFrame({FIRST: [4.5], SUM: [11]})],
+            [],
+            pDataFrame(
+                {FIRST: [4.0, 4.5], SUM: [23, 11]},
+                index=[pTimestamp("2020-01-01 08:10:00"), pTimestamp("2020-01-01 09:00:00")],
+            ),
+        ),
     ],
 )
-def test_cumsegagg_bin_with_null(end_indices, bin_by, last_chunk_res_ref, indices_of_null_res):
+def test_cumsegagg_bin_with_null(
+    end_indices, bin_by, ordered_on, last_chunk_res_ref, indices_of_null_res, bin_res_ref
+):
     # Test binning with null chunks.
     # 'data' as follow
     values = array([4.0, 4.2, 3.9, 5.6, 6.0, 9.8, 4.5, 1.1, 3.2], dtype=DTYPE_FLOAT64)
@@ -85,14 +166,19 @@ def test_cumsegagg_bin_with_null(end_indices, bin_by, last_chunk_res_ref, indice
         FIRST: (value, FIRST),
         SUM: (qty, SUM),
     }
-    # Reference results.
-    bin_res_ref = data.groupby(bin_by).agg(**agg)
-    # Update null int values.
-    bin_res_ref[SUM] = bin_res_ref[SUM].astype(DTYPE_NULLABLE_INT64)
-    bin_res_ref.loc[indices_of_null_res, SUM] = pNA
+    if isinstance(bin_by, Grouper):
+        # Reference results from pandas Grouper.
+        bin_res_ref = data.groupby(bin_by).agg(**agg)
+    else:
+        # Last cosmetic changes on 'bin_res_ref' if a DataFrame.
+        bin_res_ref.index.name = dti
+    if indices_of_null_res:
+        # Update null int values.
+        bin_res_ref[SUM] = bin_res_ref[SUM].astype(DTYPE_NULLABLE_INT64)
+        bin_res_ref.loc[indices_of_null_res, SUM] = pNA
     # Initialize.
     agg = setup_cumsegagg(agg, data.dtypes.to_dict())
-    bin_by = setup_segmentby(bin_by)
+    bin_by = setup_segmentby(bin_by, ordered_on=ordered_on)
     start_idx = 0
     buffer = {}
     bin_res_to_concatenate = []

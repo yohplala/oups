@@ -145,7 +145,7 @@ def setup_cumsegagg(
 
 
 def setup_chunk_res(agg: Dict[dtype, tuple]) -> pDataFrame:
-    """Initialize on-row DataFrame for storing the first 'cunk_res'."""
+    """Initialize one-row DataFrame for storing the first 'chunk_res'."""
     chunk_res = {}
     for dtype_, (
         _,

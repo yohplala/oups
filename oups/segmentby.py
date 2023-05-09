@@ -422,7 +422,7 @@ def by_x_rows(
         else ceil(n_rows_for_new_bins / by)
     )
     # Set 'first_bin_is_new'.
-    first_chunk_is_new = True if not buffer or rows_in_prev_last_bin == 4 else False
+    first_chunk_is_new = True if not buffer or rows_in_prev_last_bin == by else False
     # Define 'next_chunk_starts'.
     first_next_chunk_start = rows_in_continued_bin if rows_in_continued_bin else min(by, len_on)
     next_chunk_starts = arange(
