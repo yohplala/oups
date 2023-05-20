@@ -10,6 +10,7 @@ import pytest
 from numpy import array
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
+from pandas import DatetimeIndex
 from pandas import Grouper
 from pandas import Timestamp as pTimestamp
 from pandas import concat as pconcat
@@ -22,6 +23,8 @@ from oups.cumsegagg import KEY_LAST_CHUNK_RES
 from oups.cumsegagg import cumsegagg
 from oups.cumsegagg import setup_cumsegagg
 from oups.jcumsegagg import FIRST
+from oups.jcumsegagg import LAST
+from oups.jcumsegagg import MIN
 from oups.jcumsegagg import SUM
 from oups.segmentby import by_x_rows
 from oups.segmentby import setup_segmentby
@@ -32,10 +35,12 @@ from oups.segmentby import setup_segmentby
 
 
 @pytest.mark.parametrize(
-    "end_indices, bin_by, ordered_on, last_chunk_res_ref, indices_of_null_res, bin_res_ref",
+    "end_indices, bin_by, ordered_on, last_chunk_res_ref, " "indices_of_null_res, bin_res_ref",
     [
-        # 1/ 15mn bin left closed; right label
+        # 0/ 15mn bin left closed; right label
         # 2nd iter. starting on empty bin b3.
+        # This validates removale of '-1' values in 'null_bin_indices' (in
+        # 'cumsegagg()' function).
         #  'data'
         #  datetime value  qty  bins     row_idx (group)
         #      8:10   4.0    4  b1-8:15  0 (0)
@@ -61,7 +66,7 @@ from oups.segmentby import setup_segmentby
             ],
             None,
         ),
-        # 2/ 15mn bin left closed; right label
+        # 1/ 15mn bin left closed; right label
         #  'data'
         #  datetime value  qty  bins     row_idx (group)
         #      8:10   4.0    4  b1-8:15  0 (0)
@@ -87,8 +92,8 @@ from oups.segmentby import setup_segmentby
             ],
             None,
         ),
-        # 3/ 6-rows bin left closed
-        # Testing 'first_bin_is_new' parameter 'True' at iter. 2.
+        # 2/ 6-rows bin left closed
+        # Testing with new bin starting at iter. 2.
         #  'data'
         #  datetime value  qty  bins     row_idx (group)
         #      8:10   4.0    4  b1-8:10  0 (0)
@@ -112,7 +117,6 @@ from oups.segmentby import setup_segmentby
             ),
         ),
         # 4/ 6-rows bin left closed
-        # Testing 'first_bin_is_new' parameter 'False' at iter. 2.
         #  'data'
         #  datetime value  qty  bins     row_idx (group)
         #      8:10   4.0    4  b1-8:10  0 (0)
@@ -137,7 +141,7 @@ from oups.segmentby import setup_segmentby
         ),
     ],
 )
-def test_cumsegagg_bin_with_null(
+def test_cumsegagg_bin_only(
     end_indices, bin_by, ordered_on, last_chunk_res_ref, indices_of_null_res, bin_res_ref
 ):
     # Test binning with null chunks.
@@ -195,6 +199,139 @@ def test_cumsegagg_bin_with_null(
     assert bin_res.equals(bin_res_ref)
 
 
+@pytest.mark.parametrize(
+    "bin_by, ordered_on, snap_by, end_indices, " "last_chunk_res_ref, bin_ref, snap_ref",
+    [
+        (
+            # 0/ 'bin_by' using 'by_x_rows', 'snap_by' as Series.
+            #    In this test case, 'unknown_bin_end' is False after 1st data
+            #    chunk.
+            #    Last rows in 'data' are not accounted for in 1st series of
+            #    snapshots (8:20 snasphot not present), but is in 2nd series.
+            #   dti  odr  val  slices   bins     snaps
+            #  8:10    0    1         1-8:10
+            #  8:10    1    4
+            #                                   1-8:12 (excl.)
+            #  8:12    2    6
+            #                                   2-8:15
+            #  8:17    3    2
+            #  8:19    4    3   0     2-8:19
+            #                                   3-8:20 (excl.)
+            #  8:20    5    1
+            #                                   4-8:35
+            #                                   5-8:40
+            #                                   6-9:00 (excl.)
+            #  9:00    6    9
+            #  9:10    7    3
+            #                                   7-9:11
+            #                                   8-9:20
+            #  9:30    8    2         3-9:30
+            #                                   9-9:40
+            #                                  10-9:44
+            by_x_rows,
+            "dti",
+            [
+                DatetimeIndex(["2020-01-01 08:12", "2020-01-01 08:15"]),
+                DatetimeIndex(
+                    [
+                        "2020-01-01 08:15",
+                        "2020-01-01 08:20",
+                        "2020-01-01 08:35",
+                        "2020-01-01 08:40",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:11",
+                        "2020-01-01 09:20",
+                        "2020-01-01 09:40",
+                        "2020-01-01 09:44",
+                    ]
+                ),
+            ],
+            [4, 9],
+            # last_chunk_res_ref
+            [pDataFrame({MIN: [1], LAST: [2]}), pDataFrame({MIN: [2], LAST: [2]})],
+            # bin_ref
+            pDataFrame(
+                {MIN: [1, 1, 2], LAST: [2, 3, 2]},
+                index=DatetimeIndex(["2020-01-01 08:10", "2020-01-01 08:19", "2020-01-01 09:30"]),
+            ),
+            # snap_ref
+            pDataFrame(
+                {MIN: [1, 1, 3, 1, 1, 1, 1, 1, 2], LAST: [4, 6, 3, 1, 1, 1, 3, 3, 2]},
+                index=DatetimeIndex(
+                    [
+                        "2020-01-01 08:12",
+                        "2020-01-01 08:15",
+                        "2020-01-01 08:20",
+                        "2020-01-01 08:35",
+                        "2020-01-01 08:40",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:11",
+                        "2020-01-01 09:20",
+                        "2020-01-01 09:40",
+                    ]
+                ),
+            ),
+        ),
+    ],
+)
+def test_cumsegagg_bin_snap(
+    bin_by, ordered_on, snap_by, end_indices, last_chunk_res_ref, bin_ref, snap_ref
+):
+    qties = array([1, 4, 6, 2, 3, 1, 9, 3, 2], dtype=DTYPE_INT64)
+    dtidx = array(
+        [
+            "2020-01-01T08:10",
+            "2020-01-01T08:10",
+            "2020-01-01T08:12",
+            "2020-01-01T08:17",
+            "2020-01-01T08:19",
+            "2020-01-01T08:20",
+            "2020-01-01T09:00",
+            "2020-01-01T09:10",
+            "2020-01-01T09:30",
+        ],
+        dtype=DTYPE_DATETIME64,
+    )
+    qty = "qty"
+    dti = "dti"
+    data = pDataFrame({qty: qties, dti: dtidx})
+    agg = {
+        MIN: (qty, MIN),
+        LAST: (qty, LAST),
+    }
+    start_idx = 0
+    buffer = {}
+    # Initialize.
+    agg = setup_cumsegagg(agg, data.dtypes.to_dict())
+    bin_by = setup_segmentby(bin_by, ordered_on=ordered_on)
+    start_idx = 0
+    buffer = {}
+    bin_res_to_concatenate = []
+    snap_res_to_concatenate = []
+    # Run in loop.
+    for i, end_idx in enumerate(end_indices):
+        bin_res, snap_res = cumsegagg(
+            data=data.iloc[start_idx:end_idx],
+            agg=agg,
+            bin_by=bin_by,
+            buffer=buffer,
+            ordered_on=ordered_on,
+            snap_by=snap_by[i] if isinstance(snap_by, list) else snap_by,
+        )
+        assert buffer[KEY_LAST_CHUNK_RES].equals(last_chunk_res_ref[i])
+        bin_res_to_concatenate.append(bin_res)
+        snap_res_to_concatenate.append(snap_res)
+        start_idx = end_idx
+    bin_ref.index.name = dti
+    bin_res = pconcat(bin_res_to_concatenate)
+    bin_res = bin_res[~bin_res.index.duplicated(keep="last")]
+    assert bin_res.equals(bin_ref)
+    snap_ref.index.name = dti
+    snap_res = pconcat(snap_res_to_concatenate)
+    snap_res = snap_res[~snap_res.index.duplicated(keep="last")]
+    assert snap_res.equals(snap_ref)
+
+
 # Questions:
 #  - in cumsegagg, when restarting with 3 empty chunks, assuming the
 #    there are 2 'snaps', and the 3rd is a 'bin' (which was in progress at
@@ -202,16 +339,15 @@ def test_cumsegagg_bin_with_null(
 #    With proposed methodo, it is not enough to simply let the 'in-progress data'
 #    from previous iteration. the new intermediate chunk needs to be created.
 #
-#  We should really just restart jcsagg directly, without removing empyt bins
-#  If values are the same, then they are the same and that's it.
-# 'pinnu' should be forwarded with its last value / should work.
-# length will be detected 0
 # Make test
 #   - with empty snap at prev iter, then new empty snaps at next iter then end of bin.
 #   - with non empty snap at prev iter, then new empty one (res forwarded?) at next iter then end of bin
-# replay also test case segmentby() 5
-# 5/ 'bin_by' using 'by_x_rows', 'snap_by' as Series.
-#    In this test case, 'unknown_bin_end' is False after 1st data
-#    chunk.
-#    Last rows in 'data' are not accounted for in 1st series of
-#    snapshots (8:20 snasphot not present), but is in 2nd series.
+#   - is it possible to have 1st an empty snapshot then a not empty new bin
+#     (similar to test case 0 above, but 2nd snap at 8:18)
+#     -> should modify 'by_x_rows': first bin (of next ier.) can never be new when end of bin (at prev. iter.)
+#        is unknown. Because at next iter, we need to be able to have clear end oflast on-going bin to position
+#        first snapshots
+#     -> if bin are left-opened, check if this works the same.
+#     Write this reasoning clearly.
+#     Raise an error when detecting 'closed' = left (right open) and 'first_bin_is_new' then this case can be
+#     not correctly supported.

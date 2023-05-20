@@ -299,7 +299,6 @@ def test_by_scale(
         by_closed,
         chunk_ends,
         unknown_last_chunk_end,
-        first_bin_is_new,
     ) = by_scale(on, by)
     assert nall(chunk_labels == chunk_labels_ref)
     assert nall(chunk_ends == chunk_ends_ref)
@@ -307,7 +306,6 @@ def test_by_scale(
     assert n_null_chunks == n_null_chunks_ref
     assert by_closed == by.closed
     assert not unknown_last_chunk_end
-    assert first_bin_is_new
 
 
 @pytest.mark.parametrize(
@@ -370,7 +368,6 @@ def test_by_x_rows(
         chunk_closed,
         chunk_ends,
         unknown_last_bin_end,
-        first_bin_is_new,
     ) = by_x_rows(data, x_rows, closed=closed)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
     assert nall(chunk_labels == chunk_labels_ref)
@@ -379,7 +376,6 @@ def test_by_x_rows(
     # 'chunk_ends' is expected to be the same than 'chunk_labels'.
     assert nall(chunk_ends == chunk_ends_ref)
     assert unknown_last_bin_end == unknown_last_bin_end_ref
-    assert first_bin_is_new
 
 
 def test_mergesort_labels_and_keys():
@@ -509,12 +505,11 @@ def test_setup_segmentby(
     res = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
     if isinstance(bin_by, Grouper):
         on = Series(date_range("2020/01/01 08:01", periods=3, freq="3T"))
-        (next_chunk_starts, _, _, _, _, _, _) = res[BIN_BY](on=on)
     else:
         on = pDataFrame(
             {"dti": date_range("2020/01/01 08:01", periods=3, freq="3T"), "ordered_on": [1, 2, 3]}
         )
-        (next_chunk_starts, _, _, _, _, _, _) = res[BIN_BY](on=on)
+    (next_chunk_starts, _, _, _, _, _) = res[BIN_BY](on=on)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
     assert res[ON_COLS] == on_cols_ref
     assert res[ORDERED_ON] == ordered_on_ref
@@ -821,7 +816,6 @@ def test_segmentby(
     (
         next_chunk_starts,
         bin_indices,
-        first_bin_is_new,
         bin_labels,
         n_null_bins,
         snap_labels,
@@ -836,7 +830,6 @@ def test_segmentby(
     else:
         assert snap_labels_ref.equals(snap_labels)
     assert n_max_null_snaps_ref == n_max_null_snaps
-    assert first_bin_is_new
 
 
 def test_segmentby_with_outer_setup():
@@ -857,7 +850,6 @@ def test_segmentby_with_outer_setup():
     (
         next_chunk_starts,
         bin_indices,
-        first_bin_is_new,
         bin_labels,
         n_null_bins,
         snap_labels,
@@ -876,7 +868,6 @@ def test_segmentby_with_outer_setup():
     assert not n_null_bins
     assert snap_labels_ref.equals(snap_labels)
     assert n_max_null_snaps == 2
-    assert first_bin_is_new
 
 
 def test_segmentby_binby_exceptions():
@@ -888,21 +879,21 @@ def test_segmentby_binby_exceptions():
 
     def by_wrong_starts_labels(on, buffer=None):
         # 'next_chunk_starts' and 'chunk_labels' not the same size.
-        return arange(1), Series(["a", "o"]), 0, LEFT, arange(2), True, True
+        return arange(1), Series(["a", "o"]), 0, LEFT, arange(2), True
 
     with pytest.raises(ValueError, match="^'next_chunk_starts' and 'chunk_labels'"):
         segmentby(data=data, bin_by=by_wrong_starts_labels, bin_on=bin_on)
 
     def by_wrong_starts_ends(on, buffer=None):
         # 'next_chunk_starts' and 'chunk_ends' not the same size.
-        return arange(3), Series(["a", "o", "u"]), 0, LEFT, arange(1), True, True
+        return arange(3), Series(["a", "o", "u"]), 0, LEFT, arange(1), True
 
     with pytest.raises(ValueError, match="^'next_chunk_starts' and 'chunk_ends'"):
         segmentby(data=data, bin_by=by_wrong_starts_ends, bin_on=bin_on)
 
     def by_wrong_closed(on, buffer=None):
         # 'closed' not 'left' or 'right'.
-        return arange(2), Series(["a", "o"]), 0, "invented", arange(2), True, True
+        return arange(2), Series(["a", "o"]), 0, "invented", arange(2), True
 
     with pytest.raises(ValueError, match="^'bin_closed' has to be set either"):
         segmentby(data=data, bin_by=by_wrong_closed, bin_on=bin_on)
