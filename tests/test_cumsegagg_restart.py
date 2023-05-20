@@ -272,6 +272,56 @@ def test_cumsegagg_bin_only(
                 ),
             ),
         ),
+        (
+            # 1/ 'bin_by' as Grouper and 'snap_by' as Series.
+            #    In this test case, 2nd chunk is traversed without new snap,
+            #    and without new bin.
+            #   dti  odr  val  slices   bins     snaps
+            #  8:10    0    1         1-8:00
+            #  8:10    1    4
+            #                                   1-8:12 (excl.)
+            #  8:12    2    6
+            #  8:17    3    2   0
+            #  8:19    4    3
+            #  8:20    5    1
+            #  9:00    6    9   0     2-9:00
+            #                                   2-9:10 (excl.)
+            #  9:10    7    3
+            #  9:30    8    2
+            # bin_by
+            Grouper(freq="1H", label="left", closed="left", key="dti"),
+            # ordered_on
+            None,
+            # snap_by
+            [
+                DatetimeIndex(["2020-01-01 08:12"]),
+                DatetimeIndex(["2020-01-01 08:12"]),
+                DatetimeIndex(["2020-01-01 08:12", "2020-01-01 09:10"]),
+            ],
+            # end_indices
+            [3, 6, 9],
+            # last_chunk_res_ref
+            [
+                pDataFrame({MIN: [1], LAST: [6]}),
+                pDataFrame({MIN: [1], LAST: [1]}),
+                pDataFrame({MIN: [2], LAST: [2]}),
+            ],
+            # bin_ref
+            pDataFrame(
+                {MIN: [1, 2], LAST: [1, 2]},
+                index=DatetimeIndex(["2020-01-01 08:00", "2020-01-01 09:00"]),
+            ),
+            # snap_ref
+            pDataFrame(
+                {MIN: [1, 9], LAST: [4, 9]},
+                index=DatetimeIndex(
+                    [
+                        "2020-01-01 08:12",
+                        "2020-01-01 09:10",
+                    ]
+                ),
+            ),
+        ),
     ],
 )
 def test_cumsegagg_bin_snap(
@@ -338,6 +388,10 @@ def test_cumsegagg_bin_snap(
 #    prev iter.)
 #    With proposed methodo, it is not enough to simply let the 'in-progress data'
 #    from previous iteration. the new intermediate chunk needs to be created.
+#
+# Start with no snapshot in 1st iteration (using Series): does it still produce
+# an empty snapshot dataframe?
+#
 #
 # Make test
 #   - with empty snap at prev iter, then new empty snaps at next iter then end of bin.

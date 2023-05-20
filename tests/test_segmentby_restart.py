@@ -75,10 +75,7 @@ from oups.segmentby import setup_segmentby
             None,
             [2, 7, 9],
             [
-                DatetimeIndex(
-                    ["2020-01-01 08:00:00"],
-                    freq="5T",
-                ),
+                DatetimeIndex(["2020-01-01 08:00:00"], freq="5T"),
                 date_range(start="2020-01-01 08:00:00", end="2020-01-01 08:40:00", freq="5T"),
                 date_range(start="2020-01-01 08:40:00", end="2020-01-01 08:50:00", freq="5T"),
             ],
@@ -89,10 +86,7 @@ from oups.segmentby import setup_segmentby
             ],
             [0, 5, 1],
             [
-                DatetimeIndex(
-                    ["2020-01-01 08:05:00"],
-                    freq="5T",
-                ),
+                DatetimeIndex(["2020-01-01 08:05:00"], freq="5T"),
                 date_range(start="2020-01-01 08:05:00", end="2020-01-01 08:45:00", freq="5T"),
                 date_range(start="2020-01-01 08:45:00", end="2020-01-01 08:55:00", freq="5T"),
             ],
@@ -110,10 +104,7 @@ from oups.segmentby import setup_segmentby
             RIGHT,
             [1, 7, 9],
             [
-                DatetimeIndex(
-                    ["2020-01-01 07:55:00"],
-                    freq="5T",
-                ),
+                DatetimeIndex(["2020-01-01 07:55:00"], freq="5T"),
                 date_range(start="2020-01-01 07:55:00", end="2020-01-01 08:35:00", freq="5T"),
                 date_range(start="2020-01-01 08:35:00", end="2020-01-01 08:45:00", freq="5T"),
             ],
@@ -173,13 +164,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:06"]),
                 DatetimeIndex(["2020/01/01 08:06", "2020/01/01 08:18"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:18",
-                        "2020/01/01 08:36",
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:18", "2020/01/01 08:36", "2020/01/01 08:50"]),
             ],
             # 'left' means end is excluded.
             LEFT,
@@ -187,12 +172,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:06"]),
                 DatetimeIndex(["2020/01/01 08:18"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:36",
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:36", "2020/01/01 08:50"]),
             ],
             [
                 array([0, 2], dtype=DTYPE_INT64),
@@ -203,12 +183,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:06"]),
                 DatetimeIndex(["2020/01/01 08:18"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:36",
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:36", "2020/01/01 08:50"]),
             ],
             [
                 {
@@ -280,13 +255,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:12"]),
                 DatetimeIndex(["2020/01/01 08:12", "2020/01/01 08:16"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:12",
-                        "2020/01/01 08:16",
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:12", "2020/01/01 08:16", "2020/01/01 08:50"]),
             ],
             # 'left' means end is excluded.
             LEFT,
@@ -295,11 +264,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:12"]),
                 DatetimeIndex(["2020/01/01 08:16"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:50"]),
             ],
             [
                 array([0, 2], dtype=DTYPE_INT64),
@@ -311,11 +276,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:12"]),
                 DatetimeIndex(["2020/01/01 08:16"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:50"]),
             ],
             [
                 {
@@ -351,13 +312,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:06"]),
                 DatetimeIndex(["2020/01/01 08:06", "2020/01/01 08:12"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:12",
-                        "2020/01/01 08:36",
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:12", "2020/01/01 08:36", "2020/01/01 08:50"]),
             ],
             # 'right' means end is included.
             RIGHT,
@@ -366,12 +321,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:06"]),
                 DatetimeIndex(["2020/01/01 08:12"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:36",
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:36", "2020/01/01 08:50"]),
             ],
             [
                 array([1, 2], dtype=DTYPE_INT64),
@@ -382,12 +332,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:06"]),
                 DatetimeIndex(["2020/01/01 08:12"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:36",
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:36", "2020/01/01 08:50"]),
             ],
             [
                 {
@@ -424,13 +369,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:12"]),
                 DatetimeIndex(["2020/01/01 08:12", "2020/01/01 08:16"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:12",
-                        "2020/01/01 08:16",
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:12", "2020/01/01 08:16", "2020/01/01 08:50"]),
             ],
             # 'right' means end is included.
             RIGHT,
@@ -439,11 +378,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:12"]),
                 DatetimeIndex(["2020/01/01 08:12", "2020/01/01 08:16"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:50"]),
             ],
             [
                 array([1, 3], dtype=DTYPE_INT64),
@@ -455,11 +390,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:12"]),
                 DatetimeIndex(["2020/01/01 08:12", "2020/01/01 08:16"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:50",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:50"]),
             ],
             [
                 {
@@ -526,12 +457,7 @@ from oups.segmentby import setup_segmentby
             [
                 DatetimeIndex(["2020/01/01 08:03"]),
                 DatetimeIndex(["2020/01/01 08:03"]),
-                DatetimeIndex(
-                    [
-                        "2020/01/01 08:03",
-                        "2020/01/01 08:36",
-                    ]
-                ),
+                DatetimeIndex(["2020/01/01 08:03", "2020/01/01 08:36"]),
             ],
             # 'left' means end is excluded.
             LEFT,
@@ -1308,9 +1234,7 @@ def test_segmentby_exceptions():
             [
                 DatetimeIndex(["2020-01-01 08:10"]),
                 DatetimeIndex(["2020-01-01 08:10", "2020-01-01 08:19"]),
-                DatetimeIndex(
-                    ["2020-01-01 08:19", "2020-01-01 09:30"],
-                ),
+                DatetimeIndex(["2020-01-01 08:19", "2020-01-01 09:30"]),
             ],
             # n_null_bins
             [0, 0, 0],
@@ -1417,9 +1341,7 @@ def test_segmentby_exceptions():
             [
                 DatetimeIndex(["2020-01-01 08:10"]),
                 DatetimeIndex(["2020-01-01 08:10", "2020-01-01 08:19"]),
-                DatetimeIndex(
-                    ["2020-01-01 08:19", "2020-01-01 09:30"],
-                ),
+                DatetimeIndex(["2020-01-01 08:19", "2020-01-01 09:30"]),
             ],
             # n_null_bins
             [0, 0, 0],
@@ -1528,9 +1450,7 @@ def test_segmentby_exceptions():
             # bin_labels
             [
                 DatetimeIndex(["2020-01-01 08:10"]),
-                DatetimeIndex(
-                    ["2020-01-01 08:10", "2020-01-01 08:19", "2020-01-01 09:30"],
-                ),
+                DatetimeIndex(["2020-01-01 08:10", "2020-01-01 08:19", "2020-01-01 09:30"]),
             ],
             # n_null_bins
             [0, 1],
@@ -1588,7 +1508,7 @@ def test_segmentby_exceptions():
             #  8:19    4
             #  8:20    5
             #  9:00    6       0   2-9:00
-            #                               1-9:10 (excl.)
+            #                               2-9:10 (excl.)
             #  9:10    7
             #  9:30    8
             Grouper(freq="1H", label="left", closed="left", key="dti"),
@@ -1597,17 +1517,8 @@ def test_segmentby_exceptions():
             # snap_by
             [
                 DatetimeIndex(["2020-01-01 08:12"]),
-                DatetimeIndex(
-                    [
-                        "2020-01-01 08:12",
-                    ]
-                ),
-                DatetimeIndex(
-                    [
-                        "2020-01-01 08:12",
-                        "2020-01-01 09:10",
-                    ]
-                ),
+                DatetimeIndex(["2020-01-01 08:12"]),
+                DatetimeIndex(["2020-01-01 08:12", "2020-01-01 09:10"]),
             ],
             [3, 6],
             # next_chunk_starts
@@ -1624,12 +1535,8 @@ def test_segmentby_exceptions():
             # bin_labels
             [
                 DatetimeIndex(["2020-01-01 08:00"]),
-                DatetimeIndex(
-                    ["2020-01-01 08:00"],
-                ),
-                DatetimeIndex(
-                    ["2020-01-01 08:00", "2020-01-01 09:00"],
-                ),
+                DatetimeIndex(["2020-01-01 08:00"]),
+                DatetimeIndex(["2020-01-01 08:00", "2020-01-01 09:00"]),
             ],
             # n_null_bins
             [0, 0, 1],
