@@ -314,12 +314,105 @@ def test_cumsegagg_bin_only(
             # snap_ref
             pDataFrame(
                 {MIN: [1, 9], LAST: [4, 9]},
-                index=DatetimeIndex(
-                    [
-                        "2020-01-01 08:12",
-                        "2020-01-01 09:10",
-                    ]
+                index=DatetimeIndex(["2020-01-01 08:12", "2020-01-01 09:10"]),
+            ),
+        ),
+        (
+            # 2/ 'bin_by' as Grouper and 'snap_by' as Series.
+            #    In this test case, 2nd iteration contains null bins/snaps.
+            #    Testing concatenation of int64 / Int64 (pandas nullable int)
+            #    pandas DataFrame.
+            #   dti  odr  val  slices   bins     snaps
+            #  8:10    0    1         1-8:00
+            #  8:10    1    4
+            #                                   1-8:12 (excl.)
+            #  8:12    2    6
+            #  8:17    3    2
+            #  8:19    4    3
+            #  8:20    5    1
+            #                         2-8:30                    empty bin
+            #                                   2-8:33 (excl.)
+            #                                   3-9:00 (excl.)
+            #  9:00    6    9   0     3-9:00
+            #                                   4-9:10 (excl.)
+            #  9:10    7    3
+            #  9:30    8    2         4-9:30
+            # bin_by
+            Grouper(freq="30T", label="left", closed="left", key="dti"),
+            # ordered_on
+            None,
+            # snap_by
+            [
+                DatetimeIndex(["2020-01-01 08:12"]),
+                DatetimeIndex(
+                    ["2020-01-01 08:12", "2020-01-01 08:33", "2020-01-01 09:00", "2020-01-01 09:10"]
                 ),
+            ],
+            # end_indices
+            [6, 9],
+            # last_chunk_res_ref
+            [pDataFrame({MIN: [1], LAST: [1]}), pDataFrame({MIN: [2], LAST: [2]})],
+            # bin_ref
+            pDataFrame(
+                {MIN: [1, pNA, 3, 2], LAST: [1, pNA, 3, 2]},
+                index=DatetimeIndex(
+                    ["2020-01-01 08:00", "2020-01-01 08:30", "2020-01-01 09:00", "2020-01-01 09:30"]
+                ),
+                dtype=DTYPE_NULLABLE_INT64,
+            ),
+            # snap_ref
+            pDataFrame(
+                {MIN: [1, pNA, pNA, 9], LAST: [4, pNA, pNA, 9]},
+                index=DatetimeIndex(
+                    ["2020-01-01 08:12", "2020-01-01 08:33", "2020-01-01 09:00", "2020-01-01 09:10"]
+                ),
+                dtype=DTYPE_NULLABLE_INT64,
+            ),
+        ),
+        (
+            # 3/ 'bin_by' as Grouper and 'snap_by' as Series.
+            #    In this test case, 1st iteration is started without snapshot
+            #    (empty array), as not known yet!
+            #   dti  odr  val  slices   bins     snaps
+            #  8:10    0    1         1-8:00
+            #  8:10    1    4
+            #  8:12    2    6
+            #  8:17    3    2
+            #  8:19    4    3
+            #  8:20    5    1
+            #                         2-8:30                    empty bin
+            #                                   1-8:33 (excl.)
+            #                                   2-9:00 (excl.)
+            #  9:00    6    9   0     3-9:00
+            #                                   3-9:10 (excl.)
+            #  9:10    7    3
+            #  9:30    8    2         4-9:30
+            # bin_by
+            Grouper(freq="30T", label="left", closed="left", key="dti"),
+            # ordered_on
+            None,
+            # snap_by
+            [
+                DatetimeIndex([]),
+                DatetimeIndex(["2020-01-01 08:33", "2020-01-01 09:00", "2020-01-01 09:10"]),
+            ],
+            # end_indices
+            [6, 9],
+            # last_chunk_res_ref
+            [pDataFrame({MIN: [1], LAST: [1]}), pDataFrame({MIN: [2], LAST: [2]})],
+            # bin_ref
+            pDataFrame(
+                {MIN: [1, pNA, 3, 2], LAST: [1, pNA, 3, 2]},
+                index=DatetimeIndex(
+                    ["2020-01-01 08:00", "2020-01-01 08:30", "2020-01-01 09:00", "2020-01-01 09:30"]
+                ),
+                dtype=DTYPE_NULLABLE_INT64,
+            ),
+            # snap_ref
+            pDataFrame(
+                {MIN: [pNA, pNA, 9], LAST: [pNA, pNA, 9]},
+                index=DatetimeIndex(["2020-01-01 08:33", "2020-01-01 09:00", "2020-01-01 09:10"]),
+                dtype=DTYPE_NULLABLE_INT64,
             ),
         ),
     ],
@@ -382,6 +475,7 @@ def test_cumsegagg_bin_snap(
     assert snap_res.equals(snap_ref)
 
 
+# Still a test case mixing by_x_row (bin) and pGrouper (snap)
 # Questions:
 #  - in cumsegagg, when restarting with 3 empty chunks, assuming the
 #    there are 2 'snaps', and the 3rd is a 'bin' (which was in progress at

@@ -224,9 +224,11 @@ def by_scale(
                 )
         else:
             chunk_labels = chunk_ends = by
-        # If 'buffer' is not empty, it necessarily contains 'KEY_RESTART_KEY'.
         if buffer:
-            if buffer[KEY_RESTART_KEY] != chunk_ends[0]:
+            # In case at previous iteration, there has been no snapshot,
+            # 'buffer' will not contain 'KEY_RESTART_KEY', but will contain
+            # 'KEY_LAST_ON_VALUE'.
+            if KEY_RESTART_KEY in buffer and buffer[KEY_RESTART_KEY] != chunk_ends[0]:
                 # In case of restart, if first value in 'chunk_ends' is not the
                 # the one that was used in last at last iteration, try first to
                 # trim values in 'by' that are earlier than 'restart_key'.
@@ -282,10 +284,11 @@ def by_scale(
                     # condition.
                     chunk_ends = chunk_ends[1:]
                     chunk_labels = chunk_labels[1:]
-                    if chunk_ends.empty:
-                        buffer[KEY_LAST_ON_VALUE] = on.iloc[-1]
-                        return (NULL_INT64_1D_ARRAY, chunk_labels, 0, closed, chunk_ends, False)
                 del buffer[KEY_LAST_ON_VALUE]
+        if chunk_ends.empty:
+            if isinstance(buffer, dict):
+                buffer[KEY_LAST_ON_VALUE] = on.iloc[-1]
+            return (NULL_INT64_1D_ARRAY, chunk_labels, 0, closed, chunk_ends, False)
     if chunk_ends.dtype == DTYPE_DATETIME64:
         next_chunk_starts, n_null_chunks, data_traversed = _next_chunk_starts(
             on.to_numpy(copy=False).view(DTYPE_INT64),
