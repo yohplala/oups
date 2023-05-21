@@ -371,6 +371,56 @@ def test_cumsegagg_bin_only(
         ),
         (
             # 3/ 'bin_by' as Grouper and 'snap_by' as Series.
+            #    In this test case, 2nd iteration starts with 2 empty snaps,
+            #    then a null bin.
+            #   dti  odr  val  slices   bins     snaps
+            #  8:10    0    1         1-8:00
+            #  8:10    1    4
+            #                                   1-8:12 (excl.)
+            #  8:12    2    6
+            #  8:17    3    2
+            #  8:19    4    3
+            #  8:20    5    1
+            #                                   2-8:22 (excl.)
+            #                                   3-9:23 (excl.)
+            #                         2-8:30                    empty bin
+            #  9:00    6    9   0     3-9:00
+            #                                   4-9:10 (excl.)
+            #  9:10    7    3
+            #  9:30    8    2         4-9:30
+            # bin_by
+            Grouper(freq="30T", label="left", closed="left", key="dti"),
+            # ordered_on
+            None,
+            # snap_by
+            [
+                DatetimeIndex(["2020-01-01 08:12"]),
+                DatetimeIndex(
+                    ["2020-01-01 08:12", "2020-01-01 08:22", "2020-01-01 08:23", "2020-01-01 09:10"]
+                ),
+            ],
+            # end_indices
+            [6, 9],
+            # last_chunk_res_ref
+            [pDataFrame({MIN: [1], LAST: [1]}), pDataFrame({MIN: [2], LAST: [2]})],
+            # bin_ref
+            pDataFrame(
+                {MIN: [1, pNA, 3, 2], LAST: [1, pNA, 3, 2]},
+                index=DatetimeIndex(
+                    ["2020-01-01 08:00", "2020-01-01 08:30", "2020-01-01 09:00", "2020-01-01 09:30"]
+                ),
+                dtype=DTYPE_NULLABLE_INT64,
+            ),
+            # snap_ref
+            pDataFrame(
+                {MIN: [1, 1, 1, 9], LAST: [4, 1, 1, 9]},
+                index=DatetimeIndex(
+                    ["2020-01-01 08:12", "2020-01-01 08:22", "2020-01-01 08:23", "2020-01-01 09:10"]
+                ),
+            ),
+        ),
+        (
+            # 4/ 'bin_by' as Grouper and 'snap_by' as Series.
             #    In this test case, 1st iteration is started without snapshot
             #    (empty array), as not known yet!
             #   dti  odr  val  slices   bins     snaps
@@ -473,29 +523,3 @@ def test_cumsegagg_bin_snap(
     snap_res = pconcat(snap_res_to_concatenate)
     snap_res = snap_res[~snap_res.index.duplicated(keep="last")]
     assert snap_res.equals(snap_ref)
-
-
-# Still a test case mixing by_x_row (bin) and pGrouper (snap)
-# Questions:
-#  - in cumsegagg, when restarting with 3 empty chunks, assuming the
-#    there are 2 'snaps', and the 3rd is a 'bin' (which was in progress at
-#    prev iter.)
-#    With proposed methodo, it is not enough to simply let the 'in-progress data'
-#    from previous iteration. the new intermediate chunk needs to be created.
-#
-# Start with no snapshot in 1st iteration (using Series): does it still produce
-# an empty snapshot dataframe?
-#
-#
-# Make test
-#   - with empty snap at prev iter, then new empty snaps at next iter then end of bin.
-#   - with non empty snap at prev iter, then new empty one (res forwarded?) at next iter then end of bin
-#   - is it possible to have 1st an empty snapshot then a not empty new bin
-#     (similar to test case 0 above, but 2nd snap at 8:18)
-#     -> should modify 'by_x_rows': first bin (of next ier.) can never be new when end of bin (at prev. iter.)
-#        is unknown. Because at next iter, we need to be able to have clear end oflast on-going bin to position
-#        first snapshots
-#     -> if bin are left-opened, check if this works the same.
-#     Write this reasoning clearly.
-#     Raise an error when detecting 'closed' = left (right open) and 'first_bin_is_new' then this case can be
-#     not correctly supported.
