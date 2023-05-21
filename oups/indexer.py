@@ -95,7 +95,7 @@ last position."
             else:
                 # If not a dataclass instance.
                 field_as_str = str(field)
-                if any([symb in field_as_str for symb in forbidden_chars]):
+                if any((symb in field_as_str for symb in forbidden_chars)):
                     raise ValueError(
                         f"use of a forbidden character among \
 {forbidden_chars} is not possible in {field_as_str}."

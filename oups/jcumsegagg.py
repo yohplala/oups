@@ -219,10 +219,11 @@ AGG_FUNCS = {FIRST: jfirst, LAST: jlast, MIN: jmin, MAX: jmax, SUM: jsum}
 @njit
 def jcsagg(
     data: ndarray,  # 2d
-    n_cols: int,
     aggs: Tuple[Tuple[Callable, ndarray, ndarray]],
     next_chunk_starts: ndarray,  # 1d
     bin_indices: ndarray,  # 1d
+    preserve_res: bool,
+    chunk_res: ndarray,  # 1d
     bin_res: ndarray,  # 2d
     snap_res: ndarray,  # 2d
     null_bin_indices: ndarray,  # 1d
@@ -234,8 +235,6 @@ def jcsagg(
     ----------
     data : np.ndarray
         Array over which performing aggregation functions.
-    n_cols : int
-        Number of columns expected in 'bin_res' and/or 'snap_res'.
     aggs : Tuple[Tuple[Callable, np.ndarray, np.ndarray]
         Tuple of Tuple with 3 items:
           - aggregation function,
@@ -258,9 +257,21 @@ def jcsagg(
         to contain no duplicate values.
         In case of no snapshotting ('snap_res' is a null array), then
         'bin_indices' can be a null array.
+    preserve_res : boolean
+        If 'chunk_res' parameter has to be accounted for in aggregation results
+        of 1st chunk or not. In other words, is the first chunk the
+        continuation of aggregation calculation from the previous iteration, or
+        is the new iteration to be started from scratch?
+    chunk_res : np.ndarray
+        Aggregation results of last chunk from previous iteration. If
+        'preserve_res' is ``True``, then these results are re-used in 1st
+        calculation for this new iteration.
 
     Returns
     -------
+    chunk_res : np.ndarray
+        Aggregation results of last chunk for current iteration, for use in
+        next iteration.
     bin_res : np.ndarray
         Results from aggregation, with same `dtype` than 'data' array, for
         bins.
@@ -275,13 +286,35 @@ def jcsagg(
         correspond to "empty" snapshots, i.e. for which snapshot size has been
         set to 0. Input array should be set to null values, so that unused
         rows can be identified clearly.
+
+    Notes
+    -----
+    In case of a 'restart', for the implemented logic to work, it is crucial
+    that in the previous iteration, last been has not been an empty one.
+    In current implementation, if 'preserve_res' parameter is ``True``, then
+    'chunk_res' contains valid results which are forwarded into current
+    iteration.
+    But if last bin from previous iteration has been empty, then 'chunk_res'
+    does not contain relevant results to be forwarded.
     """
-    data_dtype = data.dtype
-    chunk_res = zeros(n_cols, data_dtype)
-    bin_start = chunk_start = 0
+    # 'pinnu' is 'prev_is_non_null_update'. It is renamed 'preserve_res'.
+    # With 'preserve_res' True, then cumulate (pass-through) previous results.
+    # TODO: check if last index in "next_chunk_array" is size of data.
+    # If not, do a last iteration to cover the complete input data, and simply
+    # keep in 'chunk_res'. Possibly, activate this behavior only if a flag is
+    # set. In this case, 'preserve_res' should be output from 'jcumsegagg()'
+    # To keep track of the case the last bin exactly end on last row of data.
+    # TODO: when creation 'null_bin_indices' and 'null_snap_indices', only
+    # trim the trailing '-1' if there are less null indices than their initial
+    # size.
+    # TODO: integrate in 'jcsagg()' a loopover the dtypes, with all input
+    # arrays for a dtype at same positions in different input tuples.
+    bin_start = -1 if preserve_res else 0
+    chunk_start = 0
     bin_res_idx = snap_res_idx = 0
     null_bin_idx = null_snap_idx = 0
-    # A 'snapshot' is an 'update' or 'pass-through'. A 'bin' induces a reset.
+    # A 'snapshot' is an 'update' or 'pass-through'.
+    # An end of 'bin' induces a reset.
     if len(snap_res) != 0:
         # Case 'snapshots expected'.
         # Setup identification of bins (vs snapshots).
@@ -290,7 +323,7 @@ def jcsagg(
             # Case 'there are bins'.
             # If a 'snapshot' chunk shares same last row than a 'bin'
             # chunk, the 'snapshot' is expected to be listed prior to the
-            # 'bin' chunk. This is ensures in the way bin indices are sorted
+            # 'bin' chunk. This is ensured in the way bin indices are sorted
             # vs snapshot indices. Bin indices are identified thanks to
             # 'bin_indices'.
             iter_bin_indices = iter(bin_indices)
@@ -303,9 +336,6 @@ def jcsagg(
         # Case 'no snapshot expected'.
         some_snaps = False
         is_update = False
-    # 'pinnu' is 'prev_is_non_null_update'.
-    # With 'pinnu' True, then cumulate (pass-through) previous results.
-    pinnu = False
     for (idx,), next_chunk_start in ndenumerate(next_chunk_starts):
         if some_snaps:
             # Is the current 'next_chunk_start' idx that of a 'bin' or that of
@@ -332,7 +362,7 @@ def jcsagg(
                 null_bin_indices[null_bin_idx] = bin_res_idx
                 null_bin_idx += 1
                 bin_res_idx += 1
-                pinnu = False
+                preserve_res = False
         else:
             # Chunk with some rows from the start of the bin.
             chunk = data[chunk_start:next_chunk_start]
@@ -343,19 +373,21 @@ def jcsagg(
                 # for agg in aggs:
                 for agg in literal_unroll(aggs):
                     agg_func, cols_data, cols_res = agg
-                    chunk_res[cols_res] = agg_func(chunk[:, cols_data], chunk_res[cols_res], pinnu)
+                    chunk_res[cols_res] = agg_func(
+                        chunk[:, cols_data], chunk_res[cols_res], preserve_res
+                    )
             # Step 2: record results.
             if is_update:
                 # Case of 'snapshot', record result in 'snap_res'.
                 snap_res[snap_res_idx, :] = chunk_res
                 # Update local variables and counters.
                 snap_res_idx += 1
-                pinnu = True
+                preserve_res = True
             else:
                 # Case of 'bin', record results in 'bin_res'.
                 bin_res[bin_res_idx, :] = chunk_res
                 # Update local variables and counters to reflect end of bin.
                 bin_res_idx += 1
                 bin_start = next_chunk_start
-                pinnu = False
+                preserve_res = False
         chunk_start = next_chunk_start

@@ -86,7 +86,7 @@ repos:
                 oups/writer.py:C901
                 oups/jcumsegagg.py:C901
                 oups/segmentby.py:C901
-                oups/cumsegagg.py:C901
+                oups/cumsegagg.py:C901 E203
                 oups/chainagg.py:C901
         ]
 

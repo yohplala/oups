@@ -396,7 +396,7 @@ def test_cumsegagg_bin_snap_with_null_chunks(
         "ts_first": (dti, FIRST),
     }
     bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
-    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti)
+    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti, label="right")
     bins_res, snaps_res = cumsegagg(
         data=data,
         agg=agg,
@@ -406,6 +406,7 @@ def test_cumsegagg_bin_snap_with_null_chunks(
     )
     bins_ref = data.groupby(bin_by).agg(**agg)
     if null_b_dti:
+        bins_ref[SUM] = bins_ref[SUM].astype(DTYPE_NULLABLE_INT64)
         bins_ref.loc[null_b_dti, SUM] = pNA
     assert bins_res.equals(bins_ref)
     snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5T")
@@ -560,7 +561,7 @@ def test_cumsegagg_bin_snap_with_null_chunks_other(
         "ts_first": (dti, FIRST),
     }
     bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
-    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti)
+    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti, label="right")
     bins_res, snaps_res = cumsegagg(
         data=data,
         agg=agg,
@@ -570,6 +571,7 @@ def test_cumsegagg_bin_snap_with_null_chunks_other(
     )
     bins_ref = data.groupby(bin_by).agg(**agg)
     if null_b_dti:
+        bins_ref[SUM] = bins_ref[SUM].astype(DTYPE_NULLABLE_INT64)
         bins_ref.loc[null_b_dti, SUM] = pNA
     assert bins_res.equals(bins_ref)
     snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5T")
@@ -677,7 +679,7 @@ def test_cumsegagg_single_bin_several_snaps(
         LAST: (value, LAST),
     }
     bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
-    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti)
+    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti, label="right")
     bins_res, snaps_res = cumsegagg(
         data=data,
         agg=agg,
@@ -718,12 +720,12 @@ def test_cumsegagg_single_bin_several_snaps(
         #                           s8-8:55    b2
         #      8:55   3.2                      b2
         #                   9:06    s9-9:06    b3-9:30   (not existing in 'bin_res')
-        #                   9:09   s10-9:09    b3
-        #                   9:16   s11-9:16    b3
+        #                   9:09   s10-9:09    b3        (after s9 excluded,
+        #                   9:16   s11-9:16    b3         remaining snapshots are trimmed)
         (
             "left",
-            # s1->s11                          (first, max, min, last)
-            [nNaN] * 11,
+            # s1->s9                          (first, max, min, last)
+            [nNaN] * 9,
         ),
         # 2/ bins right-closed, point of observations included
         #  'data'
@@ -737,12 +739,12 @@ def test_cumsegagg_single_bin_several_snaps(
         #                   8:52    s7-8:52    b3
         #      8:55   3.2           s8-8:55    b3
         #                   9:06    s9-9:06    b4-9:30   (not existing in 'bin_res')
-        #                   9:09   s10-9:09    b4
-        #                   9:16   s11-9:16    b4
+        #                   9:09   s10-9:09    b4        (after s8 excluded,
+        #                   9:16   s11-9:16    b4         remaining snapshots are trimmed)
         (
             "right",
-            # s1->s3     s4      s5->s7       s8      s9->s11
-            [nNaN] * 3 + [4.2] + [nNaN] * 3 + [3.2] + [nNaN] * 3,
+            # s1->s3     s4      s5->s7       s8
+            [nNaN] * 3 + [4.2] + [nNaN] * 3 + [3.2],
         ),
     ],
 )
@@ -751,6 +753,7 @@ def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
     # - 30 minutes bins
     # - snapshots as an interval index
     # - 'data' as follow below
+    # these tests actually make clever use of 'unknown_last_bin_end' parameter.
     values = array([4.2, 3.2], dtype=DTYPE_FLOAT64)
     dtidx = array(
         [
@@ -800,7 +803,7 @@ def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
             MIN: s_res,
             LAST: s_res,
         },
-        index=snap_by,
+        index=snap_by[: len(s_res)],
     )
     snaps_ref.index.name = dti
     assert snaps_res.equals(snaps_ref)
@@ -1098,7 +1101,7 @@ def test_exception_error_on_0():
     data = pDataFrame({value: values, dti: dtidx})
     agg = {FIRST: (value, FIRST)}
     bin_by = Grouper(freq="10T", closed="left", label="right", key=dti)
-    snap_by = Grouper(freq="5T", closed="left", key=dti)
+    snap_by = Grouper(freq="5T", closed="left", key=dti, label="right")
     with pytest.raises(ValueError, match="^at least one null value exists in 'snap_res'"):
         bins_res, snaps_res = cumsegagg(
             data=data,

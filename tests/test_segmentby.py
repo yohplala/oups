@@ -17,12 +17,9 @@ from pandas import Series
 from pandas import Timestamp as pTimestamp
 from pandas import date_range
 
-from oups.cumsegagg import DTYPE_DATETIME64
-from oups.cumsegagg import DTYPE_INT64
 from oups.segmentby import BIN_BY
-from oups.segmentby import KEY_BIN
-from oups.segmentby import KEY_LAST_KEY
-from oups.segmentby import KEY_ROWS_IN_LAST_BIN
+from oups.segmentby import DTYPE_DATETIME64
+from oups.segmentby import DTYPE_INT64
 from oups.segmentby import LEFT
 from oups.segmentby import NULL_INT64_1D_ARRAY
 from oups.segmentby import ON_COLS
@@ -41,7 +38,7 @@ from oups.segmentby import setup_segmentby
 
 
 @pytest.mark.parametrize(
-    "data, right_edges, right, ref, n_null_chunks_ref",
+    "data, right_edges, right, ref, n_null_chunks_ref, edges_traversed_ref",
     [
         (
             #      0  1  2  3  4  5  6
@@ -51,6 +48,7 @@ from oups.segmentby import setup_segmentby
             True,
             array([2, 4, 4, 5, 6], dtype=DTYPE_INT64),
             1,
+            False,
         ),
         (
             #      0  1  2  3  4  5  6
@@ -60,6 +58,7 @@ from oups.segmentby import setup_segmentby
             False,
             array([1, 4, 4, 4, 5], dtype=DTYPE_INT64),
             2,
+            False,
         ),
         (
             #      0  1  2  3  4  5  6
@@ -67,8 +66,9 @@ from oups.segmentby import setup_segmentby
             #      7   7   7   7
             array([50, 60, 70, 88], dtype=DTYPE_INT64),
             False,
-            array([7, 7, 7, 7], dtype=DTYPE_INT64),
-            3,
+            array([7], dtype=DTYPE_INT64),
+            0,
+            True,
         ),
         (
             #       0   1   2
@@ -78,6 +78,7 @@ from oups.segmentby import setup_segmentby
             False,
             array([0, 0, 0, 0], dtype=DTYPE_INT64),
             4,
+            False,
         ),
         (
             #      0  1  2
@@ -85,8 +86,19 @@ from oups.segmentby import setup_segmentby
             #      0  2  3  3
             array([5, 6, 7, 8], dtype=DTYPE_INT64),
             False,
-            array([0, 2, 3, 3], dtype=DTYPE_INT64),
-            2,
+            array([0, 2, 3], dtype=DTYPE_INT64),
+            1,
+            True,
+        ),
+        (
+            #      0  1  2
+            array([5, 5, 6], dtype=DTYPE_INT64),
+            #      2  3  3  3
+            array([5, 6, 7, 8], dtype=DTYPE_INT64),
+            True,
+            array([2, 3], dtype=DTYPE_INT64),
+            0,
+            True,
         ),
         (
             #      0  1  2  3  4
@@ -96,13 +108,15 @@ from oups.segmentby import setup_segmentby
             False,
             array([0, 2, 2, 5], dtype=DTYPE_INT64),
             2,
+            True,
         ),
     ],
 )
-def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref):
-    next_chunk_starts, n_null_chunks = _next_chunk_starts(data, right_edges, right)
-    assert nall(ref == next_chunk_starts)
+def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edges_traversed_ref):
+    next_chunk_starts, n_null_chunks, edges_traversed = _next_chunk_starts(data, right_edges, right)
+    assert nall(next_chunk_starts == ref)
     assert n_null_chunks == n_null_chunks_ref
+    assert edges_traversed == edges_traversed_ref
 
 
 @pytest.mark.parametrize(
@@ -295,61 +309,44 @@ def test_by_scale(
 
 
 @pytest.mark.parametrize(
-    "len_data, x_rows, buffer_in, buffer_out, chunk_starts_ref, next_chunk_starts_ref, "
-    "set_first_key",
+    "by, closed, exception_mess",
     [
-        (3, 4, None, None, array([0]), array([3]), False),
-        (7, 4, None, None, array([0, 4]), array([4, 7]), False),
-        (8, 4, None, None, array([0, 4]), array([4, 8]), False),
+        (DatetimeIndex([pTimestamp("2020/01/01 08:00")]), None, "^'closed' has to be set"),
         (
-            3,
-            4,
-            {KEY_ROWS_IN_LAST_BIN: 1, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            array([0]),
-            array([3]),
-            True,
-        ),
-        (
-            7,
-            4,
-            {KEY_ROWS_IN_LAST_BIN: 1, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 11:00")},
-            array([0, 3]),
-            array([3, 7]),
-            True,
-        ),
-        (
-            7,
-            4,
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 3, KEY_LAST_KEY: pTimestamp("2022/01/01 12:00")},
-            array([0, 4]),
-            array([4, 7]),
-            False,
-        ),
-        (
-            8,
-            4,
-            {KEY_ROWS_IN_LAST_BIN: 1, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 1, KEY_LAST_KEY: pTimestamp("2022/01/01 15:00")},
-            array([0, 3, 7]),
-            array([3, 7, 8]),
-            True,
-        ),
-        (
-            8,
-            4,
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 07:50")},
-            {KEY_ROWS_IN_LAST_BIN: 4, KEY_LAST_KEY: pTimestamp("2022/01/01 12:00")},
-            array([0, 4]),
-            array([4, 8]),
-            False,
+            # Labels
+            (
+                DatetimeIndex([pTimestamp("2020/01/01 08:00")]),
+                # Ends
+                date_range("2020/01/01 08:00", periods=2, freq="3T"),
+            ),
+            RIGHT,
+            "^number of chunk labels",
         ),
     ],
 )
+def test_by_scale_exceptions_if_datetimeindex(by, closed, exception_mess):
+    on = Series(date_range("2020/01/01 07:59", "2020/01/01 07:09", freq="2T"))
+    with pytest.raises(ValueError, match=exception_mess):
+        by_scale(on, by, closed)
+
+
+@pytest.mark.parametrize(
+    "len_data, x_rows, closed, chunk_starts_ref, next_chunk_starts_ref, unknown_last_bin_end_ref",
+    [
+        (3, 4, LEFT, array([0]), array([3]), True),
+        (7, 4, LEFT, array([0, 4]), array([4, 7]), True),
+        (7, 4, RIGHT, array([0, 4]), array([4, 7]), True),
+        (8, 4, LEFT, array([0, 4]), array([4, 8]), True),
+        (8, 4, RIGHT, array([0, 4]), array([4, 8]), False),
+    ],
+)
 def test_by_x_rows(
-    len_data, x_rows, buffer_in, buffer_out, chunk_starts_ref, next_chunk_starts_ref, set_first_key
+    len_data,
+    x_rows,
+    closed,
+    chunk_starts_ref,
+    next_chunk_starts_ref,
+    unknown_last_bin_end_ref,
 ):
     start = pTimestamp("2022/01/01 08:00")
     dummy_data = arange(len_data)
@@ -358,27 +355,27 @@ def test_by_x_rows(
     )
     chunk_labels_ref = data.iloc[chunk_starts_ref, -1].reset_index(drop=True)
     chunk_ends_idx = next_chunk_starts_ref.copy()
-    chunk_ends_idx[-1] = len_data - 1
-    chunk_ends_ref = data.iloc[chunk_ends_idx, -1].reset_index(drop=True)
-    if buffer_out is not None and set_first_key:
-        chunk_labels_ref.iloc[0] = buffer_in[KEY_LAST_KEY]
+    if closed == LEFT:
+        chunk_ends_idx[-1] = len_data - 1
+        chunk_ends_ref = data.iloc[chunk_ends_idx, -1].reset_index(drop=True)
+    else:
+        chunk_ends_idx -= 1
+        chunk_ends_ref = data.iloc[chunk_ends_idx, -1].reset_index(drop=True)
     (
         next_chunk_starts,
         chunk_labels,
         n_null_chunks,
         chunk_closed,
         chunk_ends,
-        unknown_last_chunk_end,
-    ) = by_x_rows(data, x_rows, LEFT, buffer_in)
+        unknown_last_bin_end,
+    ) = by_x_rows(data, x_rows, closed=closed)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
     assert nall(chunk_labels == chunk_labels_ref)
     assert not n_null_chunks
-    assert chunk_closed == LEFT
+    assert chunk_closed == closed
     # 'chunk_ends' is expected to be the same than 'chunk_labels'.
     assert nall(chunk_ends == chunk_ends_ref)
-    if buffer_out is not None:
-        assert buffer_in == buffer_out
-    assert unknown_last_chunk_end
+    assert unknown_last_bin_end == unknown_last_bin_end_ref
 
 
 def test_mergesort_labels_and_keys():
@@ -419,27 +416,26 @@ def test_mergesort_labels_and_keys_force_last():
     assert nall(sorted_idx_labels2 == ref_sorted_idx_labels2)
 
 
-def test_mergesort_exceptions_first():
+@pytest.mark.parametrize(
+    "labels1, labels2, exception_mess",
+    [
+        (
+            array([10, 5], dtype="int64"),
+            array([20], dtype="int64"),
+            "^not possible to have arrays of different length for first",
+        ),
+        (
+            array([10], dtype="int64"),
+            array([20, 5], dtype="int64"),
+            "^not possible to have arrays of different length for second",
+        ),
+    ],
+)
+def test_mergesort_exceptions_array_length(labels1, labels2, exception_mess):
     # Test data
-    labels1 = array([10, 5], dtype="int64")
     keys1 = array([1], dtype="int64")
-    labels2 = array([20], dtype="int64")
     keys2 = array([2], dtype="int64")
-    with pytest.raises(
-        ValueError, match="^not possible to have arrays of different length for first"
-    ):
-        mergesort((labels1, labels2), (keys1, keys2))
-
-
-def test_mergesort_exceptions_second():
-    # Test data
-    labels1 = array([10], dtype="int64")
-    keys1 = array([1], dtype="int64")
-    labels2 = array([20, 5], dtype="int64")
-    keys2 = array([2], dtype="int64")
-    with pytest.raises(
-        ValueError, match="^not possible to have arrays of different length for second"
-    ):
+    with pytest.raises(ValueError, match=exception_mess):
         mergesort((labels1, labels2), (keys1, keys2))
 
 
@@ -509,16 +505,11 @@ def test_setup_segmentby(
     res = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
     if isinstance(bin_by, Grouper):
         on = Series(date_range("2020/01/01 08:01", periods=3, freq="3T"))
-        (next_chunk_starts, _, _, _, _, _,) = res[
-            BIN_BY
-        ](on=on)
     else:
         on = pDataFrame(
             {"dti": date_range("2020/01/01 08:01", periods=3, freq="3T"), "ordered_on": [1, 2, 3]}
         )
-        (next_chunk_starts, _, _, _, _, _,) = res[
-            BIN_BY
-        ](on=on)
+    (next_chunk_starts, _, _, _, _, _) = res[BIN_BY](on=on)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
     assert res[ON_COLS] == on_cols_ref
     assert res[ORDERED_ON] == ordered_on_ref
@@ -553,7 +544,7 @@ def test_setup_segmentby(
             None,
             None,
             None,
-            "not possible to set 'bin_on' to `None`.",
+            "not possible to set both 'bin_on' and 'ordered_on'.",
         ),
         (
             Grouper(key="dti1", freq="5T", label="left", closed="left"),
@@ -584,13 +575,12 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
 
 
 @pytest.mark.parametrize(
-    "bin_by, bin_on, ordered_on, snap_by, buffer, next_chunk_starts_ref, bin_indices_ref, "
+    "bin_by, bin_on, ordered_on, snap_by, next_chunk_starts_ref, bin_indices_ref, "
     "bin_labels_ref, n_null_bins_ref, snap_labels_ref, n_max_null_snaps_ref",
     [
         (
-            # 1/ 'bin_by' only, as a Grouper.
+            # 0/ 'bin_by' only, as a Grouper.
             Grouper(key="dti", freq="5T", label="left", closed="left"),
-            None,
             None,
             None,
             None,
@@ -602,21 +592,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             0,
         ),
         (
-            # 2/ 'bin_by' only, as a Callable.
-            by_x_rows,
-            "ordered_on",
-            None,
-            None,
-            {KEY_BIN: {KEY_LAST_KEY: 1, KEY_ROWS_IN_LAST_BIN: 1}},
-            array([3, 4]),
-            NULL_INT64_1D_ARRAY,
-            Series([1, 3]),
-            0,
-            None,
-            0,
-        ),
-        (
-            # 3/ 'bin_by' and 'snap_by' both as a Grouper, left-closed
+            # 1/ 'bin_by' and 'snap_by' both as a Grouper, left-closed
             # 'snap_by' points excluded (left-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -628,8 +604,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             Grouper(key="dti", freq="5T", label="right", closed="left"),
             None,
             None,
-            Grouper(key="dti", freq="2T"),
-            None,
+            Grouper(key="dti", freq="2T", label="right"),
             #     b1 s1 s2 s3 b2 s4 s5 b3
             #      0           4        7
             array([1, 1, 2, 2, 2, 3, 4, 4]),
@@ -640,7 +615,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             2,
         ),
         (
-            # 4/ 'bin_by' and 'snap_by' both as a Grouper, right-closed
+            # 2/ 'bin_by' and 'snap_by' both as a Grouper, right-closed
             # 'snap_by' points included (right-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -653,8 +628,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             Grouper(key="dti", freq="5T", label="right", closed="right"),
             None,
             None,
-            Grouper(key="dti", freq="2T", closed="right"),
-            None,
+            Grouper(key="dti", freq="2T", label="right", closed="right"),
             #     s1 b1 s2 s3 s4 b2 s5 s6 b3
             #         1           5        8
             array([1, 1, 1, 2, 3, 3, 3, 4, 4]),
@@ -668,7 +642,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             4,
         ),
         (
-            # 5/ 'bin_by' as a Grouper, left-closed, and 'snap_by' as a
+            # 3/ 'bin_by' as a Grouper, left-closed, and 'snap_by' as a
             # DatetimeIndex.
             # 'snap_by' points excluded (left-closed)
             # 'data'
@@ -682,7 +656,6 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             None,
             None,
             date_range("2020/01/01 08:06", periods=5, freq="2T"),
-            None,
             #     b1 s1 s2 s3 b2 s4 s5 b3
             #      0           4        7
             array([1, 1, 2, 2, 2, 3, 4, 4]),
@@ -693,7 +666,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             2,
         ),
         (
-            # 6/ 'bin_by' as a Grouper, right-closed, and 'snap_by' as a
+            # 4/ 'bin_by' as a Grouper, right-closed, and 'snap_by' as a
             # DatetimeIndex.
             # 'snap_by' points included (right-closed)
             # 'data'
@@ -708,7 +681,6 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             None,
             None,
             date_range("2020/01/01 08:04", periods=6, freq="2T"),
-            None,
             #     s1 b1 s2 s3 s4 b2 s5 s6 b3
             #         1           5        8
             array([1, 1, 1, 2, 3, 3, 3, 4, 4]),
@@ -722,7 +694,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             4,
         ),
         (
-            # 7/ 'bin_by' as a Callable, left-closed.
+            # 5/ 'bin_by' as a Callable, left-closed.
             # 'snap_by' as a Grouper, points excluded (left-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -735,8 +707,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             partial(by_x_rows, by=3),
             "dti",
             None,
-            Grouper(key="dti", freq="2T"),
-            None,
+            Grouper(key="dti", freq="2T", label="right"),
             #     s1 s2 s3 s4 b1 s5 b2
             #                  4     6
             array([1, 2, 2, 3, 3, 4, 4]),
@@ -749,7 +720,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             1,
         ),
         (
-            # 8/ 'bin_by' as a Callable, right-closed.
+            # 6/ 'bin_by' as a Callable, right-closed.
             # 'snap_by' as a Grouper, points included (right-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -762,8 +733,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             partial(by_x_rows, by=3, closed=RIGHT),
             "dti",
             None,
-            Grouper(key="dti", freq="2T"),
-            None,
+            Grouper(key="dti", freq="2T", label="right"),
             #     s1 s2 s3 s4 b1 s5 s6 b2
             #                  4        7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
@@ -776,7 +746,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             3,
         ),
         (
-            # 9/ 'bin_by' as a Callable, left-closed.
+            # 7/ 'bin_by' as a Callable, left-closed.
             # 'snap_by' as a DatetimeIndex, points excluded (left-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -790,7 +760,6 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             "dti",
             "dti",
             date_range("2020/01/01 08:06", periods=5, freq="2T"),
-            None,
             #     s1 s2 s3 s4 b1 s5 b2
             #                  4     6
             array([1, 2, 2, 3, 3, 4, 4]),
@@ -803,7 +772,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             1,
         ),
         (
-            # 10/ 'bin_by' as a Callable, right-closed.
+            # 8/ 'bin_by' as a Callable, right-closed.
             # 'snap_by' as a DatetimeIndex, points included (right-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -817,7 +786,6 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             "dti",
             "dti",
             date_range("2020/01/01 08:04", periods=6, freq="2T"),
-            None,
             #     s1 s2 s3 s4 b1 s5 s6 b2
             #                  4        7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
@@ -836,7 +804,6 @@ def test_segmentby(
     bin_on,
     ordered_on,
     snap_by,
-    buffer,
     next_chunk_starts_ref,
     bin_indices_ref,
     bin_labels_ref,
@@ -853,7 +820,7 @@ def test_segmentby(
         n_null_bins,
         snap_labels,
         n_max_null_snaps,
-    ) = segmentby(data, bin_by, bin_on, ordered_on, snap_by, buffer)
+    ) = segmentby(data, bin_by, bin_on, ordered_on, snap_by)
     assert nall(next_chunk_starts_ref == next_chunk_starts)
     assert nall(bin_indices_ref == bin_indices)
     assert bin_labels_ref.equals(bin_labels)
@@ -876,7 +843,7 @@ def test_segmentby_with_outer_setup():
     #      8:10     s4-8:12    b3-8:15
     #      8:13     s5-8:14    b3
     bin_by = Grouper(key="dti", freq="5T", label="right", closed="left")
-    snap_by = Grouper(key="dti", freq="2T")
+    snap_by = Grouper(key="dti", freq="2T", label="right")
     bin_by = setup_segmentby(bin_by=bin_by, snap_by=snap_by)
     dti = date_range("2020/01/01 08:04", periods=4, freq="3T")
     data = pDataFrame({"dti": dti, "ordered_on": range(len(dti))})
