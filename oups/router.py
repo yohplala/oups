@@ -4,10 +4,10 @@ Created on Wed Dec 26 22:30:00 2021.
 
 @author: yoh
 """
-import json
 from functools import cached_property
 from os import scandir
 
+from cloudpickle import loads
 from fastparquet import ParquetFile
 from vaex import open_many
 
@@ -96,6 +96,6 @@ class ParquetHandle:
         """Return specific oups metadata."""
         md = self.pf.key_value_metadata
         if OUPS_METADATA_KEY in md:
-            return json.loads(md[OUPS_METADATA_KEY])
+            return loads(md[OUPS_METADATA_KEY])
         else:
             return None

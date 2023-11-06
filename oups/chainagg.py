@@ -6,6 +6,7 @@ Created on Wed Mar  9 21:30:00 2022.
 """
 from copy import copy
 from dataclasses import dataclass
+from io import StringIO
 from multiprocessing import cpu_count
 from os import path as os_path
 from typing import Callable, Dict, Generator, List, Tuple, Union
@@ -84,10 +85,10 @@ def _is_chainagg_result(handle: ParquetHandle) -> bool:
     # 'in' condition is checking if the set of characters defined by
     # 'MD_KEY_CHAINAGG' is in a string.
     pf = handle.pf
-    return (
-        OUPS_METADATA_KEY in pf.key_value_metadata
-        and MD_KEY_CHAINAGG in pf.key_value_metadata[OUPS_METADATA_KEY]
-    )
+    if OUPS_METADATA_KEY in pf.key_value_metadata:
+        return MD_KEY_CHAINAGG in handle._oups_metadata
+    else:
+        return None
 
 
 def _get_chainagg_md(handle: ParquetHandle) -> tuple:
@@ -117,14 +118,18 @@ def _get_chainagg_md(handle: ParquetHandle) -> tuple:
     chainagg_md = handle._oups_metadata[MD_KEY_CHAINAGG]
     # De-serialize 'last_seed_index'.
     last_seed_index = chainagg_md[MD_KEY_LAST_SEED_INDEX]
-    last_seed_index = read_json(last_seed_index, **PANDAS_DESERIALIZE).iloc[0, 0]
+    last_seed_index = read_json(StringIO(last_seed_index), **PANDAS_DESERIALIZE).iloc[0, 0]
     # 'last_agg_row' for stitching with new aggregation results.
-    last_agg_row = read_json(chainagg_md[MD_KEY_LAST_AGGREGATION_ROW], **PANDAS_DESERIALIZE)
+    last_agg_row = read_json(
+        StringIO(chainagg_md[MD_KEY_LAST_AGGREGATION_ROW]), **PANDAS_DESERIALIZE
+    )
     # Metadata related to binning process from past binnings on prior data.
     # It is used in case 'by' is a callable.
     if chainagg_md[MD_KEY_BINNING_BUFFER]:
         binning_buffer = (
-            read_json(chainagg_md[MD_KEY_BINNING_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+            read_json(StringIO(chainagg_md[MD_KEY_BINNING_BUFFER]), **PANDAS_DESERIALIZE)
+            .iloc[0]
+            .to_dict()
         )
     else:
         binning_buffer = {}
@@ -132,7 +137,9 @@ def _get_chainagg_md(handle: ParquetHandle) -> tuple:
     # used by 'post'.
     if chainagg_md[MD_KEY_POST_BUFFER]:
         post_buffer = (
-            read_json(chainagg_md[MD_KEY_POST_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+            read_json(StringIO(chainagg_md[MD_KEY_POST_BUFFER]), **PANDAS_DESERIALIZE)
+            .iloc[0]
+            .to_dict()
         )
     else:
         post_buffer = {}

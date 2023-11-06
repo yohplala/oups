@@ -115,6 +115,7 @@ def tcut(data: Series, grouper: Grouper):
         last=data.iloc[-1],
         freq=grouper.freq,
         closed=grouper.closed,
+        unit=data.iloc[0].unit,
         origin=grouper.origin,
         offset=grouper.offset,
     )

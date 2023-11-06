@@ -15,10 +15,10 @@ from numpy import zeros
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
-from pandas import Grouper
 from pandas import Int64Dtype
 from pandas import NaT as pNaT
 from pandas import Series
+from pandas.core.resample import TimeGrouper
 
 from oups.jcumsegagg import AGG_FUNCS
 from oups.jcumsegagg import jcsagg
@@ -163,18 +163,18 @@ def setup_chunk_res(agg: Dict[dtype, tuple]) -> pDataFrame:
 def cumsegagg(
     data: pDataFrame,
     agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, Tuple[List[str], List[str], Tuple, int]]],
-    bin_by: Union[Grouper, Callable, dict],
+    bin_by: Union[TimeGrouper, Callable, dict],
     bin_on: Optional[str] = None,
     buffer: Optional[dict] = None,
     ordered_on: Optional[str] = None,
-    snap_by: Optional[Union[Grouper, Series, DatetimeIndex]] = None,
+    snap_by: Optional[Union[TimeGrouper, Series, DatetimeIndex]] = None,
     error_on_0: Optional[bool] = True,
 ) -> Union[pDataFrame, Tuple[pDataFrame, pDataFrame]]:
     """Cumulative segmented aggregations, with optional snapshotting.
 
     In this function, "snapshotting" is understood as the action of making
     isolated observations. When using snapshots, values derived from
-    ``snap_by`` Grouper (or contained in ``snap_by`` Series) are considered the
+    ``snap_by`` TimeGrouper (or contained in ``snap_by`` Series) are considered the
     "points of isolated observation".
     At a given point, an observation of the "on-going" segment (aka bin) is
     made. Because segments are contiguous, any row of the dataset falls in a
@@ -186,7 +186,7 @@ def cumsegagg(
         A pandas DataFrame containing the columns over which binning (relying
         on ``bin_on`` column), performing aggregations and optionally
         snapshotting (relying on column pointed by 'ordered_on' and optionally
-        ``snap_by.key`` if is a Grouper).
+        ``snap_by.key`` if is a TimeGrouper).
         If using snapshots ('snap_by' parameter), then the column pointed by
         ``snap_by.key`` has to be ordered.
     agg : dict
@@ -202,8 +202,8 @@ def cumsegagg(
 
           - the 2nd form is that returned by the function ``setup_cumsegagg``.
 
-    bin_by : Union[Grouper, Callable, dict]
-        Callable or pandas Grouper to perform binning.
+    bin_by : Union[TimeGrouper, Callable, dict]
+        Callable or pandas TimeGrouper to perform binning.
         If a Callable, please see signature requirements in 'segmentby'
         docstring.
         If a dict, it contains the full setup for conducting the segmentation
@@ -211,7 +211,7 @@ def cumsegagg(
     bin_on : Optional[str], default None
         Name of the column in `data` over which performing the binning
         operation.
-        If 'bin_by' is a pandas `Grouper`, its `key` parameter is used instead,
+        If 'bin_by' is a pandas `TimeGrouper`, its `key` parameter is used instead,
         and 'bin_on' is ignored.
         If not provided, and 'ordered_on' parameter is, then 'ordered_on' value
         is also used to specify the column name onto which performing binning.
@@ -222,11 +222,11 @@ def cumsegagg(
         Name of an existing ordered column in 'data'. When setting it, it is
         then forwarded to 'bin_by' Callable.
         This parameter is compulsory if 'snap_by' is set. Values derived from
-        'snap_by' (either a Grouper or a Series) are compared to ``bin_ends``,
+        'snap_by' (either a TimeGrouper or a Series) are compared to ``bin_ends``,
         themselves derived from ``data[ordered_on]``.
-    snap_by : Optional[Union[Grouper, Series, DatetimeIndex]], default None
+    snap_by : Optional[Union[TimeGrouper, Series, DatetimeIndex]], default None
         Values positioning the points of observation, either derived from a
-        pandas Grouper, or contained in a pandas Series.
+        pandas TimeGrouper, or contained in a pandas Series.
         In case 'snap_by' is a Series, values  serve as locations for points of
         observation.
         Additionally, ``closed`` value defined by 'bin_on' specifies if points
@@ -336,8 +336,8 @@ def cumsegagg(
            Series). Because it is applied to 'bin_by', then 'chunk_res' will
            contain aggregation results over the last values in data, it is not
            lost.
-           In the existing 'snap_by' (either by Grouper or by Series),
-             - either if a Grouper, then last snapshot ends after end of data
+           In the existing 'snap_by' (either by TimeGrouper or by Series),
+             - either if a TimeGrouper, then last snapshot ends after end of data
              - or if a Series, at restart, if 2nd snapshot ends before last
                value in data at previous iteration, then an exception is
                raised.

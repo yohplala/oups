@@ -22,12 +22,12 @@ from numpy import ndenumerate
 from numpy import nonzero
 from numpy import zeros
 from pandas import DataFrame as pDataFrame
-from pandas import Grouper
 from pandas import IntervalIndex
 from pandas import Series
 from pandas import Timedelta
 from pandas import concat as pconcat
 from pandas import date_range
+from pandas.core.resample import TimeGrouper
 from pandas.core.resample import _get_timestamp_range_edges as gtre
 
 
@@ -136,7 +136,7 @@ def _next_chunk_starts(
 
 def by_scale(
     on: Series,
-    by: Union[Grouper, Series, Tuple[Series]],
+    by: Union[TimeGrouper, Series, Tuple[Series]],
     closed: Optional[str] = None,
     buffer: Optional[dict] = None,
 ) -> Tuple[ndarray, Series, int, str, Series, bool]:
@@ -148,7 +148,7 @@ def by_scale(
         Ordered date time index over which performing the binning as defined
         per 'by'.
     by : Grouper or Series or tuple of 2 Series
-        Setup to define binning as a pandas Grouper, or values contained in a
+        Setup to define binning as a pandas TimeGrouper, or values contained in a
         Series.
         If a Series, values are used both as ends and labels of chunks.
         If a tuple of 2 Series, values in first Series are labels of chunks,
@@ -156,7 +156,7 @@ def by_scale(
     closed : str, default None
         Optional string, specifying if intervals defined by 'by' are left or
         right closed. This parameter overrides 'by.closed' if 'by' is a pandas
-        Grouper.
+        TimeGrouper.
     buffer : dict
         Dict to keep parameters allowing chaining calls to 'by_scale', with
         ``restart_key``, keeping track of the end of the on-but-last chunk from
@@ -170,24 +170,24 @@ def by_scale(
             the row indices of the next-bin starts, for each bin. Successive
             identical indices implies empty bins, except the first.
           - ``chunk_labels``, a pandas Series specifying for each bin its
-            label. Labels are defined as per 'on' pandas Grouper.
+            label. Labels are defined as per 'on' pandas TimeGrouper.
           - ``n_null_chunks``, an int, the number of null chunks identified in
             'on'.
 
         The 3 following items are used only if both bins and snapshots are
         generated in 'cumsegagg'.
           - ``chunk_closed``, a str, indicating if bins are left or right
-            closed, as per 'by' pandas Grouper or 'closed' parameter.
+            closed, as per 'by' pandas TimeGrouper or 'closed' parameter.
           - ``chunk_ends``, a pandas Series containing bin ends, as per 'by'
-            pandas Grouper.
+            pandas TimeGrouper.
           - ``unknown_last_chunk_end``, a boolean, always `False`, specifying
             that the last chunk end is known. This is because chunk ends are
-            always fully specified as per 'by' pandas Grouper or Series.
+            always fully specified as per 'by' pandas TimeGrouper or Series.
 
     Notes
     -----
     If running ``by_scale()`` with a buffer, setting of value for key
-    `"restart_key`" depends if last value derived from 'by' (either a Grouper
+    `"restart_key`" depends if last value derived from 'by' (either a TimeGrouper
     or a Series) lies before the last value in 'on'.
       - If it lies before, then this last value derived from 'by' is the
         restart key.
@@ -195,17 +195,19 @@ def by_scale(
         restart key.
 
     """
-    if isinstance(by, Grouper):
+    if isinstance(by, TimeGrouper):
         # If 'buffer' is not empty, it necessarily contains 'KEY_RESTART_KEY'.
         first = buffer[KEY_RESTART_KEY] if buffer else on.iloc[0]
         # In case 'by' is for snapshotting, and 'closed' is not set, take care
         # to use 'closed' provided.
-        closed = by.closed if closed is None else closed
+        if closed is None:
+            closed = by.closed
         start, end = gtre(
             first=first,
             last=on.iloc[-1],
             freq=by.freq,
             closed=closed,
+            unit=first.unit,
             origin=by.origin,
             offset=by.offset,
         )
@@ -323,7 +325,7 @@ def by_scale(
         chunk_labels = chunk_labels[:n_chunks]
         chunk_ends = chunk_ends[:n_chunks]
         if buffer is not None:
-            if closed == LEFT and isinstance(by, Grouper):
+            if closed == LEFT and isinstance(by, TimeGrouper):
                 # Use of intricate way to get last or last-but-one element in
                 # 'chunk_ends', compatible with both Series and DatetimeIndex.
                 if n_chunks > 1:
@@ -337,14 +339,14 @@ def by_scale(
                     buffer[KEY_RESTART_KEY] = on.iloc[0]
             else:
                 # Take last end
-                # - either if 'by' is a Grouper, as it is enough for generating
+                # - either if 'by' is a TimeGrouper, as it is enough for generating
                 #   edges at next iteration.
                 # - or if 'by' is a Series, because Series only needs to
                 #   restart from this point then.
                 buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
     elif buffer is not None:
         # Data is not traversed.
-        # This can only happen if 'by' is not a Grouper.
+        # This can only happen if 'by' is not a TimeGrouper.
         # Keep last chunk end.
         buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
         buffer[KEY_LAST_ON_VALUE] = on.iloc[-1]
@@ -563,25 +565,25 @@ def mergesort(
 
 
 def setup_segmentby(
-    bin_by: Union[Grouper, Callable],
+    bin_by: Union[TimeGrouper, Callable],
     bin_on: Optional[str] = None,
     ordered_on: Optional[str] = None,
-    snap_by: Optional[Union[Grouper, Series]] = None,
+    snap_by: Optional[Union[TimeGrouper, Series]] = None,
 ) -> Dict[str, Union[Callable, str]]:
     """Check and setup parameters to operate data segmentation.
 
     Parameters
     ----------
-    bin_by : Union[Grouper, Callable]
-       A pandas Grouper or a Callable to perform segmentation.
+    bin_by : Union[TimeGrouper, Callable]
+       A pandas TimeGrouper or a Callable to perform segmentation.
     bin_on : Optional[str]
        Name of the column onto which performing the segmentation.
     ordered_on : Optional[str]
        Name of the column containing ordered data and to use when snapshotting.
        With this column, snapshots (points of observation) can be positioned
        with respect to bin ends.
-    snap_by : Optional[Union[Grouper, IntervalIndex]]
-       A pandas Grouper or a pandas Series defining the snapshots (points of
+    snap_by : Optional[Union[TimeGrouper, IntervalIndex]]
+       A pandas TimeGrouper or a pandas Series defining the snapshots (points of
        observation).
 
     Returns
@@ -595,8 +597,8 @@ def setup_segmentby(
 
     """
     bin_by_closed = None
-    if isinstance(bin_by, Grouper):
-        # 'bin_by' is a Grouper.
+    if isinstance(bin_by, TimeGrouper):
+        # 'bin_by' is a TimeGrouper.
         bin_by_closed = bin_by.closed
         if bin_by.key:
             if bin_on:
@@ -610,12 +612,12 @@ def setup_segmentby(
             raise ValueError("not possible to set both 'bin_by.key' and 'bin_on' to `None`.")
         if ordered_on and ordered_on != bin_on:
             raise ValueError(
-                "not possible to set 'bin_on' and 'ordered_on' to different values when 'bin_by' is a Grouper."
+                "not possible to set 'bin_on' and 'ordered_on' to different values when 'bin_by' is a TimeGrouper."
             )
         elif not ordered_on:
             # Case 'ordered_on' has not been provided but 'bin_on' has been.
             # Then set 'ordered_on' to 'bin_on'. this is so because 'bin_by' is
-            # a Grouper.
+            # a TimeGrouper.
             ordered_on = bin_on
         bin_by = partial(by_scale, by=bin_by)
     else:
@@ -623,7 +625,7 @@ def setup_segmentby(
         if bin_on is None and ordered_on is None:
             raise ValueError("not possible to set both 'bin_on' and 'ordered_on' to `None`.")
     if snap_by is not None:
-        if isinstance(snap_by, Grouper):
+        if isinstance(snap_by, TimeGrouper):
             if snap_by.key:
                 if ordered_on is None:
                     ordered_on = snap_by.key
@@ -636,7 +638,7 @@ def setup_segmentby(
                     "not possible to set 'bin_by.closed' and 'snap_by.closed' to different values."
                 )
         elif not ordered_on:
-            # Case 'snap_by' is not a Grouper.
+            # Case 'snap_by' is not a TimeGrouper.
             raise ValueError(
                 "not possible to leave 'ordered_on' to `None` in case of snapshotting."
             )
@@ -648,7 +650,7 @@ def setup_segmentby(
         if bin_on
         else ordered_on,
         ORDERED_ON: ordered_on,
-        SNAP_BY: snap_by if isinstance(snap_by, Grouper) else None,
+        SNAP_BY: snap_by if isinstance(snap_by, TimeGrouper) else None,
     }
 
 
@@ -686,10 +688,10 @@ def setup_mainbuffer(buffer: dict, with_snapshot: Optional[bool] = False) -> Tup
 
 def segmentby(
     data: pDataFrame,
-    bin_by: Union[Grouper, Callable, dict],
+    bin_by: Union[TimeGrouper, Callable, dict],
     bin_on: Optional[str] = None,
     ordered_on: Optional[str] = None,
-    snap_by: Optional[Union[Grouper, IntervalIndex]] = None,
+    snap_by: Optional[Union[TimeGrouper, IntervalIndex]] = None,
     buffer: Optional[dict] = None,
 ) -> Tuple[ndarray, ndarray, Series, int, Series, int]:
     """Identify starts of segments in data, either bins or optionally snapshots.
@@ -706,8 +708,8 @@ def segmentby(
         If any of ``ordered_on`` or ``snap_by.key`` parameters are used, the
         column they point to (the same if both parameters are provided) has to
         be ordered.
-    bin_by : Union[Grouper, Callable, dict]
-        Callable or pandas Grouper to perform binning.
+    bin_by : Union[TimeGrouper, Callable, dict]
+        Callable or pandas TimeGrouper to perform binning.
         If a Callable, it is called with following parameters:
         ``bin_by(on, buffer)``
         where:
@@ -730,9 +732,9 @@ def segmentby(
           - 'on_cols', a str or list of str, to be forwarded to 'bin_by'
             Callable.
           - 'bin_by', a Callable, either the one initially provided, or one
-            dereived from a pandas Grouper.
+            derived from a pandas TimeGrouper.
           - 'ordered_on', a str, its definitive value.
-          - 'snap_by', if a Grouper.
+          - 'snap_by', if a TimeGrouper.
 
         It has then to return a tuple made of 6 items. There are 3 items used
         whatever if snapshotting is used or not.
@@ -774,23 +776,23 @@ def segmentby(
     bin_on : Optional[str], default None
         Name of the column in `data` over which performing the binning
         operation.
-        If 'bin_by' is a pandas `Grouper`, its `key` parameter is used instead.
+        If 'bin_by' is a pandas `TimeGrouper`, its `key` parameter is used instead.
         If 'bin_on' is set, its consistence with ``bin_by.key`` parameter is
         then checked.
     ordered_on : Optional[str], default None
         Name of an existing ordered column in 'data'. When setting it, it is
         then forwarded to 'bin_by' Callable.
         This parameter is compulsory if 'snap_by' is set. Values derived from
-        'snap_by' (either a Grouper or a Series) are compared to ``bin_ends``,
+        'snap_by' (either a TimeGrouper or a Series) are compared to ``bin_ends``,
         themselves derived from ``data[ordered_on]``.
-    snap_by : Optional[Union[Grouper, Series]], default None
+    snap_by : Optional[Union[TimeGrouper, Series]], default None
         Values positioning the points of observation, either derived from a
-        pandas Grouper, or contained in a pandas Series.
+        pandas TimeGrouper, or contained in a pandas Series.
     buffer : Optional[dict], default None
         Dict of 2 dict.
           - first dict, with key `"bin"` embed values from previous binning
             process, set by 'bin_by' when it is a Callable, or by the internal
-            function ``by_scale`` if 'bin_by' is a Grouper. These values are
+            function ``by_scale`` if 'bin_by' is a TimeGrouper. These values are
             required when restarting the binning process with new seed data.
           - second dict, with key `"snap"` embed values from previous
             snapshotting process, set by 'by_scale'. Similarly, these values
@@ -856,7 +858,7 @@ def segmentby(
     if not isinstance(bin_by, dict):
         bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
     if bin_by[SNAP_BY] is not None:
-        # 'bin_by[SNAP_BY]' is not none if 'snap_by' is a Grouper.
+        # 'bin_by[SNAP_BY]' is not none if 'snap_by' is a TimeGrouper.
         # Otherwise, it can be a DatetimeIndex or a Series.
         snap_by = bin_by[SNAP_BY]
     buffer_bin, buffer_snap = setup_mainbuffer(buffer, snap_by is not None)
@@ -938,7 +940,7 @@ def segmentby(
         # unknown yet.
         # If a snapshot (observation point) is also set at end of data
         # (a snapshot position is always known, because it is either
-        # derived from a pandas Grouper, or an iterable of ordered values),
+        # derived from a pandas TimeGrouper, or an iterable of ordered values),
         # then 'merge_sorted()' cannot sort them one to the other (end of last
         # bin with last snapshot).
         # In this case, we force the bin end to be after the last snapshot.

@@ -4,12 +4,13 @@ Created on Wed Dec  6 22:30:00 2021.
 
 @author: yoh
 """
-import json
 from ast import literal_eval
 from os import listdir as os_listdir
 from os import path as os_path
 from typing import Dict, Hashable, List, Tuple, Union
 
+from cloudpickle import dumps
+from cloudpickle import loads
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from fastparquet.api import filter_row_groups
@@ -243,7 +244,7 @@ def _update_metadata(
     if existing_metadata and OUPS_METADATA_KEY in existing_metadata:
         # Case 'append' to existing metadata.
         # oups specific metadata is expected to be a dict itself.
-        consolidated_md = json.loads(existing_metadata[OUPS_METADATA_KEY])
+        consolidated_md = loads(existing_metadata[OUPS_METADATA_KEY])
         for key, value in spec_oups_md.items():
             if key in consolidated_md:
                 if value is None:
@@ -260,9 +261,9 @@ def _update_metadata(
         consolidated_md = spec_oups_md
 
     if new_metadata:
-        new_metadata[OUPS_METADATA_KEY] = json.dumps(consolidated_md)
+        new_metadata[OUPS_METADATA_KEY] = dumps(consolidated_md)
     else:
-        new_metadata = {OUPS_METADATA_KEY: json.dumps(consolidated_md)}
+        new_metadata = {OUPS_METADATA_KEY: dumps(consolidated_md)}
     if md_key:
         del OUPS_METADATA[md_key]
     else:
