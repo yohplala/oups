@@ -1,7 +1,7 @@
 repos:
   # Pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.3.0
+    rev: v4.5.0
     hooks:
       - id: forbid-new-submodules
       - id: fix-encoding-pragma
@@ -19,22 +19,22 @@ repos:
 
   # Codespell
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.1.0
+    rev: v2.2.6
     hooks:
       - id: codespell
         description: Checks for common misspellings.
         types_or: [python, rst, markdown]
 
-  # Pycln
-  - repo: https://github.com/hadialqattan/pycln
-    rev: v1.1.0
+  - repo: https://github.com/asottile/add-trailing-comma
+    rev: v3.1.0
     hooks:
-      - id: pycln
-        name: pycln (Python unused imports)
+      - id: add-trailing-comma
+        name: add-trailing-comma
+        types: [python]
 
   # Black
   - repo: https://github.com/psf/black
-    rev: 22.3.0
+    rev: 23.10.1
     hooks:
       - id: black
         args: [
@@ -102,6 +102,27 @@ repos:
         files: ^oups/
         additional_dependencies:
           - toml
+
+  - repo: https://github.com/PyCQA/docformatter
+    rev: v1.7.5
+    hooks:
+      - id: docformatter
+        additional_dependencies: [tomli]
+        args: [
+          "--black",
+          "--make-summary-multi-line",
+          "--pre-summary-newline",
+          "--blank",
+          "--recursive",
+          "--in-place",
+        ]
+
+  - repo: https://github.com/asottile/add-trailing-comma
+    rev: v3.1.0
+    hooks:
+      - id: add-trailing-comma
+        name: add-trailing-comma
+        types: [python]
 
 # flake8 ignore justifications
 # ----------------------------
