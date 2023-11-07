@@ -3,6 +3,7 @@
 Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
+
 """
 from os import path as os_path
 
@@ -92,7 +93,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
             date + "13:40",
             date + "14:00",
             date + "14:20",
-        ]
+        ],
     )
     ordered_on = "ts"
     seed_df = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
@@ -137,7 +138,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
             date + "12:00",
             date + "13:00",
             date + "14:00",
-        ]
+        ],
     )
     ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     rec_res = store[key].pdf
@@ -201,7 +202,7 @@ def test_parquet_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
             date + "13:00",
             date + "14:00",
             date + "15:00",
-        ]
+        ],
     )
     ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     rec_res = store[key].pdf
@@ -307,7 +308,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
             date + "13:40",
             date + "14:00",
             date + "14:20",
-        ]
+        ],
     )
     ordered_on = "ts"
     seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
@@ -348,7 +349,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
             date + "12:00",
             date + "13:00",
             date + "14:00",
-        ]
+        ],
     )
     agg_sum_ref = [3, 7, 18, 17, 33, 42, 16]
     ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
@@ -408,7 +409,7 @@ def test_vaex_seed_time_grouper_sum_agg(tmp_path, reduction1, reduction2):
             date + "13:00",
             date + "14:00",
             date + "15:00",
-        ]
+        ],
     )
     ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     rec_res = store[key].pdf
@@ -440,7 +441,7 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     ordered_on = "ts"
     seed_df = pDataFrame(
-        {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)}
+        {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)},
     ).sort_values(ordered_on)
     seed_path = os_path.join(tmp_path, "seed")
     fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
@@ -478,7 +479,11 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     seed_df2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100}).sort_values(ordered_on)
     fp_write(
-        seed_path, seed_df2, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+        seed_path,
+        seed_df2,
+        row_group_offsets=max_row_group_size,
+        file_scheme="hive",
+        append=True,
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
@@ -502,7 +507,11 @@ def test_parquet_seed_time_grouper_first_last_min_max_agg(tmp_path, reduction1, 
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     seed_df3 = pDataFrame({ordered_on: ts, "val": rand_ints + 400}).sort_values(ordered_on)
     fp_write(
-        seed_path, seed_df3, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+        seed_path,
+        seed_df3,
+        row_group_offsets=max_row_group_size,
+        file_scheme="hive",
+        append=True,
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
@@ -679,7 +688,7 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
             date + "13:40",
             date + "14:00",
             date + "14:20",
-        ]
+        ],
     )
     ordered_on = "ts"
     weights = [1, 2, 1, 0, 2, 1, 2, 1, 0, 3, 2, 1, 3, 0, 1, 2, 1]
@@ -705,7 +714,9 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
 
     # Setup 'post'.
     def post(agg_res: pDataFrame, isfbn: bool, post_buffer: dict):
-        """Compute duration, weighted mean and keep track of data to buffer."""
+        """
+        Compute duration, weighted mean and keep track of data to buffer.
+        """
         # Compute 'duration'.
         agg_res["last"] = (agg_res["last"] - agg_res["first"]).view("int64")
         # Compute 'weighted_mean'.
@@ -784,12 +795,16 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path, reduction1, red
     rand_ints = rr.integers(600, size=N)
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     seed_df2 = pDataFrame(
-        {ordered_on: ts, "val": rand_ints + 100, "weight": rand_ints}
+        {ordered_on: ts, "val": rand_ints + 100, "weight": rand_ints},
     ).sort_values(ordered_on)
     # Setup weighted mean: need 'weight' x 'val'.
     seed_df2["weighted_val"] = seed_df2["weight"] * seed_df2["val"]
     fp_write(
-        seed_path, seed_df2, row_group_offsets=row_group_offsets, file_scheme="hive", append=True
+        seed_path,
+        seed_df2,
+        row_group_offsets=row_group_offsets,
+        file_scheme="hive",
+        append=True,
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
@@ -834,7 +849,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
             date + "11:00",
             date + "11:30",
             date + "12:00",
-        ]
+        ],
     )
     ordered_on = "ts"
     bin_on = "ts_bin"
@@ -888,7 +903,7 @@ def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path, reduction1, reducti
     # 1st append of new data.
     ts2 = DatetimeIndex([date + "12:30", date + "13:00", date + "13:30", date + "14:00"])
     seed_pdf2 = pDataFrame(
-        {ordered_on: ts2, bin_on: ts2, "val": range(len(ts) + 1, len(ts) + len(ts2) + 1)}
+        {ordered_on: ts2, bin_on: ts2, "val": range(len(ts) + 1, len(ts) + len(ts2) + 1)},
     )
     fp_write(seed_path, seed_pdf2, file_scheme="hive", append=True)
     seed = ParquetFile(seed_path)
@@ -970,7 +985,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
             date + "14:00",
             date + "14:20",
             date + "14:20",
-        ]
+        ],
     )
     ordered_on = "ts"
     seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
@@ -984,7 +999,12 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
 
     # Setup binning.
     def by_4rows(data: Series, buffer: dict):
-        """Bin by group of 4 rows. Label for bins are values from `ordered_on`."""
+        """
+        Bin by group of 4 rows.
+
+        Label for bins are values from `ordered_on`.
+
+        """
         # A pandas Series is returned, with name being that of the 'ordered_on'
         # column. Because of pandas magic, this column will then be in aggregation
         # results, and oups will be able to use it for writing data.
@@ -1087,7 +1107,7 @@ def test_vaex_seed_by_callable_wo_bin_on(tmp_path, reduction1, reduction2):
             date + "16:00",
             date + "16:40",
             date + "16:40",
-        ]
+        ],
     )
     seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
     # Forcing dtype of 'seed_pdf' to float.
@@ -1181,7 +1201,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
             date + "14:00",
             date + "14:20",
             date + "14:20",
-        ]
+        ],
     )
     ordered_on = "ts"
     bin_on = "val"
@@ -1199,7 +1219,9 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
 
     # Setup binning.
     def by_1val(data: pDataFrame, buffer: dict):
-        """Start a new bin each time a 1 is spot."""
+        """
+        Start a new bin each time a 1 is spot.
+        """
         # A pandas Series is returned.
         # Its name does not matter as 'bin_on' in chainagg is a tuple which
         # 2nd item will define the column name for group keys.
@@ -1264,7 +1286,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path, reduction1, reduction2):
             date + "16:00",
             date + "16:40",
             date + "16:40",
-        ]
+        ],
     )
     val = np.arange(1, len(ts2) + 1)
     val[3] = 1
@@ -1545,7 +1567,13 @@ def test_parquet_seed_single_row(tmp_path, reduction):
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
     chainagg(
-        seed=seed, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by, reduction=reduction
+        seed=seed,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        keys=key,
+        by=by,
+        reduction=reduction,
     )
     # Test results.
     assert key not in store
@@ -1600,7 +1628,7 @@ def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
             date + "14:00",
             date + "14:20",
             date + "14:20",
-        ]
+        ],
     )
     ordered_on = "ts"
     val = np.arange(1, len(ts) + 1)
@@ -1617,7 +1645,13 @@ def test_parquet_seed_single_row_within_seed(tmp_path, reduction):
     agg = {"sum": ("val", "sum")}
     # Streamed aggregation: no aggregation, but no error message.
     chainagg(
-        seed=seed, ordered_on=ordered_on, agg=agg, store=store, keys=key, by=by, reduction=reduction
+        seed=seed,
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        keys=key,
+        by=by,
+        reduction=reduction,
     )
     # Test results.
     ref_res = seed_pdf.iloc[:-2].groupby(by).agg(**agg).reset_index()
@@ -1648,7 +1682,9 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path, reduction):
     agg = {"sum": ("val", "sum")}
 
     def post(agg_res: pDataFrame, isfbn: bool, post_buffer: dict):
-        """Remove 'bin_on' column."""
+        """
+        Remove 'bin_on' column.
+        """
         # Rename column 'bin_on' into 'ordered_on' to have an 'ordered_on'
         # column, while 'removing' 'bin_on' one.
         agg_res.rename(

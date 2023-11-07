@@ -102,6 +102,9 @@ repos:
         files: ^oups/
         additional_dependencies:
           - toml
+        args: [
+          "--ignore=D200,D203,D212,D417",
+          ]
 
   - repo: https://github.com/PyCQA/docformatter
     rev: v1.7.5

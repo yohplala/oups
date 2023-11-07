@@ -3,6 +3,7 @@
 Created on Sat Dec 18 15:00:00 2021.
 
 @author: yoh
+
 """
 import zipfile
 from os import path as os_path
@@ -24,7 +25,7 @@ df_ref = pDataFrame(
     {
         "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
         "temperature": [8.4, 5.3, 4.9, 2.3],
-    }
+    },
 )
 
 

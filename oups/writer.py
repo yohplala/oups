@@ -3,6 +3,7 @@
 Created on Wed Dec  6 22:30:00 2021.
 
 @author: yoh
+
 """
 from ast import literal_eval
 from os import listdir as os_listdir
@@ -41,7 +42,8 @@ def iter_dataframe(
     sharp_on: str = None,
     duplicates_on: Union[str, List[str]] = None,
 ):
-    """Yield dataframe chunks.
+    """
+    Yield dataframe chunks.
 
     Parameters
     ----------
@@ -76,6 +78,7 @@ def iter_dataframe(
       required to set ``sharp_on`` when using ``duplicates_on``, so that
       duplicates all fall in a same row group. This implies that duplicates
       have to share the same value in ``sharp_on`` column.
+
     """
     # TODO: implement 'replicate_groups' (use of 'ordered_on' column).
     if max_row_group_size is None:
@@ -93,7 +96,7 @@ def iter_dataframe(
         if not sharp_on:
             raise ValueError(
                 "duplicates are looked for row group per group. For this reason, "
-                "it is compulsory to set 'sharp_on' while setting 'duplicates_on'."
+                "it is compulsory to set 'sharp_on' while setting 'duplicates_on'.",
             )
         elif isinstance(duplicates_on, list):
             if duplicates_on and sharp_on not in duplicates_on:
@@ -147,7 +150,8 @@ def iter_dataframe(
 
 
 def to_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
-    """Expand a pandas index into a multi-index.
+    """
+    Expand a pandas index into a multi-index.
 
     Parameters
     ----------
@@ -176,6 +180,7 @@ def to_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
     (resulting in fewer index levels), these column names are appended with
     empty strings '' as required to be of equal levels number than the longest
     column names.
+
     """
     idx_temp = []
     max_levels = 0
@@ -204,9 +209,12 @@ def to_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
 
 
 def _update_metadata(
-    new_metadata: Dict[str, str], existing_metadata: Dict[str, str] = None, md_key: Hashable = None
+    new_metadata: Dict[str, str],
+    existing_metadata: Dict[str, str] = None,
+    md_key: Hashable = None,
 ) -> Dict[str, str]:
-    """Update oups specific metadata and merge to user-defined metadata.
+    """
+    Update oups specific metadata and merge to user-defined metadata.
 
     Parameters
     ----------
@@ -285,7 +293,8 @@ def write(
     metadata: Dict[str, str] = None,
     md_key: Hashable = None,
 ):
-    """Write data to disk at location specified by path.
+    """
+    Write data to disk at location specified by path.
 
     Parameters
     ----------
@@ -387,6 +396,7 @@ def write(
       data and without need to drop duplicates, it is advised to keep
       ``ordered_on`` and ``duplicates_on`` parameters set to ``None`` as these
       parameters will trigger unnecessary evaluations.
+
     """
     if ordered_on is not None:
         if isinstance(ordered_on, tuple):
@@ -412,7 +422,7 @@ def write(
                 raise ValueError(
                     "duplicates are looked for over the overlap between new data and existing data. "
                     "This overlap being identified thanks to 'ordered_on', "
-                    "it is compulsory to set 'ordered_on' while setting 'duplicates_on'."
+                    "it is compulsory to set 'ordered_on' while setting 'duplicates_on'.",
                 )
             # Enforce 'ordered_on' in 'duplicates_on', as per logic of
             # duplicate identification restricted to the data overlap between new
@@ -439,7 +449,9 @@ def write(
                 start = data[ordered_on][:0].to_numpy()[0]
                 end = data[ordered_on][-1:].to_numpy()[0]
             rrgs_idx = filter_row_groups(
-                pf, [[(ordered_on, ">=", start), (ordered_on, "<=", end)]], as_idx=True
+                pf,
+                [[(ordered_on, ">=", start), (ordered_on, "<=", end)]],
+                as_idx=True,
             )
             if rrgs_idx:
                 if len(rrgs_idx) == 1:
@@ -522,7 +534,8 @@ def write(
                 # Sorting row groups based on 'max' in 'ordered_on'.
                 ordered_on_idx = pf.columns.index(ordered_on)
                 pf.fmd.row_groups = sorted(
-                    pf.fmd.row_groups, key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"]
+                    pf.fmd.row_groups,
+                    key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"],
                 )
             # Rename partition files, and write fmd.
             pf._sort_part_names(write_fmd=False)

@@ -3,6 +3,7 @@
 Created on Wed Dec  1 18:35:00 2021.
 
 @author: yoh
+
 """
 import re
 from dataclasses import dataclass
@@ -37,7 +38,8 @@ def _dataclass_instance_to_dict(obj: dataclass) -> dict:
 
 
 def _dataclass_instance_to_lists(obj: dataclass) -> Iterator[List[Any]]:
-    """Yield items as lists of fields values.
+    """
+    Yield items as lists of fields values.
 
     If a new dataclass instance is the last field, its fields values are
     yielded as next item, and so on...
@@ -51,6 +53,7 @@ def _dataclass_instance_to_lists(obj: dataclass) -> Iterator[List[Any]]:
     -------
     Iterator[List[Any]]
         Yields list of fields values.
+
     """
     fields = list(_dataclass_instance_to_dict(obj).values())
     if fields:
@@ -60,7 +63,8 @@ def _dataclass_instance_to_lists(obj: dataclass) -> Iterator[List[Any]]:
 
 
 def _validate_toplevel_instance(toplevel: dataclass):
-    """Validate a 'toplevel'-decorated data class instance.
+    """
+    Validate a 'toplevel'-decorated data class instance.
 
     Check field type is only among 'int', 'str' or another dataclass instance.
     Check that there is at most only one dataclass instance per nesting level,
@@ -70,6 +74,7 @@ def _validate_toplevel_instance(toplevel: dataclass):
     Parameters
     ----------
     toplevel : dataclass
+
     """
     forbidden_chars = (toplevel.fields_sep, *FORBIDDEN_CHARS)
     for fields_ in _dataclass_instance_to_lists(toplevel):
@@ -84,13 +89,13 @@ def _validate_toplevel_instance(toplevel: dataclass):
                     # 1st position.
                     raise TypeError(
                         "a dataclass instance cannot be the only \
-field of a level."
+field of a level.",
                     )
                 if counter + 1 != number_of_fields:
                     # A dataclass instance cannot be in last position.
                     raise TypeError(
                         "a dataclass instance is only possible in \
-last position."
+last position.",
                     )
             else:
                 # If not a dataclass instance.
@@ -98,7 +103,7 @@ last position."
                 if any((symb in field_as_str for symb in forbidden_chars)):
                     raise ValueError(
                         f"use of a forbidden character among \
-{forbidden_chars} is not possible in {field_as_str}."
+{forbidden_chars} is not possible in {field_as_str}.",
                     )
             if not ((type(field) in TYPE_ACCEPTED) or _is_dataclass_instance(field)):
                 raise TypeError(f"field type {type(field)} not possible.")
@@ -106,7 +111,8 @@ last position."
 
 
 def _dataclass_instance_to_str(toplevel: dataclass, as_path: bool = False) -> str:
-    """Return a dataclass instance as a string.
+    """
+    Return a dataclass instance as a string.
 
     The different levels in this string are either separated with 'fields_sep'
     or with DIR_SEP.
@@ -126,6 +132,7 @@ def _dataclass_instance_to_str(toplevel: dataclass, as_path: bool = False) -> st
             - At a same level, using 'fields_sep';
             - Between different levels, either 'fields_sep', either DIR_SEP,
               depending 'as_path'.
+
     """
     levels_sep = DIR_SEP if as_path else toplevel.fields_sep
     to_str = []
@@ -140,7 +147,8 @@ def _dataclass_instance_to_str(toplevel: dataclass, as_path: bool = False) -> st
 
 
 def _dataclass_fields_types_to_lists(cls: Type[dataclass]) -> List[List[Any]]:
-    """Type of fields in dataclass returned in lists.
+    """
+    Type of fields in dataclass returned in lists.
 
     Return the type of each field, one list per level, and all levels in a
     list.
@@ -154,6 +162,7 @@ def _dataclass_fields_types_to_lists(cls: Type[dataclass]) -> List[List[Any]]:
     -------
     List[List[Any]]
         List of fields types lists, one list per level.
+
     """
     types = [[field.type for field in fields(cls)]]
     while is_dataclass(last := types[-1][-1]):
@@ -162,7 +171,8 @@ def _dataclass_fields_types_to_lists(cls: Type[dataclass]) -> List[List[Any]]:
 
 
 def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dataclass, None]:
-    """Return a dataclass instance derived from input string.
+    """
+    Return a dataclass instance derived from input string.
 
     Level separator can either be DIR_SEP or 'cls.fields_sep'.
     If dataclass '__init__' fails, `None` is returned.
@@ -179,6 +189,7 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
     -------
     Union[dataclass, None]
         Dataclass instance derived from input string.
+
     """
     types = _dataclass_fields_types_to_lists(cls)
     # Split string depending 'fields_sep' and 'DIR_SEP', into different fields.
@@ -201,7 +212,8 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
             level = [
                 field_type(field_as_string)
                 for field_type, field_as_string in zip(
-                    level_types[:-1], strings_as_list[-level_length:]
+                    level_types[:-1],
+                    strings_as_list[-level_length:],
                 )
             ] + [level_types[-1](*level)]
         return cls(*level, check=False)
@@ -215,9 +227,11 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
 
 
 def _get_depth(obj: Union[dataclass, Type[dataclass]]) -> int:
-    """Return number of levels, including 'toplevel'.
+    """
+    Return number of levels, including 'toplevel'.
 
     To be decorated with '@property'.
+
     """
     depth = 1
     level = obj
@@ -227,21 +241,28 @@ def _get_depth(obj: Union[dataclass, Type[dataclass]]) -> int:
 
 
 class TopLevel(type):
-    """Metaclass defining class properties of '@toplevel'-decorated class."""
+    """
+    Metaclass defining class properties of '@toplevel'-decorated class.
+    """
 
     @property
     def fields_sep(cls) -> str:
-        """Return field separator."""
+        """
+        Return field separator.
+        """
         return cls._fields_sep
 
     @property
     def depth(cls) -> int:
-        """Return depth, i.e. number of levels."""
+        """
+        Return depth, i.e. number of levels.
+        """
         return cls._depth
 
 
 def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
-    """Turn decorated class into an indexing schema.
+    """
+    Turn decorated class into an indexing schema.
 
     Decorated class is equipped with methods and attributes to use with a
     ``ParquetSet`` instance.
@@ -278,6 +299,7 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
         object coming in last position;
       - Value of attribute can not incorporate forbidden characters like ``/``
         and ``self.fields_sep``.
+
     """
 
     def tweak(index_class):
@@ -332,23 +354,26 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
 
 
 def is_toplevel(toplevel) -> bool:
-    """Return `True` if `toplevel`-decorated class.
+    """
+    Return `True` if `toplevel`-decorated class.
 
     Returns 'True' if 'toplevel' (class or instance) has been decorated with
-    '@toplevel'. It checks presence 'fields_sep' attribute and 'from_path'
-    method.
+    '@toplevel'. It checks presence 'fields_sep' attribute and 'from_path' method.
+
     """
     return hasattr(toplevel, "fields_sep") and callable(getattr(toplevel, "from_path", None))
 
 
 def sublevel(index_class):
-    """Define a subdirectory level.
+    """
+    Define a subdirectory level.
 
     This decorator really is an alias of ``@dataclass`` decorator, with
     parameters set to:
 
         - ``order=True``,
         - ``frozen=True``
+
     """
     # Wrap with `@dataclass`.
     # TODO

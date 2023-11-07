@@ -3,6 +3,7 @@
 Created on Wed Dec  4 21:30:00 2021.
 
 @author: yoh
+
 """
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -40,9 +41,11 @@ KEY_LAST_CHUNK_RES = "last_chunk_res"
 
 
 def setup_cumsegagg(
-    agg: Dict[str, Tuple[str, str]], data_dtype: Dict[str, dtype]
+    agg: Dict[str, Tuple[str, str]],
+    data_dtype: Dict[str, dtype],
 ) -> Dict[dtype, Tuple[List[str], List[str], Tuple, int]]:
-    """Construct chaingrouby aggregation configuration.
+    """
+    Construct chaingrouby aggregation configuration.
 
     Parameters
     ----------
@@ -76,12 +79,13 @@ def setup_cumsegagg(
                                   in 'data', to which has to be applied the
                                   aggregation function.
                                 - a 2nd 1d numpy array with indices of columns
-                                  in 'res', to which are recoreded aggrgation
+                                  in 'res', to which are recoreded aggregation
                                   results
                    int64, 'n_cols'
                               Total number of columns in 'res' (summing for all
                               aggregation function).
            }``
+
     """
     cgb_agg_cfg = {}
     # Step 1.
@@ -145,7 +149,9 @@ def setup_cumsegagg(
 
 
 def setup_chunk_res(agg: Dict[dtype, tuple]) -> pDataFrame:
-    """Initialize one-row DataFrame for storing the first 'chunk_res'."""
+    """
+    Initialize one-row DataFrame for storing the first 'chunk_res'.
+    """
     chunk_res = {}
     for dtype_, (
         _,
@@ -155,7 +161,7 @@ def setup_chunk_res(agg: Dict[dtype, tuple]) -> pDataFrame:
     ) in agg.items():
         chunk_res_single_dtype = zeros(n_cols, dtype=dtype_)
         chunk_res.update(
-            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)}
+            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)},
         )
     return pDataFrame(chunk_res, copy=False)
 
@@ -170,7 +176,8 @@ def cumsegagg(
     snap_by: Optional[Union[TimeGrouper, Series, DatetimeIndex]] = None,
     error_on_0: Optional[bool] = True,
 ) -> Union[pDataFrame, Tuple[pDataFrame, pDataFrame]]:
-    """Cumulative segmented aggregations, with optional snapshotting.
+    """
+    Cumulative segmented aggregations, with optional snapshotting.
 
     In this function, "snapshotting" is understood as the action of making
     isolated observations. When using snapshots, values derived from
@@ -288,7 +295,7 @@ def cumsegagg(
     ``False`` when reaching the end of input data.
     This is a limitation. It should be ``False`` only to mark the actual end of
     the bins. As a result, this internal flag 'preserve_res' cannot be output
-    for re-use in a next restart step.
+    for reuse in a next restart step.
     An option to circumvent this is to use snapshots instead of bins as media
     to output aggregation results for last, in-progress bin.
     This option has not been implemented.
@@ -352,7 +359,7 @@ def cumsegagg(
 
       - **cumulative segmented aggregation ('cumsegagg()')**
         -1 'preserve_res' parameter is used to indicate if aggregation
-           calculations start from scratch (first iteration) or re-use past
+           calculations start from scratch (first iteration) or reuse past
            aggregation results (following iterations).
            Aggregation results from last, in-progress bin can then be
            forwarded.
@@ -433,18 +440,18 @@ def cumsegagg(
             chunk_res_prev.loc[:, cols_name_in_res].to_numpy(copy=False).reshape(n_cols)
         )
         chunk_res.update(
-            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)}
+            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)},
         )
         # Setup 'bin_res_single_dtype'.
         bin_res_single_dtype = zeros((n_bins, n_cols), dtype=dtype_)
         bin_res.update(
-            {name: bin_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)}
+            {name: bin_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)},
         )
         # Setup 'snap_res_single_dtype'.
         if snap_by is not None:
             snap_res_single_dtype = zeros((n_snaps, n_cols), dtype=dtype_)
             snap_res.update(
-                {name: snap_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)}
+                {name: snap_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)},
             )
         if dtype_ == DTYPE_DATETIME64:
             data_single_dtype = data_single_dtype.view(DTYPE_INT64)
@@ -486,7 +493,7 @@ def cumsegagg(
                 # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
                 # (it is a pandas dtype, not a numpy one)
                 bin_res[agg[DTYPE_INT64][1]] = bin_res[agg[DTYPE_INT64][1]].astype(
-                    DTYPE_NULLABLE_INT64
+                    DTYPE_NULLABLE_INT64,
                 )
             for dtype_, (
                 _,
@@ -510,7 +517,7 @@ def cumsegagg(
                     # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
                     # (it is a pandas dtype, not a numpy one)
                     snap_res[agg[DTYPE_INT64][1]] = snap_res[agg[DTYPE_INT64][1]].astype(
-                        DTYPE_NULLABLE_INT64
+                        DTYPE_NULLABLE_INT64,
                     )
                 for dtype_, (
                     _,
@@ -522,11 +529,11 @@ def cumsegagg(
     if error_on_0:
         if snap_by is not None and snap_res.eq(0).any().any():
             raise ValueError(
-                "at least one null value exists in 'snap_res' which is likely to hint a bug."
+                "at least one null value exists in 'snap_res' which is likely to hint a bug.",
             )
         if bin_res.eq(0).any().any():
             raise ValueError(
-                "at least one null value exists in 'bin_res' which is likely to hint a bug."
+                "at least one null value exists in 'bin_res' which is likely to hint a bug.",
             )
     if snap_by is not None:
         return bin_res, snap_res

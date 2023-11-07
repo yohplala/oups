@@ -3,6 +3,7 @@
 Created on Wed Dec  4 21:30:00 2021.
 
 @author: yoh
+
 """
 from functools import partial
 from math import ceil
@@ -63,7 +64,8 @@ def _next_chunk_starts(
     right_edges: ndarray,
     right: bool,
 ):
-    """Return row indices for starts of next chunks.
+    """
+    Return row indices for starts of next chunks.
 
     Parameters
     ----------
@@ -90,6 +92,7 @@ def _next_chunk_starts(
         null chunks identified.
     data_traversed : boolean
         Specifies if 'data' has been completely traversed or not.
+
     """
     # Output variables
     next_chunk_starts = zeros(len(right_edges), dtype=DTYPE_INT64)
@@ -140,7 +143,8 @@ def by_scale(
     closed: Optional[str] = None,
     buffer: Optional[dict] = None,
 ) -> Tuple[ndarray, Series, int, str, Series, bool]:
-    """Segment an ordered DatetimeIndex or Series.
+    """
+    Segment an ordered DatetimeIndex or Series.
 
     Parameters
     ----------
@@ -222,7 +226,7 @@ def by_scale(
             chunk_labels, chunk_ends = by
             if len(chunk_labels) != len(chunk_ends):
                 raise ValueError(
-                    "number of chunk labels has to be " "equal to number of chunk ends."
+                    "number of chunk labels has to be " "equal to number of chunk ends.",
                 )
         else:
             chunk_labels = chunk_ends = by
@@ -239,7 +243,7 @@ def by_scale(
                 if buffer[KEY_RESTART_KEY] != chunk_ends[0]:
                     raise ValueError(
                         f"'by' needs to contain value {buffer[KEY_RESTART_KEY]} "
-                        "to restart correctly."
+                        "to restart correctly.",
                     )
                 n_first_chunks_to_remove = n_chunk_ends_init - len(chunk_ends)
                 chunk_labels = chunk_labels[n_first_chunks_to_remove:]
@@ -272,7 +276,7 @@ def by_scale(
                 ):
                     raise ValueError(
                         "2nd chunk end in 'by' has to be larger than value "
-                        f"{buffer[KEY_LAST_ON_VALUE]} to restart correctly."
+                        f"{buffer[KEY_LAST_ON_VALUE]} to restart correctly.",
                     )
                 if (closed == RIGHT and chunk_ends[0] < last_on_value) or (
                     closed == LEFT and chunk_ends[0] <= last_on_value
@@ -299,7 +303,9 @@ def by_scale(
         )
     else:
         next_chunk_starts, n_null_chunks, data_traversed = _next_chunk_starts(
-            on.to_numpy(copy=False), chunk_ends.to_numpy(copy=False), closed == RIGHT
+            on.to_numpy(copy=False),
+            chunk_ends.to_numpy(copy=False),
+            closed == RIGHT,
         )
     n_chunks = len(next_chunk_starts)
     # Rationale for selecting the "restart key".
@@ -366,7 +372,8 @@ def by_x_rows(
     closed: Optional[str] = LEFT,
     buffer: Optional[dict] = None,
 ) -> Tuple[ndarray, Series, int, str, Series, bool]:
-    """Segment by group of x rows.
+    """
+    Segment by group of x rows.
 
     Dummy binning function for testing 'cumsegagg' with 'bin_by' set as a
     Callable.
@@ -443,7 +450,9 @@ def by_x_rows(
     # Define 'next_chunk_starts'.
     first_next_chunk_start = rows_in_continued_bin if rows_in_continued_bin else min(by, len_on)
     next_chunk_starts = arange(
-        start=first_next_chunk_start, stop=(n_bins - 1) * by + first_next_chunk_start + 1, step=by
+        start=first_next_chunk_start,
+        stop=(n_bins - 1) * by + first_next_chunk_start + 1,
+        step=by,
     )
     # Make a copy and arrange for deriving 'chunk_starts', required for
     # defining bin labels. 'bin_labels' are derived from last column (is then
@@ -487,7 +496,7 @@ def by_x_rows(
                 # If a new bin has been created right at start,
                 # insert an empty one with label of last bin at prev iteration.
                 bin_labels = pconcat(
-                    [Series([buffer[KEY_LAST_BIN_LABEL]]), bin_labels]
+                    [Series([buffer[KEY_LAST_BIN_LABEL]]), bin_labels],
                 ).reset_index(drop=True)
                 first_bin_end = buffer[KEY_LAST_BIN_END] if closed == RIGHT else on.iloc[0]
                 bin_ends = pconcat([Series([first_bin_end]), bin_ends]).reset_index(drop=True)
@@ -514,7 +523,8 @@ def mergesort(
     keys: Tuple[ndarray, ndarray],
     force_last_from_second: Optional[bool] = False,
 ) -> Tuple[ndarray, ndarray]:
-    """Mergesort labels from keys.
+    """
+    Mergesort labels from keys.
 
     Parameters
     ----------
@@ -541,6 +551,7 @@ def mergesort(
     If a value is found in both input arrays, then value of 2nd input array
     comes after value of 1st input array, as can be checked with insertion
     indices.
+
     """
     # TODO: transition this to numba.
     labels1, labels2 = labels
@@ -549,11 +560,11 @@ def mergesort(
     len_labels2 = len(labels2)
     if len(keys1) != len_labels1:
         raise ValueError(
-            "not possible to have arrays of different length for first labels and keys arrays."
+            "not possible to have arrays of different length for first labels and keys arrays.",
         )
     if len(keys2) != len_labels2:
         raise ValueError(
-            "not possible to have arrays of different length for second labels and keys arrays."
+            "not possible to have arrays of different length for second labels and keys arrays.",
         )
     if force_last_from_second:
         len_tot = len_labels1 + len_labels2
@@ -570,7 +581,8 @@ def setup_segmentby(
     ordered_on: Optional[str] = None,
     snap_by: Optional[Union[TimeGrouper, Series]] = None,
 ) -> Dict[str, Union[Callable, str]]:
-    """Check and setup parameters to operate data segmentation.
+    """
+    Check and setup parameters to operate data segmentation.
 
     Parameters
     ----------
@@ -604,7 +616,7 @@ def setup_segmentby(
             if bin_on:
                 if bin_by.key != bin_on:
                     raise ValueError(
-                        "not possible to set 'bin_by.key' and 'bin_on' to different values."
+                        "not possible to set 'bin_by.key' and 'bin_on' to different values.",
                     )
             else:
                 bin_on = bin_by.key
@@ -612,7 +624,7 @@ def setup_segmentby(
             raise ValueError("not possible to set both 'bin_by.key' and 'bin_on' to `None`.")
         if ordered_on and ordered_on != bin_on:
             raise ValueError(
-                "not possible to set 'bin_on' and 'ordered_on' to different values when 'bin_by' is a TimeGrouper."
+                "not possible to set 'bin_on' and 'ordered_on' to different values when 'bin_by' is a TimeGrouper.",
             )
         elif not ordered_on:
             # Case 'ordered_on' has not been provided but 'bin_on' has been.
@@ -631,16 +643,16 @@ def setup_segmentby(
                     ordered_on = snap_by.key
                 elif snap_by.key != ordered_on:
                     raise ValueError(
-                        "not possible to set 'ordered_on' and 'snap_by.key' to different values."
+                        "not possible to set 'ordered_on' and 'snap_by.key' to different values.",
                     )
             if bin_by_closed and snap_by.closed != bin_by_closed:
                 raise ValueError(
-                    "not possible to set 'bin_by.closed' and 'snap_by.closed' to different values."
+                    "not possible to set 'bin_by.closed' and 'snap_by.closed' to different values.",
                 )
         elif not ordered_on:
             # Case 'snap_by' is not a TimeGrouper.
             raise ValueError(
-                "not possible to leave 'ordered_on' to `None` in case of snapshotting."
+                "not possible to leave 'ordered_on' to `None` in case of snapshotting.",
             )
     return {
         BIN_BY: bin_by,
@@ -655,7 +667,8 @@ def setup_segmentby(
 
 
 def setup_mainbuffer(buffer: dict, with_snapshot: Optional[bool] = False) -> Tuple[dict, dict]:
-    """Return 'buffer_bin' and 'buffer_snap' from main buffer.
+    """
+    Return 'buffer_bin' and 'buffer_snap' from main buffer.
 
     Parameters
     ----------
@@ -671,6 +684,7 @@ def setup_mainbuffer(buffer: dict, with_snapshot: Optional[bool] = False) -> Tup
     Tuple[dict, dict]
         The first dict is the binning buffer.
         The second dict is the snapshotting buffer.
+
     """
     if buffer is not None:
         if with_snapshot:
@@ -694,7 +708,8 @@ def segmentby(
     snap_by: Optional[Union[TimeGrouper, IntervalIndex]] = None,
     buffer: Optional[dict] = None,
 ) -> Tuple[ndarray, ndarray, Series, int, Series, int]:
-    """Identify starts of segments in data, either bins or optionally snapshots.
+    """
+    Identify starts of segments in data, either bins or optionally snapshots.
 
     Parameters
     ----------
@@ -848,6 +863,7 @@ def segmentby(
     "on-going" bin is made. In case of snapshot(s) positioned exactly on
     segment(s) ends, at the same row index in data, the observation point will
     always come before the bin end.
+
     """
     # TODO : split 'by_scale' into 'by_pgrouper' and 'by_scale'.
     # TODO : make some tests validating use of 'by_scale' as 'bin_by' parameter.
@@ -877,7 +893,7 @@ def segmentby(
         ):
             raise ValueError(
                 f"column '{ordered_on}' is not ordered. It has to be for "
-                "'cumsegagg' to operate faultlessly."
+                "'cumsegagg' to operate faultlessly.",
             )
     on = data.loc[:, bin_by[ON_COLS]]
     # 'bin_by' binning.
@@ -905,7 +921,7 @@ def segmentby(
         raise ValueError(
             "series of bins have to cover the full length of 'data'. "
             f"But last bin ends at row {next_chunk_starts[-1]} "
-            f"excluded, while size of data is {len(data)}."
+            f"excluded, while size of data is {len(data)}.",
         )
     if n_bins > 1 and buffer is not None and next_chunk_starts[-2] == len(on):
         # In case a user-provided 'bin_by()' Callable is used, check if there
@@ -915,7 +931,7 @@ def segmentby(
         raise ValueError(
             "there is at least one empty trailing bin. "
             "This is not possible if planning to restart on new "
-            "data in a next iteration."
+            "data in a next iteration.",
         )
     if snap_by is not None:
         if buffer is not None:
@@ -926,14 +942,17 @@ def segmentby(
                 raise ValueError(
                     f"not possible to have label '{buffer[KEY_LAST_BIN_LABEL]}' "
                     "of last bin at previous iteration different than label "
-                    f"'{bin_labels[0]}' of first bin at current itation."
+                    f"'{bin_labels[0]}' of first bin at current itation.",
                 )
             # Weird way to get last element because 'bin_labels' is not
             # necessarily a Series for which 'iloc' should be used.
             buffer[KEY_LAST_BIN_LABEL] = bin_labels[n_bins - 1]
         # Define points of observation
         (next_snap_starts, snap_labels, n_max_null_snaps, _, snap_ends, _) = by_scale(
-            on=data.loc[:, ordered_on], by=snap_by, closed=bin_closed, buffer=buffer_snap
+            on=data.loc[:, ordered_on],
+            by=snap_by,
+            closed=bin_closed,
+            buffer=buffer_snap,
         )
         # Consolidate 'next_snap_starts' into 'next_chunk_starts'.
         # If bins are left-closed, the end of the last bin can possibly be
@@ -972,8 +991,8 @@ def segmentby(
                     next_chunk_starts[indices_of_bins_followed_by_a_snap]
                     - next_chunk_starts[indices_of_bins_followed_by_a_snap + 1]
                 )
-                == 0
-            )[0]
+                == 0,
+            )[0],
         )
     else:
         bin_indices = NULL_INT64_1D_ARRAY

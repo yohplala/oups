@@ -3,6 +3,7 @@
 Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
+
 """
 import pytest
 from numpy import all as nall
@@ -777,7 +778,8 @@ def test_jcsagg_bin_snap_1d(
     #                      s0 b0 s1 b1 s2 b2 s3 s4 b3 s5 s6 b4 b5 s7 s8  s9  b6 s10 s11
     # next_chunk_starts = [ 0, 0, 1, 3, 4, 4, 4, 4, 4, 5, 5, 7, 7, 8, 8, 10, 10, 10, 10]
     next_chunk_starts = array(
-        [0, 0, 1, 3, 4, 4, 4, 4, 4, 5, 5, 7, 7, 8, 8, 10, 10, 10, 10], dtype=INT64
+        [0, 0, 1, 3, 4, 4, 4, 4, 4, 5, 5, 7, 7, 8, 8, 10, 10, 10, 10],
+        dtype=INT64,
     )
     bin_indices = array(bin_indices_, dtype=INT64)
     chunk_res = ones(N_AGG_COLS, dtype=dtype_)
