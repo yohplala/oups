@@ -3,6 +3,7 @@
 Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
+
 """
 import pytest
 from numpy import all as nall
@@ -10,10 +11,10 @@ from numpy import arange
 from numpy import array
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
-from pandas import Grouper
 from pandas import Series
 from pandas import Timestamp as pTimestamp
 from pandas import date_range
+from pandas.core.resample import TimeGrouper
 
 from oups.segmentby import DTYPE_DATETIME64
 from oups.segmentby import DTYPE_INT64
@@ -43,7 +44,7 @@ from oups.segmentby import setup_segmentby
         (
             # 0
             # Check with a 3rd chunk starting with several empty bins.
-            Grouper(freq="5T", label="left", closed="left"),
+            TimeGrouper(freq="5T", label="left", closed="left"),
             None,
             [3, 6, 9],
             [
@@ -71,7 +72,7 @@ from oups.segmentby import setup_segmentby
         (
             # 1
             # Check specific restart key when chunk has a single incomplete bin.
-            Grouper(freq="5T", label="left", closed="left"),
+            TimeGrouper(freq="5T", label="left", closed="left"),
             None,
             [2, 7, 9],
             [
@@ -100,7 +101,7 @@ from oups.segmentby import setup_segmentby
             # 2
             # Check 'closed' parameter overrides 'by_closed' parameter.
             # Check specific restart key when chunk has a single incomplete bin.
-            Grouper(freq="5T", label="left", closed="left"),
+            TimeGrouper(freq="5T", label="left", closed="left"),
             RIGHT,
             [1, 7, 9],
             [
@@ -131,7 +132,7 @@ from oups.segmentby import setup_segmentby
         (
             # 3
             # Check with a 3rd chunk starting with several empty bins.
-            Grouper(freq="5T", label="left", closed="right"),
+            TimeGrouper(freq="5T", label="left", closed="right"),
             None,
             [3, 6, 9],
             [
@@ -504,7 +505,7 @@ from oups.segmentby import setup_segmentby
                     "2020/01/01 08:16",
                     "2020/01/01 08:42",
                     "2020/01/01 08:52",
-                ]
+                ],
             ),
             # 'right' means end is excluded.
             RIGHT,
@@ -554,11 +555,11 @@ def test_by_scale(
             pTimestamp("2020/01/01 08:40"),  # 6 # 0
             pTimestamp("2020/01/01 08:41"),
             pTimestamp("2020/01/01 08:50"),  # 8
-        ]
+        ],
     )
     start_idx = 0
     buffer = {}
-    if isinstance(by, Grouper):
+    if isinstance(by, TimeGrouper):
         if closed is None:
             closed = by.closed
     if not isinstance(by, list):
@@ -634,7 +635,7 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
             pTimestamp("2020/01/01 08:15"),  # 3
             pTimestamp("2020/01/01 08:16"),
             pTimestamp("2020/01/01 08:21"),  # 5
-        ]
+        ],
     )
     buffer = {}
     end1, end2 = end_indices
@@ -770,7 +771,7 @@ def test_by_x_rows(
             pTimestamp("2020/01/01 08:40"),  # 6 # 0
             pTimestamp("2020/01/01 08:41"),
             pTimestamp("2020/01/01 08:50"),  # 8
-        ]
+        ],
     )
     start_idx = 0
     buffer = {}
@@ -868,7 +869,7 @@ def test_by_x_rows_single_shot(
     start = pTimestamp("2022/01/01 08:00")
     dummy_data = arange(len_data)
     data = pDataFrame(
-        {"dummy_data": dummy_data, "dti": date_range(start, periods=len_data, freq="1H")}
+        {"dummy_data": dummy_data, "dti": date_range(start, periods=len_data, freq="1H")},
     )
     chunk_labels_ref = data.iloc[chunk_starts_ref, -1].reset_index(drop=True)
     chunk_labels_ref.iloc[0] = buffer_in[KEY_LAST_BIN_LABEL]
@@ -944,7 +945,7 @@ def test_segmentby_exceptions():
             False,
         )
 
-    snap_by = Grouper(freq="2T", key=bin_on)
+    snap_by = TimeGrouper(freq="2T", key=bin_on)
     buffer = {}
     segmentby(
         data=data[:2],
@@ -1000,7 +1001,7 @@ def test_segmentby_exceptions():
             ],
         ),
         (
-            # 1/ 'bin_by' and 'snap_by' as Grouper.
+            # 1/ 'bin_by' and 'snap_by' as TimeGrouper.
             #    'bin_by', 20T, is a multiple of 'snap_by', 10T
             #   dti  odr  slices  bins     snaps
             #                      1-8:00
@@ -1018,10 +1019,10 @@ def test_segmentby_exceptions():
             #                      5-9:20   7-9:20
             #  9:30    8                    8-9:30 (excl.)
             #                               9-9:40
-            Grouper(freq="20T", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="20T", label="left", closed="left", key="dti"),
             None,
             None,
-            Grouper(freq="10T", label="right", closed="left", key="dti"),
+            TimeGrouper(freq="10T", label="right", closed="left", key="dti"),
             [3, 6, 9],
             # next_chunk_starts
             [
@@ -1091,7 +1092,7 @@ def test_segmentby_exceptions():
             ],
         ),
         (
-            # 2/ 'bin_by' as Grouper, 'snap_by' as Series.
+            # 2/ 'bin_by' as TimeGrouper, 'snap_by' as Series.
             #    'bin_by', 20T
             #   dti  odr  slices  bins     snaps
             #                      1-8:00
@@ -1112,7 +1113,7 @@ def test_segmentby_exceptions():
             #  9:30    8
             #                               9-9:40
             #                              10-9:44 (will be ignored)
-            Grouper(freq="20T", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="20T", label="left", closed="left", key="dti"),
             None,
             "dti",
             [
@@ -1127,7 +1128,7 @@ def test_segmentby_exceptions():
                         "2020-01-01 09:20",
                         "2020-01-01 09:40",
                         "2020-01-01 09:44",
-                    ]
+                    ],
                 ),
             ],
             [3, 6, 9],
@@ -1170,7 +1171,7 @@ def test_segmentby_exceptions():
                         "2020-01-01 09:11",
                         "2020-01-01 09:20",
                         "2020-01-01 09:40",
-                    ]
+                    ],
                 ),
             ],
             # n_max_null_snaps
@@ -1196,7 +1197,7 @@ def test_segmentby_exceptions():
             ],
         ),
         (
-            # 3/ 'bin_by' using 'by_x_rows', 'snap_by' as '15T' Grouper.
+            # 3/ 'bin_by' using 'by_x_rows', 'snap_by' as '15T' TimeGrouper.
             #   dti  odr  slices  bins     snaps
             #  8:10    0           1-8:10
             #  8:10    1
@@ -1217,7 +1218,7 @@ def test_segmentby_exceptions():
             by_x_rows,
             None,
             "dti",
-            Grouper(freq="15T", label="right", closed="left", key="dti"),
+            TimeGrouper(freq="15T", label="right", closed="left", key="dti"),
             [3, 6, 9],
             # next_chunk_starts
             [
@@ -1250,7 +1251,7 @@ def test_segmentby_exceptions():
                         "2020-01-01 09:15",
                         "2020-01-01 09:30",
                         "2020-01-01 09:45",
-                    ]
+                    ],
                 ),
             ],
             # n_max_null_snaps
@@ -1322,7 +1323,7 @@ def test_segmentby_exceptions():
                         "2020-01-01 09:20",
                         "2020-01-01 09:40",
                         "2020-01-01 09:44",
-                    ]
+                    ],
                 ),
             ],
             [3, 6, 9],
@@ -1357,7 +1358,7 @@ def test_segmentby_exceptions():
                         "2020-01-01 09:11",
                         "2020-01-01 09:20",
                         "2020-01-01 09:40",
-                    ]
+                    ],
                 ),
             ],
             # n_max_null_snaps
@@ -1434,7 +1435,7 @@ def test_segmentby_exceptions():
                         "2020-01-01 09:20",
                         "2020-01-01 09:40",
                         "2020-01-01 09:44",
-                    ]
+                    ],
                 ),
             ],
             [4, 9],
@@ -1466,7 +1467,7 @@ def test_segmentby_exceptions():
                         "2020-01-01 09:11",
                         "2020-01-01 09:20",
                         "2020-01-01 09:40",
-                    ]
+                    ],
                 ),
             ],
             # n_max_null_snaps
@@ -1496,7 +1497,7 @@ def test_segmentby_exceptions():
             ],
         ),
         (
-            # 6/ 'bin_by' as Grouper and 'snap_by' as Series.
+            # 6/ 'bin_by' as TimeGrouper and 'snap_by' as Series.
             #    In this test case, 2nd chunk is traversed without new snap,
             #    and without new bin.
             #   dti  odr  slices  bins     snaps
@@ -1511,7 +1512,7 @@ def test_segmentby_exceptions():
             #                               2-9:10 (excl.)
             #  9:10    7
             #  9:30    8
-            Grouper(freq="1H", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="1H", label="left", closed="left", key="dti"),
             None,
             None,
             # snap_by

@@ -3,6 +3,7 @@
 Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
+
 """
 from copy import copy
 from os import path as os_path
@@ -655,7 +656,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     N_third = int(N / 3)
     bin_val = np.array(
-        [1] * (N_third - 2) + [2] * (N_third - 4) + [3] * (N - 2 * N_third) + [4] * 6
+        [1] * (N_third - 2) + [2] * (N_third - 4) + [3] * (N - 2 * N_third) + [4] * 6,
     )
     ordered_on = "ts"
     bin_on = "direct_bin"
@@ -673,7 +674,12 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
 
     # Setup binning for key3.
     def by_4rows(data: Series, buffer: dict):
-        """Bin by group of 4 rows. Label for bins are values from `ordered_on`."""
+        """
+        Bin by group of 4 rows.
+
+        Label for bins are values from `ordered_on`.
+
+        """
         # A pandas Series is returned, with name being that of the 'ordered_on'
         # column. Because of pandas magic, this column will then be in aggregation
         # results, and oups will be able to use it for writing data.
@@ -756,7 +762,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
         | {
             key4: seed_df_trim.groupby(key_configs[key4]["bin_on"])
             .agg(**key_configs[key4]["agg"])
-            .reset_index()
+            .reset_index(),
         }
     )
     for key, ref_df in ref_res.items():
@@ -767,7 +773,11 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     seed_df2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100, bin_on: bin_val + 10})
     fp_write(
-        seed_path, seed_df2, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+        seed_path,
+        seed_df2,
+        row_group_offsets=max_row_group_size,
+        file_scheme="hive",
+        append=True,
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
@@ -796,7 +806,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
         | {
             key4: seed_df2_ref.groupby(key_configs[key4]["bin_on"])
             .agg(**key_configs[key4]["agg"])
-            .reset_index()
+            .reset_index(),
         }
     )
     for key, ref_df in ref_res.items():
@@ -807,7 +817,11 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     seed_df3 = pDataFrame({ordered_on: ts, "val": rand_ints + 400, bin_on: bin_val + 40})
     fp_write(
-        seed_path, seed_df3, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+        seed_path,
+        seed_df3,
+        row_group_offsets=max_row_group_size,
+        file_scheme="hive",
+        append=True,
     )
     seed = ParquetFile(seed_path)
     # Setup streamed aggregation.
@@ -836,7 +850,7 @@ def test_parquet_seed_3_keys(tmp_path, reduction1, reduction2, parallel):
         | {
             key4: seed_df3_ref.groupby(key_configs[key4]["bin_on"])
             .agg(**key_configs[key4]["agg"])
-            .reset_index()
+            .reset_index(),
         }
     )
     for key, ref_df in ref_res.items():
@@ -862,7 +876,7 @@ def test_exception_setup_no_bin_on_nor_by(tmp_path):
     # Test.
     with pytest.raises(ValueError, match="^at least one among"):
         (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config_res) = _setup(
-            **parameter_in
+            **parameter_in,
         )
 
 
@@ -884,7 +898,7 @@ def test_exception_setup_no_bin_on_nor_by_key_when_grouper(tmp_path):
     # Test.
     with pytest.raises(ValueError, match="^no column name defined to bin"):
         (all_cols_in, trim_start, seed_index_restart_set, reduction_agg, keys_config_res) = _setup(
-            **parameter_in
+            **parameter_in,
         )
 
 
@@ -927,7 +941,11 @@ def test_exception_different_index_at_restart(tmp_path):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     seed_df2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100})
     fp_write(
-        seed_path, seed_df2, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+        seed_path,
+        seed_df2,
+        row_group_offsets=max_row_group_size,
+        file_scheme="hive",
+        append=True,
     )
     seed = ParquetFile(seed_path)
     # Streamagg with 'key2'.
@@ -950,14 +968,19 @@ def test_exception_different_index_at_restart(tmp_path):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     seed_df3 = pDataFrame({ordered_on: ts, "val": rand_ints + 400})
     fp_write(
-        seed_path, seed_df3, row_group_offsets=max_row_group_size, file_scheme="hive", append=True
+        seed_path,
+        seed_df3,
+        row_group_offsets=max_row_group_size,
+        file_scheme="hive",
+        append=True,
     )
     seed = ParquetFile(seed_path)
     # Streamagg with 'key1' and 'key2'.
     key_configs = {key1: key1_cf, key2: key2_cf}
     # Test.
     with pytest.raises(
-        ValueError, match="^not possible to aggregate on multiple keys with existing"
+        ValueError,
+        match="^not possible to aggregate on multiple keys with existing",
     ):
         chainagg(
             seed=seed,

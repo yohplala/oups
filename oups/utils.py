@@ -3,6 +3,7 @@
 Created on Wed Dec  4 21:30:00 2021.
 
 @author: yoh
+
 """
 from os import scandir
 from typing import Iterator, List, Tuple
@@ -17,7 +18,8 @@ from oups.defines import DIR_SEP
 
 
 def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[str]]]:
-    """Yield file list in dirs.
+    """
+    Yield file list in dirs.
 
     Generator yielding a tuple which:
         - 1st value is the path of a non-empty directory at 'depth' sublevel,
@@ -37,6 +39,7 @@ def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[st
     Iterator[Dict[str,List[str]]]
         List of files within directory specified by the key. Empty directories
         are not returned.
+
     """
     if depth == 0:
         files = [
@@ -60,7 +63,8 @@ def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[st
 
 
 def strip_path_tail(dirpath: str) -> str:
-    """Remove last level directory from provided path.
+    """
+    Remove last level directory from provided path.
 
     Parameters
     ----------
@@ -71,13 +75,15 @@ def strip_path_tail(dirpath: str) -> str:
     -------
     str
         Directory path stripped from last directory.
+
     """
     if DIR_SEP in dirpath:
         return dirpath.rsplit("/", 1)[0]
 
 
 def tcut(data: Series, grouper: Grouper):
-    """Perform binning with provided grouper.
+    """
+    Perform binning with provided grouper.
 
     Achieve binning of data by dates as specified by provided pandas grouper.
     Rows falling in same period will get same label.
@@ -109,12 +115,14 @@ def tcut(data: Series, grouper: Grouper):
     - To use results in a `groupby` operation while re-using provided grouper,
       labels (being categories), need to be materialized again as timestamps
       with ``astype('datetime64')``.
+
     """
     start, end = gtre(
         first=data.iloc[0],
         last=data.iloc[-1],
         freq=grouper.freq,
         closed=grouper.closed,
+        unit=data.iloc[0].unit,
         origin=grouper.origin,
         offset=grouper.offset,
     )

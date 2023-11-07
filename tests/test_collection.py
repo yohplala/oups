@@ -3,6 +3,7 @@
 Created on Wed Dec  1 18:35:00 2021.
 
 @author: yoh
+
 """
 import zipfile
 from os import path as os_path
@@ -97,7 +98,7 @@ def test_set_parquet(tmp_path):
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 10:00", freq="2H"),
             "temperature": [8.4, 5.3],
-        }
+        },
     )
     ps[we] = df
     assert we in ps
@@ -114,7 +115,7 @@ def test_set_parquet_with_config(tmp_path):
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
-        }
+        },
     )
     rg_size = 2
     config = {"max_row_group_size": rg_size}
@@ -134,7 +135,7 @@ def test_exception_config_not_a_dict(tmp_path):
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
-        }
+        },
     )
     config = []  # First silly thing that comes to mind.
     with pytest.raises(TypeError, match="^first item"):
@@ -161,7 +162,7 @@ def test_iterator(tmp_path):
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
-        }
+        },
     )
     ps[we1], ps[we2] = df, df
     for key in ps:
@@ -176,7 +177,7 @@ def test_set_and_get_roundtrip_pandas(tmp_path):
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
-        }
+        },
     )
     config = {"max_row_group_size": 2}
     ps[we] = config, df
@@ -192,7 +193,7 @@ def test_set_pandas_and_get_vaex(tmp_path):
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
-        }
+        },
     )
     config = {"max_row_group_size": 2}
     ps[we] = config, df
@@ -208,7 +209,7 @@ def test_set_pandas_and_get_parquet_file(tmp_path):
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
-        }
+        },
     )
     config = {"max_row_group_size": 2}
     ps[we] = config, df
@@ -224,10 +225,11 @@ def test_set_cmidx_get_vaex(tmp_path):
             ("ts", ""): date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
             ("temp", "1"): [8.4, 5.3, 2.9, 6.4],
             ("temp", "2"): [8.4, 5.3, 2.9, 6.4],
-        }
+        },
     )
     pdf.columns = MultiIndex.from_tuples(
-        [("ts", ""), ("temp", "1"), ("temp", "2")], names=["component", "point"]
+        [("ts", ""), ("temp", "1"), ("temp", "2")],
+        names=["component", "point"],
     )
     ps = ParquetSet(tmp_path, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
@@ -250,7 +252,7 @@ def test_dataset_removal(tmp_path):
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
-        }
+        },
     )
     ps[we1], ps[we2], ps[we3] = df, df, df
     # Delete london-related data.
@@ -281,7 +283,7 @@ def test_11_rgs_pandas_to_vaex(tmp_path):
         {
             "timestamp": date_range("2021/01/01 08:00", freq="2H", periods=len(temp)),
             "temperature": temp,
-        }
+        },
     )
     config = {"max_row_group_size": 1}
     ps[we] = config, df

@@ -3,6 +3,7 @@
 Created on Sat Dec 18 15:00:00 2021.
 
 @author: yoh
+
 """
 from os import path as os_path
 
@@ -90,11 +91,12 @@ def test_init_idx_expansion_vaex(tmp_path):
         {
             "('lev1-col1','lev2-col1')": range(6, 12),
             "('lev1-col2','lev2-col2')": ["ah", "oh", "uh", "ih", "ai", "oi"],
-        }
+        },
     )
     res_midx = to_midx(pdf.columns)
     ref_midx = MultiIndex.from_tuples(
-        [("lev1-col1", "lev2-col1"), ("lev1-col2", "lev2-col2")], names=["l0", "l1"]
+        [("lev1-col1", "lev2-col1"), ("lev1-col2", "lev2-col2")],
+        names=["l0", "l1"],
     )
     assert res_midx.equals(ref_midx)
     vdf = from_pandas(pdf)
@@ -111,11 +113,12 @@ def test_init_idx_expansion_sparse_levels(tmp_path):
         {
             "('lev1-col1','lev2-col1')": range(6, 12),
             "('lev1-col2','lev2-col2')": ["ah", "oh", "uh", "ih", "ai", "oi"],
-        }
+        },
     )
     res_midx = to_midx(pdf.columns, levels=["ah"])
     ref_midx = MultiIndex.from_tuples(
-        [("lev1-col1", "lev2-col1"), ("lev1-col2", "lev2-col2")], names=["ah", "l1"]
+        [("lev1-col1", "lev2-col1"), ("lev1-col2", "lev2-col2")],
+        names=["ah", "l1"],
     )
     assert res_midx.equals(ref_midx)
 
@@ -170,7 +173,7 @@ def test_pandas_coalescing_simple_irgs(tmp_path):
     # (size of new data: 1)
     # One incomplete row group in the middle of otherwise complete row groups.
     # Because there is only 1 irgs (while max is 2), and 2 rows over all irgs
-    # (including data to be written), coalesing is not activated.
+    # (including data to be written), coalescing is not activated.
     # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3]
     # idx                          [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -221,7 +224,11 @@ def test_pandas_coalescing_simple_max_row_group_size(tmp_path):
     pdf1 = pDataFrame({"a": range(12)})
     dn = os_path.join(tmp_path, "test")
     fp_write(
-        dn, pdf1, row_group_offsets=[0, 4, 5, 9, 10, 11], file_scheme="hive", write_index=False
+        dn,
+        pdf1,
+        row_group_offsets=[0, 4, 5, 9, 10, 11],
+        file_scheme="hive",
+        write_index=False,
     )
     pf = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf.row_groups]
@@ -695,7 +702,11 @@ def test_pandas_drop_duplicates_wo_coalescing_irgs(tmp_path):
     pdf = pDataFrame({"a": range(n_val), "b": [0] * n_val})
     dn = os_path.join(tmp_path, "test")
     fp_write(
-        dn, pdf, row_group_offsets=[0, n_val - 2, n_val - 1], file_scheme="hive", write_index=False
+        dn,
+        pdf,
+        row_group_offsets=[0, n_val - 2, n_val - 1],
+        file_scheme="hive",
+        write_index=False,
     )
     pf = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf.row_groups]
@@ -727,7 +738,11 @@ def test_ordered_on_not_existing_pandas_vaex(tmp_path):
     dn = os_path.join(tmp_path, "test")
     # Write a 1st set of data.
     fp_write(
-        dn, pdf, row_group_offsets=[0, n_val - 2, n_val - 1], file_scheme="hive", write_index=False
+        dn,
+        pdf,
+        row_group_offsets=[0, n_val - 2, n_val - 1],
+        file_scheme="hive",
+        write_index=False,
     )
     # Append with oups same set of data, pandas dataframe.
     with pytest.raises(ValueError, match="^column 'ts'"):

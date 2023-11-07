@@ -1,7 +1,7 @@
 repos:
-
+  # Pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.1.0
+    rev: v4.5.0
     hooks:
       - id: forbid-new-submodules
       - id: fix-encoding-pragma
@@ -16,29 +16,32 @@ repos:
       - id: check-merge-conflict
       - id: check-symlinks
       - id: check-toml
-#      - id: check-yaml
 
+  # Codespell
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.1.0
+    rev: v2.2.6
     hooks:
       - id: codespell
         description: Checks for common misspellings.
         types_or: [python, rst, markdown]
 
-  - repo: https://github.com/hadialqattan/pycln
-    rev: v1.1.0
+  - repo: https://github.com/asottile/add-trailing-comma
+    rev: v3.1.0
     hooks:
-      - id: pycln
-        name: pycln (Python unused imports)
+      - id: add-trailing-comma
+        name: add-trailing-comma
+        types: [python]
 
+  # Black
   - repo: https://github.com/psf/black
-    rev: 22.3.0
+    rev: 23.10.1
     hooks:
       - id: black
         args: [
             --line-length=100,
         ]
 
+  # Isort
   - repo: https://github.com/pycqa/isort
     rev: 5.12.0
     hooks:
@@ -55,8 +58,9 @@ repos:
             --use-parentheses,
         ]
 
+  # Flake8
   - repo: https://github.com/pycqa/flake8
-    rev: 4.0.1
+    rev: 6.1.0
     hooks:
       - id: flake8
         name: flake8
@@ -90,13 +94,38 @@ repos:
                 oups/chainagg.py:C901
         ]
 
+  # Pydocstyle
   - repo: https://github.com/pycqa/pydocstyle
-    rev: 6.1.1
+    rev: 6.3.0
     hooks:
       - id: pydocstyle
         files: ^oups/
         additional_dependencies:
           - toml
+        args: [
+          "--ignore=D200,D203,D212,D417",
+          ]
+
+  - repo: https://github.com/PyCQA/docformatter
+    rev: v1.7.5
+    hooks:
+      - id: docformatter
+        additional_dependencies: [tomli]
+        args: [
+          "--black",
+          "--make-summary-multi-line",
+          "--pre-summary-newline",
+          "--blank",
+          "--recursive",
+          "--in-place",
+        ]
+
+  - repo: https://github.com/asottile/add-trailing-comma
+    rev: v3.1.0
+    hooks:
+      - id: add-trailing-comma
+        name: add-trailing-comma
+        types: [python]
 
 # flake8 ignore justifications
 # ----------------------------

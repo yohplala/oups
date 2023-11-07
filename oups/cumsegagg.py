@@ -3,6 +3,7 @@
 Created on Wed Dec  4 21:30:00 2021.
 
 @author: yoh
+
 """
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
@@ -15,10 +16,10 @@ from numpy import zeros
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
-from pandas import Grouper
 from pandas import Int64Dtype
 from pandas import NaT as pNaT
 from pandas import Series
+from pandas.core.resample import TimeGrouper
 
 from oups.jcumsegagg import AGG_FUNCS
 from oups.jcumsegagg import jcsagg
@@ -40,9 +41,11 @@ KEY_LAST_CHUNK_RES = "last_chunk_res"
 
 
 def setup_cumsegagg(
-    agg: Dict[str, Tuple[str, str]], data_dtype: Dict[str, dtype]
+    agg: Dict[str, Tuple[str, str]],
+    data_dtype: Dict[str, dtype],
 ) -> Dict[dtype, Tuple[List[str], List[str], Tuple, int]]:
-    """Construct chaingrouby aggregation configuration.
+    """
+    Construct chaingrouby aggregation configuration.
 
     Parameters
     ----------
@@ -76,12 +79,13 @@ def setup_cumsegagg(
                                   in 'data', to which has to be applied the
                                   aggregation function.
                                 - a 2nd 1d numpy array with indices of columns
-                                  in 'res', to which are recoreded aggrgation
+                                  in 'res', to which are recoreded aggregation
                                   results
                    int64, 'n_cols'
                               Total number of columns in 'res' (summing for all
                               aggregation function).
            }``
+
     """
     cgb_agg_cfg = {}
     # Step 1.
@@ -145,7 +149,9 @@ def setup_cumsegagg(
 
 
 def setup_chunk_res(agg: Dict[dtype, tuple]) -> pDataFrame:
-    """Initialize one-row DataFrame for storing the first 'chunk_res'."""
+    """
+    Initialize one-row DataFrame for storing the first 'chunk_res'.
+    """
     chunk_res = {}
     for dtype_, (
         _,
@@ -155,7 +161,7 @@ def setup_chunk_res(agg: Dict[dtype, tuple]) -> pDataFrame:
     ) in agg.items():
         chunk_res_single_dtype = zeros(n_cols, dtype=dtype_)
         chunk_res.update(
-            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)}
+            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)},
         )
     return pDataFrame(chunk_res, copy=False)
 
@@ -163,18 +169,19 @@ def setup_chunk_res(agg: Dict[dtype, tuple]) -> pDataFrame:
 def cumsegagg(
     data: pDataFrame,
     agg: Union[Dict[str, Tuple[str, str]], Dict[dtype, Tuple[List[str], List[str], Tuple, int]]],
-    bin_by: Union[Grouper, Callable, dict],
+    bin_by: Union[TimeGrouper, Callable, dict],
     bin_on: Optional[str] = None,
     buffer: Optional[dict] = None,
     ordered_on: Optional[str] = None,
-    snap_by: Optional[Union[Grouper, Series, DatetimeIndex]] = None,
+    snap_by: Optional[Union[TimeGrouper, Series, DatetimeIndex]] = None,
     error_on_0: Optional[bool] = True,
 ) -> Union[pDataFrame, Tuple[pDataFrame, pDataFrame]]:
-    """Cumulative segmented aggregations, with optional snapshotting.
+    """
+    Cumulative segmented aggregations, with optional snapshotting.
 
     In this function, "snapshotting" is understood as the action of making
     isolated observations. When using snapshots, values derived from
-    ``snap_by`` Grouper (or contained in ``snap_by`` Series) are considered the
+    ``snap_by`` TimeGrouper (or contained in ``snap_by`` Series) are considered the
     "points of isolated observation".
     At a given point, an observation of the "on-going" segment (aka bin) is
     made. Because segments are contiguous, any row of the dataset falls in a
@@ -186,7 +193,7 @@ def cumsegagg(
         A pandas DataFrame containing the columns over which binning (relying
         on ``bin_on`` column), performing aggregations and optionally
         snapshotting (relying on column pointed by 'ordered_on' and optionally
-        ``snap_by.key`` if is a Grouper).
+        ``snap_by.key`` if is a TimeGrouper).
         If using snapshots ('snap_by' parameter), then the column pointed by
         ``snap_by.key`` has to be ordered.
     agg : dict
@@ -202,8 +209,8 @@ def cumsegagg(
 
           - the 2nd form is that returned by the function ``setup_cumsegagg``.
 
-    bin_by : Union[Grouper, Callable, dict]
-        Callable or pandas Grouper to perform binning.
+    bin_by : Union[TimeGrouper, Callable, dict]
+        Callable or pandas TimeGrouper to perform binning.
         If a Callable, please see signature requirements in 'segmentby'
         docstring.
         If a dict, it contains the full setup for conducting the segmentation
@@ -211,7 +218,7 @@ def cumsegagg(
     bin_on : Optional[str], default None
         Name of the column in `data` over which performing the binning
         operation.
-        If 'bin_by' is a pandas `Grouper`, its `key` parameter is used instead,
+        If 'bin_by' is a pandas `TimeGrouper`, its `key` parameter is used instead,
         and 'bin_on' is ignored.
         If not provided, and 'ordered_on' parameter is, then 'ordered_on' value
         is also used to specify the column name onto which performing binning.
@@ -222,11 +229,11 @@ def cumsegagg(
         Name of an existing ordered column in 'data'. When setting it, it is
         then forwarded to 'bin_by' Callable.
         This parameter is compulsory if 'snap_by' is set. Values derived from
-        'snap_by' (either a Grouper or a Series) are compared to ``bin_ends``,
+        'snap_by' (either a TimeGrouper or a Series) are compared to ``bin_ends``,
         themselves derived from ``data[ordered_on]``.
-    snap_by : Optional[Union[Grouper, Series, DatetimeIndex]], default None
+    snap_by : Optional[Union[TimeGrouper, Series, DatetimeIndex]], default None
         Values positioning the points of observation, either derived from a
-        pandas Grouper, or contained in a pandas Series.
+        pandas TimeGrouper, or contained in a pandas Series.
         In case 'snap_by' is a Series, values  serve as locations for points of
         observation.
         Additionally, ``closed`` value defined by 'bin_on' specifies if points
@@ -288,7 +295,7 @@ def cumsegagg(
     ``False`` when reaching the end of input data.
     This is a limitation. It should be ``False`` only to mark the actual end of
     the bins. As a result, this internal flag 'preserve_res' cannot be output
-    for re-use in a next restart step.
+    for reuse in a next restart step.
     An option to circumvent this is to use snapshots instead of bins as media
     to output aggregation results for last, in-progress bin.
     This option has not been implemented.
@@ -336,8 +343,8 @@ def cumsegagg(
            Series). Because it is applied to 'bin_by', then 'chunk_res' will
            contain aggregation results over the last values in data, it is not
            lost.
-           In the existing 'snap_by' (either by Grouper or by Series),
-             - either if a Grouper, then last snapshot ends after end of data
+           In the existing 'snap_by' (either by TimeGrouper or by Series),
+             - either if a TimeGrouper, then last snapshot ends after end of data
              - or if a Series, at restart, if 2nd snapshot ends before last
                value in data at previous iteration, then an exception is
                raised.
@@ -352,7 +359,7 @@ def cumsegagg(
 
       - **cumulative segmented aggregation ('cumsegagg()')**
         -1 'preserve_res' parameter is used to indicate if aggregation
-           calculations start from scratch (first iteration) or re-use past
+           calculations start from scratch (first iteration) or reuse past
            aggregation results (following iterations).
            Aggregation results from last, in-progress bin can then be
            forwarded.
@@ -433,18 +440,18 @@ def cumsegagg(
             chunk_res_prev.loc[:, cols_name_in_res].to_numpy(copy=False).reshape(n_cols)
         )
         chunk_res.update(
-            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)}
+            {name: chunk_res_single_dtype[i : i + 1] for i, name in enumerate(cols_name_in_res)},
         )
         # Setup 'bin_res_single_dtype'.
         bin_res_single_dtype = zeros((n_bins, n_cols), dtype=dtype_)
         bin_res.update(
-            {name: bin_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)}
+            {name: bin_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)},
         )
         # Setup 'snap_res_single_dtype'.
         if snap_by is not None:
             snap_res_single_dtype = zeros((n_snaps, n_cols), dtype=dtype_)
             snap_res.update(
-                {name: snap_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)}
+                {name: snap_res_single_dtype[:, i] for i, name in enumerate(cols_name_in_res)},
             )
         if dtype_ == DTYPE_DATETIME64:
             data_single_dtype = data_single_dtype.view(DTYPE_INT64)
@@ -486,7 +493,7 @@ def cumsegagg(
                 # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
                 # (it is a pandas dtype, not a numpy one)
                 bin_res[agg[DTYPE_INT64][1]] = bin_res[agg[DTYPE_INT64][1]].astype(
-                    DTYPE_NULLABLE_INT64
+                    DTYPE_NULLABLE_INT64,
                 )
             for dtype_, (
                 _,
@@ -510,7 +517,7 @@ def cumsegagg(
                     # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
                     # (it is a pandas dtype, not a numpy one)
                     snap_res[agg[DTYPE_INT64][1]] = snap_res[agg[DTYPE_INT64][1]].astype(
-                        DTYPE_NULLABLE_INT64
+                        DTYPE_NULLABLE_INT64,
                     )
                 for dtype_, (
                     _,
@@ -522,11 +529,11 @@ def cumsegagg(
     if error_on_0:
         if snap_by is not None and snap_res.eq(0).any().any():
             raise ValueError(
-                "at least one null value exists in 'snap_res' which is likely to hint a bug."
+                "at least one null value exists in 'snap_res' which is likely to hint a bug.",
             )
         if bin_res.eq(0).any().any():
             raise ValueError(
-                "at least one null value exists in 'bin_res' which is likely to hint a bug."
+                "at least one null value exists in 'bin_res' which is likely to hint a bug.",
             )
     if snap_by is not None:
         return bin_res, snap_res

@@ -3,6 +3,7 @@
 Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
+
 """
 from functools import partial
 
@@ -66,7 +67,7 @@ def test_setup_csagg():
                 pTimestamp("2022/01/01 09:00"),
                 pTimestamp("2022/01/01 08:00"),
             ],
-        }
+        },
     )
     agg_cfg = {
         "val1_first": ("val1_float", FIRST),
@@ -190,7 +191,7 @@ def test_cumsegagg_bin_single_dtype(ndata, cols):
                 "col1": ndata[:, 0],
                 "col2": ndata[:, 1],
                 time_idx: ndata_dti,
-            }
+            },
         )
         agg = {
             "res_first": ("col1", "first"),
@@ -203,7 +204,7 @@ def test_cumsegagg_bin_single_dtype(ndata, cols):
             {
                 "col1_f": ndata,
                 time_idx: ndata_dti,
-            }
+            },
         )
         agg = {"res_first": ("col1_f", "first"), "res_last": ("col1_f", "last")}
     by = Grouper(freq="5T", closed="left", label="left", key=time_idx)
@@ -215,7 +216,8 @@ def test_cumsegagg_bin_single_dtype(ndata, cols):
 def test_cumsegagg_bin_mixed_dtype():
     # Test binning aggregation for a mixed dtype.
     ar_float = array(
-        [[2.0, 20.0], [4.0, 40.0], [5.0, 50.0], [8.0, 80.0], [9.0, 90.0]], dtype=DTYPE_FLOAT64
+        [[2.0, 20.0], [4.0, 40.0], [5.0, 50.0], [8.0, 80.0], [9.0, 90.0]],
+        dtype=DTYPE_FLOAT64,
     )
     ar_int = array([[1, 10], [3, 30], [6, 60], [7, 70], [9, 90]], dtype=DTYPE_INT64)
     ar_dti = array(
@@ -236,7 +238,7 @@ def test_cumsegagg_bin_mixed_dtype():
             "col3_i": ar_int[:, 0],
             "col4_i": ar_int[:, 1],
             time_idx: ar_dti,
-        }
+        },
     )
     agg = {
         "res_first_f": ("col1_f", "first"),
@@ -785,7 +787,7 @@ def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
             pTimestamp("2020-01-01 09:06:00"),
             pTimestamp("2020-01-01 09:09:00"),
             pTimestamp("2020-01-01 09:16:00"),
-        ]
+        ],
     )
     bins_res, snaps_res = cumsegagg(
         data=data,
@@ -870,7 +872,12 @@ def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
     ],
 )
 def test_cumsegagg_binby_grouper_snapby_intervalindex(
-    b_by_closed, b_by_label, s_first_val, s_max_val, s_min_val, s_last_val
+    b_by_closed,
+    b_by_label,
+    s_first_val,
+    s_max_val,
+    s_min_val,
+    s_last_val,
 ):
     # Test binning and snapshotting aggregation with null chunks.
     # - 30 minutes bins
@@ -907,7 +914,7 @@ def test_cumsegagg_binby_grouper_snapby_intervalindex(
             pTimestamp("2020-01-01 08:20:00"),
             pTimestamp("2020-01-01 08:50:00"),
             pTimestamp("2020-01-01 09:06:00"),
-        ]
+        ],
     )
     bins_res, snaps_res = cumsegagg(
         data=data,
@@ -992,7 +999,11 @@ def test_cumsegagg_binby_grouper_snapby_intervalindex(
     ],
 )
 def test_cumsegagg_binby_callable_snapby_intervalindex(
-    b_by_closed, s_first_val, s_max_val, s_min_val, s_last_val
+    b_by_closed,
+    s_first_val,
+    s_max_val,
+    s_min_val,
+    s_last_val,
 ):
     # Test binning and snapshotting aggregation with null chunks.
     # - 4-row bins
@@ -1028,7 +1039,7 @@ def test_cumsegagg_binby_callable_snapby_intervalindex(
             pTimestamp("2020-01-01 08:20:00"),
             pTimestamp("2020-01-01 08:50:00"),
             pTimestamp("2020-01-01 09:06:00"),
-        ]
+        ],
     )
     bin_by = partial(by_x_rows, closed=b_by_closed)
     bins_res, snaps_res = cumsegagg(

@@ -3,6 +3,7 @@
 Created on Wed Dec  1 18:35:00 2021.
 
 @author: yoh
+
 """
 import zipfile
 from os import path as os_path
@@ -32,7 +33,7 @@ def test_files_at_depth(tmp_path):
         [
             (DIR_SEP.join(path.rsplit(DIR_SEP, depth)[1:]), sorted(files))
             for path, files in paths_files
-        ]
+        ],
     )
     paths_ref = [
         (f"london.temperature{DIR_SEP}greenwich.summer", ["dataset.parquet"]),
@@ -57,7 +58,7 @@ def test_files_at_depth(tmp_path):
         [
             (DIR_SEP.join(path.rsplit(DIR_SEP, depth)[1:]), sorted(files))
             for path, files in paths_files
-        ]
+        ],
     )
     paths_ref = [
         (f"paris.temperature{DIR_SEP}bastille.summer{DIR_SEP}forgottendir", ["forgottenfile.parq"]),
@@ -67,7 +68,8 @@ def test_files_at_depth(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "closed,label", [("left", "left"), ("right", "left"), ("right", "right"), ("left", "right")]
+    "closed,label",
+    [("left", "left"), ("right", "left"), ("right", "right"), ("left", "right")],
 )
 def test_tcut(closed, label):
     # Test data
@@ -82,7 +84,12 @@ def test_tcut(closed, label):
     df = DataFrame({"a": range(len(ts)), "ts": ts})
     # Test closed=left/label=left.
     grouper = Grouper(
-        key="ts", freq="2H", sort=False, origin="start_day", closed=closed, label=label
+        key="ts",
+        freq="2H",
+        sort=False,
+        origin="start_day",
+        closed=closed,
+        label=label,
     )
     agg_ref = df.groupby(grouper)["a"].agg("first")
     ddf = df.copy()

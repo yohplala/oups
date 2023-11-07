@@ -3,6 +3,7 @@
 Created on Fri Dec 22 19:00:00 2022.
 
 @author: yoh
+
 """
 from typing import Callable, Tuple
 
@@ -21,7 +22,8 @@ from numpy import zeros
     cache=True,
 )
 def jfirst(ar: ndarray, initial: ndarray, use_init: bool):
-    """Jitted first.
+    """
+    Jitted first.
 
     Parameters
     ----------
@@ -37,6 +39,7 @@ def jfirst(ar: ndarray, initial: ndarray, use_init: bool):
     -------
     np.ndarray
         First in 'ar' if 'use_init' is false, else 'initial'.
+
     """
     if use_init > 0:
         return initial
@@ -51,7 +54,8 @@ def jfirst(ar: ndarray, initial: ndarray, use_init: bool):
     cache=True,
 )
 def jlast(ar: ndarray, initial: ndarray, use_init: bool):
-    """Jitted last.
+    """
+    Jitted last.
 
     Parameters
     ----------
@@ -68,6 +72,7 @@ def jlast(ar: ndarray, initial: ndarray, use_init: bool):
     -------
     np.ndarray
         Last in 'ar' if 'ar' is not a null array, else 'initial'.
+
     """
     if len(ar) > 0:
         return ar[-1]
@@ -83,7 +88,8 @@ def jlast(ar: ndarray, initial: ndarray, use_init: bool):
     parallel=True,
 )
 def jmax(ar: ndarray, initial: ndarray, use_init: bool):
-    """Jitted max.
+    """
+    Jitted max.
 
     Parameters
     ----------
@@ -100,6 +106,7 @@ def jmax(ar: ndarray, initial: ndarray, use_init: bool):
     np.ndarray
         Max values per column in 'ar', including 'initial' if 'use_init' is
         true.
+
     """
     len_ar = len(ar)
     if len_ar > 0:
@@ -127,7 +134,8 @@ def jmax(ar: ndarray, initial: ndarray, use_init: bool):
     parallel=True,
 )
 def jmin(ar: ndarray, initial: ndarray, use_init: bool):
-    """Jitted min.
+    """
+    Jitted min.
 
     Parameters
     ----------
@@ -144,6 +152,7 @@ def jmin(ar: ndarray, initial: ndarray, use_init: bool):
     np.ndarray
         Min values per column in 'ar', including 'initial' if 'use_init' is
         true.
+
     """
     len_ar = len(ar)
     if len_ar > 0:
@@ -171,7 +180,8 @@ def jmin(ar: ndarray, initial: ndarray, use_init: bool):
     parallel=True,
 )
 def jsum(ar: ndarray, initial: ndarray, use_init: bool):
-    """Jitted sum.
+    """
+    Jitted sum.
 
     Parameters
     ----------
@@ -188,6 +198,7 @@ def jsum(ar: ndarray, initial: ndarray, use_init: bool):
     np.ndarray
         Sum of values per column in 'ar', including 'initial' if 'use_init' is
         true.
+
     """
     len_ar = len(ar)
     if len_ar > 0:
@@ -229,7 +240,8 @@ def jcsagg(
     null_bin_indices: ndarray,  # 1d
     null_snap_indices: ndarray,  # 1d
 ):
-    """Group assuming contiguity.
+    """
+    Group assuming contiguity.
 
     Parameters
     ----------
@@ -241,7 +253,7 @@ def jcsagg(
           - for related aggregation function, a 1d numpy array listing the
             indices of columns in 'data' to which apply the aggregation
             function.
-          - for related aggregration function, and corresponding column in
+          - for related aggregation function, and corresponding column in
             'data', the index of the column in 'bin_res' and/or 'snap_res' to
             which recording the result. These indices are listed in a 1d numpy
             array, sorted in the same order than indices of columns in 'data'.
@@ -296,6 +308,7 @@ def jcsagg(
     iteration.
     But if last bin from previous iteration has been empty, then 'chunk_res'
     does not contain relevant results to be forwarded.
+
     """
     # 'pinnu' is 'prev_is_non_null_update'. It is renamed 'preserve_res'.
     # With 'preserve_res' True, then cumulate (pass-through) previous results.
@@ -374,7 +387,9 @@ def jcsagg(
                 for agg in literal_unroll(aggs):
                     agg_func, cols_data, cols_res = agg
                     chunk_res[cols_res] = agg_func(
-                        chunk[:, cols_data], chunk_res[cols_res], preserve_res
+                        chunk[:, cols_data],
+                        chunk_res[cols_res],
+                        preserve_res,
                     )
             # Step 2: record results.
             if is_update:

@@ -3,9 +3,11 @@
 Created on Wed Mar  9 21:30:00 2022.
 
 @author: yoh
+
 """
 from copy import copy
 from dataclasses import dataclass
+from io import StringIO
 from multiprocessing import cpu_count
 from os import path as os_path
 from typing import Callable, Dict, Generator, List, Tuple, Union
@@ -66,7 +68,8 @@ VAEX = "vaex"
 
 
 def _is_chainagg_result(handle: ParquetHandle) -> bool:
-    """Check if input handle is that of a dataset produced by streamaag.
+    """
+    Check if input handle is that of a dataset produced by streamaag.
 
     Parameters
     ----------
@@ -79,19 +82,21 @@ def _is_chainagg_result(handle: ParquetHandle) -> bool:
         `True` if parquet file contains metadata as produced by
         ``oups.chainagg``, which confirms this dataset has been produced with
         this latter function.
+
     """
     # As oups specific metadata is a string produced by json library, the last
     # 'in' condition is checking if the set of characters defined by
     # 'MD_KEY_CHAINAGG' is in a string.
     pf = handle.pf
-    return (
-        OUPS_METADATA_KEY in pf.key_value_metadata
-        and MD_KEY_CHAINAGG in pf.key_value_metadata[OUPS_METADATA_KEY]
-    )
+    if OUPS_METADATA_KEY in pf.key_value_metadata:
+        return MD_KEY_CHAINAGG in handle._oups_metadata
+    else:
+        return None
 
 
 def _get_chainagg_md(handle: ParquetHandle) -> tuple:
-    """Retrieve and deserialize chainagg metadata from previous aggregation.
+    """
+    Retrieve and deserialize chainagg metadata from previous aggregation.
 
     Parameters
     ----------
@@ -117,14 +122,19 @@ def _get_chainagg_md(handle: ParquetHandle) -> tuple:
     chainagg_md = handle._oups_metadata[MD_KEY_CHAINAGG]
     # De-serialize 'last_seed_index'.
     last_seed_index = chainagg_md[MD_KEY_LAST_SEED_INDEX]
-    last_seed_index = read_json(last_seed_index, **PANDAS_DESERIALIZE).iloc[0, 0]
+    last_seed_index = read_json(StringIO(last_seed_index), **PANDAS_DESERIALIZE).iloc[0, 0]
     # 'last_agg_row' for stitching with new aggregation results.
-    last_agg_row = read_json(chainagg_md[MD_KEY_LAST_AGGREGATION_ROW], **PANDAS_DESERIALIZE)
+    last_agg_row = read_json(
+        StringIO(chainagg_md[MD_KEY_LAST_AGGREGATION_ROW]),
+        **PANDAS_DESERIALIZE,
+    )
     # Metadata related to binning process from past binnings on prior data.
     # It is used in case 'by' is a callable.
     if chainagg_md[MD_KEY_BINNING_BUFFER]:
         binning_buffer = (
-            read_json(chainagg_md[MD_KEY_BINNING_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+            read_json(StringIO(chainagg_md[MD_KEY_BINNING_BUFFER]), **PANDAS_DESERIALIZE)
+            .iloc[0]
+            .to_dict()
         )
     else:
         binning_buffer = {}
@@ -132,7 +142,9 @@ def _get_chainagg_md(handle: ParquetHandle) -> tuple:
     # used by 'post'.
     if chainagg_md[MD_KEY_POST_BUFFER]:
         post_buffer = (
-            read_json(chainagg_md[MD_KEY_POST_BUFFER], **PANDAS_DESERIALIZE).iloc[0].to_dict()
+            read_json(StringIO(chainagg_md[MD_KEY_POST_BUFFER]), **PANDAS_DESERIALIZE)
+            .iloc[0]
+            .to_dict()
         )
     else:
         post_buffer = {}
@@ -146,7 +158,8 @@ def _set_chainagg_md(
     binning_buffer: dict = None,
     post_buffer: dict = None,
 ):
-    """Serialize and record chainagg metadata from last aggregation and post.
+    """
+    Serialize and record chainagg metadata from last aggregation and post.
 
     Parameters
     ----------
@@ -163,12 +176,13 @@ def _set_chainagg_md(
     post_buffer : dict
         Last values from post-processing, that can be required when restarting
         post-processing of new aggregation results.
+
     """
     # Setup metadata for a future 'chainagg' execution.
     # Store a json serialized pandas series, to keep track of 'whatever the
     # object' the index is.
     last_seed_index = pDataFrame({MD_KEY_LAST_SEED_INDEX: [last_seed_index]}).to_json(
-        **PANDAS_SERIALIZE
+        **PANDAS_SERIALIZE,
     )
     last_agg_row = last_agg_row.to_json(**PANDAS_SERIALIZE)
     if binning_buffer:
@@ -182,7 +196,7 @@ def _set_chainagg_md(
             MD_KEY_BINNING_BUFFER: binning_buffer,
             MD_KEY_LAST_AGGREGATION_ROW: last_agg_row,
             MD_KEY_POST_BUFFER: post_buffer,
-        }
+        },
     }
     OUPS_METADATA[key] = metadata
 
@@ -198,7 +212,8 @@ def _post_n_write_agg_chunks(
     post_buffer: dict = None,
     other_metadata: tuple = None,
 ):
-    """Write list of aggregation row groups with optional post, then reset it.
+    """
+    Write list of aggregation row groups with optional post, then reset it.
 
     Parameters
     ----------
@@ -250,6 +265,7 @@ def _post_n_write_agg_chunks(
         If `None`, no metadata is recorded.
         If some metadata is defined, ``post_buffer`` also gets its way in
         metadata.
+
     """
     # Keep last row as there might be not further iteration.
     if len(chunks) > 1:
@@ -283,7 +299,8 @@ def _setup_binning(
     bin_on: Union[str, Tuple[str, str]] = None,
     reduction_bin_col: Union[str, None] = None,
 ):
-    """Specifically operate binning setup.
+    """
+    Specifically operate binning setup.
 
     Parameters
     ----------
@@ -403,7 +420,7 @@ def _setup_binning(
             raise ValueError(
                 "two different columns are defined for achieving binning,"
                 " both by `bin_on` and `by` parameters, pointing to"
-                f" '{bin_on}' and '{by.key}' columns respectively."
+                f" '{bin_on}' and '{by.key}' columns respectively.",
             )
         elif not bin_on and by.key:
             bin_on = by.key
@@ -454,7 +471,8 @@ def _setup(
     reduction: bool,
     **kwargs,
 ):
-    """Consolidate settings for parallel aggregations.
+    """
+    Consolidate settings for parallel aggregations.
 
     Parameters
     ----------
@@ -473,7 +491,7 @@ def _setup(
         Flag indicating if reduction step will be performed on seed chunk or
         not.
 
-    Other parameters
+    Other Parameters
     ----------------
     kwargs : dict
         Settings considered as default ones if not specified within ``keys``.
@@ -573,7 +591,11 @@ def _setup(
         bin_on = key_conf_in.pop("bin_on", None)
         by = key_conf_in.pop("by", None)
         (by, cols_to_by, bin_on, reduction_bin_col, bins, bin_out_col) = _setup_binning(
-            ordered_on=ordered_on, reduction=reduction, key_idx=i, by=by, bin_on=bin_on
+            ordered_on=ordered_on,
+            reduction=reduction,
+            key_idx=i,
+            by=by,
+            bin_on=bin_on,
         )
         # 'cols_to_by' defines columns to be loaded and sent to 'by' when 'by'
         # is a Callable. It has to be completed with 'ordered_on'.
@@ -597,7 +619,7 @@ def _setup(
             raise ValueError(
                 f"not possible to have {bin_out_col} as column name in"
                 " aggregated results as it is also for column containing group"
-                " keys."
+                " keys.",
             )
         # Step 1.2 / 'agg' and 'post'.
         # Initialize 'self_agg', 'agg' and update 'reduction_agg', 'all_cols_in'.
@@ -667,7 +689,7 @@ def _setup(
             if not _is_chainagg_result(prev_agg_res):
                 raise ValueError(f"provided key '{key}' is not that of 'chainagg' results.")
             seed_index_restart, last_agg_row, binning_buffer, post_buffer = _get_chainagg_md(
-                prev_agg_res
+                prev_agg_res,
             )
             seed_index_restart_set.add(seed_index_restart)
             # Comment: pandas does not care about index name for concat. If
@@ -738,7 +760,8 @@ def _iter_data(
     discard_last: bool,
     all_cols_in: List[str],
 ):
-    """Return an iterator over seed data.
+    """
+    Return an iterator over seed data.
 
     Parameters
     ----------
@@ -788,7 +811,9 @@ def _iter_data(
             filter_seed.append((ordered_on, "<", last_seed_index))
         if filter_seed:
             iter_data = seed.iter_row_groups(
-                filters=[filter_seed], row_filter=True, columns=all_cols_in
+                filters=[filter_seed],
+                row_filter=True,
+                columns=all_cols_in,
             )
         else:
             iter_data = seed.iter_row_groups(columns=all_cols_in)
@@ -841,7 +866,8 @@ def _post_n_bin(
     binning_buffer: dict,
     reduction_bin_col: str,
 ):
-    """Conduct post-processing, and writing for iter. n-1, and binning for iter. n.
+    """
+    Conduct post-processing, and writing for iter. n-1, and binning for iter. n.
 
     Parameters
     ----------
@@ -855,7 +881,7 @@ def _post_n_bin(
     key : str
         Key for retrieving metadata corresponding to aggregation results.
 
-    Other parameters
+    Other Parameters
     ----------------
     config
         Settings related to 'key' for conducting post-processing, writing and
@@ -907,7 +933,7 @@ def _post_n_bin(
             reduction_bins = by(data=seed_chunk.loc[:, cols_to_by], buffer=binning_buffer)
         elif isinstance(by, Grouper):
             reduction_bins = tcut(data=seed_chunk.loc[:, by.key], grouper=by).astype(
-                "datetime64[ns]"
+                "datetime64[ns]",
             )
         else:
             # Bin directly on existing column. Name is available with 'bins'.
@@ -971,7 +997,8 @@ def _group_n_stitch(
     self_agg: dict,
     isfbn: bool,
 ):
-    """Conduct groupby, and stitching of previous groupby with current one.
+    """
+    Conduct groupby, and stitching of previous groupby with current one.
 
     Parameters
     ----------
@@ -980,7 +1007,7 @@ def _group_n_stitch(
     key : str
         Key for recording aggregation results.
 
-    Other parameters
+    Other Parameters
     ----------------
     config
         Settings related to 'key' for conducting groupby and stitching.
@@ -1013,11 +1040,15 @@ def _group_n_stitch(
                 # columns. These bins are thus added here to maintain
                 # usual pandas behavior.
                 missing = date_range(
-                    start=last, end=first, freq=bins.freq, inclusive="neither", name=bins.key
+                    start=last,
+                    end=first,
+                    freq=bins.freq,
+                    inclusive="neither",
+                    name=bins.key,
                 )
                 if not missing.empty:
                     last_agg_row = pconcat(
-                        [last_agg_row, pDataFrame(index=missing, columns=last_agg_row.columns)]
+                        [last_agg_row, pDataFrame(index=missing, columns=last_agg_row.columns)],
                     )
                     n_added_rows = len(last_agg_row)
             # Add last previous row (and possibly missing ones if pandas
@@ -1050,7 +1081,9 @@ def _group_n_stitch(
 
 
 def agg_loop_wo_reduction(seed_chunk: pDataFrame, key: str, config: dict):
-    """Aggregate without reduction mechanism."""
+    """
+    Aggregate without reduction mechanism.
+    """
     _, updated_config = _post_n_bin(
         seed_chunk=seed_chunk,
         reduction=False,
@@ -1102,7 +1135,9 @@ def agg_loop_with_reduction(
     with_vaex: bool = False,
     vaex_sort: str = None,
 ):
-    """Aggregate with reduction mechanism."""
+    """
+    Aggregate with reduction mechanism.
+    """
     for seed_chunk in iter_data:
         bins_n_conf = p_job(
             delayed(_post_n_bin)(
@@ -1163,7 +1198,9 @@ def agg_loop_with_reduction(
         else:
             # Reduction with pandas.
             seed_chunk = pconcat(
-                [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]], axis=1, copy=False
+                [*reduction_bins, seed_chunk[reduction_seed_chunk_cols]],
+                axis=1,
+                copy=False,
             )
             seed_chunk = seed_chunk.groupby(reduction_bin_cols, sort=False).agg(**reduction_agg)
             seed_chunk.reset_index(inplace=True)
@@ -1200,7 +1237,8 @@ def chainagg(
     parallel: bool = False,
     **kwargs,
 ):
-    """Aggregate sequentially on successive chunks (stream) of ordered data.
+    """
+    Aggregate sequentially on successive chunks (stream) of ordered data.
 
     This function conducts 'streamed aggregation' iteratively (out-of core)
     with optional post-processing of aggregation results (by use of vectorized
@@ -1331,7 +1369,7 @@ def chainagg(
         This does not impact execution of reduction in step in parallel if
         vaex is used.
 
-    Other parameters
+    Other Parameters
     ----------------
     kwargs : dict
         Settings forwarded to ``oups.writer.write`` when writing aggregation
@@ -1427,7 +1465,7 @@ def chainagg(
     if len(seed_index_restart_set) > 1:
         raise ValueError(
             "not possible to aggregate on multiple keys with existing"
-            " aggregation results not aggregated up to the same seed index."
+            " aggregation results not aggregated up to the same seed index.",
         )
     elif seed_index_restart_set:
         seed_index_restart = seed_index_restart_set.pop()
@@ -1435,7 +1473,12 @@ def chainagg(
         seed_index_restart = None
     # Initialize 'iter_data' generator from seed data, with correct trimming.
     last_seed_index, iter_data = _iter_data(
-        seed, ordered_on, trim_start, seed_index_restart, discard_last, all_cols_in
+        seed,
+        ordered_on,
+        trim_start,
+        seed_index_restart,
+        discard_last,
+        all_cols_in,
     )
     n_keys = len(keys)
     n_jobs = min(int(cpu_count() * 3 / 4), n_keys) if (parallel and n_keys > 1) else 1
