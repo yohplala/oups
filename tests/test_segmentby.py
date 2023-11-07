@@ -3,6 +3,7 @@
 Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
+
 """
 from functools import partial
 
@@ -12,10 +13,10 @@ from numpy import arange
 from numpy import array
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
-from pandas import Grouper
 from pandas import Series
 from pandas import Timestamp as pTimestamp
 from pandas import date_range
+from pandas.core.resample import TimeGrouper
 
 from oups.segmentby import BIN_BY
 from oups.segmentby import DTYPE_DATETIME64
@@ -128,16 +129,20 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:04"),
                     pTimestamp("2020/01/01 08:05"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="left", closed="left"),
+            TimeGrouper(freq="5T", label="left", closed="left"),
             DatetimeIndex(
-                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
             array([2, 3], dtype=DTYPE_INT64),
             0,
             DatetimeIndex(
-                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
         ),
         (
@@ -146,9 +151,9 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:03"),
                     pTimestamp("2020/01/01 08:04"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="left", closed="left"),
+            TimeGrouper(freq="5T", label="left", closed="left"),
             DatetimeIndex(["2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"),
             array([3], dtype=DTYPE_INT64),
             0,
@@ -160,16 +165,20 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:01"),
                     pTimestamp("2020/01/01 08:03"),
                     pTimestamp("2020/01/01 08:05"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="left", closed="left"),
+            TimeGrouper(freq="5T", label="left", closed="left"),
             DatetimeIndex(
-                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
             array([2, 3], dtype=DTYPE_INT64),
             0,
             DatetimeIndex(
-                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
         ),
         (
@@ -178,16 +187,20 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:03"),
                     pTimestamp("2020/01/01 08:05"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="right", closed="left"),
+            TimeGrouper(freq="5T", label="right", closed="left"),
             DatetimeIndex(
-                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
             array([2, 3], dtype=DTYPE_INT64),
             0,
             DatetimeIndex(
-                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:05:00", "2020-01-01 08:10:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
         ),
         (
@@ -196,9 +209,9 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:03"),
                     pTimestamp("2020/01/01 08:04"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="right", closed="left"),
+            TimeGrouper(freq="5T", label="right", closed="left"),
             DatetimeIndex(["2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"),
             array([3], dtype=DTYPE_INT64),
             0,
@@ -210,16 +223,20 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:04"),
                     pTimestamp("2020/01/01 08:05"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="left", closed="right"),
+            TimeGrouper(freq="5T", label="left", closed="right"),
             DatetimeIndex(
-                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
             array([1, 3], dtype=DTYPE_INT64),
             0,
             DatetimeIndex(
-                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
         ),
         (
@@ -228,16 +245,20 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:03"),
                     pTimestamp("2020/01/01 08:04"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="left", closed="right"),
+            TimeGrouper(freq="5T", label="left", closed="right"),
             DatetimeIndex(
-                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 07:55:00", "2020-01-01 08:00:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
             array([1, 3], dtype=DTYPE_INT64),
             0,
             DatetimeIndex(
-                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
         ),
         (
@@ -246,9 +267,9 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:01"),
                     pTimestamp("2020/01/01 08:03"),
                     pTimestamp("2020/01/01 08:04"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="left", closed="right"),
+            TimeGrouper(freq="5T", label="left", closed="right"),
             DatetimeIndex(["2020-01-01 08:00:00"], dtype=DTYPE_DATETIME64, freq="5T"),
             array([3], dtype=DTYPE_INT64),
             0,
@@ -260,16 +281,20 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:04"),
                     pTimestamp("2020/01/01 08:05"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="right", closed="right"),
+            TimeGrouper(freq="5T", label="right", closed="right"),
             DatetimeIndex(
-                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
             array([1, 3], dtype=DTYPE_INT64),
             0,
             DatetimeIndex(
-                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"
+                ["2020-01-01 08:00:00", "2020-01-01 08:05:00"],
+                dtype=DTYPE_DATETIME64,
+                freq="5T",
             ),
         ),
         (
@@ -278,9 +303,9 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
                     pTimestamp("2020/01/01 08:01"),
                     pTimestamp("2020/01/01 08:03"),
                     pTimestamp("2020/01/01 08:04"),
-                ]
+                ],
             ),
-            Grouper(freq="5T", label="right", closed="right"),
+            TimeGrouper(freq="5T", label="right", closed="right"),
             DatetimeIndex(["2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"),
             array([3], dtype=DTYPE_INT64),
             0,
@@ -289,7 +314,12 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
     ],
 )
 def test_by_scale(
-    on, by, chunk_labels_ref, next_chunk_starts_ref, n_null_chunks_ref, chunk_ends_ref
+    on,
+    by,
+    chunk_labels_ref,
+    next_chunk_starts_ref,
+    n_null_chunks_ref,
+    chunk_ends_ref,
 ):
     # next_chunk_starts, chunk_labels, n_null_chunks, by_closed, chunk_ends, False
     (
@@ -351,7 +381,7 @@ def test_by_x_rows(
     start = pTimestamp("2022/01/01 08:00")
     dummy_data = arange(len_data)
     data = pDataFrame(
-        {"dummy_data": dummy_data, "dti": date_range(start, periods=len_data, freq="1H")}
+        {"dummy_data": dummy_data, "dti": date_range(start, periods=len_data, freq="1H")},
     )
     chunk_labels_ref = data.iloc[chunk_starts_ref, -1].reset_index(drop=True)
     chunk_ends_idx = next_chunk_starts_ref.copy()
@@ -443,7 +473,7 @@ def test_mergesort_exceptions_array_length(labels1, labels2, exception_mess):
     "bin_by, bin_on, ordered_on, snap_by, on_cols_ref, ordered_on_ref, next_chunk_starts_ref",
     [
         (
-            Grouper(key="dti", freq="5T", label="left", closed="left"),
+            TimeGrouper(key="dti", freq="5T", label="left", closed="left"),
             None,
             None,
             None,
@@ -452,7 +482,7 @@ def test_mergesort_exceptions_array_length(labels1, labels2, exception_mess):
             array([2, 3]),
         ),
         (
-            Grouper(key="dti", freq="5T", label="left", closed="left"),
+            TimeGrouper(key="dti", freq="5T", label="left", closed="left"),
             "dti",
             None,
             None,
@@ -461,7 +491,7 @@ def test_mergesort_exceptions_array_length(labels1, labels2, exception_mess):
             array([2, 3]),
         ),
         (
-            Grouper(key="dti", freq="5T", label="left", closed="left"),
+            TimeGrouper(key="dti", freq="5T", label="left", closed="left"),
             None,
             "dti",
             None,
@@ -491,7 +521,7 @@ def test_mergesort_exceptions_array_length(labels1, labels2, exception_mess):
             by_x_rows,
             "dti",
             None,
-            Grouper(key="dti2", freq="5T", label="left", closed="left"),
+            TimeGrouper(key="dti2", freq="5T", label="left", closed="left"),
             ["dti", "dti2"],
             "dti2",
             array([3]),
@@ -499,15 +529,21 @@ def test_mergesort_exceptions_array_length(labels1, labels2, exception_mess):
     ],
 )
 def test_setup_segmentby(
-    bin_by, bin_on, ordered_on, snap_by, on_cols_ref, ordered_on_ref, next_chunk_starts_ref
+    bin_by,
+    bin_on,
+    ordered_on,
+    snap_by,
+    on_cols_ref,
+    ordered_on_ref,
+    next_chunk_starts_ref,
 ):
     # Input data for testing 'bin_by' callable.
     res = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
-    if isinstance(bin_by, Grouper):
+    if isinstance(bin_by, TimeGrouper):
         on = Series(date_range("2020/01/01 08:01", periods=3, freq="3T"))
     else:
         on = pDataFrame(
-            {"dti": date_range("2020/01/01 08:01", periods=3, freq="3T"), "ordered_on": [1, 2, 3]}
+            {"dti": date_range("2020/01/01 08:01", periods=3, freq="3T"), "ordered_on": [1, 2, 3]},
         )
     (next_chunk_starts, _, _, _, _, _) = res[BIN_BY](on=on)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
@@ -519,21 +555,21 @@ def test_setup_segmentby(
     "bin_by, bin_on, ordered_on, snap_by, regex_ref",
     [
         (
-            Grouper(key=None, freq="5T", label="left", closed="left"),
+            TimeGrouper(key=None, freq="5T", label="left", closed="left"),
             None,
             None,
             None,
             "^not possible to set both 'bin_by.key' and 'bin_on'",
         ),
         (
-            Grouper(key="dti1", freq="5T", label="left", closed="left"),
+            TimeGrouper(key="dti1", freq="5T", label="left", closed="left"),
             "dti2",
             None,
             None,
             "^not possible to set 'bin_by.key' and 'bin_on'",
         ),
         (
-            Grouper(key="dti1", freq="5T", label="left", closed="left"),
+            TimeGrouper(key="dti1", freq="5T", label="left", closed="left"),
             None,
             "dti2",
             None,
@@ -547,17 +583,17 @@ def test_setup_segmentby(
             "not possible to set both 'bin_on' and 'ordered_on'.",
         ),
         (
-            Grouper(key="dti1", freq="5T", label="left", closed="left"),
+            TimeGrouper(key="dti1", freq="5T", label="left", closed="left"),
             None,
             None,
-            Grouper(key="dti2", freq="5T", label="left", closed="left"),
+            TimeGrouper(key="dti2", freq="5T", label="left", closed="left"),
             "^not possible to set 'ordered_on' and 'snap_by.key'",
         ),
         (
-            Grouper(key="dti", freq="5T", label="left", closed="left"),
+            TimeGrouper(key="dti", freq="5T", label="left", closed="left"),
             None,
             None,
-            Grouper(key="dti", freq="5T", label="left", closed="right"),
+            TimeGrouper(key="dti", freq="5T", label="left", closed="right"),
             "^not possible to set 'bin_by.closed' and 'snap_by.closed'",
         ),
         (
@@ -579,8 +615,8 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
     "bin_labels_ref, n_null_bins_ref, snap_labels_ref, n_max_null_snaps_ref",
     [
         (
-            # 0/ 'bin_by' only, as a Grouper.
-            Grouper(key="dti", freq="5T", label="left", closed="left"),
+            # 0/ 'bin_by' only, as a TimeGrouper.
+            TimeGrouper(key="dti", freq="5T", label="left", closed="left"),
             None,
             None,
             None,
@@ -592,7 +628,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             0,
         ),
         (
-            # 1/ 'bin_by' and 'snap_by' both as a Grouper, left-closed
+            # 1/ 'bin_by' and 'snap_by' both as a TimeGrouper, left-closed
             # 'snap_by' points excluded (left-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -601,10 +637,10 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #               s3-8:10    b2
             #      8:10     s4-8:12    b3-8:15
             #      8:13     s5-8:14    b3
-            Grouper(key="dti", freq="5T", label="right", closed="left"),
+            TimeGrouper(key="dti", freq="5T", label="right", closed="left"),
             None,
             None,
-            Grouper(key="dti", freq="2T", label="right"),
+            TimeGrouper(key="dti", freq="2T", label="right"),
             #     b1 s1 s2 s3 b2 s4 s5 b3
             #      0           4        7
             array([1, 1, 2, 2, 2, 3, 4, 4]),
@@ -615,7 +651,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             2,
         ),
         (
-            # 2/ 'bin_by' and 'snap_by' both as a Grouper, right-closed
+            # 2/ 'bin_by' and 'snap_by' both as a TimeGrouper, right-closed
             # 'snap_by' points included (right-closed)
             # 'data'
             #  datetime       snaps       bins
@@ -625,10 +661,10 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #      8:10     s4-8:10    b2
             #               s5-8:12    b3-8:15
             #      8:13     s6-8:14    b3
-            Grouper(key="dti", freq="5T", label="right", closed="right"),
+            TimeGrouper(key="dti", freq="5T", label="right", closed="right"),
             None,
             None,
-            Grouper(key="dti", freq="2T", label="right", closed="right"),
+            TimeGrouper(key="dti", freq="2T", label="right", closed="right"),
             #     s1 b1 s2 s3 s4 b2 s5 s6 b3
             #         1           5        8
             array([1, 1, 1, 2, 3, 3, 3, 4, 4]),
@@ -642,7 +678,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             4,
         ),
         (
-            # 3/ 'bin_by' as a Grouper, left-closed, and 'snap_by' as a
+            # 3/ 'bin_by' as a TimeGrouper, left-closed, and 'snap_by' as a
             # DatetimeIndex.
             # 'snap_by' points excluded (left-closed)
             # 'data'
@@ -652,7 +688,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #               s3-8:10    b2
             #      8:10     s4-8:12    b3-8:15
             #      8:13     s5-8:14    b3
-            Grouper(key="dti", freq="5T", label="right", closed="left"),
+            TimeGrouper(key="dti", freq="5T", label="right", closed="left"),
             None,
             None,
             date_range("2020/01/01 08:06", periods=5, freq="2T"),
@@ -666,7 +702,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             2,
         ),
         (
-            # 4/ 'bin_by' as a Grouper, right-closed, and 'snap_by' as a
+            # 4/ 'bin_by' as a TimeGrouper, right-closed, and 'snap_by' as a
             # DatetimeIndex.
             # 'snap_by' points included (right-closed)
             # 'data'
@@ -677,7 +713,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #      8:10     s4-8:10    b2
             #               s5-8:12    b3-8:15
             #      8:13     s6-8:14    b3
-            Grouper(key="dti", freq="5T", label="right", closed="right"),
+            TimeGrouper(key="dti", freq="5T", label="right", closed="right"),
             None,
             None,
             date_range("2020/01/01 08:04", periods=6, freq="2T"),
@@ -695,7 +731,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
         ),
         (
             # 5/ 'bin_by' as a Callable, left-closed.
-            # 'snap_by' as a Grouper, points excluded (left-closed)
+            # 'snap_by' as a TimeGrouper, points excluded (left-closed)
             # 'data'
             #  datetime       snaps       bins
             #      8:04     s1-8:06    b1-8:06
@@ -707,7 +743,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             partial(by_x_rows, by=3),
             "dti",
             None,
-            Grouper(key="dti", freq="2T", label="right"),
+            TimeGrouper(key="dti", freq="2T", label="right"),
             #     s1 s2 s3 s4 b1 s5 b2
             #                  4     6
             array([1, 2, 2, 3, 3, 4, 4]),
@@ -721,7 +757,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
         ),
         (
             # 6/ 'bin_by' as a Callable, right-closed.
-            # 'snap_by' as a Grouper, points included (right-closed)
+            # 'snap_by' as a TimeGrouper, points included (right-closed)
             # 'data'
             #  datetime       snaps       bins
             #      8:04     s1-8:04    b1-8:04
@@ -733,7 +769,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             partial(by_x_rows, by=3, closed=RIGHT),
             "dti",
             None,
-            Grouper(key="dti", freq="2T", label="right"),
+            TimeGrouper(key="dti", freq="2T", label="right"),
             #     s1 s2 s3 s4 b1 s5 s6 b2
             #                  4        7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
@@ -833,7 +869,7 @@ def test_segmentby(
 
 
 def test_segmentby_with_outer_setup():
-    # 'bin_by' and 'snap_by' both as a Grouper, left-closed
+    # 'bin_by' and 'snap_by' both as a TimeGrouper, left-closed
     # 'snap_by' points excluded (left-closed)
     # 'data'
     #  datetime       snaps       bins
@@ -842,8 +878,8 @@ def test_segmentby_with_outer_setup():
     #               s3-8:10    b2
     #      8:10     s4-8:12    b3-8:15
     #      8:13     s5-8:14    b3
-    bin_by = Grouper(key="dti", freq="5T", label="right", closed="left")
-    snap_by = Grouper(key="dti", freq="2T", label="right")
+    bin_by = TimeGrouper(key="dti", freq="5T", label="right", closed="left")
+    snap_by = TimeGrouper(key="dti", freq="2T", label="right")
     bin_by = setup_segmentby(bin_by=bin_by, snap_by=snap_by)
     dti = date_range("2020/01/01 08:04", periods=4, freq="3T")
     data = pDataFrame({"dti": dti, "ordered_on": range(len(dti))})
@@ -902,7 +938,7 @@ def test_segmentby_binby_exceptions():
 def test_segmentby_orderedon_exceptions():
     # Check when 'ordered_on' is not ordered.
     bin_on = "ordered_on"
-    bin_by = Grouper(key=bin_on, freq="2T")
+    bin_by = TimeGrouper(key=bin_on, freq="2T")
     ordered_on = bin_on
     # 'ordered_on' is a DatetimeIndex.
     unordered = DatetimeIndex(["2020/01/01 08:00", "2020/01/01 09:00", "2020/01/01 07:00"])

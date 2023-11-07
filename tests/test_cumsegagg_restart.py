@@ -3,6 +3,7 @@
 Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
+
 """
 from functools import partial
 
@@ -11,9 +12,9 @@ from numpy import array
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
-from pandas import Grouper
 from pandas import Timestamp as pTimestamp
 from pandas import concat as pconcat
+from pandas.core.resample import TimeGrouper
 
 from oups.cumsegagg import DTYPE_DATETIME64
 from oups.cumsegagg import DTYPE_FLOAT64
@@ -56,7 +57,7 @@ from oups.segmentby import setup_segmentby
         #      9:30   3.2    1  b6-9:30
         (
             [6, 11],
-            Grouper(freq="15T", key="dti", closed="left", label="right"),
+            TimeGrouper(freq="15T", key="dti", closed="left", label="right"),
             None,
             [pDataFrame({FIRST: [5.6], SUM: [15]}), pDataFrame({FIRST: [3.2], SUM: [1]})],
             [
@@ -82,7 +83,7 @@ from oups.segmentby import setup_segmentby
         #      9:30   3.2    1  b6-9:30
         (
             [5, 11],
-            Grouper(freq="15T", key="dti", closed="left", label="right"),
+            TimeGrouper(freq="15T", key="dti", closed="left", label="right"),
             None,
             [pDataFrame({FIRST: [5.6], SUM: [9]}), pDataFrame({FIRST: [3.2], SUM: [1]})],
             [
@@ -142,7 +143,12 @@ from oups.segmentby import setup_segmentby
     ],
 )
 def test_cumsegagg_bin_only(
-    end_indices, bin_by, ordered_on, last_chunk_res_ref, indices_of_null_res, bin_res_ref
+    end_indices,
+    bin_by,
+    ordered_on,
+    last_chunk_res_ref,
+    indices_of_null_res,
+    bin_res_ref,
 ):
     # Test binning with null chunks.
     # 'data' as follow
@@ -170,8 +176,8 @@ def test_cumsegagg_bin_only(
         FIRST: (value, FIRST),
         SUM: (qty, SUM),
     }
-    if isinstance(bin_by, Grouper):
-        # Reference results from pandas Grouper.
+    if isinstance(bin_by, TimeGrouper):
+        # Reference results from pandas TimeGrouper.
         bin_res_ref = data.groupby(bin_by).agg(**agg)
     else:
         # Last cosmetic changes on 'bin_res_ref' if a DataFrame.
@@ -189,7 +195,10 @@ def test_cumsegagg_bin_only(
     # Run in loop.
     for i, end_idx in enumerate(end_indices):
         bin_res = cumsegagg(
-            data=data.iloc[start_idx:end_idx], agg=agg, bin_by=bin_by, buffer=buffer
+            data=data.iloc[start_idx:end_idx],
+            agg=agg,
+            bin_by=bin_by,
+            buffer=buffer,
         )
         assert buffer[KEY_LAST_CHUNK_RES].equals(last_chunk_res_ref[i])
         bin_res_to_concatenate.append(bin_res)
@@ -243,7 +252,7 @@ def test_cumsegagg_bin_only(
                         "2020-01-01 09:20",
                         "2020-01-01 09:40",
                         "2020-01-01 09:44",
-                    ]
+                    ],
                 ),
             ],
             [4, 9],
@@ -268,12 +277,12 @@ def test_cumsegagg_bin_only(
                         "2020-01-01 09:11",
                         "2020-01-01 09:20",
                         "2020-01-01 09:40",
-                    ]
+                    ],
                 ),
             ),
         ),
         (
-            # 1/ 'bin_by' as Grouper and 'snap_by' as Series.
+            # 1/ 'bin_by' as TimeGrouper and 'snap_by' as Series.
             #    In this test case, 2nd chunk is traversed without new snap,
             #    and without new bin.
             #   dti  odr  val  slices   bins     snaps
@@ -289,7 +298,7 @@ def test_cumsegagg_bin_only(
             #  9:10    7    3
             #  9:30    8    2
             # bin_by
-            Grouper(freq="1H", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="1H", label="left", closed="left", key="dti"),
             # ordered_on
             None,
             # snap_by
@@ -318,7 +327,7 @@ def test_cumsegagg_bin_only(
             ),
         ),
         (
-            # 2/ 'bin_by' as Grouper and 'snap_by' as Series.
+            # 2/ 'bin_by' as TimeGrouper and 'snap_by' as Series.
             #    In this test case, 2nd iteration contains null bins/snaps.
             #    Testing concatenation of int64 / Int64 (pandas nullable int)
             #    pandas DataFrame.
@@ -338,14 +347,19 @@ def test_cumsegagg_bin_only(
             #  9:10    7    3
             #  9:30    8    2         4-9:30
             # bin_by
-            Grouper(freq="30T", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="30T", label="left", closed="left", key="dti"),
             # ordered_on
             None,
             # snap_by
             [
                 DatetimeIndex(["2020-01-01 08:12"]),
                 DatetimeIndex(
-                    ["2020-01-01 08:12", "2020-01-01 08:33", "2020-01-01 09:00", "2020-01-01 09:10"]
+                    [
+                        "2020-01-01 08:12",
+                        "2020-01-01 08:33",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:10",
+                    ],
                 ),
             ],
             # end_indices
@@ -356,7 +370,12 @@ def test_cumsegagg_bin_only(
             pDataFrame(
                 {MIN: [1, pNA, 3, 2], LAST: [1, pNA, 3, 2]},
                 index=DatetimeIndex(
-                    ["2020-01-01 08:00", "2020-01-01 08:30", "2020-01-01 09:00", "2020-01-01 09:30"]
+                    [
+                        "2020-01-01 08:00",
+                        "2020-01-01 08:30",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:30",
+                    ],
                 ),
                 dtype=DTYPE_NULLABLE_INT64,
             ),
@@ -364,13 +383,18 @@ def test_cumsegagg_bin_only(
             pDataFrame(
                 {MIN: [1, pNA, pNA, 9], LAST: [4, pNA, pNA, 9]},
                 index=DatetimeIndex(
-                    ["2020-01-01 08:12", "2020-01-01 08:33", "2020-01-01 09:00", "2020-01-01 09:10"]
+                    [
+                        "2020-01-01 08:12",
+                        "2020-01-01 08:33",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:10",
+                    ],
                 ),
                 dtype=DTYPE_NULLABLE_INT64,
             ),
         ),
         (
-            # 3/ 'bin_by' as Grouper and 'snap_by' as Series.
+            # 3/ 'bin_by' as TimeGrouper and 'snap_by' as Series.
             #    In this test case, 2nd iteration starts with 2 empty snaps,
             #    then a null bin.
             #   dti  odr  val  slices   bins     snaps
@@ -389,14 +413,19 @@ def test_cumsegagg_bin_only(
             #  9:10    7    3
             #  9:30    8    2         4-9:30
             # bin_by
-            Grouper(freq="30T", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="30T", label="left", closed="left", key="dti"),
             # ordered_on
             None,
             # snap_by
             [
                 DatetimeIndex(["2020-01-01 08:12"]),
                 DatetimeIndex(
-                    ["2020-01-01 08:12", "2020-01-01 08:22", "2020-01-01 08:23", "2020-01-01 09:10"]
+                    [
+                        "2020-01-01 08:12",
+                        "2020-01-01 08:22",
+                        "2020-01-01 08:23",
+                        "2020-01-01 09:10",
+                    ],
                 ),
             ],
             # end_indices
@@ -407,7 +436,12 @@ def test_cumsegagg_bin_only(
             pDataFrame(
                 {MIN: [1, pNA, 3, 2], LAST: [1, pNA, 3, 2]},
                 index=DatetimeIndex(
-                    ["2020-01-01 08:00", "2020-01-01 08:30", "2020-01-01 09:00", "2020-01-01 09:30"]
+                    [
+                        "2020-01-01 08:00",
+                        "2020-01-01 08:30",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:30",
+                    ],
                 ),
                 dtype=DTYPE_NULLABLE_INT64,
             ),
@@ -415,12 +449,17 @@ def test_cumsegagg_bin_only(
             pDataFrame(
                 {MIN: [1, 1, 1, 9], LAST: [4, 1, 1, 9]},
                 index=DatetimeIndex(
-                    ["2020-01-01 08:12", "2020-01-01 08:22", "2020-01-01 08:23", "2020-01-01 09:10"]
+                    [
+                        "2020-01-01 08:12",
+                        "2020-01-01 08:22",
+                        "2020-01-01 08:23",
+                        "2020-01-01 09:10",
+                    ],
                 ),
             ),
         ),
         (
-            # 4/ 'bin_by' as Grouper and 'snap_by' as Series.
+            # 4/ 'bin_by' as TimeGrouper and 'snap_by' as Series.
             #    In this test case, 1st iteration is started without snapshot
             #    (empty array), as not known yet!
             #   dti  odr  val  slices   bins     snaps
@@ -438,7 +477,7 @@ def test_cumsegagg_bin_only(
             #  9:10    7    3
             #  9:30    8    2         4-9:30
             # bin_by
-            Grouper(freq="30T", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="30T", label="left", closed="left", key="dti"),
             # ordered_on
             None,
             # snap_by
@@ -454,7 +493,12 @@ def test_cumsegagg_bin_only(
             pDataFrame(
                 {MIN: [1, pNA, 3, 2], LAST: [1, pNA, 3, 2]},
                 index=DatetimeIndex(
-                    ["2020-01-01 08:00", "2020-01-01 08:30", "2020-01-01 09:00", "2020-01-01 09:30"]
+                    [
+                        "2020-01-01 08:00",
+                        "2020-01-01 08:30",
+                        "2020-01-01 09:00",
+                        "2020-01-01 09:30",
+                    ],
                 ),
                 dtype=DTYPE_NULLABLE_INT64,
             ),
@@ -468,7 +512,13 @@ def test_cumsegagg_bin_only(
     ],
 )
 def test_cumsegagg_bin_snap(
-    bin_by, ordered_on, snap_by, end_indices, last_chunk_res_ref, bin_ref, snap_ref
+    bin_by,
+    ordered_on,
+    snap_by,
+    end_indices,
+    last_chunk_res_ref,
+    bin_ref,
+    snap_ref,
 ):
     qties = array([1, 4, 6, 2, 3, 1, 9, 3, 2], dtype=DTYPE_INT64)
     dtidx = array(
