@@ -116,5 +116,3 @@ class ParquetHandle:
         md = self.pf.key_value_metadata
         if OUPS_METADATA_KEY in md:
             return loads(md[OUPS_METADATA_KEY])
-        else:
-            return None

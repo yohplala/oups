@@ -15,10 +15,10 @@ from numpy import ndarray
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
-from pandas import Grouper
 from pandas import NaT as pNaT
 from pandas import Timestamp as pTimestamp
 from pandas import date_range
+from pandas.core.resample import TimeGrouper
 
 from oups.cumsegagg import DTYPE_DATETIME64
 from oups.cumsegagg import DTYPE_FLOAT64
@@ -207,7 +207,7 @@ def test_cumsegagg_bin_single_dtype(ndata, cols):
             },
         )
         agg = {"res_first": ("col1_f", "first"), "res_last": ("col1_f", "last")}
-    by = Grouper(freq="5T", closed="left", label="left", key=time_idx)
+    by = TimeGrouper(freq="5T", closed="left", label="left", key=time_idx)
     bin_res = cumsegagg(data=data, agg=agg, bin_by=by)
     bin_res_ref = data.groupby(by).agg(**agg)
     assert bin_res.equals(bin_res_ref)
@@ -248,7 +248,7 @@ def test_cumsegagg_bin_mixed_dtype():
         "res_max_f": ("col4_i", "max"),
         "res_first_d": ("datetime_idx", "first"),
     }
-    bin_by = Grouper(freq="5T", closed="left", label="left", key=time_idx)
+    bin_by = TimeGrouper(freq="5T", closed="left", label="left", key=time_idx)
     agg_res = cumsegagg(data=data, agg=agg, bin_by=bin_by)
     agg_res_ref = data.groupby(bin_by).agg(**agg)
     assert agg_res.equals(agg_res_ref)
@@ -397,8 +397,8 @@ def test_cumsegagg_bin_snap_with_null_chunks(
         SUM: (qty, SUM),
         "ts_first": (dti, FIRST),
     }
-    bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
-    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti, label="right")
+    bin_by = TimeGrouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
+    snap_by = TimeGrouper(freq="5T", closed=b_by_closed, key=dti, label="right")
     bins_res, snaps_res = cumsegagg(
         data=data,
         agg=agg,
@@ -562,8 +562,8 @@ def test_cumsegagg_bin_snap_with_null_chunks_other(
         SUM: (qty, SUM),
         "ts_first": (dti, FIRST),
     }
-    bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
-    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti, label="right")
+    bin_by = TimeGrouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
+    snap_by = TimeGrouper(freq="5T", closed=b_by_closed, key=dti, label="right")
     bins_res, snaps_res = cumsegagg(
         data=data,
         agg=agg,
@@ -680,8 +680,8 @@ def test_cumsegagg_single_bin_several_snaps(
         MIN: (value, MIN),
         LAST: (value, LAST),
     }
-    bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
-    snap_by = Grouper(freq="5T", closed=b_by_closed, key=dti, label="right")
+    bin_by = TimeGrouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
+    snap_by = TimeGrouper(freq="5T", closed=b_by_closed, key=dti, label="right")
     bins_res, snaps_res = cumsegagg(
         data=data,
         agg=agg,
@@ -773,7 +773,7 @@ def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
         MIN: (value, MIN),
         LAST: (value, LAST),
     }
-    bin_by = Grouper(freq="30T", closed=s_by_closed, label="right", key=dti)
+    bin_by = TimeGrouper(freq="30T", closed=s_by_closed, label="right", key=dti)
     snap_by = DatetimeIndex(
         [
             pTimestamp("2020-01-01 08:00:00"),
@@ -905,7 +905,7 @@ def test_cumsegagg_binby_grouper_snapby_intervalindex(
         MIN: (value, MIN),
         LAST: (value, LAST),
     }
-    bin_by = Grouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
+    bin_by = TimeGrouper(freq="30T", closed=b_by_closed, label=b_by_label, key=dti)
     snap_by = DatetimeIndex(
         [
             pTimestamp("2020-01-01 07:58:00"),
@@ -1046,7 +1046,6 @@ def test_cumsegagg_binby_callable_snapby_intervalindex(
         data=data,
         agg=agg,
         bin_by=bin_by,
-        bin_on=dti,
         ordered_on=dti,
         snap_by=snap_by,
     )
@@ -1072,8 +1071,8 @@ def test_exit_on_null_data():
     # Test exception if a col in 'agg' does not exist in data.
     data = pDataFrame({"val": []})
     agg = {FIRST: ("val", FIRST)}
-    bin_by = Grouper(freq="10T", closed="left", label="right", key="val")
-    snap_by = Grouper(freq="5T", closed="left", key="val")
+    bin_by = TimeGrouper(freq="10T", closed="left", label="right", key="val")
+    snap_by = TimeGrouper(freq="5T", closed="left", key="val")
     none_res = cumsegagg(
         data=data,
         agg=agg,
@@ -1091,10 +1090,10 @@ def test_exception_col_not_existing():
     dti = "dti"
     data = pDataFrame({value: values, dti: dtidx})
     agg = {FIRST: (f"{value}_", FIRST)}
-    bin_by = Grouper(freq="10T", closed="left", label="right", key=dti)
-    snap_by = Grouper(freq="5T", closed="left", key=dti)
+    bin_by = TimeGrouper(freq="10T", closed="left", label="right", key=dti)
+    snap_by = TimeGrouper(freq="5T", closed="left", key=dti)
     with pytest.raises(ValueError, match="^column 'value_' does not"):
-        bins_res, snaps_res = cumsegagg(
+        cumsegagg(
             data=data,
             agg=agg,
             bin_by=bin_by,
@@ -1111,13 +1110,31 @@ def test_exception_error_on_0():
     dti = "dti"
     data = pDataFrame({value: values, dti: dtidx})
     agg = {FIRST: (value, FIRST)}
-    bin_by = Grouper(freq="10T", closed="left", label="right", key=dti)
-    snap_by = Grouper(freq="5T", closed="left", key=dti, label="right")
+    bin_by = TimeGrouper(freq="10T", closed="left", label="right", key=dti)
+    snap_by = TimeGrouper(freq="5T", closed="left", key=dti, label="right")
     with pytest.raises(ValueError, match="^at least one null value exists in 'snap_res'"):
-        bins_res, snaps_res = cumsegagg(
+        cumsegagg(
             data=data,
             agg=agg,
             bin_by=bin_by,
             ordered_on=dti,
             snap_by=snap_by,
+        )
+
+
+def test_exception_unknown_agg_function(tmp_path):
+    # Test exception when agg func is unknown.
+    values = array([0.0], dtype=DTYPE_FLOAT64)
+    dtidx = array(["2020-01-01T08:00"], dtype=DTYPE_DATETIME64)
+    value = "value"
+    dti = "dti"
+    data = pDataFrame({value: values, dti: dtidx})
+    agg = {SUM: ("value", "unknown")}
+    bin_by = TimeGrouper(freq="10T", closed="left", label="right", key=dti)
+    with pytest.raises(ValueError, match="^`unknown` aggregation function"):
+        cumsegagg(
+            data=data,
+            agg=agg,
+            bin_by=bin_by,
+            ordered_on=dti,
         )

@@ -24,7 +24,7 @@ from numpy import nonzero
 from numpy import zeros
 from pandas import DataFrame as pDataFrame
 from pandas import IntervalIndex
-from pandas import Series
+from pandas import Series as pSeries
 from pandas import Timedelta
 from pandas import concat as pconcat
 from pandas import date_range
@@ -41,16 +41,17 @@ RIGHT = "right"
 # Keys for main buffer.
 KEY_BIN = "bin"
 KEY_SNAP = "snap"
-# Keys for 'by_x_rows'.
+# Keys for 'by_...' when a Callable.
 KEY_LAST_BIN_LABEL = "last_bin_label"
 KEY_LAST_BIN_END = "last_bin_end"
 KEY_RESTART_KEY = "restart_key"
 KEY_LAST_ON_VALUE = "last_on_value"
 # Keys for 'bin_by' when a dict
-ON_COLS = "on_cols"
-BIN_BY = "bin_by"
-ORDERED_ON = "ordered_on"
-SNAP_BY = "snap_by"
+KEY_ON_COLS = "on_cols"
+KEY_BIN_BY = "bin_by"
+KEY_ORDERED_ON = "ordered_on"
+KEY_SNAP_BY = "snap_by"
+KEY_BIN_ON = "bin_on"
 
 
 @njit(
@@ -138,11 +139,11 @@ def _next_chunk_starts(
 
 
 def by_scale(
-    on: Series,
-    by: Union[TimeGrouper, Series, Tuple[Series]],
+    on: pSeries,
+    by: Union[TimeGrouper, pSeries, Tuple[pSeries]],
     closed: Optional[str] = None,
     buffer: Optional[dict] = None,
-) -> Tuple[ndarray, Series, int, str, Series, bool]:
+) -> Tuple[ndarray, pSeries, int, str, pSeries, bool]:
     """
     Segment an ordered DatetimeIndex or Series.
 
@@ -163,8 +164,8 @@ def by_scale(
         TimeGrouper.
     buffer : dict
         Dict to keep parameters allowing chaining calls to 'by_scale', with
-        ``restart_key``, keeping track of the end of the on-but-last chunk from
-        previous iteration, derived from 'by'.
+        ``restart_key``, keeping track of the end of the one-but-last chunk
+        from previous iteration, derived from 'by'.
 
     Returns
     -------
@@ -172,7 +173,7 @@ def by_scale(
         The first 3 items are used in 'cumsegagg' in all situations.
           - ``next_chunk_starts``, a one-dimensional array of `int` specifying
             the row indices of the next-bin starts, for each bin. Successive
-            identical indices implies empty bins, except the first.
+            identical indices imply empty bins, except the first.
           - ``chunk_labels``, a pandas Series specifying for each bin its
             label. Labels are defined as per 'on' pandas TimeGrouper.
           - ``n_null_chunks``, an int, the number of null chunks identified in
@@ -191,8 +192,8 @@ def by_scale(
     Notes
     -----
     If running ``by_scale()`` with a buffer, setting of value for key
-    `"restart_key`" depends if last value derived from 'by' (either a TimeGrouper
-    or a Series) lies before the last value in 'on'.
+    `"restart_key`" depends if last value derived from 'by' (either a
+    TimeGrouper or a Series) lies before the last value in 'on'.
       - If it lies before, then this last value derived from 'by' is the
         restart key.
       - If it lies after, then the one-but-last value derived from 'by' is the
@@ -324,9 +325,9 @@ def by_scale(
     #       at next iteration, N+1, we are sure no new data will appear before
     #       it. This last value can be safely used as restart value.
     # TODO: when splitting 'by_scale()' into 'by_pgrouper()' and 'by_scale()',
-    # for 'by_pgrouper()', the using for 'restart_key' the last value in 'on'
-    # is complies whatever the 'closed' parameter (I think). This simplifies
-    # below code.
+    # for 'by_pgrouper()', then using for 'restart_key' the last value in 'on'
+    # complies with whatever the 'closed' parameter is (I think). This
+    # simplifies below code.
     if data_traversed:
         chunk_labels = chunk_labels[:n_chunks]
         chunk_ends = chunk_ends[:n_chunks]
@@ -345,8 +346,8 @@ def by_scale(
                     buffer[KEY_RESTART_KEY] = on.iloc[0]
             else:
                 # Take last end
-                # - either if 'by' is a TimeGrouper, as it is enough for generating
-                #   edges at next iteration.
+                # - either if 'by' is a TimeGrouper, as it is enough for
+                #   generating edges at next iteration.
                 # - or if 'by' is a Series, because Series only needs to
                 #   restart from this point then.
                 buffer[KEY_RESTART_KEY] = chunk_ends[n_chunks - 1]
@@ -358,7 +359,7 @@ def by_scale(
         buffer[KEY_LAST_ON_VALUE] = on.iloc[-1]
     return (
         next_chunk_starts,
-        chunk_labels,
+        pSeries(chunk_labels),
         n_null_chunks,
         closed,
         chunk_ends,
@@ -367,11 +368,11 @@ def by_scale(
 
 
 def by_x_rows(
-    on: Union[pDataFrame, Series],
+    on: Union[pDataFrame, pSeries],
     by: Optional[int] = 4,
     closed: Optional[str] = LEFT,
     buffer: Optional[dict] = None,
-) -> Tuple[ndarray, Series, int, str, Series, bool]:
+) -> Tuple[ndarray, pSeries, int, str, pSeries, bool]:
     """
     Segment by group of x rows.
 
@@ -380,7 +381,7 @@ def by_x_rows(
 
     Parameters
     ----------
-    on : Union[pDataFrame, Series]
+    on : Union[pDataFrame, pSeries]
         Either a pandas Series or a DataFrame made of two columns, from which
         deriving
           - the number of rows in 'on',
@@ -496,10 +497,10 @@ def by_x_rows(
                 # If a new bin has been created right at start,
                 # insert an empty one with label of last bin at prev iteration.
                 bin_labels = pconcat(
-                    [Series([buffer[KEY_LAST_BIN_LABEL]]), bin_labels],
+                    [pSeries([buffer[KEY_LAST_BIN_LABEL]]), bin_labels],
                 ).reset_index(drop=True)
                 first_bin_end = buffer[KEY_LAST_BIN_END] if closed == RIGHT else on.iloc[0]
-                bin_ends = pconcat([Series([first_bin_end]), bin_ends]).reset_index(drop=True)
+                bin_ends = pconcat([pSeries([first_bin_end]), bin_ends]).reset_index(drop=True)
                 next_chunk_starts = ninsert(next_chunk_starts, 0, 0)
                 # In this case, first bin is empty.
                 n_null_bins = 1
@@ -579,7 +580,7 @@ def setup_segmentby(
     bin_by: Union[TimeGrouper, Callable],
     bin_on: Optional[str] = None,
     ordered_on: Optional[str] = None,
-    snap_by: Optional[Union[TimeGrouper, Series]] = None,
+    snap_by: Optional[Union[TimeGrouper, pSeries]] = None,
 ) -> Dict[str, Union[Callable, str]]:
     """
     Check and setup parameters to operate data segmentation.
@@ -632,10 +633,17 @@ def setup_segmentby(
             # a TimeGrouper.
             ordered_on = bin_on
         bin_by = partial(by_scale, by=bin_by)
-    else:
+    elif callable(bin_by):
         # 'bin_by' is a Callable.
         if bin_on is None and ordered_on is None:
             raise ValueError("not possible to set both 'bin_on' and 'ordered_on' to `None`.")
+    else:
+        # 'bin_by' is neither a TimeGrouper, nor a Callable.
+        # This is not possible.
+        raise ValueError(
+            "not possible to have 'bin_by' parameter different "
+            "than a pandas TimeGrouper or a Callable.",
+        )
     if snap_by is not None:
         if isinstance(snap_by, TimeGrouper):
             if snap_by.key:
@@ -655,14 +663,15 @@ def setup_segmentby(
                 "not possible to leave 'ordered_on' to `None` in case of snapshotting.",
             )
     return {
-        BIN_BY: bin_by,
-        ON_COLS: [bin_on, ordered_on]
+        KEY_BIN_BY: bin_by,
+        KEY_ON_COLS: [bin_on, ordered_on]
         if ordered_on and bin_on and ordered_on != bin_on
         else bin_on
         if bin_on
         else ordered_on,
-        ORDERED_ON: ordered_on,
-        SNAP_BY: snap_by if isinstance(snap_by, TimeGrouper) else None,
+        KEY_ORDERED_ON: ordered_on,
+        KEY_BIN_ON: bin_on,
+        KEY_SNAP_BY: snap_by if isinstance(snap_by, TimeGrouper) else None,
     }
 
 
@@ -707,7 +716,7 @@ def segmentby(
     ordered_on: Optional[str] = None,
     snap_by: Optional[Union[TimeGrouper, IntervalIndex]] = None,
     buffer: Optional[dict] = None,
-) -> Tuple[ndarray, ndarray, Series, int, Series, int]:
+) -> Tuple[ndarray, ndarray, pSeries, int, pSeries, int]:
     """
     Identify starts of segments in data, either bins or optionally snapshots.
 
@@ -760,6 +769,7 @@ def segmentby(
             corresponding bins are empty, except the first one. In this case,
             corresponding rows in aggregation result will be filled with null
             values.
+            Last value of this array always equals to ``len(on)``.
           - ``bin_labels``, a pandas Series which values are expected to be
             all bin labels, incl. those of empty bins, as they will appear in
             aggregation results. Labels can be of any type.
@@ -816,19 +826,18 @@ def segmentby(
 
     Returns
     -------
-    Tuple made of the 6 items.
+    Tuple made of 6 items.
       - ``next_chunk_starts``,  an ordered one-dimensional numpy array of int,
         specifying for each bin and snapshot the row indice at which starts the
         next one.
       - ``bin_indices``, a one-dimensional array of int, specifying which
         value in ``next_chunk_starts`` relates to a bin (as opposed to a
         snapshot)
-        or if it is continuation of last bin from previous call.
       - ``bin_labels``, a pandas Series specifying for each bin its label.
       - ``n_null_bins``, an int, indicating how many bins are empty.
       - ``snap_labels``, a pandas Series specifying for each snapshot its
         label.
-      - ``n_max_null_snapsh``, an int, specifying how many at most there are
+      - ``n_max_null_snaps``, an int, specifying how many at most there are
         empty snapshots. This figure is an upper bound.
 
     Notes
@@ -843,14 +852,19 @@ def segmentby(
       - create the correct number of bins that would be in-between the data
         processed at the previous aggregation iteration, and the new data.
         This has to show in 'next_chunk_starts' array that is returned.
-      - start with same bin label as previous iteration.
+      - start with same bin label as previous iteration when using snapshots.
 
-    Having the same bin label between both iterations will ensure:
-      - that the bin with previous aggregation results is overwritten.
+    Having the same bin label between both iterations when using snapshots will
+    ensure:
+      - that the bin with previous aggregation results is overwritten (ok, not
+        necessarily meaningful if agg results have not changed in case there
+        has been no new data in this bin).
       - even if this bin is empty at restart, in the case of snapshotting, it
         is necessary when this bin ends that new empty snapshots before its end
         correctly forward past results, and that new empty snapshots after this
-        end are correctly accounted for as empty chunks.
+        end are correctly accounted for as empty chunks. For this reason, when
+        using snapshots, a check ensures that same bin label is used between
+        two successive iterations.
 
     Still for repetitive calls of 'bin_by', care has to be taken that:
       - the last bin is not an empty one.
@@ -873,12 +887,12 @@ def segmentby(
     # be run at child class instantiation.
     if not isinstance(bin_by, dict):
         bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
-    if bin_by[SNAP_BY] is not None:
-        # 'bin_by[SNAP_BY]' is not none if 'snap_by' is a TimeGrouper.
+    if bin_by[KEY_SNAP_BY] is not None:
+        # 'bin_by[KEY_SNAP_BY]' is not none if 'snap_by' is a TimeGrouper.
         # Otherwise, it can be a DatetimeIndex or a Series.
-        snap_by = bin_by[SNAP_BY]
+        snap_by = bin_by[KEY_SNAP_BY]
     buffer_bin, buffer_snap = setup_mainbuffer(buffer, snap_by is not None)
-    ordered_on = bin_by[ORDERED_ON]
+    ordered_on = bin_by[KEY_ORDERED_ON]
     if ordered_on:
         # Check 'ordered_on' is an ordered column.
         if not (
@@ -895,7 +909,7 @@ def segmentby(
                 f"column '{ordered_on}' is not ordered. It has to be for "
                 "'cumsegagg' to operate faultlessly.",
             )
-    on = data.loc[:, bin_by[ON_COLS]]
+    on = data.loc[:, bin_by[KEY_ON_COLS]]
     # 'bin_by' binning.
     (
         next_chunk_starts,
@@ -904,7 +918,7 @@ def segmentby(
         bin_closed,
         bin_ends,
         unknown_last_bin_end,
-    ) = bin_by[BIN_BY](on=on, buffer=buffer_bin)
+    ) = bin_by[KEY_BIN_BY](on=on, buffer=buffer_bin)
     # Check consistency of 'bin_by' results.
     # TODO : consider transitioning 'bin_by' and 'snap_by' into a class.
     # Integrate below checks within a template class.
@@ -912,6 +926,10 @@ def segmentby(
     # Others at runtime.
     if bin_closed != LEFT and bin_closed != RIGHT:
         raise ValueError(f"'bin_closed' has to be set either to '{LEFT}' or to '{RIGHT}'.")
+    if not isinstance(bin_labels, pSeries):
+        # Because `iloc` is used afterwards, `bin_labels` has to be a pandas
+        # Series.
+        raise TypeError("'bin_labels' has to be a pandas Series.")
     n_bins = len(next_chunk_starts)
     if n_bins != len(bin_labels):
         raise ValueError("'next_chunk_starts' and 'chunk_labels' have to be of the same size.")
@@ -938,15 +956,13 @@ def segmentby(
             # When using snapshots, and in case of multiple calls, check that
             # label of last bin (previous iteration) is same than label of
             # first bin (current iteration).
-            if KEY_LAST_BIN_LABEL in buffer and buffer[KEY_LAST_BIN_LABEL] != bin_labels[0]:
+            if KEY_LAST_BIN_LABEL in buffer and buffer[KEY_LAST_BIN_LABEL] != bin_labels.iloc[0]:
                 raise ValueError(
                     f"not possible to have label '{buffer[KEY_LAST_BIN_LABEL]}' "
                     "of last bin at previous iteration different than label "
-                    f"'{bin_labels[0]}' of first bin at current itation.",
+                    f"'{bin_labels.iloc[0]}' of first bin at current itation when ."
+                    " using snapshots",
                 )
-            # Weird way to get last element because 'bin_labels' is not
-            # necessarily a Series for which 'iloc' should be used.
-            buffer[KEY_LAST_BIN_LABEL] = bin_labels[n_bins - 1]
         # Define points of observation
         (next_snap_starts, snap_labels, n_max_null_snaps, _, snap_ends, _) = by_scale(
             on=data.loc[:, ordered_on],
@@ -998,6 +1014,10 @@ def segmentby(
         bin_indices = NULL_INT64_1D_ARRAY
         snap_labels = None
         n_max_null_snaps = 0
+    # Keep track of last bin labels for checking at next iteration.
+    # Check is managed at upper level in `cumsegagg`.
+    if buffer is not None:
+        buffer[KEY_LAST_BIN_LABEL] = bin_labels.iloc[-1]
     return (
         next_chunk_starts,
         bin_indices,

@@ -13,18 +13,18 @@ from numpy import arange
 from numpy import array
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
-from pandas import Series
+from pandas import Series as pSeries
 from pandas import Timestamp as pTimestamp
 from pandas import date_range
 from pandas.core.resample import TimeGrouper
 
-from oups.segmentby import BIN_BY
 from oups.segmentby import DTYPE_DATETIME64
 from oups.segmentby import DTYPE_INT64
+from oups.segmentby import KEY_BIN_BY
+from oups.segmentby import KEY_ON_COLS
+from oups.segmentby import KEY_ORDERED_ON
 from oups.segmentby import LEFT
 from oups.segmentby import NULL_INT64_1D_ARRAY
-from oups.segmentby import ON_COLS
-from oups.segmentby import ORDERED_ON
 from oups.segmentby import RIGHT
 from oups.segmentby import _next_chunk_starts
 from oups.segmentby import by_scale
@@ -124,7 +124,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
     "on, by, chunk_labels_ref, next_chunk_starts_ref, n_null_chunks_ref, chunk_ends_ref",
     [
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:04"),
@@ -146,7 +146,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
             ),
         ),
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:03"),
@@ -160,7 +160,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
             DatetimeIndex(["2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"),
         ),
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:01"),
                     pTimestamp("2020/01/01 08:03"),
@@ -182,7 +182,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
             ),
         ),
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:03"),
@@ -204,7 +204,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
             ),
         ),
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:03"),
@@ -218,7 +218,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
             DatetimeIndex(["2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"),
         ),
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:04"),
@@ -240,7 +240,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
             ),
         ),
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:03"),
@@ -262,7 +262,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
             ),
         ),
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:01"),
                     pTimestamp("2020/01/01 08:03"),
@@ -276,7 +276,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
             DatetimeIndex(["2020-01-01 08:05:00"], dtype=DTYPE_DATETIME64, freq="5T"),
         ),
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:00"),
                     pTimestamp("2020/01/01 08:04"),
@@ -298,7 +298,7 @@ def test_next_chunk_starts(data, right_edges, right, ref, n_null_chunks_ref, edg
             ),
         ),
         (
-            Series(
+            pSeries(
                 [
                     pTimestamp("2020/01/01 08:01"),
                     pTimestamp("2020/01/01 08:03"),
@@ -355,7 +355,7 @@ def test_by_scale(
     ],
 )
 def test_by_scale_exceptions_if_datetimeindex(by, closed, exception_mess):
-    on = Series(date_range("2020/01/01 07:59", "2020/01/01 07:09", freq="2T"))
+    on = pSeries(date_range("2020/01/01 07:59", "2020/01/01 07:09", freq="2T"))
     with pytest.raises(ValueError, match=exception_mess):
         by_scale(on, by, closed)
 
@@ -540,15 +540,15 @@ def test_setup_segmentby(
     # Input data for testing 'bin_by' callable.
     res = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
     if isinstance(bin_by, TimeGrouper):
-        on = Series(date_range("2020/01/01 08:01", periods=3, freq="3T"))
+        on = pSeries(date_range("2020/01/01 08:01", periods=3, freq="3T"))
     else:
         on = pDataFrame(
             {"dti": date_range("2020/01/01 08:01", periods=3, freq="3T"), "ordered_on": [1, 2, 3]},
         )
-    (next_chunk_starts, _, _, _, _, _) = res[BIN_BY](on=on)
+    (next_chunk_starts, _, _, _, _, _) = res[KEY_BIN_BY](on=on)
     assert nall(next_chunk_starts == next_chunk_starts_ref)
-    assert res[ON_COLS] == on_cols_ref
-    assert res[ORDERED_ON] == ordered_on_ref
+    assert res[KEY_ON_COLS] == on_cols_ref
+    assert res[KEY_ORDERED_ON] == ordered_on_ref
 
 
 @pytest.mark.parametrize(
@@ -622,7 +622,7 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             None,
             array([1, 2, 4]),
             NULL_INT64_1D_ARRAY,
-            DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:05", "2020/01/01 08:10"]),
+            pSeries(DatetimeIndex(["2020/01/01 08:00", "2020/01/01 08:05", "2020/01/01 08:10"])),
             0,
             None,
             0,
@@ -645,9 +645,9 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #      0           4        7
             array([1, 1, 2, 2, 2, 3, 4, 4]),
             array([0, 4, 7]),
-            DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"]),
+            pSeries(DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"])),
             0,
-            date_range("2020/01/01 08:06", periods=5, freq="2T"),
+            pSeries(date_range("2020/01/01 08:06", periods=5, freq="2T")),
             2,
         ),
         (
@@ -669,9 +669,9 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #         1           5        8
             array([1, 1, 1, 2, 3, 3, 3, 4, 4]),
             array([1, 5, 8]),
-            DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"]),
+            pSeries(DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"])),
             0,
-            date_range("2020/01/01 08:04", periods=6, freq="2T"),
+            pSeries(date_range("2020/01/01 08:04", periods=6, freq="2T")),
             # s2 and s5 are detected twice:
             # - for having same 'next_snap_start' as s1 and s4.
             # - for being after a bin end, sharing the same 'next_chunk_start'.
@@ -696,9 +696,9 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #      0           4        7
             array([1, 1, 2, 2, 2, 3, 4, 4]),
             array([0, 4, 7]),
-            DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"]),
+            pSeries(DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"])),
             0,
-            date_range("2020/01/01 08:06", periods=5, freq="2T"),
+            pSeries(date_range("2020/01/01 08:06", periods=5, freq="2T")),
             2,
         ),
         (
@@ -721,9 +721,9 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #         1           5        8
             array([1, 1, 1, 2, 3, 3, 3, 4, 4]),
             array([1, 5, 8]),
-            DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"]),
+            pSeries(DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"])),
             0,
-            date_range("2020/01/01 08:04", periods=6, freq="2T"),
+            pSeries(date_range("2020/01/01 08:04", periods=6, freq="2T")),
             # s2 and s5 are detected twice:
             # - for having same 'next_snap_start' as s1 and s4.
             # - for being after a bin end, sharing the same 'next_chunk_start'.
@@ -748,11 +748,9 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #                  4     6
             array([1, 2, 2, 3, 3, 4, 4]),
             array([4, 6]),
-            DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])
-            .to_series()
-            .reset_index(drop=True),
+            pSeries(DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])),
             0,
-            date_range("2020/01/01 08:06", periods=5, freq="2T"),
+            pSeries(date_range("2020/01/01 08:06", periods=5, freq="2T")),
             1,
         ),
         (
@@ -774,11 +772,9 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #                  4        7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
             array([4, 7]),
-            DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])
-            .to_series()
-            .reset_index(drop=True),
+            pSeries(DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])),
             0,
-            date_range("2020/01/01 08:04", periods=6, freq="2T"),
+            pSeries(date_range("2020/01/01 08:04", periods=6, freq="2T")),
             3,
         ),
         (
@@ -800,11 +796,9 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #                  4     6
             array([1, 2, 2, 3, 3, 4, 4]),
             array([4, 6]),
-            DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])
-            .to_series()
-            .reset_index(drop=True),
+            pSeries(DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])),
             0,
-            date_range("2020/01/01 08:06", periods=5, freq="2T"),
+            pSeries(date_range("2020/01/01 08:06", periods=5, freq="2T")),
             1,
         ),
         (
@@ -826,11 +820,9 @@ def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_re
             #                  4        7
             array([1, 1, 2, 3, 3, 3, 4, 4]),
             array([4, 7]),
-            DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])
-            .to_series()
-            .reset_index(drop=True),
+            pSeries(DatetimeIndex(["2020/01/01 08:04", "2020/01/01 08:13"])),
             0,
-            date_range("2020/01/01 08:04", periods=6, freq="2T"),
+            pSeries(date_range("2020/01/01 08:04", periods=6, freq="2T")),
             3,
         ),
     ],
@@ -896,8 +888,10 @@ def test_segmentby_with_outer_setup():
     #                              0           4        7
     next_chunk_starts_ref = array([1, 1, 2, 2, 2, 3, 4, 4])
     bin_indices_ref = array([0, 4, 7])
-    bin_labels_ref = DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"])
-    snap_labels_ref = date_range("2020/01/01 08:06", periods=5, freq="2T")
+    bin_labels_ref = pSeries(
+        DatetimeIndex(["2020/01/01 08:05", "2020/01/01 08:10", "2020/01/01 08:15"]),
+    )
+    snap_labels_ref = pSeries(date_range("2020/01/01 08:06", periods=5, freq="2T"))
     assert nall(next_chunk_starts_ref == next_chunk_starts)
     assert nall(bin_indices_ref == bin_indices)
     assert bin_labels_ref.equals(bin_labels)
@@ -915,24 +909,28 @@ def test_segmentby_binby_exceptions():
 
     def by_wrong_starts_labels(on, buffer=None):
         # 'next_chunk_starts' and 'chunk_labels' not the same size.
-        return arange(1), Series(["a", "o"]), 0, LEFT, arange(2), True
+        return arange(1), pSeries(["a", "o"]), 0, LEFT, arange(2), True
 
     with pytest.raises(ValueError, match="^'next_chunk_starts' and 'chunk_labels'"):
         segmentby(data=data, bin_by=by_wrong_starts_labels, bin_on=bin_on)
 
     def by_wrong_starts_ends(on, buffer=None):
         # 'next_chunk_starts' and 'chunk_ends' not the same size.
-        return arange(3), Series(["a", "o", "u"]), 0, LEFT, arange(1), True
+        return arange(3), pSeries(["a", "o", "u"]), 0, LEFT, arange(1), True
 
     with pytest.raises(ValueError, match="^'next_chunk_starts' and 'chunk_ends'"):
         segmentby(data=data, bin_by=by_wrong_starts_ends, bin_on=bin_on)
 
     def by_wrong_closed(on, buffer=None):
         # 'closed' not 'left' or 'right'.
-        return arange(2), Series(["a", "o"]), 0, "invented", arange(2), True
+        return arange(2), pSeries(["a", "o"]), 0, "invented", arange(2), True
 
     with pytest.raises(ValueError, match="^'bin_closed' has to be set either"):
         segmentby(data=data, bin_by=by_wrong_closed, bin_on=bin_on)
+
+    with pytest.raises(ValueError, match="^not possible to have 'bin_by'"):
+        # 'bin_by' different than a Timegrouper or Callable.
+        segmentby(data=data, bin_by=None, bin_on=bin_on)
 
 
 def test_segmentby_orderedon_exceptions():

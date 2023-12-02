@@ -10,3 +10,4 @@ from .collection import ParquetSet
 from .indexer import is_toplevel
 from .indexer import sublevel
 from .indexer import toplevel
+from .streamagg import streamagg
