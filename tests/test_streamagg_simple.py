@@ -653,16 +653,16 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     }
 
     # Setup 'post'.
-    def post(post_buffer: dict, agg_res: pDataFrame):
+    def post(buffer: dict, bin_res: pDataFrame):
         """
         Compute duration, weighted mean and keep track of data to buffer.
         """
         # Compute 'duration'.
-        agg_res[LAST] = (agg_res[LAST] - agg_res[FIRST]).view("int64")
+        bin_res[LAST] = (bin_res[LAST] - bin_res[FIRST]).view("int64")
         # Compute 'weighted_mean'.
-        agg_res["sum_weighted_val"] = agg_res["sum_weighted_val"] / agg_res["sum_weight"]
+        bin_res["sum_weighted_val"] = bin_res["sum_weighted_val"] / bin_res["sum_weight"]
         # Rename column 'first' and remove the others.
-        agg_res.rename(
+        bin_res.rename(
             columns={
                 "sum_weighted_val": "weighted_mean",
                 LAST: "duration",
@@ -670,14 +670,14 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
             inplace=True,
         )
         # Remove un-used columns.
-        agg_res.drop(columns=["sum_weight", FIRST], inplace=True)
+        bin_res.drop(columns=["sum_weight", FIRST], inplace=True)
         # Keep number of iterations in 'post' (to test 'post_buffer' is
         # correctly updated in place, and recorded)
-        if "iter_num" not in post_buffer:
-            post_buffer["iter_num"] = 1
+        if "iter_num" not in buffer:
+            buffer["iter_num"] = 1
         else:
-            post_buffer["iter_num"] += 1
-        return agg_res
+            buffer["iter_num"] += 1
+        return bin_res
 
     # Setup streamed aggregation.
     streamagg(
@@ -747,9 +747,10 @@ def test_parquet_seed_duration_weighted_mean_from_post(tmp_path):
     assert streamagg_md[KEY_POST_BUFFER] == {"iter_num": 3}
 
 
-def test_parquet_seed_time_grouper_first_agg_on_datetime(tmp_path):
+def test_parquet_seed_time_grouper_bin_on_as_tuple(tmp_path):
     # Test with parquet seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
+    # Change group keys column name with 'bin_on' set as a tuple.
     max_row_group_size = 4
     date = "2020/01/01 "
     ts = DatetimeIndex(
@@ -768,6 +769,7 @@ def test_parquet_seed_time_grouper_first_agg_on_datetime(tmp_path):
     )
     ordered_on = "ts"
     bin_on = "ts_bin"
+    ts_open = "ts_open"
     seed_pdf = pDataFrame({ordered_on: ts, bin_on: ts, "val": range(1, len(ts) + 1)})
     row_group_offsets = [0, 4, 6]
     seed_path = os_path.join(tmp_path, "seed")
@@ -778,22 +780,23 @@ def test_parquet_seed_time_grouper_first_agg_on_datetime(tmp_path):
     store = ParquetSet(store_path, Indexer)
     key = Indexer("agg_res")
     # Setup aggregation.
-    bin_by = TimeGrouper(key=bin_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {ordered_on: (ordered_on, LAST), SUM: ("val", SUM)}
     # Streamed aggregation.
     streamagg(
         seed=seed,
-        ordered_on=bin_on,
+        ordered_on=ordered_on,
         agg=agg,
         store=store,
         keys=key,
         bin_by=bin_by,
-        bin_on=bin_on,
+        bin_on=(ordered_on, ts_open),
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
     # Test results
     ref_res = seed_pdf.iloc[:-1].groupby(bin_by).agg(**agg)
+    ref_res.index.name = ts_open
     ref_res.reset_index(inplace=True)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
@@ -807,18 +810,19 @@ def test_parquet_seed_time_grouper_first_agg_on_datetime(tmp_path):
     # 2nd streamed aggregation.
     streamagg(
         seed=seed,
-        ordered_on=bin_on,
+        ordered_on=ordered_on,
         agg=agg,
         store=store,
         keys=key,
         bin_by=bin_by,
-        bin_on=bin_on,
+        bin_on=(ordered_on, ts_open),
         trim_start=True,
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
     # Test results
     ref_res = pconcat([seed_pdf, seed_pdf2]).iloc[:-1].groupby(bin_by).agg(**agg)
+    ref_res.index.name = ts_open
     ref_res.reset_index(inplace=True)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
@@ -1083,9 +1087,10 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
     # Setup streamed aggregation.
     max_row_group_size = 4
     agg = {
-        "ts_start": ("ts", FIRST),
+        "ts": ("ts", FIRST),
         MAX: ("val", MAX),
     }
+    bin_out_col = "group_keys"
     streamagg(
         seed=(max_vdf_chunk_size, seed_vdf),
         ordered_on=ordered_on,
@@ -1093,7 +1098,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
         store=store,
         keys=key,
         bin_by=by_1val,
-        bin_on=bin_on,
+        bin_on=(bin_on, bin_out_col),
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
@@ -1116,16 +1121,16 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
             trimmed_seed["bins"].iloc[0] = -1
         trimmed_seed["bins"] = trimmed_seed["bins"].ffill()
         ref_res_agg = trimmed_seed.groupby("bins").agg(**agg)
-        ref_res_agg.index.name = "ts"
+        ref_res_agg.index.name = bin_out_col
         ref_res_agg.reset_index(inplace=True)
         # Set correct bin labels (same label can be used for several bins)
-        ref_res_agg["ts"] = (
+        ref_res_agg[bin_out_col] = (
             trimmed_seed.loc[trimmed_seed["val"] == 1, ordered_on]
             .reset_index(drop=True)
             .astype("datetime64[ns]")
         )
-        if ref_res_agg["ts"].iloc[0] == -1:
-            ref_res_agg["ts"].iloc[0] = trimmed_seed["ts"].iloc[0]
+        if ref_res_agg[bin_out_col].iloc[0] == -1:
+            ref_res_agg[bin_out_col].iloc[0] = trimmed_seed[bin_out_col].iloc[0]
         return ref_res_agg
 
     # Test results
@@ -1167,7 +1172,7 @@ def test_vaex_seed_by_callable_with_bin_on(tmp_path):
         store=store,
         keys=key,
         bin_by=by_1val,
-        bin_on=bin_on,
+        bin_on=(bin_on, bin_out_col),
         discard_last=True,
         max_row_group_size=max_row_group_size,
     )
@@ -1488,8 +1493,8 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
     # Test with vaex seed, time grouper and 'first' aggregation.
     # No post, 'discard_last=True'.
     # Test 'duplicates_on=[ordered_on]' (without 'bin_on')
-    # 'bin_on' is already removed by 'by_x_rows'.
     # No error should raise at recording.
+    # This is not a standard use!
     date = "2020/01/01 "
     ts_order = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "09:30"])
     ts_bin = ts_order + +Timedelta("40T")
@@ -1504,6 +1509,21 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
     key = Indexer("agg_res")
     # Setup aggregation.
     agg = {SUM: ("val", SUM)}
+
+    def post(buffer: dict, bin_res: pDataFrame):
+        """
+        Remove 'bin_on' column.
+        """
+        # Rename column 'bin_on' into 'ordered_on' to have an 'ordered_on'
+        # column, while 'removing' 'bin_on' one.
+        # This is not a standard use, as to rename 'bin_on' column, one should
+        # use 'bin_on' parameter in the form of a tuple.
+        bin_res.rename(
+            columns={bin_on: ordered_on},
+            inplace=True,
+        )
+        return bin_res
+
     # Streamed aggregation.
     streamagg(
         seed=seed_vdf,
@@ -1512,7 +1532,7 @@ def test_vaex_seed_time_grouper_duplicates_on_wo_bin_on(tmp_path):
         store=store,
         keys=key,
         bin_by=by_x_rows,
-        bin_on=bin_on,
+        post=post,
         discard_last=True,
         duplicates_on=[],
     )
@@ -1678,3 +1698,4 @@ def test_exception_not_key_of_streamagg_results(tmp_path):
 # TODO
 # in test case with snapshot: when snapshot is a TimeGrouper, make sure that stitching
 # works same as for bin: that empty snapshots are generated between 2 row groups.
+# test case, test parameter value not in 'streamagg' nor in 'write' signature.

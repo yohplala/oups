@@ -8,13 +8,14 @@ Created on Wed Nov 15 21:30:00 2023.
 from dataclasses import dataclass
 from multiprocessing import cpu_count
 from os import path as os_path
-from typing import Callable, Dict, Generator, List, Tuple, Union
+from typing import Callable, Dict, Generator, List, Optional, Tuple, Union
 
 import numpy as np
 from fastparquet import ParquetFile
 from joblib import Parallel
 from joblib import delayed
 from pandas import DataFrame as pDataFrame
+from pandas import DatetimeIndex
 from pandas import Series
 from pandas import Timestamp as pTimestamp
 from pandas import concat as pconcat
@@ -36,6 +37,7 @@ from oups.segmentby import KEY_ORDERED_ON
 from oups.segmentby import KEY_SNAP_BY
 from oups.segmentby import setup_segmentby
 from oups.writer import DUPLICATES_ON
+from oups.writer import KEY_MAX_ROW_GROUP_SIZE
 from oups.writer import MAX_ROW_GROUP_SIZE
 from oups.writer import OUPS_METADATA
 from oups.writer import OUPS_METADATA_KEY
@@ -50,6 +52,14 @@ KEY_STREAMAGG = "streamagg"
 KEY_LAST_SEED_INDEX = "last_seed_index"
 KEY_SEGAGG_BUFFER = "segagg_buffer"
 KEY_POST_BUFFER = "post_buffer"
+KEY_BIN_ON_OUT = "bin_on_out"
+# List of valid parameters for 'key_conf_in'
+AGG = "agg"
+POST = "post"
+# 'bin_by' is a compulsory parameter, and a specific check is made for it.
+# It is not added in 'KEY_CONF_IN_PARAMS'.
+WRITE_PARAMS = set(write.__code__.co_varnames[: write.__code__.co_argcount])
+KEY_CONF_IN_PARAMS = {KEY_BIN_ON, KEY_SNAP_BY, AGG, POST} | WRITE_PARAMS
 
 
 def _is_streamagg_result(handle: ParquetHandle) -> bool:
@@ -109,7 +119,7 @@ def _setup(
     kwargs : dict
         Settings considered as default ones if not specified within ``keys``.
         Default values for parameters related to aggregation can be set this
-        way. (``agg``, ``bin_by``, ``bin_on``, ``snap_by``, ``post``)
+        way. (``agg``, ``snap_by`` & ``post``)
         Parameters related to writing data are added to ``write_config``, that
         is then forwarded to ``oups.writer.write`` when writing aggregation
         results to store. Can define for instance custom `max_row_group_size`
@@ -136,7 +146,6 @@ def _setup(
                      'seg_config' : dict specifying the segmentation config,
                      'agg_config' : dict specifying the aggregation config,
                      'post' : Callable or None,
-                     'max_agg_row_group_size' : int,
                      'agg_res_buffer' : agg_res_buffer,
                      'bin_res_buffer' : bin_res_buffer,
                      'segagg_buffer' : dict, possibly empty,
@@ -163,46 +172,84 @@ def _setup(
         "agg_res": None,
         "bin_res": None,
     }
+    # Make a deep copy because of modifying the dictionary content in the loop.
     for key, key_conf_in in keys.items():
         # Parameters in 'key_conf_in' take precedence over those in 'kwargs'.
+        # Additionally, with this step, 'key_conf_in' is a deep copy, and when
+        # parameters are popped, it does not affect the initial 'key_conf_in'.
         key_conf_in = kwargs | key_conf_in
+        try:
+            bin_by = key_conf_in.pop(KEY_BIN_BY)
+        except KeyError:
+            raise ValueError(f"'{KEY_BIN_BY}' parameter is missing for key '{key}'.")
+        # Check parameters in 'key_conf_in' are valid ones.
+        for param in key_conf_in.keys():
+            if param not in KEY_CONF_IN_PARAMS:
+                raise ValueError(f"'{param}' not a valid parameters in '{key}' aggregation config.")
         # Step 1 / Process parameters.
+        bin_on = key_conf_in.pop(KEY_BIN_ON, None)
+        if isinstance(bin_on, tuple):
+            # 'bin_on_out' is name of column containing group keys in 'agg_res'.
+            # Setting of 'bin_on_out' is a 'streamagg' task, not a 'cumesegagg'
+            # one. This is because this parameter clarifies then how to set
+            # 'duplicates_on' parameter for 'oups.writer.write' which is also
+            # part of 'streamagg' perimeter.
+            bin_on, bin_on_out = bin_on
+        else:
+            bin_on_out = None
         # Step 1.1 / 'seg_conf': segmentation step.
         try:
-            bin_by = key_conf_in.pop(KEY_BIN_BY, None)
-        except KeyError:
-            raise KeyError(f"{KEY_BIN_BY} parameter is missing for {key}.")
-        seg_config = setup_segmentby(
-            bin_by=bin_by,
-            bin_on=key_conf_in.pop(KEY_BIN_ON, None),
-            ordered_on=ordered_on,
-            snap_by=key_conf_in.pop(KEY_SNAP_BY, None),
-        )
+            seg_config = setup_segmentby(
+                bin_by=bin_by,
+                bin_on=bin_on,
+                ordered_on=ordered_on,
+                snap_by=key_conf_in.pop(KEY_SNAP_BY, None),
+            )
+        except Exception:
+            raise ValueError(f"error raised for key '{key}'")
         # Step 1.2 / 'all_cols_in'.
         # If 'bin_on' is defined, it is to be loaded as well.
-        if seg_config[KEY_BIN_ON]:
-            all_cols_in.add(seg_config[KEY_BIN_ON])
-        agg = key_conf_in.pop("agg")
+        if bin_on := seg_config[KEY_BIN_ON]:
+            all_cols_in.add(bin_on)
+            if bin_on_out is None:
+                # It may be that 'bin_on' value has been modified in
+                # 'setup_segmentby'. If 'bin_on_out' has not been set
+                # previously, then set it to this possibly new value of
+                # 'bin_on'.
+                bin_on_out = bin_on
+        agg = key_conf_in.pop(AGG)
         # 'agg' is in the form:
         # {"output_col":("input_col", "agg_function_name")}
+        if bin_on_out in agg:
+            # Check that this name is not already that of an output column
+            # from aggregation.
+            raise ValueError(
+                f"not possible to have {bin_on_out} as column name in"
+                " aggregated results as it is also for column containing group"
+                " keys.",
+            )
         # Update 'all_cols_in', list of columns from seed to be loaded.
         all_cols_in.update({col_in for col_in, _ in agg.values()})
         # Step 1.3 / 'max_agg_row_group' and 'write_config'.
         # Initialize aggregation result max size before writing to disk.
         # If present, keep 'max_row_group_size' within 'key_conf_in' as it
         # is a parameter to be forwarded to the writer.
-        max_agg_row_group_size = (
-            key_conf_in["max_row_group_size"]
-            if "max_row_group_size" in key_conf_in
-            else MAX_ROW_GROUP_SIZE
-        )
+        if KEY_MAX_ROW_GROUP_SIZE not in key_conf_in.keys():
+            key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = MAX_ROW_GROUP_SIZE
         # Initialize 'write_config', which are parameters remaining in
         # 'key_conf_in' and some adjustments.
         # Forcing 'ordered_on' for write.
         key_conf_in[KEY_ORDERED_ON] = ordered_on
+        # Adding 'bin_on_out' to 'duplicates_on' except if 'duplicates_on' is
+        # set already. In this case, if 'bin_on_out' is not in
+        # 'duplicates_on', it is understood as a voluntary user choice.
+        # For all other cases, 'duplicates_on' has been set by user.
+        # Setting 'duplicates_on' is the true reason of having 'bin_on_out'.
+        # If allows the user to inform 'streamagg' that the binning colume
+        # (with unique keys) is this one.
         if DUPLICATES_ON not in key_conf_in or key_conf_in[DUPLICATES_ON] is None:
-            # For writing step, set 'duplicates_on' if not set by user already.
-            key_conf_in[DUPLICATES_ON] = ordered_on
+            # Force 'bin_on_out'.
+            key_conf_in[DUPLICATES_ON] = bin_on_out if bin_on_out else ordered_on
         # Step 2 / Process metadata if already existing aggregation results.
         # Initialize variables.
         if key in store:
@@ -230,12 +277,16 @@ def _setup(
         # 'agg_res_buffer' and 'bin_res_buffer' are buffers to keep aggregation
         # chunks before a concatenation to record. Because they are appended
         # in-place for each key, they are created separately for each key.
+        try:
+            agg_config = setup_cumsegagg(agg, seed_dtypes)
+        except Exception:
+            raise ValueError(f"error raised for key '{key}'")
         keys_config[str(key)] = key_default | {
             "dirpath": os_path.join(store._basepath, key.to_path),
             "seg_config": seg_config,
-            "agg_config": setup_cumsegagg(agg, seed_dtypes),
-            "post": key_conf_in.pop("post"),
-            "max_agg_row_group_size": max_agg_row_group_size,
+            "agg_config": agg_config,
+            KEY_BIN_ON_OUT: bin_on_out,
+            POST: key_conf_in.pop(POST),
             "agg_res_buffer": [],
             "bin_res_buffer": [],
             KEY_SEGAGG_BUFFER: segagg_buffer,
@@ -351,7 +402,8 @@ def _post_n_write_agg_chunks(
     dirpath: str,
     key: str,
     write_config: dict,
-    bin_res_buffer: Union[List[pDataFrame], None],
+    index_name: Union[str, None] = None,
+    bin_res_buffer: Union[List[pDataFrame], None] = None,
     post: Callable = None,
     post_buffer: dict = None,
     last_seed_index=None,
@@ -374,20 +426,21 @@ def _post_n_write_agg_chunks(
         Settings forwarded to ``oups.writer.write`` when writing aggregation
         results to store. Compulsory parameter defining at least `ordered_on`
         and `duplicates_on` columns.
+    index_name : str, default None
+        If a string, name index of dataframe resulting from aggregation with
+        this value.
     post : Callable, default None
         User-defined function accepting 3 parameters.
 
-          - First, a dict to be used as data buffer, that can be necessary for
-            some user-defined post-processing requiring data assessed in
+          - ``buffer``, a dict to be used as data buffer, that can be necessary
+            for some user-defined post-processing requiring data assessed in
             previous post-processing iteration.
-          - second, the pandas dataframe resulting from the aggregations defined
-            by ``agg`` parameter, with first row already corrected with last
-            row of previous streamed aggregation.
-            If only bins are requested, these are aggregation results for bins.
-            If bins and snapshots are requested, these are aggregation results
-            for snapshots.
-          - Third (optional), if bins and snapshots are requested, then these
-            are aggregations results for bins.
+          - ``bin_res``, a pandas dataframe resulting from the aggregations
+            defined by ``agg`` parameter, with first row already corrected
+            with last row of previous streamed aggregation.
+            These are aggregation results for bins.
+          - ``snap_res`` (optional), a pandas dataframe resulting from the
+            aggregations defined by ``agg`` parameter that contains snapshots.
 
         It has then to return a pandas dataframe that will be recorded.
         This optional post-processing is intended for use of vectorized
@@ -413,12 +466,20 @@ def _post_n_write_agg_chunks(
     """
     # Concat list of aggregation results.
     agg_res = pconcat(agg_res_buffer) if len(agg_res_buffer) > 1 else agg_res_buffer[0]
+    if index_name:
+        # In case 'by' is a callable, index may have no name, but user may have
+        # defined one with 'bin_on' parameter.
+        agg_res.index.name = index_name
     # Keep group keys as a column before post-processing.
     agg_res.reset_index(inplace=True)
     # Reset (in place) buffer.
     agg_res_buffer.clear()
     if bin_res_buffer:
         bin_res = pconcat(bin_res_buffer) if len(bin_res_buffer) > 1 else bin_res_buffer[0]
+        if index_name:
+            # In case 'by' is a callable, index may have no name, but user may
+            # have defined one with 'bin_on' parameter.
+            bin_res.index.name = index_name
         bin_res.reset_index(inplace=True)
         bin_res_buffer.clear()
     else:
@@ -427,7 +488,9 @@ def _post_n_write_agg_chunks(
         # Post processing if any.
         # 'post_buffer' has to be modified in-place.
         agg_res = (
-            post(post_buffer, agg_res) if bin_res is None else post(post_buffer, bin_res, agg_res)
+            post(buffer=post_buffer, bin_res=agg_res)
+            if bin_res is None
+            else post(buffer=post_buffer, bin_res=bin_res, snap_res=agg_res)
         )
     if last_seed_index:
         # If 'last_seed_index', set oups metadata.
@@ -492,15 +555,19 @@ def agg_iter(
                 # Length of 'agg_res_buffer' is number of times it has been
                 # appended.
                 agg_mean_row_group_size = agg_n_rows // len(agg_res_buffer)
-                if agg_n_rows + agg_mean_row_group_size >= config["max_agg_row_group_size"]:
+                if (
+                    agg_n_rows + agg_mean_row_group_size
+                    >= config["write_config"][KEY_MAX_ROW_GROUP_SIZE]
+                ):
                     # Write results from previous iteration.
                     _post_n_write_agg_chunks(
                         agg_res_buffer=agg_res_buffer,
                         dirpath=config["dirpath"],
                         key=key,
                         write_config=config["write_config"],
+                        index_name=config[KEY_BIN_ON_OUT],
                         bin_res_buffer=config["bin_res_buffer"],
-                        post=config["post"],
+                        post=config[POST],
                         post_buffer=config[KEY_POST_BUFFER],
                     )
                     # Reset number of rows within chunk list and number of
@@ -526,13 +593,14 @@ def streamagg(
     ordered_on: str,
     store: ParquetSet,
     keys: Union[dataclass, dict],
-    agg: dict = None,
-    bin_by: Union[TimeGrouper, Callable[[Series, dict], Tuple]] = None,
-    bin_on: str = None,
-    post: Callable = None,
-    trim_start: bool = True,
-    discard_last: bool = True,
-    parallel: bool = False,
+    agg: Optional[dict] = None,
+    bin_by: Optional[Union[TimeGrouper, Callable[[Series, dict], tuple]]] = None,
+    bin_on: Optional[Union[str, Tuple[str, str]]] = None,
+    snap_by: Optional[Union[TimeGrouper, Series, DatetimeIndex]] = None,
+    post: Optional[Callable] = None,
+    trim_start: Optional[bool] = True,
+    discard_last: Optional[bool] = True,
+    parallel: Optional[bool] = False,
     **kwargs,
 ):
     """
@@ -564,18 +632,22 @@ def streamagg(
         If a dict, several keys can be specified for operating multiple
         parallel aggregations on the same seed. In this case, the dict should
         be in the form
-        ``{key: {'agg': agg, 'bin_by': bin_by, 'bin_on': bin_on, 'post': post, **kwargs}}``
+        ``{key: {'agg': agg, 'bin_by': bin_by, 'bin_on': bin_on, 'snap_by': snap_by, 'post': post, **kwargs}}``
         Any additional parameters, (``**kwargs``) are forwarded to
-        ``oups.writer.write`` when writing aggregation results to store.
+        ``oups.writer.write`` when writing aggregation results to store, such
+        as custom `max_row_group_size` or 'duplicates_on' parameters (see not
+        below for 'duplicates_on').
         Please, note:
 
           - `bin_by` is a compulsory parameter.
           - If not specified, `bin_on` parameter in dict does not get default
             values.
-          - If not specified `agg` and `post` parameters in dict get values
-            from `agg` and `post` parameters defined when calling `streamagg`.
-            If using 'post' when calling 'streamagg' and not willing to apply
-            it for one key, set it to ``None`` in key specific config.
+          - If not specified, `agg`, `snap_by` and `post` parameters in dict
+            get values from `agg`, `snap_by` and `post` parameters defined when
+            calling `streamagg`.
+            If using `snap_by` or `post` when calling `streamagg` and not
+            willing to apply it for one key, set it to ``None`` in key specific
+            config.
 
     agg : Union[dict, None], default None
         Dict in the form ``{"output_col":("input_col", "agg_function_name")}``
@@ -585,7 +657,7 @@ def streamagg(
         Examples of ``agg_function_name`` are `first`, `last`, `min`, `max` and
         `sum`.
         This parameter is compulsory, except if ``key`` parameter is a`dict`.
-    bin_by : Union[TimeGrouper, Callable[[pd.DataFrame, dict], array-like]], default None
+    bin_by : Union[TimeGrouper, Callable[[pd.DataFrame, dict]]], default None
         Parameter defining the binning logic.
         If a `Callable`, it is given following parameters.
 
@@ -603,38 +675,50 @@ def streamagg(
         results for next-to-come binning iteration.
     bin_on : Union[str, Tuple[str, str]], default None
         ``bin_on`` may either be a string or a tuple of 2 string. When a
-        string, it refers to an existing column in seed data. When a tuple,
-        the 1st string refers to an existing column in seed data, the 2nd the
-        name to use for the column which values will be the group keys in
-        aggregation results.
+        string, it refers to an existing column in seed data onto which
+        applying the binning defined by ``bin_by`` parameter. Its value is then
+        carried over as name for the column containing the group keys.
+        It is further used when writing results for defining ``duplicates_on``
+        parameter (see ``oups.writer.write``).
+        When a tuple, the 1st string refers to an existing column in seed data,
+        the 2nd the name to use for the column which values will be the group
+        keys in aggregation results.
         Moreover, setting of ``bin_on`` should be adapted depending how is
-        defined ``bin_by`` parameter. In all the cases mentioned below, ``bin_on``
+        defined ``by`` parameter. In all the cases mentioned below, ``bin_on``
         can either be a string or a tuple of 2 string.
 
-          - if ``bin_by`` is ``None`` then ``bin_on`` is expected to be set to an
+          - if ``by`` is ``None`` then ``bin_on`` is expected to be set to an
             existing column name, which values are directly used for binning.
-          - if ``bin_by`` is a callable, then ``bin_on`` can have different values.
+          - if ``by`` is a callable, then ``bin_on`` can have different values.
 
             - ``None``, the default.
             - the name of an existing column onto which applying the binning
-              defined by ``bin_by`` parameter. Its value is then carried over as
+              defined by ``by`` parameter. Its value is then carried over as
               name for the column containing the group keys.
 
         It is further used when writing results for defining ``duplicates_on``
         parameter (see ``oups.writer.write``).
+    snap_by : Optional[Union[TimeGrouper, Series, DatetimeIndex]], default None
+        Values positioning the points of observation, either derived from a
+        pandas TimeGrouper, or contained in a pandas Series.
+        In case 'snap_by' is a Series, values  serve as locations for points of
+        observation.
+        Additionally, ``closed`` value defined by 'bin_on' specifies if points
+        of observations are included or excluded. As "should be logical", if
+          - `left`, then values at points of observation are excluded.
+          - `right`, then values at points of observation are included.
     post : Callable, default None
-        User-defined function accepting 3 parameters.
+        User-defined function accepting up to 3 parameters.
 
-          - First, the pandas dataframe resulting from the aggregations defined
-            by ``agg`` parameter, with first row already corrected with last
-            row of previous streamed aggregation.
-          - Second, a boolean which indicates if first row of aggregation
-            result is a new bin, or is the 'same' that last bin of aggregation
-            result. If 'same', all values may not be the same (updated), but
-            the aggregation bin is the same.
-          - Third, a dict to be used as data buffer, that can be necessary for
-            some user-defined post-processing requiring data assessed in
+          - ``buffer``, a dict to be used as data buffer, that can be necessary
+            for some user-defined post-processing requiring data assessed in
             previous post-processing iteration.
+          - ``bin_res``, a pandas dataframe resulting from the aggregations
+            defined by ``agg`` parameter, with first row already corrected
+            with last row of previous streamed aggregation.
+            These are aggregation results for bins.
+          - ``snap_res`` (optional), a pandas dataframe resulting from the
+            aggregations defined by ``agg`` parameter that contains snapshots.
 
         It has then to return a pandas dataframe that will be recorded.
         This optional post-processing is intended for use of vectorized
@@ -658,7 +742,7 @@ def streamagg(
     kwargs : dict
         Settings forwarded to ``oups.writer.write`` when writing aggregation
         results to store. Can define for instance custom `max_row_group_size`
-        parameter.
+        or 'duplicates_on' parameters (see not below for 'duplicates_on').
 
     Notes
     -----
@@ -707,22 +791,40 @@ def streamagg(
 
         - 'ordered_on' is forced to 'streamagg' ``ordered_on`` parameter.
         - If 'duplicates_on' is not set by the user or is `None`, then it is
-          set to the name of the output column for group keys defined by
-          `bin_on`. The rational is that this column identifies uniquely each
-          bin, and so is a relevant column to identify duplicates. But then,
-          there might be case for which 'ordered_on' column does this job
-          already (if there are unique values in 'ordered_on') and the column
-          containing group keys is then removed during user post-processing.
-          To allow this case, if the user is setting ``duplicates_on`` as
-          additional parameter to ``streamagg``, it is not
-          modified. It means omission of the column name containing the group
-          keys, as defined by 'bin_on' parameter when it is set, is a
-          voluntary choice from the user.
+            - either set to the name of the output column for group keys
+              defined by `bin_on` if `bin_on` is set. The rational is that this
+              column identifies uniquely each bin, and so is a relevant column
+              to identify duplicates.
+            - if `bin_on` is not set, then it defaults to `ordered_on` column.
+
+          There might case when this logic is unsuited. For instance, perhaps
+          values in 'ordered_on' column does provide a unique valid identifier
+          for bins already (if there are unique values in 'ordered_on'). It may
+          then be that the column containing group keys is removed during user
+          post-processing.
+          To allow such specific use case, the user can set ``duplicates_on``
+          as additional parameter to ``streamagg``. If the user omit a column
+          name, it means that this is a voluntary choice from the user.
 
     """
     # Parameter setup.
     if not isinstance(keys, dict):
-        keys = {keys: {"agg": agg, KEY_BIN_BY: bin_by, KEY_BIN_ON: bin_on, "post": post}}
+        keys = {
+            keys: {
+                AGG: agg,
+                KEY_BIN_BY: bin_by,
+                KEY_BIN_ON: bin_on,
+                KEY_SNAP_BY: snap_by,
+                POST: post,
+            },
+        }
+    # Check 'kwargs' parameters are those expected for 'write' function.
+    for param in kwargs.keys():
+        if param not in WRITE_PARAMS:
+            raise ValueError(
+                f"{param} is neither a valid parameter for `streamagg` function, "
+                "nor for `oups.write` function.",
+            )
     (
         all_cols_in,
         trim_start,
@@ -740,6 +842,7 @@ def streamagg(
         store=store,
         keys=keys,
         agg=agg,
+        snap_by=snap_by,
         post=post,
         trim_start=trim_start,
         **kwargs,
@@ -785,10 +888,11 @@ def streamagg(
                 dirpath=config["dirpath"],
                 agg_res_buffer=[*config["agg_res_buffer"], config["agg_res"]],
                 write_config=config["write_config"],
+                index_name=config[KEY_BIN_ON_OUT],
                 bin_res_buffer=[*config["bin_res_buffer"], config["bin_res"]]
                 if config["bin_res"]
                 else [],
-                post=config["post"],
+                post=config[POST],
                 post_buffer=config[KEY_POST_BUFFER],
                 last_seed_index=last_seed_index,
                 segagg_buffer=config[KEY_SEGAGG_BUFFER],

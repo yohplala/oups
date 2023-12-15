@@ -92,6 +92,7 @@ repos:
                 oups/segmentby.py:C901
                 oups/cumsegagg.py:C901 E203
                 oups/chainagg.py:C901
+                oups/streamagg.py:C901
         ]
 
   # Pydocstyle
