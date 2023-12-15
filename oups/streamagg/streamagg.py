@@ -23,19 +23,19 @@ from pandas.core.resample import TimeGrouper
 from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.collection import ParquetSet
-from oups.cumsegagg import cumsegagg
-from oups.cumsegagg import setup_cumsegagg
-from oups.jcumsegagg import FIRST
-from oups.jcumsegagg import LAST
-from oups.jcumsegagg import MAX
-from oups.jcumsegagg import MIN
-from oups.jcumsegagg import SUM
 from oups.router import ParquetHandle
-from oups.segmentby import KEY_BIN_BY
-from oups.segmentby import KEY_BIN_ON
-from oups.segmentby import KEY_ORDERED_ON
-from oups.segmentby import KEY_SNAP_BY
-from oups.segmentby import setup_segmentby
+from oups.streamagg.cumsegagg import cumsegagg
+from oups.streamagg.cumsegagg import setup_cumsegagg
+from oups.streamagg.jcumsegagg import FIRST
+from oups.streamagg.jcumsegagg import LAST
+from oups.streamagg.jcumsegagg import MAX
+from oups.streamagg.jcumsegagg import MIN
+from oups.streamagg.jcumsegagg import SUM
+from oups.streamagg.segmentby import KEY_BIN_BY
+from oups.streamagg.segmentby import KEY_BIN_ON
+from oups.streamagg.segmentby import KEY_ORDERED_ON
+from oups.streamagg.segmentby import KEY_SNAP_BY
+from oups.streamagg.segmentby import setup_segmentby
 from oups.writer import DUPLICATES_ON
 from oups.writer import KEY_MAX_ROW_GROUP_SIZE
 from oups.writer import MAX_ROW_GROUP_SIZE

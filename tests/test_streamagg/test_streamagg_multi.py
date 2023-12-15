@@ -23,10 +23,10 @@ from pandas.core.resample import TimeGrouper
 from oups import ParquetSet
 from oups import streamagg
 from oups import toplevel
-from oups.jcumsegagg import FIRST
-from oups.jcumsegagg import LAST
-from oups.segmentby import by_x_rows
-from oups.streamagg import _setup
+from oups.streamagg.jcumsegagg import FIRST
+from oups.streamagg.jcumsegagg import LAST
+from oups.streamagg.segmentby import by_x_rows
+from oups.streamagg.streamagg import _setup
 from oups.writer import MAX_ROW_GROUP_SIZE
 
 

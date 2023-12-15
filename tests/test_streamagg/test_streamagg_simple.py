@@ -26,16 +26,16 @@ from vaex import from_pandas
 from oups import ParquetSet
 from oups import streamagg
 from oups import toplevel
-from oups.cumsegagg import DTYPE_NULLABLE_INT64
-from oups.jcumsegagg import FIRST
-from oups.jcumsegagg import LAST
-from oups.jcumsegagg import MAX
-from oups.jcumsegagg import MIN
-from oups.jcumsegagg import SUM
-from oups.segmentby import by_x_rows
-from oups.streamagg import KEY_LAST_SEED_INDEX
-from oups.streamagg import KEY_POST_BUFFER
-from oups.streamagg import KEY_STREAMAGG
+from oups.streamagg.cumsegagg import DTYPE_NULLABLE_INT64
+from oups.streamagg.jcumsegagg import FIRST
+from oups.streamagg.jcumsegagg import LAST
+from oups.streamagg.jcumsegagg import MAX
+from oups.streamagg.jcumsegagg import MIN
+from oups.streamagg.jcumsegagg import SUM
+from oups.streamagg.segmentby import by_x_rows
+from oups.streamagg.streamagg import KEY_LAST_SEED_INDEX
+from oups.streamagg.streamagg import KEY_POST_BUFFER
+from oups.streamagg.streamagg import KEY_STREAMAGG
 
 
 # from pandas.testing import assert_frame_equal

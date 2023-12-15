@@ -18,20 +18,20 @@ from pandas import Timestamp as pTimestamp
 from pandas import date_range
 from pandas.core.resample import TimeGrouper
 
-from oups.segmentby import DTYPE_DATETIME64
-from oups.segmentby import DTYPE_INT64
-from oups.segmentby import KEY_BIN_BY
-from oups.segmentby import KEY_ON_COLS
-from oups.segmentby import KEY_ORDERED_ON
-from oups.segmentby import LEFT
-from oups.segmentby import NULL_INT64_1D_ARRAY
-from oups.segmentby import RIGHT
-from oups.segmentby import _next_chunk_starts
-from oups.segmentby import by_scale
-from oups.segmentby import by_x_rows
-from oups.segmentby import mergesort
-from oups.segmentby import segmentby
-from oups.segmentby import setup_segmentby
+from oups.streamagg.segmentby import DTYPE_DATETIME64
+from oups.streamagg.segmentby import DTYPE_INT64
+from oups.streamagg.segmentby import KEY_BIN_BY
+from oups.streamagg.segmentby import KEY_ON_COLS
+from oups.streamagg.segmentby import KEY_ORDERED_ON
+from oups.streamagg.segmentby import LEFT
+from oups.streamagg.segmentby import NULL_INT64_1D_ARRAY
+from oups.streamagg.segmentby import RIGHT
+from oups.streamagg.segmentby import _next_chunk_starts
+from oups.streamagg.segmentby import by_scale
+from oups.streamagg.segmentby import by_x_rows
+from oups.streamagg.segmentby import mergesort
+from oups.streamagg.segmentby import segmentby
+from oups.streamagg.segmentby import setup_segmentby
 
 
 # from pandas.testing import assert_frame_equal

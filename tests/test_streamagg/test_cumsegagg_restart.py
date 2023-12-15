@@ -16,19 +16,19 @@ from pandas import Timestamp as pTimestamp
 from pandas import concat as pconcat
 from pandas.core.resample import TimeGrouper
 
-from oups.cumsegagg import DTYPE_DATETIME64
-from oups.cumsegagg import DTYPE_FLOAT64
-from oups.cumsegagg import DTYPE_INT64
-from oups.cumsegagg import DTYPE_NULLABLE_INT64
-from oups.cumsegagg import KEY_LAST_CHUNK_RES
-from oups.cumsegagg import cumsegagg
-from oups.cumsegagg import setup_cumsegagg
-from oups.jcumsegagg import FIRST
-from oups.jcumsegagg import LAST
-from oups.jcumsegagg import MIN
-from oups.jcumsegagg import SUM
-from oups.segmentby import by_x_rows
-from oups.segmentby import setup_segmentby
+from oups.streamagg.cumsegagg import DTYPE_DATETIME64
+from oups.streamagg.cumsegagg import DTYPE_FLOAT64
+from oups.streamagg.cumsegagg import DTYPE_INT64
+from oups.streamagg.cumsegagg import DTYPE_NULLABLE_INT64
+from oups.streamagg.cumsegagg import KEY_LAST_CHUNK_RES
+from oups.streamagg.cumsegagg import cumsegagg
+from oups.streamagg.cumsegagg import setup_cumsegagg
+from oups.streamagg.jcumsegagg import FIRST
+from oups.streamagg.jcumsegagg import LAST
+from oups.streamagg.jcumsegagg import MIN
+from oups.streamagg.jcumsegagg import SUM
+from oups.streamagg.segmentby import by_x_rows
+from oups.streamagg.segmentby import setup_segmentby
 
 
 # from pandas.testing import assert_frame_equal

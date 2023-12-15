@@ -21,11 +21,11 @@ from pandas import NaT as pNaT
 from pandas import Series
 from pandas.core.resample import TimeGrouper
 
-from oups.jcumsegagg import AGG_FUNCS
-from oups.jcumsegagg import jcsagg
-from oups.segmentby import KEY_LAST_BIN_LABEL
-from oups.segmentby import KEY_ORDERED_ON
-from oups.segmentby import segmentby
+from oups.streamagg.jcumsegagg import AGG_FUNCS
+from oups.streamagg.jcumsegagg import jcsagg
+from oups.streamagg.segmentby import KEY_LAST_BIN_LABEL
+from oups.streamagg.segmentby import KEY_ORDERED_ON
+from oups.streamagg.segmentby import segmentby
 
 
 # Some constants.
