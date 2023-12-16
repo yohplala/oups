@@ -8,16 +8,10 @@ Created on Wed Dec  1 18:35:00 2021.
 import zipfile
 from os import path as os_path
 
-import pytest
-from pandas import DataFrame
-from pandas import Grouper
-from pandas import Timestamp
+from oups.store.defines import DIR_SEP
+from oups.store.utils import files_at_depth
 
-from oups.defines import DIR_SEP
-from oups.utils import files_at_depth
-from oups.utils import tcut
-
-from . import TEST_DATA
+from .. import TEST_DATA
 
 
 def test_files_at_depth(tmp_path):
@@ -65,34 +59,3 @@ def test_files_at_depth(tmp_path):
         (f"stockholm.pressure{DIR_SEP}flemings.spring{DIR_SEP}innerplace.morning", ["_metadata"]),
     ]
     assert paths_files == paths_ref
-
-
-@pytest.mark.parametrize(
-    "closed,label",
-    [("left", "left"), ("right", "left"), ("right", "right"), ("left", "right")],
-)
-def test_tcut(closed, label):
-    # Test data
-    ts = [
-        Timestamp("2022/03/01 09:00"),
-        Timestamp("2022/03/01 10:00"),
-        Timestamp("2022/03/01 10:30"),
-        Timestamp("2022/03/01 12:00"),
-        Timestamp("2022/03/01 15:00"),
-        Timestamp("2022/03/01 19:00"),
-    ]
-    df = DataFrame({"a": range(len(ts)), "ts": ts})
-    # Test closed=left/label=left.
-    grouper = Grouper(
-        key="ts",
-        freq="2H",
-        sort=False,
-        origin="start_day",
-        closed=closed,
-        label=label,
-    )
-    agg_ref = df.groupby(grouper)["a"].agg("first")
-    ddf = df.copy()
-    ddf["ts"] = tcut(df["ts"], grouper).astype("datetime64[ns]")
-    agg_res = ddf.groupby(grouper)["a"].agg("first")
-    assert agg_ref.equals(agg_res)

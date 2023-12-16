@@ -7,10 +7,10 @@ Created on Sat Dec 18 15:00:00 2021.
 """
 from pandas import DataFrame as pDataFrame
 
-from oups.collection import ParquetSet
-from oups.indexer import toplevel
-from oups.writer import OUPS_METADATA
-from oups.writer import OUPS_METADATA_KEY
+from oups import ParquetSet
+from oups import toplevel
+from oups.store.writer import OUPS_METADATA
+from oups.store.writer import OUPS_METADATA_KEY
 
 
 # from os import path as os_path

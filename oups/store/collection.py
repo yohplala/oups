@@ -16,12 +16,12 @@ from pandas import DataFrame as pDataFrame
 from sortedcontainers import SortedSet
 from vaex.dataframe import DataFrame as vDataFrame
 
-from oups.defines import DIR_SEP
-from oups.indexer import is_toplevel
-from oups.router import ParquetHandle
-from oups.utils import files_at_depth
-from oups.utils import strip_path_tail
-from oups.writer import write
+from oups.store.defines import DIR_SEP
+from oups.store.indexer import is_toplevel
+from oups.store.router import ParquetHandle
+from oups.store.utils import files_at_depth
+from oups.store.utils import strip_path_tail
+from oups.store.writer import write
 
 
 def is_parquet_file(file: str) -> bool:

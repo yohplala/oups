@@ -12,8 +12,8 @@ from cloudpickle import loads
 from fastparquet import ParquetFile
 from vaex import open_many
 
-from oups.defines import DIR_SEP
-from oups.writer import OUPS_METADATA_KEY
+from oups.store.defines import DIR_SEP
+from oups.store.writer import OUPS_METADATA_KEY
 
 
 class ParquetHandle:

@@ -14,8 +14,8 @@ import pytest
 from oups import is_toplevel
 from oups import sublevel
 from oups import toplevel
-from oups.defines import DIR_SEP
-from oups.indexer import DEFAULT_FIELDS_SEP
+from oups.store.defines import DIR_SEP
+from oups.store.indexer import DEFAULT_FIELDS_SEP
 
 
 def test_toplevel_is_toplevel():

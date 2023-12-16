@@ -13,9 +13,9 @@ from pandas import DataFrame as pDataFrame
 from pandas import date_range
 from vaex.dataframe import DataFrame as vDataFrame
 
-from oups.router import ParquetHandle
+from oups.store.router import ParquetHandle
 
-from . import TEST_DATA
+from .. import TEST_DATA
 
 
 # TEST_DATA = 'test-data'

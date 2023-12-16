@@ -22,8 +22,14 @@ from pandas import concat as pconcat
 from pandas.core.resample import TimeGrouper
 from vaex.dataframe import DataFrame as vDataFrame
 
-from oups.collection import ParquetSet
-from oups.router import ParquetHandle
+from oups.store.collection import ParquetSet
+from oups.store.router import ParquetHandle
+from oups.store.writer import DUPLICATES_ON
+from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
+from oups.store.writer import MAX_ROW_GROUP_SIZE
+from oups.store.writer import OUPS_METADATA
+from oups.store.writer import OUPS_METADATA_KEY
+from oups.store.writer import write
 from oups.streamagg.cumsegagg import cumsegagg
 from oups.streamagg.cumsegagg import setup_cumsegagg
 from oups.streamagg.jcumsegagg import FIRST
@@ -36,12 +42,6 @@ from oups.streamagg.segmentby import KEY_BIN_ON
 from oups.streamagg.segmentby import KEY_ORDERED_ON
 from oups.streamagg.segmentby import KEY_SNAP_BY
 from oups.streamagg.segmentby import setup_segmentby
-from oups.writer import DUPLICATES_ON
-from oups.writer import KEY_MAX_ROW_GROUP_SIZE
-from oups.writer import MAX_ROW_GROUP_SIZE
-from oups.writer import OUPS_METADATA
-from oups.writer import OUPS_METADATA_KEY
-from oups.writer import write
 
 
 VDATAFRAME_ROW_GROUP_SIZE = 6_345_000
