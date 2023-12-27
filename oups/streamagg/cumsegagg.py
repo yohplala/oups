@@ -21,10 +21,11 @@ from pandas import NaT as pNaT
 from pandas import Series
 from pandas.core.resample import TimeGrouper
 
-from oups.jcumsegagg import AGG_FUNCS
-from oups.jcumsegagg import jcsagg
-from oups.segmentby import ORDERED_ON
-from oups.segmentby import segmentby
+from oups.streamagg.jcumsegagg import AGG_FUNCS
+from oups.streamagg.jcumsegagg import jcsagg
+from oups.streamagg.segmentby import KEY_LAST_BIN_LABEL
+from oups.streamagg.segmentby import KEY_ORDERED_ON
+from oups.streamagg.segmentby import segmentby
 
 
 # Some constants.
@@ -118,11 +119,14 @@ def setup_cumsegagg(
         cols_name_in_res.append(out_col)
         # Set list of agg functions (temporary buffer).
         agg_funcs = tup[2]
-        if (agg_func := AGG_FUNCS[func]) in agg_funcs:
-            func_idx = agg_funcs.index(agg_func)
-        else:
-            func_idx = len(agg_funcs)
-            agg_funcs.append(AGG_FUNCS[func])
+        try:
+            if (agg_func := AGG_FUNCS[func]) in agg_funcs:
+                func_idx = agg_funcs.index(agg_func)
+            else:
+                func_idx = len(agg_funcs)
+                agg_funcs.append(AGG_FUNCS[func])
+        except KeyError:
+            raise ValueError(f"`{func}` aggregation function is unknown.")
         # 'cols_idx'
         cols_data = tup[3]
         cols_res = tup[4]
@@ -181,8 +185,8 @@ def cumsegagg(
 
     In this function, "snapshotting" is understood as the action of making
     isolated observations. When using snapshots, values derived from
-    ``snap_by`` TimeGrouper (or contained in ``snap_by`` Series) are considered the
-    "points of isolated observation".
+    ``snap_by`` TimeGrouper (or contained in ``snap_by`` Series) are considered
+    the "points of isolated observation".
     At a given point, an observation of the "on-going" segment (aka bin) is
     made. Because segments are contiguous, any row of the dataset falls in a
     segment.
@@ -223,8 +227,10 @@ def cumsegagg(
         If not provided, and 'ordered_on' parameter is, then 'ordered_on' value
         is also used to specify the column name onto which performing binning.
     buffer : Optional[dict], default None
-        User-chosen values from previous binning process, that can be required
-        when restarting the binning process with new seed data.
+        Buffer containing data for restarting the binning process with new seed
+        data:
+        - from previous segmentation step,
+        - from previous aggregation step.
     ordered_on : Union[str, None]
         Name of an existing ordered column in 'data'. When setting it, it is
         then forwarded to 'bin_by' Callable.
@@ -374,10 +380,16 @@ def cumsegagg(
     if not len_data:
         # 'data' is empty. Simply return.
         return
-    if isinstance(next(iter(agg.keys())), str):
+    if not isinstance(next(iter(agg.values())), list):
         # Reshape aggregation definition.
         agg = setup_cumsegagg(agg, data.dtypes.to_dict())
-    preserve_res = True if buffer else False
+    if buffer is None:
+        # First agg iteration.
+        preserve_res = False
+    else:
+        # New agg iteration.
+        preserve_res = True
+        prev_last_bin_label = buffer[KEY_LAST_BIN_LABEL] if KEY_LAST_BIN_LABEL in buffer else None
     # In case of restart, 'n_max_null_bins' is a max because 1st null bin may
     # well be continuation of last in-progress bin, without result in current
     # iteration, but with results from previous iteration.
@@ -396,11 +408,15 @@ def cumsegagg(
         snap_by=snap_by,
         buffer=buffer,
     )
+    if preserve_res and prev_last_bin_label != bin_labels.iloc[0]:
+        # A new bin has been started. Do not preserve past results.
+        # This behavior is only possible in case no snapshot is used.
+        preserve_res = False
     if isinstance(bin_by, dict):
         # If 'bin_by' is a dict, then setup has been managed separately, and
         # 'cumsegagg' may be running without 'bin_on' and 'ordered_on'
         # parameters. force 'ordered_on' as it is re-used below.
-        ordered_on = bin_by[ORDERED_ON]
+        ordered_on = bin_by[KEY_ORDERED_ON]
     # Initiate dict of result columns.
     # Setup 'chunk_res'.
     chunk_res_prev = (
@@ -480,14 +496,15 @@ def cumsegagg(
             null_bin_indices,  # 1d
             null_snap_indices,  # 1d
         )
-    # Assemble 'bin_res' as a pandas DataFrame.
+    # Record last aggregation results for a restart.
     if isinstance(buffer, dict):
         buffer[KEY_LAST_CHUNK_RES] = pDataFrame(chunk_res, copy=False)
+    # Assemble 'bin_res' as a pandas DataFrame.
     bin_res = pDataFrame(bin_res, index=bin_labels, copy=False)
     bin_res.index.name = ordered_on if ordered_on else bin_on
     # Set null values.
     if n_max_null_bins != 0:
-        null_bin_labels = bin_labels[null_bin_indices[~nisin(null_bin_indices, -1)]]
+        null_bin_labels = bin_labels.iloc[null_bin_indices[~nisin(null_bin_indices, -1)]]
         if not null_bin_labels.empty:
             if DTYPE_INT64 in agg:
                 # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.

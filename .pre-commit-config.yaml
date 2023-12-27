@@ -87,11 +87,13 @@ repos:
             --per-file-ignores=
                 tests/*.py:D103
                 oups/__init__.py:F401
-                oups/writer.py:C901
-                oups/jcumsegagg.py:C901
-                oups/segmentby.py:C901
-                oups/cumsegagg.py:C901 E203
-                oups/chainagg.py:C901
+                oups/store/__init__.py:F401
+                oups/store/writer.py:C901
+                oups/streamagg/__init__.py:F401
+                oups/streamagg/jcumsegagg.py:C901
+                oups/streamagg/segmentby.py:C901
+                oups/streamagg/cumsegagg.py:C901 E203
+                oups/streamagg/streamagg.py:C901
         ]
 
   # Pydocstyle

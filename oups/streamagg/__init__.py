@@ -5,5 +5,5 @@ Created on Wed Dec  1 18:35:00 2021.
 @author: yoh
 
 """
-
-TEST_DATA = "test-data"
+from .segmentby import by_x_rows
+from .streamagg import streamagg

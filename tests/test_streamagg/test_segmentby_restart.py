@@ -16,21 +16,21 @@ from pandas import Timestamp as pTimestamp
 from pandas import date_range
 from pandas.core.resample import TimeGrouper
 
-from oups.segmentby import DTYPE_DATETIME64
-from oups.segmentby import DTYPE_INT64
-from oups.segmentby import KEY_BIN
-from oups.segmentby import KEY_LAST_BIN_END
-from oups.segmentby import KEY_LAST_BIN_LABEL
-from oups.segmentby import KEY_LAST_ON_VALUE
-from oups.segmentby import KEY_RESTART_KEY
-from oups.segmentby import KEY_SNAP
-from oups.segmentby import LEFT
-from oups.segmentby import NULL_INT64_1D_ARRAY
-from oups.segmentby import RIGHT
-from oups.segmentby import by_scale
-from oups.segmentby import by_x_rows
-from oups.segmentby import segmentby
-from oups.segmentby import setup_segmentby
+from oups.streamagg.segmentby import DTYPE_DATETIME64
+from oups.streamagg.segmentby import DTYPE_INT64
+from oups.streamagg.segmentby import KEY_BIN
+from oups.streamagg.segmentby import KEY_LAST_BIN_END
+from oups.streamagg.segmentby import KEY_LAST_BIN_LABEL
+from oups.streamagg.segmentby import KEY_LAST_ON_VALUE
+from oups.streamagg.segmentby import KEY_RESTART_KEY
+from oups.streamagg.segmentby import KEY_SNAP
+from oups.streamagg.segmentby import LEFT
+from oups.streamagg.segmentby import NULL_INT64_1D_ARRAY
+from oups.streamagg.segmentby import RIGHT
+from oups.streamagg.segmentby import by_scale
+from oups.streamagg.segmentby import by_x_rows
+from oups.streamagg.segmentby import segmentby
+from oups.streamagg.segmentby import setup_segmentby
 
 
 # from pandas.testing import assert_frame_equal

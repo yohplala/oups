@@ -18,7 +18,7 @@ from oups import ParquetSet
 from oups import sublevel
 from oups import toplevel
 
-from . import TEST_DATA
+from .. import TEST_DATA
 
 
 # tmp_path = os_path.expanduser('~/Documents/code/data/oups')
