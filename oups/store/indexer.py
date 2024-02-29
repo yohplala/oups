@@ -379,3 +379,7 @@ def sublevel(index_class):
     # TODO
     # When python 3.10 is more wide spread, set 'slot=True' to save RAM.
     return dataclass(index_class, order=True, frozen=True)
+
+
+# TODO
+# - deep copy of an Indexer is currently not possible. Work this out.

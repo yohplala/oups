@@ -4,6 +4,15 @@ Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
 
+Test utils.
+- Check pandas DataFrame equality:
+from pandas.testing import assert_frame_equal
+- Run pytest in iPython:
+run -m pytest /home/yoh/Documents/code/oups/tests/test_aggstream/test_aggstream_init.py
+- Initialize store object:
+tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+store = ParquetSet(os_path.join(tmp_path, "store"), Indexer)
+
 """
 from copy import deepcopy
 from os import path as os_path
@@ -34,18 +43,6 @@ from oups.aggstream.jcumsegagg import SUM
 from oups.aggstream.segmentby import KEY_ORDERED_ON
 from oups.store.writer import KEY_DUPLICATES_ON
 from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
-
-
-"""
-Test utils.
-- Check pandas DataFrame equality:
-from pandas.testing import assert_frame_equal
-- Run pytest in iPython:
-run -m pytest /home/yoh/Documents/code/oups/tests/test_aggstream/test_aggstream_init.py
-- Initialize store object:
-tmp_path = os_path.expanduser('~/Documents/code/data/oups')
-store = ParquetSet(os_path.join(tmp_path, "store"), Indexer)
-"""
 
 
 @toplevel
@@ -405,4 +402,19 @@ def test_exception_not_key_of_streamagg_results(store):
             store=store,
             keys=key,
             bin_by=bin_by,
+        )
+
+
+def test_exception_setup_no_bin_by(store):
+    ordered_on = "ts"
+    key = Indexer("agg_res")
+    keys_config = {key: {"agg": {"out_spec": ("in_spec", FIRST)}}}
+    # Test.
+    with pytest.raises(ValueError, match="^'bin_by' parameter is missing"):
+        AggStream(
+            store=store,
+            keys=keys_config,
+            ordered_on=ordered_on,
+            agg=None,
+            post=None,
         )

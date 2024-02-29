@@ -1313,6 +1313,15 @@ class AggStream:
 # Should we persist / store 'p_job' between 'AggStream.agg' execution?
 
 # Tests:
+
+# Test exceptions
+# - test case, test parameter value not in 'streamagg' nor in 'write' signature.
+# - test filter ids is same between "keys" parameter and "filters" parameter or raise error
+# - test filter syntax used but not 'filters' parameter
+# - test using default_filter_id in "filters" dict
+# - test with a filter defined in 'filters' parameter but not used in 'keys' parameter.
+# - do a test using only "no filter id" "_" and do not specify 'filters' parameter.
+# Other tests
 # - in test case with snapshot: when snapshot is a TimeGrouper, make sure that stitching
 # works same as for bin: that empty snapshots are generated between 2 row groups.
 # - test case, test parameter value not in 'streamagg' nor in 'write' signature.

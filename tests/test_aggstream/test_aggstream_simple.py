@@ -4,6 +4,16 @@ Created on Sun Mar 13 18:00:00 2022.
 
 @author: yoh
 
+Test utils.
+- Check pandas DataFrame equality:
+from pandas.testing import assert_frame_equal
+- Run pytest in iPython:
+run -m pytest /home/yoh/Documents/code/oups/tests/test_aggstream/test_aggstream_simple.py
+- Initialize store object & seed path:
+tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+store = ParquetSet(os_path.join(tmp_path, "store"), Indexer)
+seed_path = os_path.join(tmp_path, "seed")
+
 """
 from os import path as os_path
 
@@ -36,25 +46,9 @@ from oups.aggstream.jcumsegagg import SUM
 from oups.aggstream.segmentby import by_x_rows
 
 
-"""
-Test utils.
-- Check pandas DataFrame equality:
-from pandas.testing import assert_frame_equal
-- Run pytest in iPython:
-run -m pytest /home/yoh/Documents/code/oups/tests/test_aggstream/test_aggstream_simple.py
-- Initialize store object & seed path:
-tmp_path = os_path.expanduser('~/Documents/code/data/oups')
-store = ParquetSet(os_path.join(tmp_path, "store"), Indexer)
-seed_path = os_path.join(tmp_path, "seed")
-"""
-
-
 @toplevel
 class Indexer:
     dataset_ref: str
-
-
-key = Indexer("agg_res")
 
 
 @pytest.fixture
@@ -66,6 +60,9 @@ def store(tmp_path):
 @pytest.fixture
 def seed_path(tmp_path):
     return os_path.join(tmp_path, "seed")
+
+
+key = Indexer("agg_res")
 
 
 def test_time_grouper_sum_agg(store, seed_path):
@@ -1166,7 +1163,7 @@ def test_time_grouper_duplicates_on_wo_bin_on(store):
         discard_last=True,
     )
     # Test results.
-    ref_res = pDataFrame({ordered_on: ts_order[:1], "sum": [6]})
+    ref_res = pDataFrame({ordered_on: ts_order[:1], SUM: [6]})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
