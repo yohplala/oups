@@ -30,7 +30,7 @@ from vaex.dataframe import DataFrame as vDataFrame
 COMPRESSION = "SNAPPY"
 MAX_ROW_GROUP_SIZE = 6_345_000
 KEY_MAX_ROW_GROUP_SIZE = "max_row_group_size"
-DUPLICATES_ON = "duplicates_on"
+KEY_DUPLICATES_ON = "duplicates_on"
 # Notes to any dev.
 # Store any specific oups metadata in this dict as string.
 # When using, append data by using `OUPS_METADATA.update()`.

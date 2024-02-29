@@ -20,23 +20,23 @@ from pandas import Timestamp as pTimestamp
 from pandas import date_range
 from pandas.core.resample import TimeGrouper
 
-from oups.streamagg.cumsegagg import DTYPE_DATETIME64
-from oups.streamagg.cumsegagg import DTYPE_FLOAT64
-from oups.streamagg.cumsegagg import DTYPE_INT64
-from oups.streamagg.cumsegagg import DTYPE_NULLABLE_INT64
-from oups.streamagg.cumsegagg import cumsegagg
-from oups.streamagg.cumsegagg import setup_cumsegagg
-from oups.streamagg.jcumsegagg import FIRST
-from oups.streamagg.jcumsegagg import LAST
-from oups.streamagg.jcumsegagg import MAX
-from oups.streamagg.jcumsegagg import MIN
-from oups.streamagg.jcumsegagg import SUM
-from oups.streamagg.jcumsegagg import jfirst
-from oups.streamagg.jcumsegagg import jlast
-from oups.streamagg.jcumsegagg import jmax
-from oups.streamagg.jcumsegagg import jmin
-from oups.streamagg.jcumsegagg import jsum
-from oups.streamagg.segmentby import by_x_rows
+from oups.aggstream.cumsegagg import DTYPE_DATETIME64
+from oups.aggstream.cumsegagg import DTYPE_FLOAT64
+from oups.aggstream.cumsegagg import DTYPE_INT64
+from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
+from oups.aggstream.cumsegagg import cumsegagg
+from oups.aggstream.cumsegagg import setup_cumsegagg
+from oups.aggstream.jcumsegagg import FIRST
+from oups.aggstream.jcumsegagg import LAST
+from oups.aggstream.jcumsegagg import MAX
+from oups.aggstream.jcumsegagg import MIN
+from oups.aggstream.jcumsegagg import SUM
+from oups.aggstream.jcumsegagg import jfirst
+from oups.aggstream.jcumsegagg import jlast
+from oups.aggstream.jcumsegagg import jmax
+from oups.aggstream.jcumsegagg import jmin
+from oups.aggstream.jcumsegagg import jsum
+from oups.aggstream.segmentby import by_x_rows
 
 
 # from pandas.testing import assert_frame_equal

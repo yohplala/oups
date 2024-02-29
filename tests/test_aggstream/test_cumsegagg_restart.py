@@ -16,19 +16,19 @@ from pandas import Timestamp as pTimestamp
 from pandas import concat as pconcat
 from pandas.core.resample import TimeGrouper
 
-from oups.streamagg.cumsegagg import DTYPE_DATETIME64
-from oups.streamagg.cumsegagg import DTYPE_FLOAT64
-from oups.streamagg.cumsegagg import DTYPE_INT64
-from oups.streamagg.cumsegagg import DTYPE_NULLABLE_INT64
-from oups.streamagg.cumsegagg import KEY_LAST_CHUNK_RES
-from oups.streamagg.cumsegagg import cumsegagg
-from oups.streamagg.cumsegagg import setup_cumsegagg
-from oups.streamagg.jcumsegagg import FIRST
-from oups.streamagg.jcumsegagg import LAST
-from oups.streamagg.jcumsegagg import MIN
-from oups.streamagg.jcumsegagg import SUM
-from oups.streamagg.segmentby import by_x_rows
-from oups.streamagg.segmentby import setup_segmentby
+from oups.aggstream.cumsegagg import DTYPE_DATETIME64
+from oups.aggstream.cumsegagg import DTYPE_FLOAT64
+from oups.aggstream.cumsegagg import DTYPE_INT64
+from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
+from oups.aggstream.cumsegagg import KEY_LAST_CHUNK_RES
+from oups.aggstream.cumsegagg import cumsegagg
+from oups.aggstream.cumsegagg import setup_cumsegagg
+from oups.aggstream.jcumsegagg import FIRST
+from oups.aggstream.jcumsegagg import LAST
+from oups.aggstream.jcumsegagg import MIN
+from oups.aggstream.jcumsegagg import SUM
+from oups.aggstream.segmentby import by_x_rows
+from oups.aggstream.segmentby import setup_segmentby
 
 
 # from pandas.testing import assert_frame_equal

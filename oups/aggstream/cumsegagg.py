@@ -21,11 +21,11 @@ from pandas import NaT as pNaT
 from pandas import Series
 from pandas.core.resample import TimeGrouper
 
-from oups.streamagg.jcumsegagg import AGG_FUNCS
-from oups.streamagg.jcumsegagg import jcsagg
-from oups.streamagg.segmentby import KEY_LAST_BIN_LABEL
-from oups.streamagg.segmentby import KEY_ORDERED_ON
-from oups.streamagg.segmentby import segmentby
+from oups.aggstream.jcumsegagg import AGG_FUNCS
+from oups.aggstream.jcumsegagg import jcsagg
+from oups.aggstream.segmentby import KEY_LAST_BIN_LABEL
+from oups.aggstream.segmentby import KEY_ORDERED_ON
+from oups.aggstream.segmentby import segmentby
 
 
 # Some constants.
@@ -384,10 +384,12 @@ def cumsegagg(
         # Reshape aggregation definition.
         agg = setup_cumsegagg(agg, data.dtypes.to_dict())
     if buffer is None:
-        # First agg iteration.
+        # Single run agg.
         preserve_res = False
     else:
-        # New agg iteration.
+        # Agg iteration with possible restart.
+        # Detection of 1st iteration is managed below with test if a new bin
+        # is started.
         preserve_res = True
         prev_last_bin_label = buffer[KEY_LAST_BIN_LABEL] if KEY_LAST_BIN_LABEL in buffer else None
     # In case of restart, 'n_max_null_bins' is a max because 1st null bin may
@@ -415,7 +417,7 @@ def cumsegagg(
     if isinstance(bin_by, dict):
         # If 'bin_by' is a dict, then setup has been managed separately, and
         # 'cumsegagg' may be running without 'bin_on' and 'ordered_on'
-        # parameters. force 'ordered_on' as it is re-used below.
+        # parameters. Force 'ordered_on' as it is re-used below.
         ordered_on = bin_by[KEY_ORDERED_ON]
     # Initiate dict of result columns.
     # Setup 'chunk_res'.
