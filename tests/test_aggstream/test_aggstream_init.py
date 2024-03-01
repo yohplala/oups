@@ -50,6 +50,9 @@ class Indexer:
     dataset_ref: str
 
 
+key = Indexer("agg_res")
+
+
 @pytest.fixture
 def store(tmp_path):
     # Reuse pre-defined Indexer.
@@ -390,7 +393,6 @@ def test_exception_not_key_of_streamagg_results(store):
     ordered_on = "ts_order"
     val = range(1, len(ts) + 1)
     seed_pdf = pDataFrame({ordered_on: ts, "val": val})
-    key = Indexer("agg_res")
     store[key] = seed_pdf
     # Setup aggregation.
     bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
@@ -405,16 +407,57 @@ def test_exception_not_key_of_streamagg_results(store):
         )
 
 
-def test_exception_setup_no_bin_by(store):
+@pytest.mark.parametrize(
+    "other_parameters, exception_mess",
+    [
+        # 0 / No 'bin_by'
+        (
+            {"keys": {key: {"agg": {"out_spec": ("in_spec", FIRST)}}}},
+            "^'bin_by' parameter is missing",
+        ),
+        # 1 / Parameter not in 'AggStream.__init__' nor in 'write' signature.
+        # Because '**kwargs' is used in 'AggStream.__init__', test the
+        # implemented check.
+        (
+            {
+                "keys": {key: {"agg": {"out_spec": ("in_spec", FIRST)}}},
+                "my_invented_parameter": 0,
+            },
+            "^'my_invented_parameter' is neither",
+        ),
+        # 2 / Different filter ids between 'keys' and 'filters' parameters.
+        (
+            {
+                "keys": {"filter1": {key: {"agg": {"out_spec": ("in_spec", FIRST)}}}},
+                "filters": {"filter2": ["val", ">=", 0]},
+            },
+            "^not possible to have different lists of filter ids",
+        ),
+        # 3 / Filter syntax used in 'keys' parameter, without 'filters' parameter.
+        (
+            {
+                "keys": {"filter1": {key: {"agg": {"out_spec": ("in_spec", FIRST)}}}},
+            },
+            "^not possible to use filter syntax for `keys`",
+        ),
+        # 4 / Use "no filter" filter id in 'filters' to set a filter.
+        (
+            {
+                "keys": {NO_FILTER_ID: {key: {"agg": {"out_spec": ("in_spec", FIRST)}}}},
+                "filters": {NO_FILTER_ID: ["val", ">=", 0]},
+            },
+            f"^not possible to use '{NO_FILTER_ID}'",
+        ),
+    ],
+)
+def test_exceptions_Aggstream_parameters(store, other_parameters, exception_mess):
     ordered_on = "ts"
-    key = Indexer("agg_res")
-    keys_config = {key: {"agg": {"out_spec": ("in_spec", FIRST)}}}
+    conf = {
+        "store": store,
+        "ordered_on": ordered_on,
+    } | other_parameters
     # Test.
-    with pytest.raises(ValueError, match="^'bin_by' parameter is missing"):
+    with pytest.raises(ValueError, match=exception_mess):
         AggStream(
-            store=store,
-            keys=keys_config,
-            ordered_on=ordered_on,
-            agg=None,
-            post=None,
+            **conf,
         )

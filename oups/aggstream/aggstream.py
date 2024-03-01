@@ -1088,13 +1088,18 @@ class AggStream:
             # Check 'filters' parameter is used.
             if filters is None:
                 raise ValueError(
-                    "not possible to use filter syntax for `keys`"
-                    " parameter without providing `filters`"
-                    " parameter as well.",
+                    "not possible to use filter syntax for `keys` parameter "
+                    "without providing `filters` parameter as well.",
                 )
             else:
                 # Check same filters id are both in 'keys' and 'filters'
                 # parameters.
+                if NO_FILTER_ID in filters and filters[NO_FILTER_ID] is not None:
+                    raise ValueError(
+                        f"not possible to use '{NO_FILTER_ID}' as key in "
+                        "`filters` parameter with a value different than "
+                        "`None`.",
+                    )
                 filt_filt_ids = set(filters)
                 filt_filt_ids.discard(NO_FILTER_ID)
                 if filt_filt_ids != (keys_filt_ids := set(keys)):
@@ -1313,15 +1318,8 @@ class AggStream:
 # Should we persist / store 'p_job' between 'AggStream.agg' execution?
 
 # Tests:
-
-# Test exceptions
-# - test case, test parameter value not in 'streamagg' nor in 'write' signature.
-# - test filter ids is same between "keys" parameter and "filters" parameter or raise error
-# - test filter syntax used but not 'filters' parameter
-# - test using default_filter_id in "filters" dict
-# - test with a filter defined in 'filters' parameter but not used in 'keys' parameter.
-# - do a test using only "no filter id" "_" and do not specify 'filters' parameter.
-# Other tests
+# - do a test using only "no filter id" "_" with another filter and check no filter
+#   is used indeed.
 # - in test case with snapshot: when snapshot is a TimeGrouper, make sure that stitching
 # works same as for bin: that empty snapshots are generated between 2 row groups.
 # - test case, test parameter value not in 'streamagg' nor in 'write' signature.
