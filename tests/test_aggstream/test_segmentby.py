@@ -18,20 +18,20 @@ from pandas import Timestamp as pTimestamp
 from pandas import date_range
 from pandas.core.resample import TimeGrouper
 
-from oups.streamagg.segmentby import DTYPE_DATETIME64
-from oups.streamagg.segmentby import DTYPE_INT64
-from oups.streamagg.segmentby import KEY_BIN_BY
-from oups.streamagg.segmentby import KEY_ON_COLS
-from oups.streamagg.segmentby import KEY_ORDERED_ON
-from oups.streamagg.segmentby import LEFT
-from oups.streamagg.segmentby import NULL_INT64_1D_ARRAY
-from oups.streamagg.segmentby import RIGHT
-from oups.streamagg.segmentby import _next_chunk_starts
-from oups.streamagg.segmentby import by_scale
-from oups.streamagg.segmentby import by_x_rows
-from oups.streamagg.segmentby import mergesort
-from oups.streamagg.segmentby import segmentby
-from oups.streamagg.segmentby import setup_segmentby
+from oups.aggstream.segmentby import DTYPE_DATETIME64
+from oups.aggstream.segmentby import DTYPE_INT64
+from oups.aggstream.segmentby import KEY_BIN_BY
+from oups.aggstream.segmentby import KEY_ON_COLS
+from oups.aggstream.segmentby import KEY_ORDERED_ON
+from oups.aggstream.segmentby import LEFT
+from oups.aggstream.segmentby import NULL_INT64_1D_ARRAY
+from oups.aggstream.segmentby import RIGHT
+from oups.aggstream.segmentby import _next_chunk_starts
+from oups.aggstream.segmentby import by_scale
+from oups.aggstream.segmentby import by_x_rows
+from oups.aggstream.segmentby import mergesort
+from oups.aggstream.segmentby import segmentby
+from oups.aggstream.segmentby import setup_segmentby
 
 
 # from pandas.testing import assert_frame_equal

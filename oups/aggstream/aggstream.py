@@ -1326,19 +1326,19 @@ class AggStream:
 # works same as for bin: that empty snapshots are generated between 2 row groups.
 # - test case, test parameter value not in 'streamagg' nor in 'write' signature.
 # - un test snap + bin avec deux ou trois chunks dans lesquels il n'y a ni snap, ni bin qui se finissent.
-# - bien faire un cas test snapshot ou le 2nd seed chunk démarre sur une nouvelle bin,
-# straight away / cal pose des problèmes quand c'est simplement bin,
-# alors bin+snapshot, il y a des chances que ça ne marche pas non plus.
+# - bien faire un cas test snapshot ou le 2nd seed chunk démarre sur une nouvelle bin:
+#    straight away / ça pose des problèmes quand c'est simplement bin,
+#    alors bin+snapshot, il y a des chances que ça ne marche pas non plus.
 # - Do a test case to check that if in 'post' an exception is raised for instance,
-# then values in class are properly set: segagg_buffer, post_buffer, seed_index_restart,
-# and agg_res_buffer and bin_res_buffer are empty lists.
+#    then values in class are properly set: segagg_buffer, post_buffer, seed_index_restart,
+#    and agg_res_buffer and bin_res_buffer are empty lists.
 # - Test new parameters: 'final_write' and seed check exception
-#   for seed check exception, check the last '_last_seed_index' has been correctly recorded
-#   and aggregation results integrate results from last seed chunk.
+#    for seed check exception, check the last '_last_seed_index' has been correctly recorded
+#    and aggregation results integrate results from last seed chunk.
 # - A test that with a given filter release an empty dataframe.
 # - A test with a check function that raises an exception: check that last seed index has been
-#   that of the last iteration, prior to the exception.
+#    that of the last iteration, prior to the exception.
 # - A test for filter_dataframe
-#      check when some chunk are empty for a given filter id
+#    check when some chunk are empty for a given filter id
 # - A test with first seed generator like Parquet File, then 1 dataframe each time.
 # - Test with different 'ordered_on' values for a key vs seed

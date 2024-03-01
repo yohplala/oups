@@ -219,7 +219,7 @@ def test_3_keys_only_bins(store, seed_path):
         assert rec_res.equals(ref_df)
 
 
-def test_exception_different_indexes_at_restart(tmp_path):
+def test_exception_different_indexes_at_restart(store, seed_path):
     # Test exception at restart with 2 different 'seed_index_restart' for 2
     # different keys.
     # - key 1: time grouper '2T', agg 'first', and 'last',
@@ -242,7 +242,6 @@ def test_exception_different_indexes_at_restart(tmp_path):
     rand_ints.sort()
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     seed_df = pDataFrame({ordered_on: ts, "val": rand_ints})
-    seed_path = os_path.join(tmp_path, "seed")
     fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation for 'key1'.

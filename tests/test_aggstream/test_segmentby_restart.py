@@ -16,21 +16,21 @@ from pandas import Timestamp as pTimestamp
 from pandas import date_range
 from pandas.core.resample import TimeGrouper
 
-from oups.streamagg.segmentby import DTYPE_DATETIME64
-from oups.streamagg.segmentby import DTYPE_INT64
-from oups.streamagg.segmentby import KEY_BIN
-from oups.streamagg.segmentby import KEY_LAST_BIN_END
-from oups.streamagg.segmentby import KEY_LAST_BIN_LABEL
-from oups.streamagg.segmentby import KEY_LAST_ON_VALUE
-from oups.streamagg.segmentby import KEY_RESTART_KEY
-from oups.streamagg.segmentby import KEY_SNAP
-from oups.streamagg.segmentby import LEFT
-from oups.streamagg.segmentby import NULL_INT64_1D_ARRAY
-from oups.streamagg.segmentby import RIGHT
-from oups.streamagg.segmentby import by_scale
-from oups.streamagg.segmentby import by_x_rows
-from oups.streamagg.segmentby import segmentby
-from oups.streamagg.segmentby import setup_segmentby
+from oups.aggstream.segmentby import DTYPE_DATETIME64
+from oups.aggstream.segmentby import DTYPE_INT64
+from oups.aggstream.segmentby import KEY_BIN
+from oups.aggstream.segmentby import KEY_LAST_BIN_END
+from oups.aggstream.segmentby import KEY_LAST_BIN_LABEL
+from oups.aggstream.segmentby import KEY_LAST_ON_VALUE
+from oups.aggstream.segmentby import KEY_RESTART_KEY
+from oups.aggstream.segmentby import KEY_SNAP
+from oups.aggstream.segmentby import LEFT
+from oups.aggstream.segmentby import NULL_INT64_1D_ARRAY
+from oups.aggstream.segmentby import RIGHT
+from oups.aggstream.segmentby import by_scale
+from oups.aggstream.segmentby import by_x_rows
+from oups.aggstream.segmentby import segmentby
+from oups.aggstream.segmentby import setup_segmentby
 
 
 # from pandas.testing import assert_frame_equal
@@ -995,9 +995,9 @@ def test_segmentby_exceptions():
             [None] * 3,
             [0] * 3,
             [
-                {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: 0},
-                {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: 4},
-                {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: 8},
+                {KEY_BIN: {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: 0}, KEY_LAST_BIN_LABEL: 0},
+                {KEY_BIN: {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: 4}, KEY_LAST_BIN_LABEL: 4},
+                {KEY_BIN: {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: 8}, KEY_LAST_BIN_LABEL: 8},
             ],
         ),
         (
