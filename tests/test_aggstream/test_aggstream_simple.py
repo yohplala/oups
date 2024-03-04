@@ -37,6 +37,7 @@ from oups import toplevel
 from oups.aggstream.aggstream import KEY_AGGSTREAM
 from oups.aggstream.aggstream import KEY_POST_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
+from oups.aggstream.aggstream import NO_FILTER_ID
 from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
 from oups.aggstream.jcumsegagg import FIRST
 from oups.aggstream.jcumsegagg import LAST
@@ -1281,3 +1282,62 @@ def test_bin_on_col_sum_agg(store):
     # Check 'last_seed_index'.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
+
+
+def test_time_grouper_agg_first_filters_and_no_filter(store):
+    # Test with time grouper and 'first' aggregation, with and w/o filters.
+    # Seed as simple pandas DataFrame.
+    # No post, 'discard_last=True'.
+    #
+    # Setup aggregation.
+    ordered_on = "ts"
+    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    agg = {SUM: ("val", SUM)}
+    key_a = Indexer("key_a")
+    filter_id_spec_a = "filter_a"
+    key_b = Indexer("key_b")
+    filter_id_spec_b = "filter_b"
+    as_ = AggStream(
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        keys={
+            NO_FILTER_ID: {key: {"bin_by": bin_by}},
+            filter_id_spec_a: {key_a: {"bin_by": bin_by}},
+            filter_id_spec_b: {key_b: {"bin_by": bin_by}},
+        },
+        filters={
+            filter_id_spec_a: [("val", ">=", 2)],
+            filter_id_spec_b: [("val", ">=", 3)],
+        },
+    )
+    # Seed data.
+    date = "2020/01/01 "
+    ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "10:00"])
+    seed = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    # Streamed aggregation.
+    as_.agg(
+        seed=seed,
+    )
+    # 1st append, starting a new bin.
+    ts2 = DatetimeIndex([date + "10:20", date + "10:40", date + "11:00", date + "11:30"])
+    seed2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
+    seed2 = pconcat([seed, seed2])
+    # Streamed aggregation.
+    as_.agg(
+        seed=seed2,
+    )
+    # Test results.
+    seed2 = seed2.iloc[:-1]
+    # 'key'
+    ref_res = seed2.groupby(bin_by).agg(**agg).reset_index()
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    # 'key_a'
+    ref_res = seed2.loc[seed2["val"] >= 2].groupby(bin_by).agg(**agg).reset_index()
+    rec_res = store[key_a].pdf
+    assert rec_res.equals(ref_res)
+    # 'key_b'
+    ref_res = seed2.loc[seed2["val"] >= 3].groupby(bin_by).agg(**agg).reset_index()
+    rec_res = store[key_b].pdf
+    assert rec_res.equals(ref_res)

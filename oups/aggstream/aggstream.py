@@ -509,25 +509,32 @@ def _iter_data(
             filter_main_chunk = seed_chunk.loc[:, ordered_on] < last_seed_index
             seed_remainder = seed_chunk.loc[~filter_main_chunk]
             filter_array &= filter_main_chunk
-        if not filter_array.any():
-            # DataFrame will be empty after filtering.
-            # Proceed with next iteration.
-            continue
         # Step 4 / Filter seed and yield.
+        print("filters")
+        print(filters)
+        print("filter array")
+        print(filter_array)
         for filt_id, filters_ in filters.items():
             # Filter.
-            if filt_id != NO_FILTER_ID:
-                filter_array &= dataframe_filter(seed_chunk, filters_)
-                if not filter_array.any():
-                    # DataFrame will be empty after filtering.
-                    # Proceed with next iteration.
-                    continue
-            if filter_array.all():
+            print("filter_id")
+            print(filt_id)
+            filter_array_loc = (
+                dataframe_filter(seed_chunk, filters_) & filter_array
+                if filt_id != NO_FILTER_ID
+                else filter_array.copy()
+            )
+            if not filter_array_loc.any():
+                # DataFrame will be empty after filtering.
+                # Proceed with next iteration.
+                continue
+            elif filter_array_loc.all():
+                # If filter only contains 1, simply return full seed chunk.
                 yield last_seed_index, filt_id, seed_chunk
             else:
-                filtered_chunk = seed_chunk.loc[filter_array]
-                filtered_chunk.reset_index(drop=True, inplace=True)
-                yield last_seed_index, filt_id, filtered_chunk
+                # Otherwise, filter.
+                yield last_seed_index, filt_id, seed_chunk.loc[filter_array_loc].reset_index(
+                    drop=True,
+                )
 
 
 def _post_n_write_agg_chunks(
@@ -626,6 +633,10 @@ def _post_n_write_agg_chunks(
     )
     # Make a copy when a single item to not propagate to original 'agg_res'
     # the 'reset_index'.
+    print("key")
+    print(key)
+    print("agg_res_buffer")
+    print(agg_res_buffer)
     agg_res = (
         pconcat(agg_res_buffer) if len(agg_res_buffer) > 1 else agg_res_buffer[0].copy(deep=False)
     )
@@ -744,6 +755,8 @@ def agg_iter(
                         post=keys_config[KEY_POST],
                     )
     # Segment and aggregate. Group keys becomes the index.
+    print("seed_chunk")
+    print(seed_chunk)
     agg_res = cumsegagg(
         data=seed_chunk,
         agg=agg_config,
@@ -1094,15 +1107,21 @@ class AggStream:
             else:
                 # Check same filters id are both in 'keys' and 'filters'
                 # parameters.
-                if NO_FILTER_ID in filters and filters[NO_FILTER_ID] is not None:
-                    raise ValueError(
-                        f"not possible to use '{NO_FILTER_ID}' as key in "
-                        "`filters` parameter with a value different than "
-                        "`None`.",
-                    )
+                if NO_FILTER_ID in filters:
+                    if filters[NO_FILTER_ID] is not None:
+                        raise ValueError(
+                            f"not possible to use '{NO_FILTER_ID}' as key in "
+                            "`filters` parameter with a value different than "
+                            "`None`.",
+                        )
+                elif NO_FILTER_ID in keys:
+                    # If not in 'filters' but in 'keys', add it to 'filters'.
+                    filters[NO_FILTER_ID] = None
                 filt_filt_ids = set(filters)
                 filt_filt_ids.discard(NO_FILTER_ID)
-                if filt_filt_ids != (keys_filt_ids := set(keys)):
+                keys_filt_ids = set(keys)
+                keys_filt_ids.discard(NO_FILTER_ID)
+                if filt_filt_ids != keys_filt_ids:
                     raise ValueError(
                         "not possible to have different lists of filter ids"
                         " between `keys` and `filters` parameters.\n"
@@ -1118,6 +1137,11 @@ class AggStream:
             _min_number_of_keys_per_filter.append(len(keys[filt_id]))
             # TODO: remove '_all_keys' if key can be serialize.
             _all_keys.extend(keys[filt_id])
+        # Check for duplicates keys between different filter ids.
+        seen = set()
+        dupes = [key for key in _all_keys if key in seen or seen.add(key)]
+        if dupes:
+            raise ValueError(f"not possible to have key(s) {dupes} used for different filter ids.")
         self.all_keys = _all_keys
         self.filter_ids_to_keys = _filter_ids_to_keys
         # Once filters have been managed, simplify 'keys' as a single level
@@ -1287,6 +1311,7 @@ class AggStream:
                 # Post-process & write results from last iteration, this time
                 # keeping last aggregation row, and recording metadata for a
                 # future 'AggStream.agg' execution.
+                print("final write")
                 p_job(
                     delayed(_post_n_write_agg_chunks)(
                         key=key,
@@ -1318,11 +1343,8 @@ class AggStream:
 # Should we persist / store 'p_job' between 'AggStream.agg' execution?
 
 # Tests:
-# - do a test using only "no filter id" "_" with another filter and check no filter
-#   is used indeed.
 # - in test case with snapshot: when snapshot is a TimeGrouper, make sure that stitching
 # works same as for bin: that empty snapshots are generated between 2 row groups.
-# - test case, test parameter value not in 'streamagg' nor in 'write' signature.
 # - un test snap + bin avec deux ou trois chunks dans lesquels il n'y a ni snap, ni bin qui se finissent.
 # - bien faire un cas test snapshot ou le 2nd seed chunk démarre sur une nouvelle bin:
 #    straight away / ça pose des problèmes quand c'est simplement bin,

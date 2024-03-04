@@ -448,6 +448,20 @@ def test_exception_not_key_of_streamagg_results(store):
             },
             f"^not possible to use '{NO_FILTER_ID}'",
         ),
+        # 5 / Same key for different filter ids.
+        (
+            {
+                "keys": {
+                    "filter1": {key: {"agg": {"out_spec": ("in_spec", FIRST)}}},
+                    "filter2": {key: {"agg": {"out_spec": ("in_spec", FIRST)}}},
+                },
+                "filters": {
+                    "filter1": ["val", ">=", 0],
+                    "filter2": ["val", ">=", 2],
+                },
+            },
+            "^not possible to have key(s)",
+        ),
     ],
 )
 def test_exceptions_Aggstream_parameters(store, other_parameters, exception_mess):
