@@ -449,7 +449,7 @@ def test_exception_not_key_of_streamagg_results(store):
                     "filter2": ["val", ">=", 2],
                 },
             },
-            "^not possible to have key(s)",
+            "^not possible to have key",
         ),
     ],
 )
