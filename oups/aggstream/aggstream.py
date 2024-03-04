@@ -1325,7 +1325,6 @@ class AggStream:
 # - Use dill to serialize 'keys' in joblib / if working:
 #    - replace setting of dir_path in keys_config by store directly.
 #    - remove 'self.all_keys'
-# Should we persist / store 'p_job' between 'AggStream.agg' execution?
 
 # Tests:
 # - in test case with snapshot: when snapshot is a TimeGrouper, make sure that stitching
