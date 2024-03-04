@@ -8,7 +8,7 @@ Test utils.
 - Check pandas DataFrame equality:
 from pandas.testing import assert_frame_equal
 - Run pytest in iPython:
-run -m pytest /home/yoh/Documents/code/oups/tests/test_aggstream/test_aggstream_simple.py
+run -m pytest /home/yoh/Documents/code/oups/tests/test_aggstream/test_aggstream_advanced.py
 - Initialize store object & seed path:
 tmp_path = os_path.expanduser('~/Documents/code/data/oups')
 store = ParquetSet(os_path.join(tmp_path, "store"), Indexer)
@@ -94,6 +94,7 @@ def test_3_keys_only_bins(store, seed_path):
         store=store,
         keys=key_configs,
         max_row_group_size=max_row_group_size,
+        parallel=True,
     )
     # Seed data.
     start = Timestamp("2020/01/01")
@@ -114,7 +115,6 @@ def test_3_keys_only_bins(store, seed_path):
     as_.agg(
         seed=seed,
         discard_last=True,
-        parallel=True,
     )
 
     def get_ref_results(seed_df):
@@ -173,7 +173,6 @@ def test_3_keys_only_bins(store, seed_path):
     as_.agg(
         seed=seed,
         discard_last=True,
-        parallel=True,
     )
     # Test results
     seed_df2_trim = seed_df2[seed_df2[ordered_on] < seed_df2[ordered_on].iloc[-1]]
@@ -203,7 +202,6 @@ def test_3_keys_only_bins(store, seed_path):
     as_.agg(
         seed=seed,
         discard_last=True,
-        parallel=True,
     )
     # Test results
     seed_df3_trim = seed_df3[seed_df3[ordered_on] < seed_df3[ordered_on].iloc[-1]]

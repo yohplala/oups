@@ -70,10 +70,7 @@ def always_false(**kwargs):
 
 
 @pytest.mark.parametrize(
-    (
-        "root_parameters, ref_seed_config, ref_keys_config, ref_agg_pd, "
-        "ref_filter_ids_to_keys, ref_min_number_of_keys_per_filter"
-    ),
+    ("root_parameters, ref_seed_config, ref_keys_config, ref_agg_pd, " "ref_filter_ids_to_keys"),
     [
         (
             # Test  1 /
@@ -110,8 +107,6 @@ def always_false(**kwargs):
             {str(Indexer("key1")): {"agg_out": ("val", SUM)}},
             # ref_filter_ids_to_keys
             {NO_FILTER_ID: [str(Indexer("key1"))]},
-            # ref_min_number_of_keys_per_filter
-            1,
         ),
         (
             # Test 2 /
@@ -222,8 +217,6 @@ def always_false(**kwargs):
                     str(Indexer("key4_most_default")),
                 ],
             },
-            # ref_min_number_of_keys_per_filter
-            4,
         ),
         (
             # Test 3 /
@@ -338,8 +331,6 @@ def always_false(**kwargs):
                 ],
                 "filter2": [str(Indexer("key4_most_default"))],
             },
-            # ref_min_number_of_keys_per_filter
-            1,
         ),
     ],
 )
@@ -350,7 +341,6 @@ def test_aggstream_init(
     ref_keys_config,
     ref_agg_pd,
     ref_filter_ids_to_keys,
-    ref_min_number_of_keys_per_filter,
 ):
     # Setup streamed aggregation.
     as_ = AggStream(store=store, **root_parameters)
@@ -379,7 +369,6 @@ def test_aggstream_init(
         "agg_pd": ref_agg_pd,
         "agg_cs": {},
         "filter_ids_to_keys": ref_filter_ids_to_keys,
-        "min_number_of_keys_per_filter": ref_min_number_of_keys_per_filter,
     }
     for attr in main_ref_attr:
         assert getattr(as_, attr) == main_ref_attr[attr]

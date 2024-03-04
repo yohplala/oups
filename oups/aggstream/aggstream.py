@@ -510,14 +510,8 @@ def _iter_data(
             seed_remainder = seed_chunk.loc[~filter_main_chunk]
             filter_array &= filter_main_chunk
         # Step 4 / Filter seed and yield.
-        print("filters")
-        print(filters)
-        print("filter array")
-        print(filter_array)
         for filt_id, filters_ in filters.items():
             # Filter.
-            print("filter_id")
-            print(filt_id)
             filter_array_loc = (
                 dataframe_filter(seed_chunk, filters_) & filter_array
                 if filt_id != NO_FILTER_ID
@@ -633,10 +627,6 @@ def _post_n_write_agg_chunks(
     )
     # Make a copy when a single item to not propagate to original 'agg_res'
     # the 'reset_index'.
-    print("key")
-    print(key)
-    print("agg_res_buffer")
-    print(agg_res_buffer)
     agg_res = (
         pconcat(agg_res_buffer) if len(agg_res_buffer) > 1 else agg_res_buffer[0].copy(deep=False)
     )
@@ -755,8 +745,6 @@ def agg_iter(
                         post=keys_config[KEY_POST],
                     )
     # Segment and aggregate. Group keys becomes the index.
-    print("seed_chunk")
-    print(seed_chunk)
     agg_res = cumsegagg(
         data=seed_chunk,
         agg=agg_config,
@@ -798,8 +786,6 @@ class AggStream:
         an aggregation is run (seed data dtypes is required).
       - ``self.filter_ids_to_keys``, dict, mapping filter ids to list of
         keys.
-      - ``self.min_number_of_keys_per_filter``, int, minimal number of keys
-        for a given filter set, among all filter sets.
       - ``self.keys_config``, dict of keys config in the form:
         ``{key: {'dirpath': str, where to record agg res,
                  'bin_on_out' : str, name in aggregation results for column
@@ -827,6 +813,7 @@ class AggStream:
         To be noticed, keys of dict ``agg_buffers`` are strings.
       - ``self.all_keys``, list of keys, kept as Indexer. This attribute is to
         be removed if key can be kept as an Indexer in ``self.keys_config``.
+      - ``self.p_job``, Parallel, joblib setup.
 
     """
 
@@ -843,6 +830,7 @@ class AggStream:
         bin_on: Optional[Union[str, Tuple[str, str]]] = None,
         snap_by: Optional[Union[TimeGrouper, Series, DatetimeIndex]] = None,
         post: Optional[Callable] = None,
+        parallel: Optional[bool] = False,
         **kwargs,
     ):
         """
@@ -1010,6 +998,9 @@ class AggStream:
             functions (not mixing rows together, but operating on one or
             several columns), or dataframe formatting before results are
             finally recorded.
+        parallel : bool, default False
+            Conduct processing of keys in parallel, with one process per `key`.
+            If a single `key`, only one process is possible.
 
         Other Parameters
         ----------------
@@ -1147,7 +1138,6 @@ class AggStream:
         # Once filters have been managed, simplify 'keys' as a single level
         # dict.
         keys = ChainMap(*keys.values())
-        self.min_number_of_keys_per_filter = min(_min_number_of_keys_per_filter)
         (
             self.keys_config,
             self.agg_pd,
@@ -1167,6 +1157,11 @@ class AggStream:
         # Cannot be set yet, because seed dtype is required.
         # Is a dict, specifying for each key, its expected aggregation.
         self.agg_cs = {}
+        # Configure parallel job.
+        # Per filter set, take min number of keys.
+        n_keys = min(_min_number_of_keys_per_filter)
+        n_jobs = min(int(cpu_count() * 3 / 4), n_keys) if (parallel and n_keys > 1) else 1
+        self.p_job = Parallel(n_jobs=n_jobs, prefer="threads")
 
     def _init_agg_cs(self, seed: Iterable[pDataFrame]):
         """
@@ -1205,7 +1200,6 @@ class AggStream:
         trim_start: Optional[bool] = True,
         discard_last: Optional[bool] = True,
         final_write: Optional[bool] = True,
-        parallel: Optional[bool] = False,
     ):
         """
         Aggregate sequentially on successive chunks (stream) of ordered data.
@@ -1229,12 +1223,8 @@ class AggStream:
             below notes.
         final_write : bool, default True
             If ``True``, after last iteration of aggregation, aggregation
-            results are written to disk.
-            If ``False``, last aggregation results remain set in memory,
-            available for a next iteration.
-        parallel : bool, default False
-            Conduct processing of keys in parallel, with one process per `key`.
-            If a single `key`, only one process is possible.
+            results are written to disk. With this parameter, restarting
+            aggregation with a new AggStream instance is possible.
 
         Notes
         -----
@@ -1273,58 +1263,53 @@ class AggStream:
             # If first time an aggregation is made with this object,
             # initialize 'agg_cs'.
             seed = self._init_agg_cs(seed)
-        # Per filter set, take min number of keys.
-        n_keys = self.min_number_of_keys_per_filter
-        n_jobs = min(int(cpu_count() * 3 / 4), n_keys) if (parallel and n_keys > 1) else 1
         seed_check_exception = False
-        with Parallel(n_jobs=n_jobs, prefer="threads") as p_job:
-            try:
-                for _last_seed_index, filter_id, filtered_chunk in _iter_data(
-                    seed=seed,
-                    **self.seed_config,
-                    trim_start=trim_start,
-                    discard_last=discard_last,
-                ):
-                    agg_loop_res = p_job(
-                        delayed(agg_iter)(
-                            seed_chunk=filtered_chunk,
-                            key=key,
-                            keys_config=self.keys_config[key],
-                            agg_config=self.agg_cs[key],
-                            agg_buffers=self.agg_buffers[key],
-                        )
-                        for key in self.filter_ids_to_keys[filter_id]
-                    )
-                    for key, agg_res in agg_loop_res:
-                        self.agg_buffers[key].update(agg_res)
-                    # Set 'seed_index_restart' to the 'last_seed_index' with
-                    # which restarting the next aggregation iteration.
-                    self.seed_config[KEY_RESTART_INDEX] = _last_seed_index
-            except SeedCheckException:
-                seed_check_exception = True
-            # Check if at least one iteration has been achieved or not.
-            agg_res = next(iter(self.agg_buffers.values()))[KEY_AGG_RES]
-            if agg_res is None:
-                # No iteration has been achieved, as no data.
-                return
-            if final_write:
-                # Post-process & write results from last iteration, this time
-                # keeping last aggregation row, and recording metadata for a
-                # future 'AggStream.agg' execution.
-                print("final write")
-                p_job(
-                    delayed(_post_n_write_agg_chunks)(
+        try:
+            for _last_seed_index, filter_id, filtered_chunk in _iter_data(
+                seed=seed,
+                **self.seed_config,
+                trim_start=trim_start,
+                discard_last=discard_last,
+            ):
+                agg_loop_res = self.p_job(
+                    delayed(agg_iter)(
+                        seed_chunk=filtered_chunk,
                         key=key,
-                        dirpath=self.keys_config[key]["dirpath"],
-                        agg_buffers=agg_res,
-                        append_last_res=True,
-                        write_config=self.keys_config[key]["write_config"],
-                        index_name=self.keys_config[key][KEY_BIN_ON_OUT],
-                        post=self.keys_config[key][KEY_POST],
-                        last_seed_index=self.seed_config[KEY_RESTART_INDEX],
+                        keys_config=self.keys_config[key],
+                        agg_config=self.agg_cs[key],
+                        agg_buffers=self.agg_buffers[key],
                     )
-                    for key, agg_res in self.agg_buffers.items()
+                    for key in self.filter_ids_to_keys[filter_id]
                 )
+                for key, agg_res in agg_loop_res:
+                    self.agg_buffers[key].update(agg_res)
+                # Set 'seed_index_restart' to the 'last_seed_index' with
+                # which restarting the next aggregation iteration.
+                self.seed_config[KEY_RESTART_INDEX] = _last_seed_index
+        except SeedCheckException:
+            seed_check_exception = True
+        # Check if at least one iteration has been achieved or not.
+        agg_res = next(iter(self.agg_buffers.values()))[KEY_AGG_RES]
+        if agg_res is None:
+            # No iteration has been achieved, as no data.
+            return
+        if final_write:
+            # Post-process & write results from last iteration, this time
+            # keeping last aggregation row, and recording metadata for a
+            # future 'AggStream.agg' execution.
+            self.p_job(
+                delayed(_post_n_write_agg_chunks)(
+                    key=key,
+                    dirpath=self.keys_config[key]["dirpath"],
+                    agg_buffers=agg_res,
+                    append_last_res=True,
+                    write_config=self.keys_config[key]["write_config"],
+                    index_name=self.keys_config[key][KEY_BIN_ON_OUT],
+                    post=self.keys_config[key][KEY_POST],
+                    last_seed_index=self.seed_config[KEY_RESTART_INDEX],
+                )
+                for key, agg_res in self.agg_buffers.items()
+            )
         # Add keys in store for those who where not in.
         # This is needed because cloudpickle is unable to serialize Indexer.
         # But dill can. Try to switch to dill?
