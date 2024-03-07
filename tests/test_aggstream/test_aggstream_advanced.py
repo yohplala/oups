@@ -77,7 +77,7 @@ key3_cf = {
 
 
 def test_3_keys_only_bins(store, seed_path):
-    # Test with 4 keys, no snapshots, parallel iterations.
+    # Test with 3 keys, no snapshots, parallel iterations.
     # - key 1: time grouper '2T', agg 'first', and 'last',
     # - key 2: time grouper '13T', agg 'first', and 'max',
     # - key 3: 'by' as callable, every 4 rows, agg 'min', 'max',
@@ -225,7 +225,6 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     #
     # Setup a 1st separate streamed aggregations (awkward...).
     max_row_group_size = 6
-    ordered_on = "ts"
     as1 = AggStream(
         ordered_on=ordered_on,
         store=store,
@@ -282,3 +281,80 @@ def test_exception_different_indexes_at_restart(store, seed_path):
             keys={key1: deepcopy(key1_cf), key2: deepcopy(key2_cf)},
             max_row_group_size=max_row_group_size,
         )
+
+
+def test_3_keys_bins_snaps_filters(store, seed_path):
+    # Test with 3 keys, bins and snapshots, filters and parallel iterations.
+    # - filter 'True' : key 1: time grouper '10T', agg 'first' (bin),
+    #                          with snap '5T', agg 'last'.
+    # - filter 'False' : key 2: time grouper '20T', agg 'first' (bin),
+    #                           with snap '5T', agg 'last'.
+    # No head or tail trimming.
+    #
+    # Setup streamed aggregation.
+    max_row_group_size = 5
+    val = "val"
+    key1 = Indexer("agg_10T")
+    key1_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="10T", closed="left", label="left"),
+        "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
+        "snap_by": TimeGrouper(key=ordered_on, freq="5T", closed="left", label="left"),
+    }
+    key2 = Indexer("agg_20T")
+    key2_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="20T", closed="left", label="left"),
+        "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
+        "snap_by": TimeGrouper(key=ordered_on, freq="5T", closed="left", label="left"),
+    }
+    filter1 = "filter1"
+    filter2 = "filter2"
+
+    # Setup 'post'.
+    def post(buffer: dict, bin_res: pDataFrame, snap_res: pDataFrame):
+        """
+        Aggregate previous and current bin aggregation results.
+
+        Keep per row 'first' value of previous and current bin, and 'last' value from
+        current snapshot.
+
+        """
+        print("bin_res")
+        print(bin_res)
+        print("snap_res")
+        print(snap_res)
+        return snap_res
+
+    filter_on = "filter_on"
+    as_ = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys={
+            filter1: {key1: deepcopy(key1_cf)},
+            filter2: {key2: deepcopy(key2_cf)},
+        },
+        filters={
+            filter1: [(filter_on, "==", True)],
+            filter2: [(filter_on, "==", False)],
+        },
+        max_row_group_size=max_row_group_size,
+        parallel=True,
+        post=post,
+    )
+    # Seed data.
+    start = Timestamp("2020/01/01")
+    rr = np.random.default_rng(1)
+    N = 50
+    rand_ints = rr.integers(120, size=N)
+    rand_ints.sort()
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    filter_val = np.ones(len(ts), dtype=bool)
+    filter_val[::2] = False
+    seed_df = pDataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
+    print(seed_df)
+    print(as_)
+    # seed_li = [seed_df.loc[:28], seed_df.loc[28:]]
+    # Streamed aggregation.
+    # as_.agg(seed=seed_df,
+    #        trim_start = False,
+    #        discard_last=False,
+    #        final_write=False)

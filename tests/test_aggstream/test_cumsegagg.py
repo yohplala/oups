@@ -40,7 +40,6 @@ from oups.aggstream.segmentby import by_x_rows
 
 
 # from pandas.testing import assert_frame_equal
-# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
 
 
 def test_setup_csagg():
@@ -1122,7 +1121,7 @@ def test_exception_error_on_0():
         )
 
 
-def test_exception_unknown_agg_function(tmp_path):
+def test_exception_unknown_agg_function():
     # Test exception when agg func is unknown.
     values = array([0.0], dtype=DTYPE_FLOAT64)
     dtidx = array(["2020-01-01T08:00"], dtype=DTYPE_DATETIME64)

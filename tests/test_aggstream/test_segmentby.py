@@ -35,7 +35,6 @@ from oups.aggstream.segmentby import setup_segmentby
 
 
 # from pandas.testing import assert_frame_equal
-# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
 
 
 @pytest.mark.parametrize(

@@ -438,7 +438,8 @@ def _iter_data(
         A single list of tuples can also be used, meaning that no `OR`
         operation between set of filters is to be conducted.
     trim_start : bool
-        Flag to indicate if seed head has to be trimmed.
+        Flag to indicate if seed head has to be trimmed till value of
+        'restart_index' (last seed index of previous aggregation sequence).
     discard_last : bool
         If ``True``, last row group in seed data (sharing the same value in
         `ordered_on` column) is removed from the aggregation step.
@@ -493,7 +494,7 @@ def _iter_data(
         # Step 3 / Prepare filter to trim seed head and tail if requested.
         if trim_start:
             if seed_chunk.loc[:, ordered_on].iloc[-1] < restart_index:
-                # Do not process this chunk.
+                # This full chunk is to be discarded. Go to the next.
                 continue
             else:
                 filter_array = seed_chunk[ordered_on] >= restart_index
@@ -1214,9 +1215,11 @@ class AggStream:
             Seed data over which conducting streamed aggregations.
         trim_start : bool, default True
             If ``True``, and if aggregated results already exist, then
-            retrieves the first index from seed data not processed yet
-            (recorded in metadata of existing aggregated results), and trim all
-            seed data before this index (index excluded from trim).
+            retrieves the last index present in seed data (recorded in metadata
+            of existing aggregated results), and trim all seed data before this
+            index (index excluded from trim, so it will be in new aggregation
+            results). This trimming makes sense if previous aggregation
+            iteration has been managed with ``discard_last`` set ``True``.
         discard_last : bool, default True
             If ``True``, last row group in seed data (sharing the same value in
             `ordered_on` column) is removed from the aggregation step. See
@@ -1234,11 +1237,11 @@ class AggStream:
         - Aggregation is by default processed up to the last index excluded,
           and subsequent aggregation will start from this last index included,
           assumed to be that of an incomplete row group.
-          If `discard_last` is set `False`, then aggregation is process up to the
-          last data.
+          If `discard_last` is set `False`, then aggregation is process up to
+          the last data.
         - By default, with parameter `discard_last`` set ``True``, the last row
-          group (composed from rows sharing the same value in `ordered_on` column),
-          is discarded.
+          group (composed from rows sharing the same value in `ordered_on`
+          column), is discarded.
 
             - It may be for instance that this row group is not complete yet
               and should therefore not be accounted for. More precisely, new
@@ -1256,6 +1259,8 @@ class AggStream:
               when it becomes the one-but-last row, as a new row is added).
 
         """
+        # TODO: add 'snap_by' parameter to 'agg()' to allow using list of
+        # timestamps. 'cumsegagg()' is already compatible.
         if isinstance(seed, pDataFrame):
             # Make the seed an iterable.
             seed = [seed]
@@ -1346,3 +1351,4 @@ class AggStream:
 #    check when some chunk are empty for a given filter id
 # - A test with first seed generator like Parquet File, then 1 dataframe each time.
 # - Test with different 'ordered_on' values for a key vs seed
+# - Test with a final_write, then create a new AggStream instance and have a new aggregation iteration

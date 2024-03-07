@@ -62,5 +62,8 @@ def dataframe_filter(df, filters):
                 and_part &= ops[op](df[name].values, val)
             elif op == "~":
                 and_part &= ~df[name].values
+            else:
+                # Unknown operator.
+                raise ValueError(f"operator '{op}' is not supported.")
         out |= and_part
     return out
