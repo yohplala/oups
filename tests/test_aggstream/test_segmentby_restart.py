@@ -1218,6 +1218,7 @@ def test_segmentby_exceptions():
             by_x_rows,
             None,
             "dti",
+            # snap_by
             TimeGrouper(freq="15T", label="right", closed="left", key="dti"),
             [3, 6, 9],
             # next_chunk_starts
@@ -1311,6 +1312,7 @@ def test_segmentby_exceptions():
             by_x_rows,
             None,
             "dti",
+            # snap_by
             [
                 DatetimeIndex(["2020-01-01 08:12", "2020-01-01 08:15"]),
                 DatetimeIndex(["2020-01-01 08:15", "2020-01-01 08:20", "2020-01-01 08:35"]),
@@ -1618,6 +1620,11 @@ def test_segmentby(
     start_idx = 0
     buffer = {}
     bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
+    if isinstance(snap_by, TimeGrouper):
+        # Reset 'snap_by' if a TimeGrouper, because it has been stored in
+        # 'bin_by' dict. Hence, we can check that 'snap_by' is correctly
+        # retrieved from it.
+        snap_by = None
     for i, end_idx in enumerate(end_indices):
         (
             next_chunk_starts,
