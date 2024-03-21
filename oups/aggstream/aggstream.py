@@ -756,8 +756,7 @@ def agg_iter(
     # 'everything'. If only 'bins' are requested, it gathers bins.
     # If 'bins' and 'snapshots' are requested, it gathers snapshots.
     agg_buffers[KEY_BIN_RES], agg_buffers[KEY_AGG_RES] = (
-        agg_res if isinstance(agg_res, tuple) else None,
-        agg_res,
+        agg_res if isinstance(agg_res, tuple) else (None, agg_res)
     )
     return key, agg_buffers
 
@@ -999,6 +998,7 @@ class AggStream:
             functions (not mixing rows together, but operating on one or
             several columns), or dataframe formatting before results are
             finally recorded.
+            Please, read the note below regarding 'post' parameter.
         parallel : bool, default False
             Conduct processing of keys in parallel, with one process per `key`.
             If a single `key`, only one process is possible.
@@ -1057,6 +1057,18 @@ class AggStream:
           last good results are still written to disk with correct metadata. If
           an exception is raised at some other point of the aggregation
           process, results are not written.
+        - Use of 'post' parameter can be intricate. The user should be aware
+          of 2 situations.
+
+            - Either 'post' is called not as 'final_write'. In this case, the
+              last existing row is removed from bin and snapshot aggregation
+              results. It will be added back at the next iteration though.
+              this is to optimize the iteration mechanism.
+            - Or 'post' is called as 'final_write'. In this case, the last
+              existing row is kept in bin and snapshot aggregation results.
+
+          The user should make sure the 'post' function adapts to both
+          situations.
 
         """
         # Check 'kwargs' parameters are those expected for 'write' function.
@@ -1228,6 +1240,9 @@ class AggStream:
             If ``True``, after last iteration of aggregation, aggregation
             results are written to disk. With this parameter, restarting
             aggregation with a new AggStream instance is possible.
+            If ``True``, if an exception is raised during seed check, then last
+            aggregation results from last valid seed chunk are also written to
+            disk.
 
         Notes
         -----
@@ -1330,6 +1345,7 @@ class AggStream:
 # - Use dill to serialize 'keys' in joblib / if working:
 #    - replace setting of dir_path in keys_config by store directly.
 #    - remove 'self.all_keys'
+# - Store as many p_job as there are filters to keep the correct number of parallel jobs per filters.
 
 # Tests:
 # - in test case with snapshot: when snapshot is a TimeGrouper, make sure that stitching
