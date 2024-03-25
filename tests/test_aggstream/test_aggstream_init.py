@@ -223,6 +223,7 @@ def always_false(**kwargs):
             # Same as test 2, but with 2 filters.
             # - filter 1 has key 1, 2 & 3,
             # - filter 2 has key 4.
+            # Add 'snap_by' parameter to consolidate within each key's config.
             {
                 KEY_ORDERED_ON: "ts_dflt",
                 KEY_MAX_ROW_GROUP_SIZE: 1000,
@@ -230,6 +231,7 @@ def always_false(**kwargs):
                 KEY_CHECK: always_true,
                 KEY_AGG: {"out_dflt": ("in_dflt", LAST)},
                 KEY_POST: always_true,
+                "snap_by": TimeGrouper(key="ts_dflt", freq="30T"),
                 "keys": {
                     "filter1": {
                         Indexer("key1_some_default"): {
@@ -348,6 +350,25 @@ def test_aggstream_init(
     assert as_.seed_config == ref_seed_config
     # Do not check 'seg_config' in 'keys_config'.
     res_keys_config = deepcopy(as_.keys_config)
+    if "snap_by" in root_parameters:
+        # Check 'snap_by' is initialized in 'seg_config':
+        ref_grouper = root_parameters["snap_by"]
+        ref_grouper_attr = {
+            "key": ref_grouper.key,
+            "freq": ref_grouper.freq,
+            "axis": ref_grouper.axis,
+            "sort": ref_grouper.sort,
+            "dropna": ref_grouper.dropna,
+            "closed": ref_grouper.closed,
+            "label": ref_grouper.label,
+            "how": ref_grouper.how,
+            "convention": ref_grouper.convention,
+            "origin": ref_grouper.origin,
+        }
+        for key in ref_keys_config:
+            res_grouper = res_keys_config[key]["seg_config"]["snap_by"]
+            for attr in ref_grouper_attr:
+                assert getattr(res_grouper, attr) == ref_grouper_attr[attr]
     for key, ref in ref_keys_config.items():
         del res_keys_config[key]["seg_config"]
         del res_keys_config[key]["dirpath"]

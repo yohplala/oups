@@ -295,17 +295,16 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
     # Setup streamed aggregation.
     max_row_group_size = 5
     val = "val"
+    snap_by = TimeGrouper(key=ordered_on, freq="5T", closed="left", label="right")
     key1 = Indexer("agg_10T")
     key1_cf = {
         "bin_by": TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
         "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
-        "snap_by": TimeGrouper(key=ordered_on, freq="5T", closed="left", label="right"),
     }
     key2 = Indexer("agg_20T")
     key2_cf = {
         "bin_by": TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
         "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
-        "snap_by": TimeGrouper(key=ordered_on, freq="5T", closed="left", label="right"),
     }
     filter1 = "filter1"
     filter2 = "filter2"
@@ -361,8 +360,6 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
                 LAST: DTYPE_NULLABLE_INT64,
             },
         )
-        print("merged_res")
-        print(merged_res)
         merged_res = merged_res.reindex(
             columns=[
                 ordered_on,
@@ -413,6 +410,7 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
+        snap_by=snap_by,
         max_row_group_size=max_row_group_size,
         parallel=True,
         post=post,
@@ -502,14 +500,20 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
         Get reference results from cumsegagg and post.
         """
         bin_res_ref, snap_res_ref = cumsegagg(
-            data=seed.loc[seed_df[filter_on], :],
+            data=seed,
             **key_conf,
             ordered_on=ordered_on,
         )
         return post({}, bin_res_ref.reset_index(), snap_res_ref.reset_index())
 
-    key1_res_ref = reference_results(seed_df.loc[seed_df[filter_on], :], key1_cf)
-    key2_res_ref = reference_results(seed_df.loc[~seed_df[filter_on], :], key2_cf)
+    key1_res_ref = reference_results(
+        seed_df.loc[seed_df[filter_on], :],
+        key1_cf | {"snap_by": snap_by},
+    )
+    key2_res_ref = reference_results(
+        seed_df.loc[~seed_df[filter_on], :],
+        key2_cf | {"snap_by": snap_by},
+    )
     # Seed data & streamed aggregation with a seed data of a single row,
     # at same timestamp than last one, not writing final results.
     seed_df = pDataFrame(
@@ -533,7 +537,13 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
     assert key2_res.equals(key2_res_ref)
 
     # Again a single row with same timestamp: check how snapshot concatenate,
+    # -> is not possible, need 2 rows of agg res to be added (last row removed
+    # when no in 'infal_write')
     # because 1st row does not seem to be repeated.
+
+    # Add a 3rd key with lower time freq than snap.
+
+    # Test Aggstream init que 'snap_by' peut être communalisé.
 
     # Seed data & streamed aggregation with a seed data of several row,
     # writing final results.
