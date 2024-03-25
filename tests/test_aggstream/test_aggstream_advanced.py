@@ -293,22 +293,6 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
     # No head or tail trimming.
     #
     # Setup streamed aggregation.
-    max_row_group_size = 5
-    val = "val"
-    snap_by = TimeGrouper(key=ordered_on, freq="5T", closed="left", label="right")
-    key1 = Indexer("agg_10T")
-    key1_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
-        "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
-    }
-    key2 = Indexer("agg_20T")
-    key2_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
-        "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
-    }
-    filter1 = "filter1"
-    filter2 = "filter2"
-
     # Setup 'post'.
     def post(buffer: dict, bin_res: pDataFrame, snap_res: pDataFrame):
         """
@@ -398,6 +382,22 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
         merged_res = merged_res.set_index(ordered_on).loc[snap_res.loc[:, ordered_on]].reset_index()
         return merged_res.drop(columns=["current_first", "current_last"])
 
+    val = "val"
+    max_row_group_size = 5
+    common_key_params = {
+        "snap_by": TimeGrouper(key=ordered_on, freq="5T", closed="left", label="right"),
+        "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
+    }
+    key1 = Indexer("agg_10T")
+    key1_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
+    }
+    key2 = Indexer("agg_20T")
+    key2_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
+    }
+    filter1 = "filter1"
+    filter2 = "filter2"
     filter_on = "filter_on"
     as_ = AggStream(
         ordered_on=ordered_on,
@@ -410,8 +410,8 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        snap_by=snap_by,
         max_row_group_size=max_row_group_size,
+        **common_key_params,
         parallel=True,
         post=post,
     )
@@ -508,11 +508,11 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
 
     key1_res_ref = reference_results(
         seed_df.loc[seed_df[filter_on], :],
-        key1_cf | {"snap_by": snap_by},
+        key1_cf | common_key_params,
     )
     key2_res_ref = reference_results(
         seed_df.loc[~seed_df[filter_on], :],
-        key2_cf | {"snap_by": snap_by},
+        key2_cf | common_key_params,
     )
     # Seed data & streamed aggregation with a seed data of a single row,
     # at same timestamp than last one, not writing final results.
