@@ -36,7 +36,6 @@ from oups import ParquetSet
 from oups import toplevel
 from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
 from oups.aggstream.cumsegagg import cumsegagg
-from oups.aggstream.cumsegagg import pNA
 from oups.aggstream.jcumsegagg import FIRST
 from oups.aggstream.jcumsegagg import LAST
 from oups.aggstream.jcumsegagg import MAX
@@ -341,7 +340,7 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
         else:
             shifted_bin_res = (
                 bin_res.drop(ordered_on, axis=1)
-                .shift(1, fill_value=pNA)
+                .shift(1)
                 .rename(columns={FIRST: "prev_first", LAST: "prev_last"})
             )
         buffer["prev_bin_res"] = bin_res.iloc[-1:]
@@ -352,6 +351,18 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
         # Keep track of existing NA by filling with '-1' as others will be
         # created by 'merge_ordered' which have to be filled differently.
         merged_res = merge_ordered(shifted_bin_res.fillna(-1), snap_res.fillna(-1), on=ordered_on)
+        merged_res = merged_res.astype(
+            {
+                "prev_first": DTYPE_NULLABLE_INT64,
+                "current_first": DTYPE_NULLABLE_INT64,
+                FIRST: DTYPE_NULLABLE_INT64,
+                "prev_last": DTYPE_NULLABLE_INT64,
+                "current_last": DTYPE_NULLABLE_INT64,
+                LAST: DTYPE_NULLABLE_INT64,
+            },
+        )
+        print("merged_res")
+        print(merged_res)
         merged_res = merged_res.reindex(
             columns=[
                 ordered_on,
@@ -363,11 +374,10 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
                 LAST,
             ],
         )
-        # Remove possibly created rows in 'snap_res' columns,
-        # and fill empty rows in 'bin_res' columns.
-        merged_res = merged_res.dropna(subset=FIRST).bfill()
+        # Remove possibly created rows in 'snap_res' columns.
+        merged_res = merged_res.dropna(subset=FIRST)
         if bin_res_last_ts < snap_res_last_ts:
-            # In case 'snapd_res' ends with several rows later than last row in
+            # In case 'snap_res' ends with several rows later than last row in
             # 'bin_res', last row from 'bin_res' has to be shifted by one
             # horizontally, before being forward filled.
             shifted_last_row = merged_res.set_index(ordered_on).loc[bin_res_last_ts]
@@ -378,7 +388,15 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
                 len(merged_res) - 1,
                 ["prev_first", "current_first", "prev_last", "current_last"],
             ] = shifted_last_row.loc[["prev_first", "current_first", "prev_last", "current_last"]]
-            merged_res.bfill(inplace=True)
+        # Fill empty rows in 'bin_res' columns.
+        # 'bin_res' columns.
+        bin_res_cols = [
+            "prev_first",
+            "current_first",
+            "prev_last",
+            "current_last",
+        ]
+        merged_res.loc[:, bin_res_cols] = merged_res.loc[:, bin_res_cols].bfill()
         # In case of more bins than snaps, only keep snaps.
         merged_res = merged_res.set_index(ordered_on).loc[snap_res.loc[:, ordered_on]].reset_index()
         return merged_res.drop(columns=["current_first", "current_last"])
@@ -405,59 +423,77 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
     #    N = 50
     #    rand_ints = rr.integers(120, size=N)
     #    rand_ints.sort()
-    rand_ints = np.array(
-        [
-            2,
-            3,
-            4,
-            7,
-            10,
-            14,
-            14,
-            14,
-            16,
-            17,
-            24,
-            29,
-            30,
-            31,
-            32,
-            33,
-            36,
-            37,
-            39,
-            45,
-            48,
-            49,
-            50,
-            54,
-            54,
-            56,
-            58,
-            59,
-            60,
-            61,
-            64,
-            65,
-            77,
-            89,
-            90,
-            90,
-            90,
-            94,
-            98,
-            98,
-            99,
-            100,
-            103,
-            104,
-            108,
-            113,
-            114,
-            115,
-            117,
-            117,
-        ],
+    rand_ints = np.hstack(
+        np.array(
+            [
+                2,
+                3,
+                4,
+                7,
+                10,
+                14,
+                14,
+                14,
+                16,
+                17,
+                24,
+                29,
+            ],
+        ),
+        np.array(
+            [
+                30,
+                31,
+                32,
+                33,
+                36,
+                37,
+                39,
+                45,
+                48,
+                49,
+                50,
+                54,
+            ],
+        ),
+        np.array(
+            [
+                54,
+                56,
+                58,
+                59,
+                60,
+                61,
+                64,
+                65,
+                77,
+                89,
+                90,
+                90,
+            ],
+        ),
+        np.array(
+            [
+                90,
+                94,
+                98,
+                98,
+                99,
+                100,
+                103,
+                104,
+                108,
+                113,
+                114,
+                115,
+            ],
+        ),
+        np.array(
+            [
+                117,
+                117,
+            ],
+        ),
     )
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     filter_val = np.ones(len(ts), dtype=bool)
@@ -528,27 +564,13 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
         **key1_cf,
         ordered_on=ordered_on,
     )
-    key1_res_ref = post({}, key1_bin_res_ref.reset_index(), key1_snap_res_ref.reset_index()).astype(
-        {
-            "prev_first": DTYPE_NULLABLE_INT64,
-            FIRST: DTYPE_NULLABLE_INT64,
-            "prev_last": DTYPE_NULLABLE_INT64,
-            LAST: DTYPE_NULLABLE_INT64,
-        },
-    )
+    key1_res_ref = post({}, key1_bin_res_ref.reset_index(), key1_snap_res_ref.reset_index())
     key2_bin_res_ref, key2_snap_res_ref = cumsegagg(
         data=seed_df.loc[~seed_df[filter_on], :],
         **key2_cf,
         ordered_on=ordered_on,
     )
-    key2_res_ref = post({}, key2_bin_res_ref.reset_index(), key2_snap_res_ref.reset_index()).astype(
-        {
-            "prev_first": DTYPE_NULLABLE_INT64,
-            FIRST: DTYPE_NULLABLE_INT64,
-            "prev_last": DTYPE_NULLABLE_INT64,
-            LAST: DTYPE_NULLABLE_INT64,
-        },
-    )
+    key2_res_ref = post({}, key2_bin_res_ref.reset_index(), key2_snap_res_ref.reset_index())
     # Seed data & streamed aggregation with a seed data of a single row,
     # at same timestamp than last one, not writing final results.
     seed_df = pDataFrame(
@@ -567,25 +589,11 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
     )
     # Check that results on disk have not changed.
     key1_res = store[key1].pdf
-    key1_res = key1_res.astype(
-        {
-            "prev_first": DTYPE_NULLABLE_INT64,
-            FIRST: DTYPE_NULLABLE_INT64,
-            "prev_last": DTYPE_NULLABLE_INT64,
-            LAST: DTYPE_NULLABLE_INT64,
-        },
-    )
     key2_res = store[key2].pdf
-    key2_res = key2_res.astype(
-        {
-            "prev_first": DTYPE_NULLABLE_INT64,
-            FIRST: DTYPE_NULLABLE_INT64,
-            "prev_last": DTYPE_NULLABLE_INT64,
-            LAST: DTYPE_NULLABLE_INT64,
-        },
-    )
     assert key1_res.equals(key1_res_ref)
     assert key2_res.equals(key2_res_ref)
+
+    # rework ndarray to have it on less rows.
 
     # Again a single row with same timestamp: check how snapshot concatenate,
     # because 1st row does not seem to be repeated.
