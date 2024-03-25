@@ -424,76 +424,13 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
     #    rand_ints = rr.integers(120, size=N)
     #    rand_ints.sort()
     rand_ints = np.hstack(
-        np.array(
-            [
-                2,
-                3,
-                4,
-                7,
-                10,
-                14,
-                14,
-                14,
-                16,
-                17,
-                24,
-                29,
-            ],
-        ),
-        np.array(
-            [
-                30,
-                31,
-                32,
-                33,
-                36,
-                37,
-                39,
-                45,
-                48,
-                49,
-                50,
-                54,
-            ],
-        ),
-        np.array(
-            [
-                54,
-                56,
-                58,
-                59,
-                60,
-                61,
-                64,
-                65,
-                77,
-                89,
-                90,
-                90,
-            ],
-        ),
-        np.array(
-            [
-                90,
-                94,
-                98,
-                98,
-                99,
-                100,
-                103,
-                104,
-                108,
-                113,
-                114,
-                115,
-            ],
-        ),
-        np.array(
-            [
-                117,
-                117,
-            ],
-        ),
+        [
+            np.array([2, 3, 4, 7, 10, 14, 14, 14, 16, 17]),
+            np.array([24, 29, 30, 31, 32, 33, 36, 37, 39, 45]),
+            np.array([48, 49, 50, 54, 54, 56, 58, 59, 60, 61]),
+            np.array([64, 65, 77, 89, 90, 90, 90, 94, 98, 98]),
+            np.array([99, 100, 103, 104, 108, 113, 114, 115, 117, 117]),
+        ],
     )
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     filter_val = np.ones(len(ts), dtype=bool)
@@ -558,19 +495,21 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
         discard_last=False,
         final_write=True,
     )
-    # Ref. results step 1.
-    key1_bin_res_ref, key1_snap_res_ref = cumsegagg(
-        data=seed_df.loc[seed_df[filter_on], :],
-        **key1_cf,
-        ordered_on=ordered_on,
-    )
-    key1_res_ref = post({}, key1_bin_res_ref.reset_index(), key1_snap_res_ref.reset_index())
-    key2_bin_res_ref, key2_snap_res_ref = cumsegagg(
-        data=seed_df.loc[~seed_df[filter_on], :],
-        **key2_cf,
-        ordered_on=ordered_on,
-    )
-    key2_res_ref = post({}, key2_bin_res_ref.reset_index(), key2_snap_res_ref.reset_index())
+
+    # Ref. results.
+    def reference_results(seed: pDataFrame, key_conf: dict):
+        """
+        Get reference results from cumsegagg and post.
+        """
+        bin_res_ref, snap_res_ref = cumsegagg(
+            data=seed.loc[seed_df[filter_on], :],
+            **key_conf,
+            ordered_on=ordered_on,
+        )
+        return post({}, bin_res_ref.reset_index(), snap_res_ref.reset_index())
+
+    key1_res_ref = reference_results(seed_df.loc[seed_df[filter_on], :], key1_cf)
+    key2_res_ref = reference_results(seed_df.loc[~seed_df[filter_on], :], key2_cf)
     # Seed data & streamed aggregation with a seed data of a single row,
     # at same timestamp than last one, not writing final results.
     seed_df = pDataFrame(
@@ -592,8 +531,6 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
     key2_res = store[key2].pdf
     assert key1_res.equals(key1_res_ref)
     assert key2_res.equals(key2_res_ref)
-
-    # rework ndarray to have it on less rows.
 
     # Again a single row with same timestamp: check how snapshot concatenate,
     # because 1st row does not seem to be repeated.
