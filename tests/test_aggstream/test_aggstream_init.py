@@ -37,6 +37,7 @@ from oups.aggstream.aggstream import KEY_POST_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
 from oups.aggstream.aggstream import KEY_SEGAGG_BUFFER
 from oups.aggstream.aggstream import NO_FILTER_ID
+from oups.aggstream.aggstream import FilterApp
 from oups.aggstream.jcumsegagg import FIRST
 from oups.aggstream.jcumsegagg import LAST
 from oups.aggstream.jcumsegagg import SUM
@@ -70,7 +71,7 @@ def always_false(**kwargs):
 
 
 @pytest.mark.parametrize(
-    ("root_parameters, ref_seed_config, ref_keys_config, ref_agg_pd, " "ref_filter_ids_to_keys"),
+    ("root_parameters, ref_seed_config, ref_keys_config, ref_agg_pd, " "ref_filter_apps"),
     [
         (
             # Test  1 /
@@ -105,8 +106,8 @@ def always_false(**kwargs):
             },
             # ref_agg_pd
             {str(Indexer("key1")): {"agg_out": ("val", SUM)}},
-            # ref_filter_ids_to_keys
-            {NO_FILTER_ID: [str(Indexer("key1"))]},
+            # ref_filter_apps
+            {NO_FILTER_ID: FilterApp([str(Indexer("key1"))], "NA")},
         ),
         (
             # Test 2 /
@@ -208,14 +209,17 @@ def always_false(**kwargs):
                 str(Indexer("key3_only_default")): {"out_dflt": ("in_dflt", LAST)},
                 str(Indexer("key4_most_default")): {"out_dflt": ("in_dflt", LAST)},
             },
-            # ref_filter_ids_to_keys
+            # ref_filter_apps
             {
-                NO_FILTER_ID: [
-                    str(Indexer("key1_some_default")),
-                    str(Indexer("key2_only_specific")),
-                    str(Indexer("key3_only_default")),
-                    str(Indexer("key4_most_default")),
-                ],
+                NO_FILTER_ID: FilterApp(
+                    [
+                        str(Indexer("key1_some_default")),
+                        str(Indexer("key2_only_specific")),
+                        str(Indexer("key3_only_default")),
+                        str(Indexer("key4_most_default")),
+                    ],
+                    "NA",
+                ),
             },
         ),
         (
@@ -324,14 +328,17 @@ def always_false(**kwargs):
                 str(Indexer("key3_only_default")): {"out_dflt": ("in_dflt", LAST)},
                 str(Indexer("key4_most_default")): {"out_dflt": ("in_dflt", LAST)},
             },
-            # ref_filter_ids_to_keys
+            # ref_filter_apps
             {
-                "filter1": [
-                    str(Indexer("key1_some_default")),
-                    str(Indexer("key2_only_specific")),
-                    str(Indexer("key3_only_default")),
-                ],
-                "filter2": [str(Indexer("key4_most_default"))],
+                "filter1": FilterApp(
+                    [
+                        str(Indexer("key1_some_default")),
+                        str(Indexer("key2_only_specific")),
+                        str(Indexer("key3_only_default")),
+                    ],
+                    "NA",
+                ),
+                "filter2": FilterApp([str(Indexer("key4_most_default"))], "NA"),
             },
         ),
     ],
@@ -342,7 +349,7 @@ def test_aggstream_init(
     ref_seed_config,
     ref_keys_config,
     ref_agg_pd,
-    ref_filter_ids_to_keys,
+    ref_filter_apps,
 ):
     # Setup streamed aggregation.
     as_ = AggStream(store=store, **root_parameters)
@@ -389,10 +396,15 @@ def test_aggstream_init(
         "store": store,
         "agg_pd": ref_agg_pd,
         "agg_cs": {},
-        "filter_ids_to_keys": ref_filter_ids_to_keys,
     }
     for attr in main_ref_attr:
         assert getattr(as_, attr) == main_ref_attr[attr]
+    for filt_id in ref_filter_apps:
+        # Only checking list of keys, not number of parallel jobs as this
+        # figure is platform dependent.
+        assert as_.filter_apps[filt_id].keys == ref_filter_apps[filt_id].keys
+        # But check number of parallel jobs is found as key in ``as_.p_jobs``.
+        assert as_.filter_apps[filt_id].n_jobs in as_.p_jobs
 
 
 def test_exception_not_key_of_streamagg_results(store):

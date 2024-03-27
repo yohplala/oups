@@ -292,7 +292,6 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
     # - snap '5T'
     # No head or tail trimming.
     #
-    # Setup streamed aggregation.
     # Setup 'post'.
     def post(buffer: dict, bin_res: pDataFrame, snap_res: pDataFrame):
         """
@@ -382,6 +381,7 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
         merged_res = merged_res.set_index(ordered_on).loc[snap_res.loc[:, ordered_on]].reset_index()
         return merged_res.drop(columns=["current_first", "current_last"])
 
+    # Setup streamed aggregation.
     val = "val"
     max_row_group_size = 5
     common_key_params = {

@@ -6,6 +6,7 @@ Created on Wed Nov 15 21:30:00 2023.
 
 """
 from collections import ChainMap
+from collections import namedtuple
 from dataclasses import dataclass
 from itertools import chain
 from multiprocessing import cpu_count
@@ -70,6 +71,9 @@ KEY_POST = "post"
 # It is not added in 'KEY_CONF_IN_PARAMS'.
 WRITE_PARAMS = set(write.__code__.co_varnames[: write.__code__.co_argcount])
 KEY_CONF_IN_PARAMS = {KEY_BIN_ON, KEY_SNAP_BY, KEY_AGG, KEY_POST} | WRITE_PARAMS
+
+
+FilterApp = namedtuple("FilterApp", "keys n_jobs")
 
 
 def _is_aggstream_result(handle: ParquetHandle) -> bool:
@@ -784,8 +788,9 @@ class AggStream:
         iteration has been run, and defining aggregation in `cumsegagg`
         standard. It is initialized in ``self.agg`` function, the 1st time
         an aggregation is run (seed data dtypes is required).
-      - ``self.filter_ids_to_keys``, dict, mapping filter ids to list of
-        keys.
+      - ``self.filter_apps``, dict, mapping filter ids to list of keys, and
+        number of parallel jobs that can be run for this filter id.
+        Number of jobs is to be used as key in ``self.p_jobs`` attribute.
       - ``self.keys_config``, dict of keys config in the form:
         ``{key: {'dirpath': str, where to record agg res,
                  'bin_on_out' : str, name in aggregation results for column
@@ -801,19 +806,30 @@ class AggStream:
         To be noticed, keys of dict ``keys_config`` are strings.
       - ``self.agg_buffers``, dict to keep track of aggregation iteration
                               intermediate results.
-        ``{key: {'agg_n_rows' : 0,
-                 'agg_res' : None,
-                 'bin_res' : None,
-                 'agg_res_buffer' : list, agg_res_buffer,
-                 'bin_res_buffer' : list, bin_res_buffer,
-                 'segagg_buffer' : dict, possibly empty,
-                 'post_buffer' : dict, possibly empty,
+        ``{key: {'agg_n_rows' : int, number of rows in aggregation results,
+                            for bins (if snapshots not requested) or snapshots.
+                 'agg_res' : None or pDataFrame, last aggregation results,
+                            for bins (if snapshots not requested) or snapshots,
+                 'bin_res' : None or pDataFrame, last aggregation results,
+                            for bins (if snapshots requested),
+                 'agg_res_buffer' : list of pDataFrame, buffer to keep
+                            aggregagation results, bins (if snapshots not
+                            requested) or snapshots,
+                 'bin_res_buffer' : list of pDataFrame, buffer to keep bin
+                            aggregagation results (if snapshots requested)
+                 'segagg_buffer' : dict, possibly empty, keeping track of
+                            segmentation and aggregation intermediate
+                            variables,
+                 'post_buffer' : dict, possibly empty,  keeping track of
+                            'post' function intermediate variables,
                },
          }``
         To be noticed, keys of dict ``agg_buffers`` are strings.
       - ``self.all_keys``, list of keys, kept as Indexer. This attribute is to
         be removed if key can be kept as an Indexer in ``self.keys_config``.
-      - ``self.p_job``, Parallel, joblib setup.
+      - ``self.p_jobs``, dict, containing Parallel objects, as per joblib
+        setup. Keys are int, being the number of parallel jobs to run for this
+        filter id.
 
     """
 
@@ -1086,8 +1102,6 @@ class AggStream:
                 filt_id: [filters_] if isinstance(filters_[0], tuple) else filters_
                 for filt_id, filters_ in filters.items()
             }
-        # Store and keys related attributes.
-        self.store = store
         # Set default values for keys' config.
         keys_default = {
             KEY_SNAP_BY: snap_by,
@@ -1132,13 +1146,19 @@ class AggStream:
                         f" List of filter ids in `keys` parameter is {keys_filt_ids}.\n"
                         f" List of filter ids in `filters` parameter is {filt_filt_ids}.",
                     )
-        _filter_ids_to_keys = {}
-        _min_number_of_keys_per_filter = []
+        _filter_apps = {}
         _all_keys = []
+        _max_parallel_jobs = max(int(cpu_count() * 3 / 4), 1)
+        _p_jobs = {}
         for filt_id in keys:
             # Keep keys as str.
-            _filter_ids_to_keys[filt_id] = list(map(str, keys[filt_id]))
-            _min_number_of_keys_per_filter.append(len(keys[filt_id]))
+            # Set number of jobs.
+            n_keys = len(keys[filt_id])
+            n_jobs = min(_max_parallel_jobs, n_keys) if parallel else 1
+            _filter_apps[filt_id] = FilterApp(list(map(str, keys[filt_id])), n_jobs)
+            if n_jobs not in _p_jobs:
+                # Configure parallel jobs.
+                _p_jobs[n_jobs] = Parallel(n_jobs=n_jobs, prefer="threads")
             # TODO: remove '_all_keys' if key can be serialize.
             _all_keys.extend(keys[filt_id])
         # Check for duplicates keys between different filter ids.
@@ -1146,8 +1166,9 @@ class AggStream:
         dupes = [key for key in _all_keys if key in seen or seen.add(key)]
         if dupes:
             raise ValueError(f"not possible to have key(s) {dupes} used for different filter ids.")
+        self.p_jobs = _p_jobs
         self.all_keys = _all_keys
-        self.filter_ids_to_keys = _filter_ids_to_keys
+        self.filter_apps = _filter_apps
         # Once filters have been managed, simplify 'keys' as a single level
         # dict.
         keys = ChainMap(*keys.values())
@@ -1170,11 +1191,8 @@ class AggStream:
         # Cannot be set yet, because seed dtype is required.
         # Is a dict, specifying for each key, its expected aggregation.
         self.agg_cs = {}
-        # Configure parallel job.
-        # Per filter set, take min number of keys.
-        n_keys = min(_min_number_of_keys_per_filter)
-        n_jobs = min(int(cpu_count() * 3 / 4), n_keys) if (parallel and n_keys > 1) else 1
-        self.p_job = Parallel(n_jobs=n_jobs, prefer="threads")
+        # Store attribute.
+        self.store = store
 
     def _init_agg_cs(self, seed: Iterable[pDataFrame]):
         """
@@ -1291,7 +1309,8 @@ class AggStream:
                 trim_start=trim_start,
                 discard_last=discard_last,
             ):
-                agg_loop_res = self.p_job(
+                # Retrieve Parallel joblib setup.
+                agg_loop_res = self.p_jobs[self.filter_apps[filter_id].n_jobs](
                     delayed(agg_iter)(
                         seed_chunk=filtered_chunk,
                         key=key,
@@ -1299,8 +1318,9 @@ class AggStream:
                         agg_config=self.agg_cs[key],
                         agg_buffers=self.agg_buffers[key],
                     )
-                    for key in self.filter_ids_to_keys[filter_id]
+                    for key in self.filter_apps[filter_id].keys
                 )
+                # Transform list of tuples into a dict.
                 for key, agg_res in agg_loop_res:
                     self.agg_buffers[key].update(agg_res)
                 # Set 'seed_index_restart' to the 'last_seed_index' with
@@ -1317,19 +1337,20 @@ class AggStream:
             # Post-process & write results from last iteration, this time
             # keeping last aggregation row, and recording metadata for a
             # future 'AggStream.agg' execution.
-            self.p_job(
-                delayed(_post_n_write_agg_chunks)(
-                    key=key,
-                    dirpath=self.keys_config[key]["dirpath"],
-                    agg_buffers=agg_res,
-                    append_last_res=True,
-                    write_config=self.keys_config[key]["write_config"],
-                    index_name=self.keys_config[key][KEY_BIN_ON_OUT],
-                    post=self.keys_config[key][KEY_POST],
-                    last_seed_index=self.seed_config[KEY_RESTART_INDEX],
+            for keys, n_jobs in self.filter_apps.values():
+                self.p_jobs[n_jobs](
+                    delayed(_post_n_write_agg_chunks)(
+                        key=key,
+                        dirpath=self.keys_config[key]["dirpath"],
+                        agg_buffers=self.agg_buffers[key],
+                        append_last_res=True,
+                        write_config=self.keys_config[key]["write_config"],
+                        index_name=self.keys_config[key][KEY_BIN_ON_OUT],
+                        post=self.keys_config[key][KEY_POST],
+                        last_seed_index=self.seed_config[KEY_RESTART_INDEX],
+                    )
+                    for key in keys
                 )
-                for key, agg_res in self.agg_buffers.items()
-            )
         # Add keys in store for those who where not in.
         # This is needed because cloudpickle is unable to serialize Indexer.
         # But dill can. Try to switch to dill?
