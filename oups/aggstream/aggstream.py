@@ -10,7 +10,6 @@ from collections import namedtuple
 from dataclasses import dataclass
 from itertools import chain
 from multiprocessing import cpu_count
-from os import path as os_path
 from typing import Callable, Iterable, Optional, Tuple, Union
 
 from joblib import Parallel
@@ -86,7 +85,6 @@ def _is_aggstream_result(handle: ParquetHandle) -> bool:
     ----------
     handle : ParquetHandle
         Handle to parquet file.
-    filters :
 
     Returns
     -------
@@ -105,7 +103,6 @@ def _is_aggstream_result(handle: ParquetHandle) -> bool:
 
 def _init_keys_config(
     seed_ordered_on: str,
-    store: ParquetSet,
     keys_config: dict,
     keys_default: dict,
 ):
@@ -119,8 +116,6 @@ def _init_keys_config(
         This parameter is used for seed segmentation. It is also used as
         default name of the column with respect to which aggregation results are
         in ascending order, if not provided in ``keys`` parameter.
-    store : ParquetSet
-        Store to which recording aggregation results.
     keys_config : dict
         Unconsolidated keys config.
     keys_default : dict
@@ -136,8 +131,7 @@ def _init_keys_config(
     The following AggStream's parameters are initialized with this function.
 
       - ``keys_config``, dict of keys' config in the form:
-        ``{key: {'dirpath': str, where to record agg res,
-                 'bin_on_out' : str, name in aggregation results for column
+        ``{key: {'bin_on_out' : str, name in aggregation results for column
                                 with bin ids.
                  'seg_config' : dict specifying the segmentation config,
                  'post' : Callable or None,
@@ -147,7 +141,6 @@ def _init_keys_config(
                                   },
                },
          }``
-        To be noticed keys of dict ``keys_config`` are strings.
       - ``self.agg_pd``, dict, specifying per key the aggregation
         configuration.
 
@@ -164,7 +157,6 @@ def _init_keys_config(
         except KeyError:
             raise ValueError(f"'{KEY_BIN_BY}' parameter is missing for key '{key}'.")
         key_conf_in = keys_default | key_conf_in
-        key_as_str = str(key)
         # Check parameters in 'key_conf_in' are valid ones.
         for param in key_conf_in:
             if param not in KEY_CONF_IN_PARAMS:
@@ -199,10 +191,10 @@ def _init_keys_config(
                 # previously, then set it to this possibly new value of
                 # 'bin_on'.
                 bin_on_out = bin_on
-        agg_pd[key_as_str] = key_conf_in.pop(KEY_AGG)
+        agg_pd[key] = key_conf_in.pop(KEY_AGG)
         # 'agg' is in the form:
         # {"output_col":("input_col", "agg_function_name")}
-        if bin_on_out in agg_pd[key_as_str]:
+        if bin_on_out in agg_pd[key]:
             # Check that this name is not already that of an output
             # column from aggregation.
             raise ValueError(
@@ -231,8 +223,7 @@ def _init_keys_config(
             key_conf_in[KEY_DUPLICATES_ON] = (
                 bin_on_out if bin_on_out else key_conf_in[KEY_ORDERED_ON]
             )
-        consolidated_keys_config[key_as_str] = {
-            "dirpath": os_path.join(store._basepath, key.to_path),
+        consolidated_keys_config[key] = {
             "seg_config": seg_config,
             KEY_BIN_ON_OUT: bin_on_out,
             KEY_POST: key_conf_in.pop(KEY_POST),
@@ -275,13 +266,11 @@ def _init_agg_buffers(
                  'post_buffer' : dict, possibly empty,
                },
          }``
-        To be noticed keys of dict ``agg_buffers`` are strings.
 
     """
     agg_buffers = {}
     seed_index_restart_set = set()
     for key in keys:
-        key_as_str = str(key)
         # Default values for aggregation counters and buffers.
         # 'agg_n_rows' : number of rows in aggregation result.
         # 'agg_res_buffer' and 'bin_res_buffer' are buffers to keep
@@ -291,7 +280,7 @@ def _init_agg_buffers(
         # Because 'segagg_buffer' and 'post_buffer' are modified
         # in-place for each key, they are created separately for
         # each key.
-        agg_buffers[key_as_str] = _reset_agg_buffers()
+        agg_buffers[key] = _reset_agg_buffers()
         # Process metadata if already existing aggregation results.
         if key in store:
             # Prior AggStream results already in store.
@@ -310,15 +299,15 @@ def _init_agg_buffers(
             # aggregation results, to be used by 'post'. If not used,
             # it is an empty dict.
             seed_index_restart_set.add(aggstream_md[KEY_RESTART_INDEX])
-            agg_buffers[key_as_str][KEY_SEGAGG_BUFFER] = (
+            agg_buffers[key][KEY_SEGAGG_BUFFER] = (
                 aggstream_md[KEY_SEGAGG_BUFFER] if aggstream_md[KEY_SEGAGG_BUFFER] else {}
             )
-            agg_buffers[key_as_str][KEY_POST_BUFFER] = (
+            agg_buffers[key][KEY_POST_BUFFER] = (
                 aggstream_md[KEY_POST_BUFFER] if aggstream_md[KEY_POST_BUFFER] else {}
             )
         else:
-            agg_buffers[key_as_str][KEY_SEGAGG_BUFFER] = {}
-            agg_buffers[key_as_str][KEY_POST_BUFFER] = {}
+            agg_buffers[key][KEY_SEGAGG_BUFFER] = {}
+            agg_buffers[key][KEY_POST_BUFFER] = {}
 
     if len(seed_index_restart_set) > 1:
         raise ValueError(
@@ -541,8 +530,8 @@ def _iter_data(
 def _post_n_write_agg_chunks(
     agg_buffers: dict,
     append_last_res: bool,
-    dirpath: str,
-    key: str,
+    store: ParquetSet,
+    key: dataclass,
     write_config: dict,
     index_name: Optional[str] = None,
     post: Optional[Callable] = None,
@@ -589,9 +578,9 @@ def _post_n_write_agg_chunks(
     append_last_res : bool
         If 'agg_res' should be appended to 'agg_res_buffer' and if 'bin_res'
         should be appended to 'bin_res_buffers'.
-    dirpath : str
-        Path to which recording aggregation results.
-    key : str
+    store : ParquetSet
+        ParquetSet to which recording aggregation results.
+    key : dataclass
         Key for retrieving corresponding metadata.
     write_config : dict
         Settings forwarded to ``oups.writer.write`` when writing aggregation
@@ -684,14 +673,15 @@ def _post_n_write_agg_chunks(
             },
         }
     # Record data.
-    write(dirpath=dirpath, data=agg_res, md_key=key, **write_config)
+    store[key] = write_config, agg_res
     # Reset aggregation buffers and counters.
     _reset_agg_buffers(agg_buffers)
 
 
 def agg_iter(
     seed_chunk: pDataFrame,
-    key: str,
+    store: ParquetSet,
+    key: dataclass,
     keys_config: dict,
     agg_config: dict,
     agg_buffers: dict,
@@ -703,7 +693,9 @@ def agg_iter(
     ----------
     seed_chunk : pDataFrame
         Chunk of seed data.
-    key : str
+    store : ParquetSet
+        ParquetSet to which recording aggregation results.
+    key : dataclass
         Key for recording aggregation results.
     keys_config
         Settings related to 'key' for conducting post-processing, writing and
@@ -755,7 +747,7 @@ def agg_iter(
                     _post_n_write_agg_chunks(
                         agg_buffers=agg_buffers,
                         append_last_res=False,
-                        dirpath=keys_config["dirpath"],
+                        store=store,
                         key=key,
                         write_config=keys_config["write_config"],
                         index_name=keys_config[KEY_BIN_ON_OUT],
@@ -815,7 +807,6 @@ class AggStream:
                                   },
                },
          }``
-        To be noticed, keys of dict ``keys_config`` are strings.
       - ``self.agg_buffers``, dict to keep track of aggregation iteration
                               intermediate results.
         ``{key: {'agg_n_rows' : int, number of rows in aggregation results,
@@ -836,9 +827,6 @@ class AggStream:
                             'post' function intermediate variables,
                },
          }``
-        To be noticed, keys of dict ``agg_buffers`` are strings.
-      - ``self.all_keys``, list of keys, kept as Indexer. This attribute is to
-        be removed if key can be kept as an Indexer in ``self.keys_config``.
       - ``self.p_jobs``, dict, containing Parallel objects, as per joblib
         setup. Keys are int, being the number of parallel jobs to run for this
         filter id.
@@ -1162,11 +1150,10 @@ class AggStream:
         _all_keys = []
         _p_jobs = {KEY_MAX_P_JOBS: Parallel(n_jobs=KEY_MAX_P_JOBS, prefer="threads")}
         for filt_id in keys:
-            # Keep keys as str.
             # Set number of jobs.
             n_keys = len(keys[filt_id])
             n_jobs = min(KEY_MAX_P_JOBS, n_keys) if parallel else 1
-            _filter_apps[filt_id] = FilterApp(list(map(str, keys[filt_id])), n_jobs)
+            _filter_apps[filt_id] = FilterApp(list(keys[filt_id]), n_jobs)
             if n_jobs not in _p_jobs:
                 # Configure parallel jobs.
                 _p_jobs[n_jobs] = Parallel(n_jobs=n_jobs, prefer="threads")
@@ -1178,7 +1165,6 @@ class AggStream:
         if dupes:
             raise ValueError(f"not possible to have key(s) {dupes} used for different filter ids.")
         self.p_jobs = _p_jobs
-        self.all_keys = _all_keys
         self.filter_apps = _filter_apps
         # Once filters have been managed, simplify 'keys' as a single level
         # dict.
@@ -1186,7 +1172,7 @@ class AggStream:
         (
             self.keys_config,
             self.agg_pd,
-        ) = _init_keys_config(ordered_on, store, keys, keys_default)
+        ) = _init_keys_config(ordered_on, keys, keys_default)
         (
             restart_index,
             self.agg_buffers,
@@ -1326,6 +1312,7 @@ class AggStream:
                     agg_loop_res = self.p_jobs[self.filter_apps[filter_id].n_jobs](
                         delayed(agg_iter)(
                             seed_chunk=filtered_chunk,
+                            store=self.store,
                             key=key,
                             keys_config=self.keys_config[key],
                             agg_config=self.agg_cs[key],
@@ -1347,8 +1334,8 @@ class AggStream:
             # future 'AggStream.agg' execution.
             self.p_jobs[KEY_MAX_P_JOBS](
                 delayed(_post_n_write_agg_chunks)(
+                    store=self.store,
                     key=key,
-                    dirpath=self.keys_config[key]["dirpath"],
                     agg_buffers=agg_res,
                     append_last_res=True,
                     write_config=self.keys_config[key]["write_config"],
@@ -1358,21 +1345,9 @@ class AggStream:
                 )
                 for key, agg_res in self.agg_buffers.items()
             )
-            # Add keys in store for those which where not in.
-            # This is needed because cloudpickle is unable to serialize Indexer.
-            # TODO: But dill can. Try to switch to dill?
-            # https://joblib.readthedocs.io/en/latest/parallel.html#serialization-processes
-            for key in self.all_keys:
-                if key not in self.store:
-                    self.store._keys.add(key)
         if seed_check_exception:
             raise SeedCheckException()
 
-
-# TODO:
-# - Use dill to serialize 'keys' in joblib / if working:
-#    - replace setting of dir_path in keys_config by store directly.
-#    - remove 'self.all_keys'
 
 # Tests:
 # - in test case with snapshot: when snapshot is a TimeGrouper, make sure that stitching
