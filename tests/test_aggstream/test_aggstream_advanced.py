@@ -384,8 +384,9 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
     # Setup streamed aggregation.
     val = "val"
     max_row_group_size = 5
+    snap_duration = "5T"
     common_key_params = {
-        "snap_by": TimeGrouper(key=ordered_on, freq="5T", closed="left", label="right"),
+        "snap_by": TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
         "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
     }
     key1 = Indexer("agg_10T")
@@ -514,13 +515,16 @@ def test_2_keys_bins_snaps_filters(store, seed_path):
         seed_df.loc[~seed_df[filter_on], :],
         key2_cf | common_key_params,
     )
-    # Seed data & streamed aggregation with a seed data of a single row,
-    # at same timestamp than last one, not writing final results.
+    # Seed data & streamed aggregation, not writing final results, with a seed
+    # data of two rows in 2 different snaps,
+    # - one at same timestamp than last one.
+    # - one at a new timestamp. This one will not be considered because when
+    #   not writing final results, last row in agg res is set aside.
     seed_df = pDataFrame(
         {
-            ordered_on: [ts[-1]],
-            val: [rand_ints[-1] + 1],
-            filter_on: [filter_val[-1]],
+            ordered_on: [ts[-1], ts[-1] + Timedelta(snap_duration)],
+            val: [rand_ints[-1] + 1, rand_ints[-1] + 10],
+            filter_on: [filter_val[-1]] * 2,
         },
     )
     seed_list.append(seed_df)

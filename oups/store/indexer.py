@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from dataclasses import fields
 from dataclasses import is_dataclass
 from functools import partial
-from typing import Any, Iterator, List, Type, Union
+from typing import Any, Callable, Iterator, List, Tuple, Type, Union
 
 from oups.store.defines import DIR_SEP
 
@@ -240,6 +240,20 @@ def _get_depth(obj: Union[dataclass, Type[dataclass]]) -> int:
     return depth
 
 
+def _reduce(obj: Type[dataclass]) -> Tuple[Callable, Tuple[str]]:
+    """
+    Reduce function for making 'Indexer' serializable.
+
+    Returns
+    -------
+    Tuple[Callable, Tuple[str]]
+        See '__reduce' standard interface.
+        https://docs.python.org/3/library/pickle.html#object.__reduce__
+
+    """
+    return obj.from_str, (str(obj),)
+
+
 class TopLevel(type):
     """
     Metaclass defining class properties of '@toplevel'-decorated class.
@@ -338,11 +352,13 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
         # Class instance properties: 'to_path'
         _dataclass_instance_to_str_p = partial(_dataclass_instance_to_str, as_path=True)
         index_class.to_path = property(_dataclass_instance_to_str_p)
-        _dataclass_instance_from_path = partial(_dataclass_instance_from_str)
 
         # Classmethods: 'from_str', 'from_path'.
-        index_class.from_path = classmethod(_dataclass_instance_from_path)
-        index_class.from_str = classmethod(_dataclass_instance_from_path)
+        index_class.from_path = classmethod(_dataclass_instance_from_str)
+        index_class.from_str = classmethod(_dataclass_instance_from_str)
+
+        # Serialization.
+        index_class.__reduce__ = _reduce
 
         return index_class
 

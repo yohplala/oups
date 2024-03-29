@@ -71,6 +71,8 @@ KEY_POST = "post"
 # It is not added in 'KEY_CONF_IN_PARAMS'.
 WRITE_PARAMS = set(write.__code__.co_varnames[: write.__code__.co_argcount])
 KEY_CONF_IN_PARAMS = {KEY_BIN_ON, KEY_SNAP_BY, KEY_AGG, KEY_POST} | WRITE_PARAMS
+# Parallel jobs.
+KEY_MAX_P_JOBS = max(int(cpu_count() * 3 / 4), 1)
 
 
 FilterApp = namedtuple("FilterApp", "keys n_jobs")
@@ -622,16 +624,20 @@ def _post_n_write_agg_chunks(
         Writing metadata is triggered ONLY if ``last_seed_index`` is provided.
 
     """
+    if (agg_res := agg_buffers[KEY_AGG_RES]) is None:
+        # Check if at least one iteration has been achieved or not.
+        # No iteration has been achieved, as no data.
+        return
     # Concat list of aggregation results.
     # TODO: factorize these 2 x 5 rows of code below, for bin res and snap res ...
     # 'agg_res_buffer'
     agg_res_buffer = (
-        [*agg_buffers[KEY_AGG_RES_BUFFER], agg_buffers[KEY_AGG_RES]]
+        [*agg_buffers[KEY_AGG_RES_BUFFER], agg_res]
         if append_last_res
         else agg_buffers[KEY_AGG_RES_BUFFER]
     )
-    # Make a copy when a single item to not propagate to original 'agg_res'
-    # the 'reset_index'.
+    # Make a copy when a single item, to not propagate the 'reset_index'
+    # to original 'agg_res'.
     agg_res = (
         pconcat(agg_res_buffer) if len(agg_res_buffer) > 1 else agg_res_buffer[0].copy(deep=False)
     )
@@ -720,12 +726,18 @@ def agg_iter(
         # Retrieve length of aggregation results.
         agg_res_len = len(agg_res)
         agg_res_buffer = agg_buffers[KEY_AGG_RES_BUFFER]
+        print("agg_res")
+        print(agg_res)
+        print("agg_res_len")
+        print(agg_res_len)
         if agg_res_len > 1:
             # Remove last row from 'agg_res' and add to
             # 'agg_res_buffer'.
             agg_res_buffer.append(agg_res.iloc[:-1])
             # Remove last row that is not recorded from total number of rows.
             agg_buffers["agg_n_rows"] += agg_res_len - 1
+            print("agg_n_rows")
+            print(agg_buffers["agg_n_rows"])
             agg_n_rows = agg_buffers["agg_n_rows"]
             if (bin_res := agg_buffers[KEY_BIN_RES]) is not None:
                 # If we have bins & snapshots, do same with bins.
@@ -1148,13 +1160,12 @@ class AggStream:
                     )
         _filter_apps = {}
         _all_keys = []
-        _max_parallel_jobs = max(int(cpu_count() * 3 / 4), 1)
-        _p_jobs = {}
+        _p_jobs = {KEY_MAX_P_JOBS: Parallel(n_jobs=KEY_MAX_P_JOBS, prefer="threads")}
         for filt_id in keys:
             # Keep keys as str.
             # Set number of jobs.
             n_keys = len(keys[filt_id])
-            n_jobs = min(_max_parallel_jobs, n_keys) if parallel else 1
+            n_jobs = min(KEY_MAX_P_JOBS, n_keys) if parallel else 1
             _filter_apps[filt_id] = FilterApp(list(map(str, keys[filt_id])), n_jobs)
             if n_jobs not in _p_jobs:
                 # Configure parallel jobs.
@@ -1227,7 +1238,7 @@ class AggStream:
 
     def agg(
         self,
-        seed: Union[pDataFrame, Iterable[pDataFrame]],
+        seed: Union[pDataFrame, Iterable[pDataFrame]] = None,
         trim_start: Optional[bool] = True,
         discard_last: Optional[bool] = True,
         final_write: Optional[bool] = True,
@@ -1297,67 +1308,63 @@ class AggStream:
         if isinstance(seed, pDataFrame):
             # Make the seed an iterable.
             seed = [seed]
-        if not self.agg_cs:
-            # If first time an aggregation is made with this object,
-            # initialize 'agg_cs'.
-            seed = self._init_agg_cs(seed)
-        seed_check_exception = False
-        try:
-            for _last_seed_index, filter_id, filtered_chunk in _iter_data(
-                seed=seed,
-                **self.seed_config,
-                trim_start=trim_start,
-                discard_last=discard_last,
-            ):
-                # Retrieve Parallel joblib setup.
-                agg_loop_res = self.p_jobs[self.filter_apps[filter_id].n_jobs](
-                    delayed(agg_iter)(
-                        seed_chunk=filtered_chunk,
-                        key=key,
-                        keys_config=self.keys_config[key],
-                        agg_config=self.agg_cs[key],
-                        agg_buffers=self.agg_buffers[key],
+        # Seed can be an empty list or None.
+        if seed:
+            if not self.agg_cs:
+                # If first time an aggregation is made with this object,
+                # initialize 'agg_cs'.
+                seed = self._init_agg_cs(seed)
+            seed_check_exception = False
+            try:
+                for _last_seed_index, filter_id, filtered_chunk in _iter_data(
+                    seed=seed,
+                    **self.seed_config,
+                    trim_start=trim_start,
+                    discard_last=discard_last,
+                ):
+                    # Retrieve Parallel joblib setup.
+                    agg_loop_res = self.p_jobs[self.filter_apps[filter_id].n_jobs](
+                        delayed(agg_iter)(
+                            seed_chunk=filtered_chunk,
+                            key=key,
+                            keys_config=self.keys_config[key],
+                            agg_config=self.agg_cs[key],
+                            agg_buffers=self.agg_buffers[key],
+                        )
+                        for key in self.filter_apps[filter_id].keys
                     )
-                    for key in self.filter_apps[filter_id].keys
-                )
-                # Transform list of tuples into a dict.
-                for key, agg_res in agg_loop_res:
-                    self.agg_buffers[key].update(agg_res)
-                # Set 'seed_index_restart' to the 'last_seed_index' with
-                # which restarting the next aggregation iteration.
-                self.seed_config[KEY_RESTART_INDEX] = _last_seed_index
-        except SeedCheckException:
-            seed_check_exception = True
-        # Check if at least one iteration has been achieved or not.
-        agg_res = next(iter(self.agg_buffers.values()))[KEY_AGG_RES]
-        if agg_res is None:
-            # No iteration has been achieved, as no data.
-            return
+                    # Transform list of tuples into a dict.
+                    for key, agg_res in agg_loop_res:
+                        self.agg_buffers[key].update(agg_res)
+                    # Set 'seed_index_restart' to the 'last_seed_index' with
+                    # which restarting the next aggregation iteration.
+                    self.seed_config[KEY_RESTART_INDEX] = _last_seed_index
+            except SeedCheckException:
+                seed_check_exception = True
         if final_write:
             # Post-process & write results from last iteration, this time
             # keeping last aggregation row, and recording metadata for a
             # future 'AggStream.agg' execution.
-            for keys, n_jobs in self.filter_apps.values():
-                self.p_jobs[n_jobs](
-                    delayed(_post_n_write_agg_chunks)(
-                        key=key,
-                        dirpath=self.keys_config[key]["dirpath"],
-                        agg_buffers=self.agg_buffers[key],
-                        append_last_res=True,
-                        write_config=self.keys_config[key]["write_config"],
-                        index_name=self.keys_config[key][KEY_BIN_ON_OUT],
-                        post=self.keys_config[key][KEY_POST],
-                        last_seed_index=self.seed_config[KEY_RESTART_INDEX],
-                    )
-                    for key in keys
+            self.p_jobs[KEY_MAX_P_JOBS](
+                delayed(_post_n_write_agg_chunks)(
+                    key=key,
+                    dirpath=self.keys_config[key]["dirpath"],
+                    agg_buffers=agg_res,
+                    append_last_res=True,
+                    write_config=self.keys_config[key]["write_config"],
+                    index_name=self.keys_config[key][KEY_BIN_ON_OUT],
+                    post=self.keys_config[key][KEY_POST],
+                    last_seed_index=self.seed_config[KEY_RESTART_INDEX],
                 )
-        # Add keys in store for those who where not in.
-        # This is needed because cloudpickle is unable to serialize Indexer.
-        # But dill can. Try to switch to dill?
-        # https://joblib.readthedocs.io/en/latest/parallel.html#serialization-processes
-        for key in self.all_keys:
-            if key not in self.store:
-                self.store._keys.add(key)
+                for key, agg_res in self.agg_buffers.items()
+            )
+            # Add keys in store for those which where not in.
+            # This is needed because cloudpickle is unable to serialize Indexer.
+            # TODO: But dill can. Try to switch to dill?
+            # https://joblib.readthedocs.io/en/latest/parallel.html#serialization-processes
+            for key in self.all_keys:
+                if key not in self.store:
+                    self.store._keys.add(key)
         if seed_check_exception:
             raise SeedCheckException()
 
@@ -1366,7 +1373,6 @@ class AggStream:
 # - Use dill to serialize 'keys' in joblib / if working:
 #    - replace setting of dir_path in keys_config by store directly.
 #    - remove 'self.all_keys'
-# - Store as many p_job as there are filters to keep the correct number of parallel jobs per filters.
 
 # Tests:
 # - in test case with snapshot: when snapshot is a TimeGrouper, make sure that stitching
