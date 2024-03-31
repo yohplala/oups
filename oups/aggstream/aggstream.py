@@ -70,7 +70,7 @@ KEY_POST = "post"
 # It is not added in 'KEY_CONF_IN_PARAMS'.
 WRITE_PARAMS = set(write.__code__.co_varnames[: write.__code__.co_argcount])
 KEY_CONF_IN_PARAMS = {KEY_BIN_ON, KEY_SNAP_BY, KEY_AGG, KEY_POST} | WRITE_PARAMS
-# Parallel jobs.
+# Parallel jobs, at most using 75% of available cpus.
 KEY_MAX_P_JOBS = max(int(cpu_count() * 3 / 4), 1)
 
 

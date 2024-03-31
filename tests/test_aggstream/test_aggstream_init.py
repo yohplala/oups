@@ -94,7 +94,7 @@ def always_false(**kwargs):
             },
             # ref_keys_config
             {
-                str(Indexer("key1")): {
+                Indexer("key1"): {
                     KEY_BIN_ON_OUT: "ts",
                     KEY_POST: None,
                     "write_config": {
@@ -105,9 +105,9 @@ def always_false(**kwargs):
                 },
             },
             # ref_agg_pd
-            {str(Indexer("key1")): {"agg_out": ("val", SUM)}},
+            {Indexer("key1"): {"agg_out": ("val", SUM)}},
             # ref_filter_apps
-            {NO_FILTER_ID: FilterApp([str(Indexer("key1"))], "NA")},
+            {NO_FILTER_ID: FilterApp([Indexer("key1")], "NA")},
         ),
         (
             # Test 2 /
@@ -161,7 +161,7 @@ def always_false(**kwargs):
             },
             # ref_keys_config
             {
-                str(Indexer("key1_some_default")): {
+                Indexer("key1_some_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_false,
                     "write_config": {
@@ -171,7 +171,7 @@ def always_false(**kwargs):
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },
                 },
-                str(Indexer("key2_only_specific")): {
+                Indexer("key2_only_specific"): {
                     KEY_BIN_ON_OUT: None,
                     KEY_POST: None,
                     "write_config": {
@@ -181,7 +181,7 @@ def always_false(**kwargs):
                         KEY_DUPLICATES_ON: "ts_spec",
                     },
                 },
-                str(Indexer("key3_only_default")): {
+                Indexer("key3_only_default"): {
                     KEY_BIN_ON_OUT: "bin_out_spec",
                     KEY_POST: always_true,
                     "write_config": {
@@ -191,7 +191,7 @@ def always_false(**kwargs):
                         KEY_DUPLICATES_ON: "bin_out_spec",
                     },
                 },
-                str(Indexer("key4_most_default")): {
+                Indexer("key4_most_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_true,
                     "write_config": {
@@ -204,19 +204,19 @@ def always_false(**kwargs):
             },
             # ref_agg_pd
             {
-                str(Indexer("key1_some_default")): {"out_spec": ("in_spec", FIRST)},
-                str(Indexer("key2_only_specific")): {"out_spec": ("in_spec", FIRST)},
-                str(Indexer("key3_only_default")): {"out_dflt": ("in_dflt", LAST)},
-                str(Indexer("key4_most_default")): {"out_dflt": ("in_dflt", LAST)},
+                Indexer("key1_some_default"): {"out_spec": ("in_spec", FIRST)},
+                Indexer("key2_only_specific"): {"out_spec": ("in_spec", FIRST)},
+                Indexer("key3_only_default"): {"out_dflt": ("in_dflt", LAST)},
+                Indexer("key4_most_default"): {"out_dflt": ("in_dflt", LAST)},
             },
             # ref_filter_apps
             {
                 NO_FILTER_ID: FilterApp(
                     [
-                        str(Indexer("key1_some_default")),
-                        str(Indexer("key2_only_specific")),
-                        str(Indexer("key3_only_default")),
-                        str(Indexer("key4_most_default")),
+                        Indexer("key1_some_default"),
+                        Indexer("key2_only_specific"),
+                        Indexer("key3_only_default"),
+                        Indexer("key4_most_default"),
                     ],
                     "NA",
                 ),
@@ -280,7 +280,7 @@ def always_false(**kwargs):
             },
             # ref_keys_config
             {
-                str(Indexer("key1_some_default")): {
+                Indexer("key1_some_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_false,
                     "write_config": {
@@ -290,7 +290,7 @@ def always_false(**kwargs):
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },
                 },
-                str(Indexer("key2_only_specific")): {
+                Indexer("key2_only_specific"): {
                     KEY_BIN_ON_OUT: None,
                     KEY_POST: None,
                     "write_config": {
@@ -300,7 +300,7 @@ def always_false(**kwargs):
                         KEY_DUPLICATES_ON: "ts_spec",
                     },
                 },
-                str(Indexer("key3_only_default")): {
+                Indexer("key3_only_default"): {
                     KEY_BIN_ON_OUT: "bin_out_spec",
                     KEY_POST: always_true,
                     "write_config": {
@@ -310,7 +310,7 @@ def always_false(**kwargs):
                         KEY_DUPLICATES_ON: "bin_out_spec",
                     },
                 },
-                str(Indexer("key4_most_default")): {
+                Indexer("key4_most_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_true,
                     "write_config": {
@@ -323,22 +323,22 @@ def always_false(**kwargs):
             },
             # ref_agg_pd
             {
-                str(Indexer("key1_some_default")): {"out_spec": ("in_spec", FIRST)},
-                str(Indexer("key2_only_specific")): {"out_spec": ("in_spec", FIRST)},
-                str(Indexer("key3_only_default")): {"out_dflt": ("in_dflt", LAST)},
-                str(Indexer("key4_most_default")): {"out_dflt": ("in_dflt", LAST)},
+                Indexer("key1_some_default"): {"out_spec": ("in_spec", FIRST)},
+                Indexer("key2_only_specific"): {"out_spec": ("in_spec", FIRST)},
+                Indexer("key3_only_default"): {"out_dflt": ("in_dflt", LAST)},
+                Indexer("key4_most_default"): {"out_dflt": ("in_dflt", LAST)},
             },
             # ref_filter_apps
             {
                 "filter1": FilterApp(
                     [
-                        str(Indexer("key1_some_default")),
-                        str(Indexer("key2_only_specific")),
-                        str(Indexer("key3_only_default")),
+                        Indexer("key1_some_default"),
+                        Indexer("key2_only_specific"),
+                        Indexer("key3_only_default"),
                     ],
                     "NA",
                 ),
-                "filter2": FilterApp([str(Indexer("key4_most_default"))], "NA"),
+                "filter2": FilterApp([Indexer("key4_most_default")], "NA"),
             },
         ),
     ],
@@ -378,7 +378,6 @@ def test_aggstream_init(
                 assert getattr(res_grouper, attr) == ref_grouper_attr[attr]
     for key, ref in ref_keys_config.items():
         del res_keys_config[key]["seg_config"]
-        del res_keys_config[key]["dirpath"]
         assert res_keys_config[key] == ref
     ref_agg_buffers = {
         "agg_n_rows": 0,
