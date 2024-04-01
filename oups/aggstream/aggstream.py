@@ -44,6 +44,7 @@ from oups.store.writer import MAX_ROW_GROUP_SIZE
 from oups.store.writer import OUPS_METADATA
 from oups.store.writer import OUPS_METADATA_KEY
 from oups.store.writer import write
+from oups.store.writer import write_metadata
 
 
 # Aggregation functions.
@@ -616,6 +617,16 @@ def _post_n_write_agg_chunks(
     if (agg_res := agg_buffers[KEY_AGG_RES]) is None:
         # Check if at least one iteration has been achieved or not.
         # No iteration has been achieved, as no data.
+        if last_seed_index:
+            # If 'last_seed_index', at least set it in oups metadata.
+            # It is possible new seed data has been streamed and taken into
+            # account, but used for this key, because having been filtered out.
+            OUPS_METADATA[key] = {
+                KEY_AGGSTREAM: {
+                    KEY_RESTART_INDEX: last_seed_index,
+                },
+            }
+            write_metadata(pf=store[key].pf, md_key=key)
         return
     # Concat list of aggregation results.
     # TODO: factorize these 2 x 5 rows of code below, for bin res and snap res ...
