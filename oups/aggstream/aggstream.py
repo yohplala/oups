@@ -615,7 +615,6 @@ def _post_n_write_agg_chunks(
 
     """
     if (agg_res := agg_buffers[KEY_AGG_RES]) is None:
-        # Check if at least one iteration has been achieved or not.
         # No iteration has been achieved, as no data.
         if last_seed_index:
             # If 'last_seed_index', at least set it in oups metadata.
@@ -729,18 +728,12 @@ def agg_iter(
         # Retrieve length of aggregation results.
         agg_res_len = len(agg_res)
         agg_res_buffer = agg_buffers[KEY_AGG_RES_BUFFER]
-        print("agg_res")
-        print(agg_res)
-        print("agg_res_len")
-        print(agg_res_len)
         if agg_res_len > 1:
             # Remove last row from 'agg_res' and add to
             # 'agg_res_buffer'.
             agg_res_buffer.append(agg_res.iloc[:-1])
             # Remove last row that is not recorded from total number of rows.
             agg_buffers["agg_n_rows"] += agg_res_len - 1
-            print("agg_n_rows")
-            print(agg_buffers["agg_n_rows"])
             agg_n_rows = agg_buffers["agg_n_rows"]
             if (bin_res := agg_buffers[KEY_BIN_RES]) is not None:
                 # If we have bins & snapshots, do same with bins.
@@ -1356,7 +1349,7 @@ class AggStream:
                 )
                 for key, agg_res in self.agg_buffers.items()
             )
-        if seed_check_exception:
+        if seed and seed_check_exception:
             raise SeedCheckException()
 
 
@@ -1367,10 +1360,7 @@ class AggStream:
 # - bien faire un cas test snapshot ou le 2nd seed chunk démarre sur une nouvelle bin:
 #    straight away / ça pose des problèmes quand c'est simplement bin,
 #    alors bin+snapshot, il y a des chances que ça ne marche pas non plus.
-# - Do a test case to check that if in 'post' an exception is raised for instance,
-#    then values in class are properly set: segagg_buffer, post_buffer, seed_index_restart,
-#    and agg_res_buffer and bin_res_buffer are empty lists.
-# - Test new parameters: 'final_write' and seed check exception
+# - Test new parameter: seed check exception
 #    for seed check exception, check the last '_last_seed_index' has been correctly recorded
 #    and aggregation results integrate results from last seed chunk.
 # - A test that with a given filter release an empty dataframe.
