@@ -1161,7 +1161,6 @@ class AggStream:
             if n_jobs not in _p_jobs:
                 # Configure parallel jobs.
                 _p_jobs[n_jobs] = Parallel(n_jobs=n_jobs, prefer="threads")
-            # TODO: remove '_all_keys' if key can be serialize.
             _all_keys.extend(keys[filt_id])
         # Check for duplicates keys between different filter ids.
         seen = set()
