@@ -816,6 +816,9 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     assert key2_res.equals(key2_res_ref)
     key3_res = store[key3].pdf
     assert key3_res.equals(key3_res_ref)
+    assert (
+        store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == seed_df[ordered_on].iloc[-1]
+    )
     # --------------#
     # Data stream 7 #
     # --------------#
@@ -847,3 +850,6 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     assert key2_res.equals(key2_res_ref)
     key3_res = store[key3].pdf
     assert key3_res.equals(key3_res_ref)
+    assert (
+        store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == seed_df[ordered_on].iloc[-1]
+    )
