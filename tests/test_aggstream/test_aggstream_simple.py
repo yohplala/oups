@@ -1349,7 +1349,6 @@ def test_time_grouper_agg_first_filters_and_no_filter(store):
 def test_different_ordered_on(store):
     # Test an 'ordered_on' value at key level different than at that at seed
     # level.
-    # No post.
     #
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
