@@ -1353,20 +1353,9 @@ class AggStream:
 
 
 # Tests:
-# - in test case with snapshot: when snapshot is a TimeGrouper, make sure that stitching
-# works same as for bin: that empty snapshots are generated between 2 row groups.
-# - un test snap + bin avec deux ou trois chunks dans lesquels il n'y a ni snap, ni bin qui se finissent.
-# - bien faire un cas test snapshot ou le 2nd seed chunk démarre sur une nouvelle bin:
-#    straight away / ça pose des problèmes quand c'est simplement bin,
-#    alors bin+snapshot, il y a des chances que ça ne marche pas non plus.
+# - Test with different 'ordered_on' values for a key vs seed
 # - Test new parameter: seed check exception
 #    for seed check exception, check the last '_last_seed_index' has been correctly recorded
 #    and aggregation results integrate results from last seed chunk.
-# - A test that with a given filter release an empty dataframe.
-# - A test with a check function that raises an exception: check that last seed index has been
-#    that of the last iteration, prior to the exception.
 # - A test for filter_dataframe
 #    check when some chunk are empty for a given filter id
-# - A test with first seed generator like Parquet File, then 1 dataframe each time.
-# - Test with different 'ordered_on' values for a key vs seed
-# - Test with a final_write, then create a new AggStream instance and have a new aggregation iteration

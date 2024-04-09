@@ -297,6 +297,130 @@ def test_exception_different_indexes_at_restart(store, seed_path):
         )
 
 
+def post(buffer: dict, bin_res: pDataFrame, snap_res: pDataFrame):
+    """
+    Aggregate previous and current bin aggregation results.
+
+    Keep per row 'first' and 'last' values from previous bin, and from current
+    snapshot.
+
+    Notes
+    -----
+      - This function has been defined by using 'label' parameter for
+        'bin_by' and 'snap_by' set to 'right'.
+      - This function has been decently tested and optimized by the test cases
+        of this python module...
+
+    """
+    bin_res_last_ts = bin_res.loc[:, ordered_on].iloc[-1]
+    snap_res_last_ts = snap_res.loc[:, ordered_on].iloc[-1]
+    n_bin_res = len(bin_res)
+    if buffer:
+        # Retrieve previous results, concat to new, and shift.
+        # If last 'ts' from previous bin result is same than first 'ts' in new
+        # bin result, then discard last row in previous results.
+        # Else discard first row in previous results instead.
+        prev_bin_res = (
+            buffer["prev_bin_res"].iloc[:-1]
+            if (
+                buffer["prev_bin_res"].loc[:, ordered_on].iloc[-1]
+                == bin_res.loc[:, ordered_on].iloc[0]
+            )
+            else buffer["prev_bin_res"]
+        )
+        shifted_bin_res = pconcat([prev_bin_res, bin_res], ignore_index=True)
+    else:
+        # 1st iteration.
+        # Keep NaN row to make sure to have 2 rows stored in 'prev_bin_res'.
+        shifted_bin_res = pconcat([bin_res.shift(1), bin_res.iloc[-1:]], ignore_index=True)
+    # Forced to keep one row more in case the last row is a duplicate
+    # index with 1st row of next iteration.
+    buffer["prev_bin_res"] = shifted_bin_res.iloc[-2:]
+    # Remove rows added by past concat.
+    # One at the end and one or 0 at the bottom.
+    start_index = len(shifted_bin_res) - n_bin_res - 1
+    shifted_bin_res = shifted_bin_res.iloc[start_index:-1].reset_index(
+        drop=True,
+    )
+    # Align 'bin_res' on 2 columns.
+    # Keep track of existing NA by filling with '-1' as others will be
+    # created by 'merge_ordered' which have to be managed differently.
+    shifted_bin_res = (
+        pconcat(
+            [
+                shifted_bin_res.drop(ordered_on, axis=1).rename(
+                    columns={FIRST: "prev_first", LAST: "prev_last"},
+                ),
+                bin_res,
+            ],
+            axis=1,
+        )
+        .rename(
+            columns={FIRST: "current_first", LAST: "current_last"},
+        )
+        .fillna(-1)
+    )
+    if bin_res_last_ts < snap_res_last_ts:
+        # Shift horizontally last row and keep it apart for reuse later.
+        hshifted_bin_res_last_row = (
+            shifted_bin_res.set_index(ordered_on)
+            .loc[bin_res_last_ts]
+            .reindex(
+                [
+                    "prev_first",
+                    "current_first",
+                    "prev_last",
+                    "current_last",
+                ],
+            )
+            .shift(-1)
+            .loc[["prev_first", "prev_last"]]
+        )
+    merged_res = merge_ordered(
+        shifted_bin_res.loc[:, [ordered_on, "prev_first", "prev_last"]],
+        snap_res.fillna(-1),
+        on=ordered_on,
+    )
+    merged_res = merged_res.astype(
+        {
+            "prev_first": DTYPE_NULLABLE_INT64,
+            FIRST: DTYPE_NULLABLE_INT64,
+            "prev_last": DTYPE_NULLABLE_INT64,
+            LAST: DTYPE_NULLABLE_INT64,
+        },
+    )
+    # This reindex is essentially for pretty printing when debugging.
+    merged_res = merged_res.reindex(
+        columns=[ordered_on, "prev_first", FIRST, "prev_last", LAST],
+    )
+    # 'bin_res' columns.
+    bin_res_cols = ["prev_first", "prev_last"]
+    if bin_res_last_ts < snap_res_last_ts:
+        # In case 'snap_res' ends with several rows later than last row in
+        # 'bin_res', last values have to be derived from 'bin_res' last row
+        # that are then shifted by one horizontally, before being forward
+        # filled.
+        merged_res.loc[len(merged_res) - 1, bin_res_cols] = hshifted_bin_res_last_row
+    # Fill empty rows in 'bin_res' columns.
+    merged_res.loc[:, bin_res_cols] = merged_res.loc[:, bin_res_cols].bfill()
+    # Remove possibly created rows in 'snap_res' columns.
+    # be it because more bins than snaps, or snaps indexes with different
+    # values than bin indexes.
+    return merged_res.dropna(subset=FIRST, ignore_index=True)
+
+
+def reference_results(seed: pDataFrame, key_conf: dict):
+    """
+    Get reference results from cumsegagg and post for 2 next test cases.
+    """
+    bin_res_ref, snap_res_ref = cumsegagg(
+        data=seed,
+        **key_conf,
+        ordered_on=ordered_on,
+    )
+    return post({}, bin_res_ref.reset_index(), snap_res_ref.reset_index())
+
+
 def test_3_keys_bins_snaps_filters(store, seed_path):
     # Test with 3 keys, bins and snapshots, filters and parallel iterations.
     # - filter 'True' : key 1: time grouper '10T', agg 'first' & 'last'.
@@ -304,112 +428,6 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     # - filter 'True' : key 3: time grouper '2T', agg 'first' & 'last'.
     # - snap '5T'
     # No head or tail trimming.
-    #
-    # Setup 'post'.
-    def post(buffer: dict, bin_res: pDataFrame, snap_res: pDataFrame):
-        """
-        Aggregate previous and current bin aggregation results.
-
-        Keep per row 'first' value of previous and current bin, and 'last'
-        value from current snapshot.
-
-        Notes
-        -----
-          - This function has been defined by using 'label' parameter for
-            'bin_by' and 'snap_by' set to 'right'.
-          - This function has been decently tested and optimized by this very
-            test case...
-
-        """
-        bin_res_last_ts = bin_res.loc[:, ordered_on].iloc[-1]
-        snap_res_last_ts = snap_res.loc[:, ordered_on].iloc[-1]
-        if buffer:
-            # Retrieve previous results, concat to new, and shift.
-            if (
-                buffer["prev_bin_res"].loc[:, ordered_on].iloc[-1]
-                == bin_res.loc[:, ordered_on].iloc[0]
-            ):
-                prev_bin_res = buffer["prev_bin_res"].iloc[:-1]
-            else:
-                prev_bin_res = buffer["prev_bin_res"].iloc[1:]
-            shifted_bin_res = pconcat([prev_bin_res, bin_res], ignore_index=True)
-            # Forced to keep one row more in case the last row is a duplicate
-            # index with 1st row of next iteration.
-            buffer["prev_bin_res"] = shifted_bin_res.iloc[-2:]
-            # Remove row added by past concat.
-            shifted_bin_res = shifted_bin_res.iloc[:-1]
-        else:
-            # 1st iteration.
-            # Forced to keep one row more in case the last row is a duplicate
-            # index with 1st row of next iteration.
-            buffer["prev_bin_res"] = bin_res.iloc[-2:]
-            shifted_bin_res = bin_res.shift(1)
-        # Align 'bin_res' on 2 columns.
-        # Keep track of existing NA by filling with '-1' as others will be
-        # created by 'merge_ordered' which have to be managed differently.
-        shifted_bin_res = (
-            pconcat(
-                [
-                    shifted_bin_res.drop(ordered_on, axis=1).rename(
-                        columns={FIRST: "prev_first", LAST: "prev_last"},
-                    ),
-                    bin_res,
-                ],
-                axis=1,
-            )
-            .rename(
-                columns={FIRST: "current_first", LAST: "current_last"},
-            )
-            .fillna(-1)
-        )
-        if bin_res_last_ts < snap_res_last_ts:
-            # Shift horizontally last row and keep it apart for reuse later.
-            hshifted_bin_res_last_row = (
-                shifted_bin_res.set_index(ordered_on)
-                .loc[bin_res_last_ts]
-                .reindex(
-                    [
-                        "prev_first",
-                        "current_first",
-                        "prev_last",
-                        "current_last",
-                    ],
-                )
-                .shift(-1)
-                .loc[["prev_first", "prev_last"]]
-            )
-        merged_res = merge_ordered(
-            shifted_bin_res.loc[:, [ordered_on, "prev_first", "prev_last"]],
-            snap_res.fillna(-1),
-            on=ordered_on,
-        )
-        merged_res = merged_res.astype(
-            {
-                "prev_first": DTYPE_NULLABLE_INT64,
-                FIRST: DTYPE_NULLABLE_INT64,
-                "prev_last": DTYPE_NULLABLE_INT64,
-                LAST: DTYPE_NULLABLE_INT64,
-            },
-        )
-        # This reindex is essentially for pretty printing when debugging.
-        merged_res = merged_res.reindex(
-            columns=[ordered_on, "prev_first", FIRST, "prev_last", LAST],
-        )
-        # 'bin_res' columns.
-        bin_res_cols = ["prev_first", "prev_last"]
-        if bin_res_last_ts < snap_res_last_ts:
-            # In case 'snap_res' ends with several rows later than last row in
-            # 'bin_res', last values have to be derived from 'bin_res' last row
-            # that are then shifted by one horizontally, before being forward
-            # filled.
-            merged_res.loc[len(merged_res) - 1, bin_res_cols] = hshifted_bin_res_last_row
-        # Fill empty rows in 'bin_res' columns.
-        merged_res.loc[:, bin_res_cols] = merged_res.loc[:, bin_res_cols].bfill()
-        # Remove possibly created rows in 'snap_res' columns.
-        # be it because more bins than snaps, or snaps indexes with different
-        # values than bin indexes.
-        return merged_res.dropna(subset=FIRST, ignore_index=True)
-
     # Setup streamed aggregation.
     val = "val"
     max_row_group_size = 5
@@ -615,19 +633,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
             LAST: DTYPE_NULLABLE_INT64,
         },
     )
-
     # Ref. results by continuous aggregation for key1 and key2.
-    def reference_results(seed: pDataFrame, key_conf: dict):
-        """
-        Get reference results from cumsegagg and post.
-        """
-        bin_res_ref, snap_res_ref = cumsegagg(
-            data=seed,
-            **key_conf,
-            ordered_on=ordered_on,
-        )
-        return post({}, bin_res_ref.reset_index(), snap_res_ref.reset_index())
-
     key1_res_ref = reference_results(
         seed_df.loc[seed_df[filter_on], :],
         key1_cf | common_key_params,
@@ -853,3 +859,123 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     assert (
         store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == seed_df[ordered_on].iloc[-1]
     )
+
+
+def test_3_keys_bins_snaps_filters_restart(store, seed_path):
+    # Test with 3 keys, bins and snapshots, filters and parallel iterations.
+    # - filter 'True' : key 1: time grouper '10T', agg 'first' & 'last'.
+    # - filter 'False' : key 2: time grouper '20T', agg 'first' & 'last'.
+    # - filter 'True' : key 3: time grouper '2T', agg 'first' & 'last'.
+    # - snap '5T'
+    # No head or tail trimming.
+    # Restarting aggregation with a new AggStream instance.
+    # Setup streamed aggregation.
+    val = "val"
+    max_row_group_size = 5
+    snap_duration = "5T"
+    common_key_params = {
+        "snap_by": TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
+        "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
+    }
+    key1 = Indexer("agg_10T")
+    key1_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
+    }
+    key2 = Indexer("agg_20T")
+    key2_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
+    }
+    key3 = Indexer("agg_2T")
+    key3_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="right"),
+    }
+    filter1 = "filter1"
+    filter2 = "filter2"
+    filter_on = "filter_on"
+    as1 = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys={
+            filter1: {
+                key1: deepcopy(key1_cf),
+                key3: deepcopy(key3_cf),
+            },
+            filter2: {key2: deepcopy(key2_cf)},
+        },
+        filters={
+            filter1: [(filter_on, "==", True)],
+            filter2: [(filter_on, "==", False)],
+        },
+        max_row_group_size=max_row_group_size,
+        **common_key_params,
+        parallel=True,
+        post=post,
+    )
+    # Seed data.
+    rand_ints = np.hstack(
+        [
+            np.array([2, 3, 4, 7, 10, 14, 14, 14, 16, 17]),
+            np.array([24, 29, 30, 31, 32, 33, 36, 37, 39, 45]),
+            np.array([48, 49, 50, 54, 54, 56, 58, 59, 60, 61]),
+            np.array([64, 65, 77, 89, 90, 90, 90, 94, 98, 98]),
+            np.array([99, 100, 103, 104, 108, 113, 114, 115, 117, 117]),
+        ],
+    )
+    start = Timestamp("2020/01/01")
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    filter_val = np.ones(len(ts), dtype=bool)
+    filter_val[::2] = False
+    seed_df = pDataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
+    seed_list = [seed_df.iloc[:17], seed_df.iloc[17:31]]
+    as1.agg(
+        seed=seed_list,
+        trim_start=False,
+        discard_last=False,
+        final_write=True,
+    )
+    del as1
+    # New aggregation.
+    as2 = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys={
+            filter1: {
+                key1: deepcopy(key1_cf),
+                key3: deepcopy(key3_cf),
+            },
+            filter2: {key2: deepcopy(key2_cf)},
+        },
+        filters={
+            filter1: [(filter_on, "==", True)],
+            filter2: [(filter_on, "==", False)],
+        },
+        max_row_group_size=max_row_group_size,
+        **common_key_params,
+        parallel=True,
+        post=post,
+    )
+    as2.agg(
+        seed=seed_df.iloc[31:],
+        trim_start=False,
+        discard_last=False,
+        final_write=True,
+    )
+    # Reference results by continuous aggregation.
+    key1_res_ref = reference_results(
+        seed_df.loc[seed_df[filter_on], :],
+        key1_cf | common_key_params,
+    )
+    key2_res_ref = reference_results(
+        seed_df.loc[~seed_df[filter_on], :],
+        key2_cf | common_key_params,
+    )
+    key3_res_ref = reference_results(
+        seed_df.loc[seed_df[filter_on], :],
+        key3_cf | common_key_params,
+    )
+    key1_res = store[key1].pdf
+    assert key1_res.equals(key1_res_ref)
+    key2_res = store[key2].pdf
+    assert key2_res.equals(key2_res_ref)
+    key3_res = store[key3].pdf
+    assert key3_res.equals(key3_res_ref)
