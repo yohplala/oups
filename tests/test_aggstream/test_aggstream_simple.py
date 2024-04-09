@@ -976,7 +976,8 @@ def test_time_grouper_agg_first(store):
     # Seed as simple pandas DataFrame.
     # No post, 'discard_last=True'.
     # 1st agg ends on a full bin (no stitching required when re-starting).
-    # For such a use case, streamed aggregation is actually no needed.
+    # For such a use case, streamed aggregation is actually not needed.
+    #
     # Setup aggregation.
     ordered_on = "ts"
     bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
@@ -1018,6 +1019,7 @@ def test_single_row(store):
     # Test with time grouper and 'first' aggregation.
     # Single row.
     # No post, 'discard_last=True'.
+    #
     # Setup aggregation.
     ordered_on = "ts"
     bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
@@ -1124,6 +1126,7 @@ def test_time_grouper_duplicates_on_wo_bin_on(store):
     # Test 'duplicates_on=[ordered_on]' (without 'bin_on')
     # No error should raise at recording.
     # This is not a standard use!
+    #
     # Setup aggregation.
     ordered_on = "ts_order"
     agg = {SUM: ("val", SUM)}
@@ -1340,4 +1343,92 @@ def test_time_grouper_agg_first_filters_and_no_filter(store):
     # 'key_b'
     ref_res = seed2.loc[seed2["val"] >= 3].groupby(bin_by).agg(**agg).reset_index()
     rec_res = store[key_b].pdf
+    assert rec_res.equals(ref_res)
+
+
+def test_different_ordered_on(store):
+    # Test an 'ordered_on' value at key level different than at that at seed
+    # level.
+    # No post.
+    #
+    # Seed data
+    # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
+    # RGS   VAL ROW BIN    TS | comments
+    #  1      1    0   1  8:10 | 2 aggregated rows from same row group.
+    #         2                |
+    #         3        2  9:10 |
+    #         4                |
+    #  2      5    4   3 10:10 | no stitching with previous.
+    #         6                | 1 aggregated row.
+    #  3      7    6           | stitching with previous (same bin).
+    #         8        4 11:10 | 2 aggregated rows, not incl. stitching
+    #         9                | with prev agg row.
+    #        10        5 12:10 |
+    #  4     11   10           | stitching with previous (same bin).
+    #        12                | 0 aggregated row, not incl stitching.
+    #  5     13   12   6 13:10 |
+    #  6     14   13           |
+    #        15                |
+    #  7     16   15   7 14:10 | no stitching, 1 aggregated row.
+    #        17                |
+    #
+    # Setup aggregation.
+    key_ordered_on = "val"
+    seed_ordered_on = "ts"
+
+    def post(buffer: dict, bin_res: pDataFrame):
+        """
+        Remove some columns before recording.
+        """
+        return bin_res.drop(columns=seed_ordered_on)
+
+    max_row_group_size = 3
+    agg = {key_ordered_on: (key_ordered_on, FIRST)}
+    bin_by = TimeGrouper(key=seed_ordered_on, freq="1H", closed="left", label="left")
+    as_ = AggStream(
+        ordered_on=seed_ordered_on,
+        agg=agg,
+        store=store,
+        keys={
+            key: {
+                "ordered_on": key_ordered_on,
+                "bin_by": bin_by,
+            },
+        },
+        max_row_group_size=max_row_group_size,
+        post=post,
+    )
+    # Setup seed data.
+    date = "2020/01/01 "
+    ts = DatetimeIndex(
+        [
+            date + "08:10",  # 1
+            date + "08:10",  # 1
+            date + "09:10",  # 2
+            date + "09:10",  # 2
+            date + "10:10",  # 3
+            date + "10:10",  # 3
+            date + "10:10",  # 3
+            date + "11:10",  # 4
+            date + "11:10",  # 4
+            date + "12:10",  # 5
+            date + "12:10",  # 5
+            date + "12:10",  # 5
+            date + "13:10",  # 6
+            date + "13:10",  # 6
+            date + "13:10",  # 6
+            date + "14:10",  # 7
+            date + "14:10",  # 7
+        ],
+    )
+    seed = pDataFrame({seed_ordered_on: ts, key_ordered_on: range(1, len(ts) + 1)})
+    # Setup streamed aggregation.
+    as_.agg(
+        seed=seed,
+        discard_last=False,
+        final_write=True,
+    )
+    # Check
+    ref_res = seed.groupby(bin_by).agg(**agg).reset_index(drop=True)
+    rec_res = store[key].pdf
     assert rec_res.equals(ref_res)

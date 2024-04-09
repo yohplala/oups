@@ -1353,9 +1353,6 @@ class AggStream:
 
 
 # Tests:
-# - Test with different 'ordered_on' values for a key vs seed
 # - Test new parameter: seed check exception
 #    for seed check exception, check the last '_last_seed_index' has been correctly recorded
 #    and aggregation results integrate results from last seed chunk.
-# - A test for filter_dataframe
-#    check when some chunk are empty for a given filter id

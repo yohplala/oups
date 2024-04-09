@@ -428,6 +428,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     # - filter 'True' : key 3: time grouper '2T', agg 'first' & 'last'.
     # - snap '5T'
     # No head or tail trimming.
+    #
     # Setup streamed aggregation.
     val = "val"
     max_row_group_size = 5
@@ -869,6 +870,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
     # - snap '5T'
     # No head or tail trimming.
     # Restarting aggregation with a new AggStream instance.
+    #
     # Setup streamed aggregation.
     val = "val"
     max_row_group_size = 5
