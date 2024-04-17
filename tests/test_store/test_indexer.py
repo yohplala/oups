@@ -10,6 +10,8 @@ from dataclasses import asdict
 from dataclasses import fields
 
 import pytest
+from cloudpickle import dumps
+from cloudpickle import loads
 
 from oups import is_toplevel
 from oups import sublevel
@@ -108,6 +110,10 @@ def test_toplevel_nested_dataclass_to_str():
     tl = TopLevel("aha", 2, sl1)
     to_str_ref = "aha-2-5-oh-ou-3-7"
     assert str(tl) == to_str_ref
+
+    # Test serialization.
+    unserialized = loads(dumps(tl))
+    assert unserialized == tl
 
 
 def test_toplevel_nested_dataclass_attributes():

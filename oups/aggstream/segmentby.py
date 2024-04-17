@@ -696,15 +696,14 @@ def setup_mainbuffer(buffer: dict, with_snapshot: Optional[bool] = False) -> Tup
 
     """
     if buffer is not None:
-        if with_snapshot:
-            if KEY_BIN not in buffer:
-                buffer[KEY_BIN] = {}
+        if KEY_BIN not in buffer:
+            buffer[KEY_BIN] = {}
+            if with_snapshot:
                 buffer[KEY_SNAP] = {}
+        if with_snapshot:
             return buffer[KEY_BIN], buffer[KEY_SNAP]
-        elif KEY_BIN in buffer:
-            return buffer[KEY_BIN], None
         else:
-            return buffer, None
+            return buffer[KEY_BIN], None
     else:
         return None, None
 
@@ -941,28 +940,28 @@ def segmentby(
             f"But last bin ends at row {next_chunk_starts[-1]} "
             f"excluded, while size of data is {len(data)}.",
         )
-    if n_bins > 1 and buffer is not None and next_chunk_starts[-2] == len(on):
-        # In case a user-provided 'bin_by()' Callable is used, check if there
-        # are empty trailing bins. If there are, and that restart are expected
-        # (use of 'buffer'), then raise error, this it not allowed, as it would
-        # lead to wrong results in 'jcumsegagg()'.
-        raise ValueError(
-            "there is at least one empty trailing bin. "
-            "This is not possible if planning to restart on new "
-            "data in a next iteration.",
-        )
-    if snap_by is not None:
-        if buffer is not None:
+    if buffer is not None:
+        # A buffer that is not 'None' means a restart is expected.
+        if n_bins > 1 and next_chunk_starts[-2] == len(on):
+            # In case a user-provided 'bin_by()' Callable is used, check if there
+            # are empty trailing bins. If there are, and that restart are expected
+            # (use of 'buffer'), then raise error, this it not allowed, as it would
+            # lead to wrong results in 'jcumsegagg()'.
+            raise ValueError(
+                "there is at least one empty trailing bin. "
+                "This is not possible if planning to restart on new "
+                "data in a next iteration.",
+            )
+        if KEY_LAST_BIN_LABEL in buffer and buffer[KEY_LAST_BIN_LABEL] != bin_labels.iloc[0]:
             # When using snapshots, and in case of multiple calls, check that
             # label of last bin (previous iteration) is same than label of
             # first bin (current iteration).
-            if KEY_LAST_BIN_LABEL in buffer and buffer[KEY_LAST_BIN_LABEL] != bin_labels.iloc[0]:
-                raise ValueError(
-                    f"not possible to have label '{buffer[KEY_LAST_BIN_LABEL]}' "
-                    "of last bin at previous iteration different than label "
-                    f"'{bin_labels.iloc[0]}' of first bin at current itation when ."
-                    " using snapshots",
-                )
+            raise ValueError(
+                f"not possible to have label '{buffer[KEY_LAST_BIN_LABEL]}' "
+                "of last bin at previous iteration different than label "
+                f"'{bin_labels.iloc[0]}' of first bin at current iteration.",
+            )
+    if snap_by is not None:
         # Define points of observation
         (next_snap_starts, snap_labels, n_max_null_snaps, _, snap_ends, _) = by_scale(
             on=data.loc[:, ordered_on],

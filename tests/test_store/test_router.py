@@ -4,6 +4,10 @@ Created on Sat Dec 18 15:00:00 2021.
 
 @author: yoh
 
+Test utils.
+TEST_DATA = 'test-data'
+tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+
 """
 import zipfile
 from os import path as os_path
@@ -13,13 +17,11 @@ from pandas import DataFrame as pDataFrame
 from pandas import date_range
 from vaex.dataframe import DataFrame as vDataFrame
 
+from oups.store.indexer import toplevel
 from oups.store.router import ParquetHandle
 
 from .. import TEST_DATA
 
-
-# TEST_DATA = 'test-data'
-# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
 
 df_ref = pDataFrame(
     {
@@ -27,6 +29,14 @@ df_ref = pDataFrame(
         "temperature": [8.4, 5.3, 4.9, 2.3],
     },
 )
+
+
+@toplevel
+class Indexer:
+    loc: str
+
+
+key_ref = Indexer("ah")
 
 
 def test_parquet_file(tmp_path):

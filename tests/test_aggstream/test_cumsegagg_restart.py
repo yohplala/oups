@@ -9,30 +9,31 @@ from functools import partial
 
 import pytest
 from numpy import array
+from numpy import random as nrandom
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame
 from pandas import DatetimeIndex
+from pandas import Timedelta
 from pandas import Timestamp as pTimestamp
 from pandas import concat as pconcat
 from pandas.core.resample import TimeGrouper
 
-from oups.streamagg.cumsegagg import DTYPE_DATETIME64
-from oups.streamagg.cumsegagg import DTYPE_FLOAT64
-from oups.streamagg.cumsegagg import DTYPE_INT64
-from oups.streamagg.cumsegagg import DTYPE_NULLABLE_INT64
-from oups.streamagg.cumsegagg import KEY_LAST_CHUNK_RES
-from oups.streamagg.cumsegagg import cumsegagg
-from oups.streamagg.cumsegagg import setup_cumsegagg
-from oups.streamagg.jcumsegagg import FIRST
-from oups.streamagg.jcumsegagg import LAST
-from oups.streamagg.jcumsegagg import MIN
-from oups.streamagg.jcumsegagg import SUM
-from oups.streamagg.segmentby import by_x_rows
-from oups.streamagg.segmentby import setup_segmentby
+from oups.aggstream.cumsegagg import DTYPE_DATETIME64
+from oups.aggstream.cumsegagg import DTYPE_FLOAT64
+from oups.aggstream.cumsegagg import DTYPE_INT64
+from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
+from oups.aggstream.cumsegagg import KEY_LAST_CHUNK_RES
+from oups.aggstream.cumsegagg import cumsegagg
+from oups.aggstream.cumsegagg import setup_cumsegagg
+from oups.aggstream.jcumsegagg import FIRST
+from oups.aggstream.jcumsegagg import LAST
+from oups.aggstream.jcumsegagg import MIN
+from oups.aggstream.jcumsegagg import SUM
+from oups.aggstream.segmentby import by_x_rows
+from oups.aggstream.segmentby import setup_segmentby
 
 
 # from pandas.testing import assert_frame_equal
-# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
 
 
 @pytest.mark.parametrize(
@@ -239,6 +240,7 @@ def test_cumsegagg_bin_only(
             #                                  10-9:44
             by_x_rows,
             "dti",
+            # snap_by
             [
                 DatetimeIndex(["2020-01-01 08:12", "2020-01-01 08:15"]),
                 DatetimeIndex(
@@ -558,7 +560,6 @@ def test_cumsegagg_bin_snap(
             agg=agg,
             bin_by=bin_by,
             buffer=buffer,
-            ordered_on=ordered_on,
             snap_by=snap_by[i] if isinstance(snap_by, list) else snap_by,
         )
         assert buffer[KEY_LAST_CHUNK_RES].equals(last_chunk_res_ref[i])
@@ -573,3 +574,57 @@ def test_cumsegagg_bin_snap(
     snap_res = pconcat(snap_res_to_concatenate)
     snap_res = snap_res[~snap_res.index.duplicated(keep="last")]
     assert snap_res.equals(snap_ref)
+
+
+def test_cumsegagg_bin_snap_time_grouper():
+    # Testing bins and snapshots, both as time grouper.
+    # This test case has shown trouble that transforming input data within
+    # 'setup_segmentby()' may lead to. Transformed values 'snap_by',
+    # and 'bin_on' were then not retrieved in 'cumsegagg()', leading to
+    # segmentation fault.
+    ordered_on = "ts"
+    val = "val"
+    bin_by = TimeGrouper(key=ordered_on, freq="10T", closed="left", label="left")
+    agg = {FIRST: (val, FIRST), LAST: (val, LAST)}
+    snap_by = TimeGrouper(key=ordered_on, freq="5T", closed="left", label="left")
+    # Seed data.
+    start = pTimestamp("2020/01/01")
+    rr = nrandom.default_rng(1)
+    N = 50
+    rand_ints = rr.integers(120, size=N)
+    rand_ints.sort()
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed = pDataFrame({ordered_on: ts, val: rand_ints})
+    # Setup for restart
+    agg_as_list = setup_cumsegagg(agg, seed.dtypes.to_dict())
+    bin_by_as_dict = setup_segmentby(bin_by=bin_by, ordered_on=ordered_on, snap_by=snap_by)
+    seed1 = seed[:28]
+    seed2 = seed[28:]
+    buffer = {}
+    # Aggregation
+    bin_res1, snap_res1 = cumsegagg(
+        data=seed1,
+        agg=agg_as_list,
+        bin_by=bin_by_as_dict,
+        buffer=buffer,
+    )
+    bin_res2, snap_res2 = cumsegagg(
+        data=seed2,
+        agg=agg_as_list,
+        bin_by=bin_by_as_dict,
+        buffer=buffer,
+    )
+    bin_res = pconcat([bin_res1, bin_res2])
+    bin_res = bin_res[~bin_res.index.duplicated(keep="last")]
+    snap_res = pconcat([snap_res1, snap_res2])
+    snap_res = snap_res[~snap_res.index.duplicated(keep="last")]
+    # Reference results obtained by a straight execution.
+    bin_res_ref, snap_res_ref = cumsegagg(
+        data=seed,
+        agg=agg,
+        bin_by=bin_by,
+        ordered_on=ordered_on,
+        snap_by=snap_by,
+    )
+    assert bin_res.equals(bin_res_ref)
+    assert snap_res.equals(snap_res_ref)

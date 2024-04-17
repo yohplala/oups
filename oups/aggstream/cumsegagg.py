@@ -21,11 +21,14 @@ from pandas import NaT as pNaT
 from pandas import Series
 from pandas.core.resample import TimeGrouper
 
-from oups.streamagg.jcumsegagg import AGG_FUNCS
-from oups.streamagg.jcumsegagg import jcsagg
-from oups.streamagg.segmentby import KEY_LAST_BIN_LABEL
-from oups.streamagg.segmentby import KEY_ORDERED_ON
-from oups.streamagg.segmentby import segmentby
+from oups.aggstream.jcumsegagg import AGG_FUNCS
+from oups.aggstream.jcumsegagg import jcsagg
+from oups.aggstream.segmentby import KEY_BIN_ON
+from oups.aggstream.segmentby import KEY_LAST_BIN_LABEL
+from oups.aggstream.segmentby import KEY_ORDERED_ON
+from oups.aggstream.segmentby import KEY_SNAP_BY
+from oups.aggstream.segmentby import segmentby
+from oups.aggstream.segmentby import setup_segmentby
 
 
 # Some constants.
@@ -376,6 +379,9 @@ def cumsegagg(
     # without snapshot in 1st iteration, an empty 'snap_res' gets returned
     # nonetheless and that concatenation can be managed with subsequent
     # 'snap_res' from next iterations.
+    # TODO: if requesting snapshots, bin aggregation results are not necessary.
+    # Consider just outputting label of bins in snapshot results, without
+    # agrgegation results for bins? (memory savings).
     len_data = len(data)
     if not len_data:
         # 'data' is empty. Simply return.
@@ -384,12 +390,24 @@ def cumsegagg(
         # Reshape aggregation definition.
         agg = setup_cumsegagg(agg, data.dtypes.to_dict())
     if buffer is None:
-        # First agg iteration.
+        # Single run agg.
         preserve_res = False
     else:
-        # New agg iteration.
+        # Agg iteration with possible restart.
+        # Detection of 1st iteration is managed below with test if a new bin
+        # is started.
         preserve_res = True
         prev_last_bin_label = buffer[KEY_LAST_BIN_LABEL] if KEY_LAST_BIN_LABEL in buffer else None
+    if not isinstance(bin_by, dict):
+        bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
+    # Following 'setup_segmentby', parameters 'ordered_on', 'bin_on'  have to
+    # be retrieved from it.
+    ordered_on = bin_by[KEY_ORDERED_ON]
+    # 'bin_by' as a dict may contain 'snap_by' if it is a TimeGrouper.
+    if bin_by[KEY_SNAP_BY] is not None:
+        # 'bin_by[KEY_SNAP_BY]' is not none if 'snap_by' is a TimeGrouper.
+        # Otherwise, it can be a DatetimeIndex or a Series.
+        snap_by = bin_by[KEY_SNAP_BY]
     # In case of restart, 'n_max_null_bins' is a max because 1st null bin may
     # well be continuation of last in-progress bin, without result in current
     # iteration, but with results from previous iteration.
@@ -403,8 +421,6 @@ def cumsegagg(
     ) = segmentby(
         data=data,
         bin_by=bin_by,
-        bin_on=bin_on,
-        ordered_on=ordered_on,
         snap_by=snap_by,
         buffer=buffer,
     )
@@ -412,11 +428,6 @@ def cumsegagg(
         # A new bin has been started. Do not preserve past results.
         # This behavior is only possible in case no snapshot is used.
         preserve_res = False
-    if isinstance(bin_by, dict):
-        # If 'bin_by' is a dict, then setup has been managed separately, and
-        # 'cumsegagg' may be running without 'bin_on' and 'ordered_on'
-        # parameters. force 'ordered_on' as it is re-used below.
-        ordered_on = bin_by[KEY_ORDERED_ON]
     # Initiate dict of result columns.
     # Setup 'chunk_res'.
     chunk_res_prev = (
@@ -501,7 +512,7 @@ def cumsegagg(
         buffer[KEY_LAST_CHUNK_RES] = pDataFrame(chunk_res, copy=False)
     # Assemble 'bin_res' as a pandas DataFrame.
     bin_res = pDataFrame(bin_res, index=bin_labels, copy=False)
-    bin_res.index.name = ordered_on if ordered_on else bin_on
+    bin_res.index.name = ordered_on if ordered_on else bin_by[KEY_BIN_ON]
     # Set null values.
     if n_max_null_bins != 0:
         null_bin_labels = bin_labels.iloc[null_bin_indices[~nisin(null_bin_indices, -1)]]

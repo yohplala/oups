@@ -42,8 +42,8 @@ class ParquetHandle:
         """
         Instantiate parquet handle.
 
-        Parameter
-        ---------
+        Parameters
+        ----------
         dirpath : str
             Directory path from where to load data.
 

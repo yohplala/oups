@@ -4,17 +4,22 @@ Created on Sat Dec 18 15:00:00 2021.
 
 @author: yoh
 
+Test utils.
+from os import path as os_path
+tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+store = ParquetSet(os_path.join(tmp_path, "store"), ShortIndexer)
+
 """
+from os import path as os_path
+
+import pytest
 from pandas import DataFrame as pDataFrame
 
 from oups import ParquetSet
 from oups import toplevel
 from oups.store.writer import OUPS_METADATA
 from oups.store.writer import OUPS_METADATA_KEY
-
-
-# from os import path as os_path
-# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+from oups.store.writer import write_metadata
 
 
 @toplevel
@@ -22,14 +27,21 @@ class ShortIndexer:
     comp: str
 
 
-def test_custom_metadata(tmp_path):
+@pytest.fixture
+def store(tmp_path):
+    # Reuse pre-defined Indexer.
+    return ParquetSet(os_path.join(tmp_path, "store"), ShortIndexer)
+
+
+sidx = ShortIndexer("sidx")
+pdf = pDataFrame({"a": [1], "b": [2]})
+
+
+def test_custom_metadata(store):
     # Write metadata in new dataset, and update them.
     # No oups specific metadata.
     # Step 1: write.
-    pdf = pDataFrame({"a": [1], "b": [2]})
     metadata = {"md1": "step1", "md2": "step1", "md3": "step1"}
-    store = ParquetSet(tmp_path, ShortIndexer)
-    sidx = ShortIndexer("sidx")
     store[sidx] = {"metadata": metadata}, pdf
     # Retrieve metadata.
     md_rec = store[sidx].metadata
@@ -46,14 +58,11 @@ def test_custom_metadata(tmp_path):
     assert md_rec == md_ref
 
 
-def test_oups_metadata_wo_custom_metadata(tmp_path):
+def test_oups_metadata_wo_custom_metadata(store):
     # Write specific oups metadata in new dataset, and update them.
     # No user-defined metadata.
     # Step 1: write.
-    pdf = pDataFrame({"a": [1], "b": [2]})
     metadata = {"md1": "step1", "md2": "step1", "md3": "step1"}
-    store = ParquetSet(tmp_path, ShortIndexer)
-    sidx = ShortIndexer("sidx")
     OUPS_METADATA[sidx] = metadata
     store[sidx] = pdf
     # Retrieve oups metadata.
@@ -72,13 +81,10 @@ def test_oups_metadata_wo_custom_metadata(tmp_path):
     assert not OUPS_METADATA
 
 
-def test_oups_metadata_with_custom_metadata(tmp_path):
+def test_oups_metadata_with_custom_metadata(store):
     # Write specific oups metadata in new dataset, and update them.
     # with user-defined metadata.
     # Step 1: write.
-    pdf = pDataFrame({"a": [1], "b": [2]})
-    store = ParquetSet(tmp_path, ShortIndexer)
-    sidx = ShortIndexer("sidx")
     metadata = {"md1": "step1", "md2": "step1", "md3": "step1"}
     OUPS_METADATA[sidx] = metadata
     store[sidx] = {"metadata": metadata.copy()}, pdf
@@ -107,3 +113,15 @@ def test_oups_metadata_with_custom_metadata(tmp_path):
     assert OUPS_METADATA_KEY in md_rec
     del md_rec[OUPS_METADATA_KEY]
     assert md_rec == md_ref
+
+
+def test_write_metadata(store):
+    # Only updating metadata, that 's all. No data being written.
+    # Write parquet file.
+    store[sidx] = pdf
+    # Write application-related metadata.
+    md_ref = {"my_app": "lala"}
+    OUPS_METADATA[sidx] = md_ref
+    write_metadata(pf=store[sidx].pf, md_key=sidx)
+    # Test
+    assert store[sidx]._oups_metadata == md_ref

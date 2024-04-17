@@ -13,12 +13,12 @@ from numpy import diff as ndiff
 from numpy import ones
 from numpy import zeros
 
-from oups.streamagg.jcumsegagg import jcsagg
-from oups.streamagg.jcumsegagg import jfirst
-from oups.streamagg.jcumsegagg import jlast
-from oups.streamagg.jcumsegagg import jmax
-from oups.streamagg.jcumsegagg import jmin
-from oups.streamagg.jcumsegagg import jsum
+from oups.aggstream.jcumsegagg import jcsagg
+from oups.aggstream.jcumsegagg import jfirst
+from oups.aggstream.jcumsegagg import jlast
+from oups.aggstream.jcumsegagg import jmax
+from oups.aggstream.jcumsegagg import jmin
+from oups.aggstream.jcumsegagg import jsum
 
 
 INT64 = "int64"

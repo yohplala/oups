@@ -228,8 +228,7 @@ class ParquetSet:
             if not isinstance(kwargs, dict):
                 raise TypeError(
                     f"first item {kwargs} should be a dict to "
-                    "define parameter setting for "
-                    "'writer.write'.",
+                    "define parameter setting for 'writer.write'.",
                 )
             self.set(key, data, **kwargs)
         else:
