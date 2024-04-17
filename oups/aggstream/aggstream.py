@@ -10,7 +10,7 @@ from collections import namedtuple
 from dataclasses import dataclass
 from itertools import chain
 from multiprocessing import cpu_count
-from typing import Callable, Iterable, Optional, Tuple, Union
+from typing import Callable, Iterable, List, Optional, Tuple, Union
 
 from joblib import Parallel
 from joblib import delayed
@@ -528,6 +528,47 @@ def _iter_data(
                 )
 
 
+def _concat_agg_res(
+    agg_res_buffers: List[pDataFrame],
+    agg_res: pDataFrame,
+    append_last_res: bool,
+    index_name: str,
+):
+    """
+    Concat aggregation results with / without last row.
+
+    Parameters
+    ----------
+    agg_res_buffers : List[pDataFrame]
+        List of aggregation results to concatenate.
+    agg_res : pDataFrame
+        Last aggregation results (all rows from last iteration).
+    append_last_res : bool
+        If 'agg_res' should be appended to 'agg_res_buffer' and if 'bin_res'
+        should be appended to 'bin_res_buffers'.
+    index_name : str, default None
+        If a string, index name of dataframe resulting from aggregation with
+        this value, which will be enforced in written results.
+
+    Returns
+    -------
+    pDataFrame
+        List of aggregation results concatenated in a single DataFrame.
+
+    """
+    agg_res_list = [*agg_res_buffers, agg_res] if append_last_res else agg_res_buffers
+    # Make a copy when a single item, to not propagate the 'reset_index'
+    # to original 'agg_res'.
+    agg_res = pconcat(agg_res_list) if len(agg_res_list) > 1 else agg_res_list[0].copy(deep=False)
+    if index_name:
+        # In case 'by' is a callable, index may have no name, but user may have
+        # defined one with 'bin_on' parameter.
+        agg_res.index.name = index_name
+    # Keep group keys as a column before post-processing.
+    agg_res.reset_index(inplace=True)
+    return agg_res
+
+
 def _post_n_write_agg_chunks(
     agg_buffers: dict,
     append_last_res: bool,
@@ -558,11 +599,13 @@ def _post_n_write_agg_chunks(
         - agg_res_buffer : List[pDataFrame], list of chunks resulting from
           aggregation (pandas DataFrame), either from bins if only bins
           requested, or from snapshots if bins and snapshots requested.
-          It is flushed here after writing
+          It contains 'agg_res' (last aggregation results),but without last
+          row. It is flushed here after writing
         - bin_res_buffer : List[pandas.DataFrame], list of bins resulting from
           aggregation (pandas dataframes), when bins and snapshots are
           requested.
-          It is flushed here after writing
+          It contains 'bin_res' (last aggregation results), but without last
+          row. It is flushed here after writing
         - post_buffer : dict, buffer to keep track of data that can be
           processed during previous iterations. This pointer should not be
           re-initialized in 'post' or data from previous iterations will be
@@ -628,42 +671,16 @@ def _post_n_write_agg_chunks(
             write_metadata(pf=store[key].pf, md_key=key)
         return
     # Concat list of aggregation results.
-    # TODO: factorize these 2 x 5 rows of code below, for bin res and snap res ...
-    # 'agg_res_buffer'
-    agg_res_buffer = (
-        [*agg_buffers[KEY_AGG_RES_BUFFER], agg_res]
-        if append_last_res
-        else agg_buffers[KEY_AGG_RES_BUFFER]
-    )
-    # Make a copy when a single item, to not propagate the 'reset_index'
-    # to original 'agg_res'.
-    agg_res = (
-        pconcat(agg_res_buffer) if len(agg_res_buffer) > 1 else agg_res_buffer[0].copy(deep=False)
-    )
-    if index_name:
-        # In case 'by' is a callable, index may have no name, but user may have
-        # defined one with 'bin_on' parameter.
-        agg_res.index.name = index_name
-    # Keep group keys as a column before post-processing.
-    agg_res.reset_index(inplace=True)
-    # 'bin_res_buffer'
+    agg_res = _concat_agg_res(agg_buffers[KEY_AGG_RES_BUFFER], agg_res, append_last_res, index_name)
+    # Same if needed with 'bin_res_buffer'
     bin_res = agg_buffers[KEY_BIN_RES]
     if bin_res is not None:
-        bin_res_buffer = (
-            [*agg_buffers[KEY_BIN_RES_BUFFER], bin_res]
-            if append_last_res
-            else agg_buffers[KEY_BIN_RES_BUFFER]
+        bin_res = _concat_agg_res(
+            agg_buffers[KEY_BIN_RES_BUFFER],
+            bin_res,
+            append_last_res,
+            index_name,
         )
-        bin_res = (
-            pconcat(bin_res_buffer)
-            if len(bin_res_buffer) > 1
-            else bin_res_buffer[0].copy(deep=False)
-        )
-        if index_name:
-            # In case 'by' is a callable, index may have no name, but user may
-            # have defined one with 'bin_on' parameter.
-            bin_res.index.name = index_name
-        bin_res.reset_index(inplace=True)
     post_buffer = agg_buffers[KEY_POST_BUFFER]
     if post:
         # Post processing if any.
@@ -729,8 +746,9 @@ def agg_iter(
         agg_res_len = len(agg_res)
         agg_res_buffer = agg_buffers[KEY_AGG_RES_BUFFER]
         if agg_res_len > 1:
-            # Remove last row from 'agg_res' and add to
-            # 'agg_res_buffer'.
+            # Add 'agg_res' to 'agg_res_buffer' ignoring last row.
+            # It is incimplete, so useless to write it to results while
+            # aggregation iterations are on-going.
             agg_res_buffer.append(agg_res.iloc[:-1])
             # Remove last row that is not recorded from total number of rows.
             agg_buffers["agg_n_rows"] += agg_res_len - 1
@@ -1350,9 +1368,3 @@ class AggStream:
             )
         if seed and seed_check_exception:
             raise SeedCheckException()
-
-
-# Tests:
-# - Test new parameter: seed check exception
-#    for seed check exception, check the last '_last_seed_index' has been correctly recorded
-#    and aggregation results integrate results from last seed chunk.

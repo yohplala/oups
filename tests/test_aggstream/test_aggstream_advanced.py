@@ -37,6 +37,7 @@ from oups import ParquetSet
 from oups import toplevel
 from oups.aggstream.aggstream import KEY_AGGSTREAM
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
+from oups.aggstream.aggstream import SeedCheckException
 from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
 from oups.aggstream.cumsegagg import cumsegagg
 from oups.aggstream.jcumsegagg import FIRST
@@ -295,6 +296,94 @@ def test_exception_different_indexes_at_restart(store, seed_path):
             keys={key1: deepcopy(key1_cf), key2: deepcopy(key2_cf)},
             max_row_group_size=max_row_group_size,
         )
+
+
+def test_exception_seed_check_and_restart(store, seed_path):
+    # Test exception when checking seed data, then restart with corrected seed.
+    # - key 1: filter1, time grouper '2T', agg 'first', and 'last',
+    # - key 2: filter2, time grouper '15T', agg 'first', and 'max',
+    #
+    def check(seed_chunk, check_buffer=None):
+        """
+        Raise a 'ValueError' if a NaT is in 'ordered_on' column.
+        """
+        if seed_chunk.loc[:, ordered_on].isna().any():
+            raise ValueError
+
+    key1 = Indexer("agg_2T")
+    key1_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
+        "agg": {FIRST: ("val", FIRST), LAST: ("val", LAST)},
+    }
+    key2 = Indexer("agg_60T")
+    key2_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="60T", closed="left", label="left"),
+        "agg": {FIRST: ("val", FIRST), MAX: ("val", MAX)},
+    }
+    filter1 = "filter1"
+    filter2 = "filter2"
+    filter_on = "filter_on"
+    max_row_group_size = 6
+    as_ = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys={
+            filter1: {key1: deepcopy(key1_cf)},
+            filter2: {key2: deepcopy(key2_cf)},
+        },
+        filters={
+            filter1: [(filter_on, "==", True)],
+            filter2: [(filter_on, "==", False)],
+        },
+        max_row_group_size=max_row_group_size,
+        check=check,
+    )
+    # Seed data.
+    start = Timestamp("2020/01/01")
+    rr = np.random.default_rng(1)
+    N = 20
+    rand_ints = rr.integers(100, size=N)
+    rand_ints.sort()
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    filter_val = np.ones(len(ts), dtype=bool)
+    filter_val[::2] = False
+    seed_orig = pDataFrame({ordered_on: ts, "val": rand_ints, filter_on: filter_val})
+    seed_mod = seed_orig.copy(deep=True)
+    # Set a 'NaT' in 'ordered_on' column, 2nd chunk for raising an exception.
+    seed_mod.iloc[11, seed_orig.columns.get_loc(ordered_on)] = pNaT
+    # Streamed aggregation, raising an exception, but 1st chunk should be
+    # written.
+    with pytest.raises(SeedCheckException):
+        as_.agg(
+            seed=[seed_mod[:10], seed_mod[10:]],
+            trim_start=False,
+            discard_last=False,
+            final_write=True,
+        )
+    # Check 'restart_index' in results.
+    restart_index = seed_mod.iloc[9, seed_mod.columns.get_loc(ordered_on)]
+    assert store[key1]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == restart_index
+    assert store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == restart_index
+    # Restart with 'corrected' seed.
+    as_.agg(
+        seed=seed_orig[10:],
+        trim_start=False,
+        discard_last=False,
+        final_write=True,
+    )
+    # Check with ref results.
+    bin_res_ref_key1 = cumsegagg(
+        data=seed_orig.loc[seed_orig[filter_on], :],
+        **key1_cf,
+        ordered_on=ordered_on,
+    )
+    assert store[key1].pdf.equals(bin_res_ref_key1.reset_index())
+    bin_res_ref_key2 = cumsegagg(
+        data=seed_orig.loc[~seed_orig[filter_on], :],
+        **key2_cf,
+        ordered_on=ordered_on,
+    )
+    assert store[key2].pdf.equals(bin_res_ref_key2.reset_index())
 
 
 def post(buffer: dict, bin_res: pDataFrame, snap_res: pDataFrame):
