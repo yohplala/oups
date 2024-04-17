@@ -398,6 +398,9 @@ def _iter_data(
     """
     Iterate provided seed, applying sequentially (optionally) filters.
 
+    Seed has to be monotonic increasing on 'ordered_on' column. If not, it is
+    ordered.
+
     Parameters
     ----------
     seed : Iterable[pDataFrame]
