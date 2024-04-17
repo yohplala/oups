@@ -470,10 +470,10 @@ def _iter_data(
     seed_remainder = None
     for seed_chunk in seed:
         # Check seed chunk is ordered on 'ordered_on', else order.
-        # if not seed_chunk[ordered_on].is_monotonic_increasing:
         # This re-ordering is made because for 'trim_start' and
         # 'discard_last', this ordereding is required.
-        # seed_chunk.sort_values(by=ordered_on, inplace=True)
+        if not seed_chunk[ordered_on].is_monotonic_increasing:
+            seed_chunk.sort_values(by=ordered_on, inplace=True)
         # Step 1 / Seed check by user.
         if check:
             # Apply user checks.
