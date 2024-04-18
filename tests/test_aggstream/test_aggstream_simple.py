@@ -1435,17 +1435,7 @@ def test_different_ordered_on(store):
 
 
 def test_exception_unordered_seed(store, seed_path):
-    # Test exception when checking seed data, with seed unordered.
-    # - key 1: time grouper '2T', agg 'first', and 'last',
-    #
-    start = Timestamp("2020/01/01")
-    rr = np.random.default_rng(1)
-    N = 20
-    rand_ints = rr.integers(100, size=N)
-    rand_ints.sort()
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
-    ref_idx = 10
-
+    # Test exception when checking seed data, with unordered seed.
     ordered_on = "ts"
     key_cf = {
         "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
@@ -1460,6 +1450,13 @@ def test_exception_unordered_seed(store, seed_path):
         max_row_group_size=max_row_group_size,
     )
     # Seed data.
+    start = Timestamp("2020/01/01")
+    rr = np.random.default_rng(1)
+    N = 20
+    rand_ints = rr.integers(100, size=N)
+    rand_ints.sort()
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ref_idx = 10
     seed = pDataFrame({ordered_on: ts, "val": rand_ints})
     # Set a 'NaT' in 'ordered_on' column, 2nd chunk for raising an exception.
     seed.iloc[ref_idx, seed.columns.get_loc(ordered_on)] = pNaT
