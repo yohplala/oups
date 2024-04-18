@@ -38,6 +38,7 @@ from oups.aggstream.aggstream import KEY_AGGSTREAM
 from oups.aggstream.aggstream import KEY_POST_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
 from oups.aggstream.aggstream import NO_FILTER_ID
+from oups.aggstream.aggstream import SeedCheckException
 from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
 from oups.aggstream.jcumsegagg import FIRST
 from oups.aggstream.jcumsegagg import LAST
@@ -1431,3 +1432,45 @@ def test_different_ordered_on(store):
     ref_res = seed.groupby(bin_by).agg(**agg).reset_index(drop=True)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
+
+
+def test_exception_unordered_seed(store, seed_path):
+    # Test exception when checking seed data, with seed unordered.
+    # - key 1: time grouper '2T', agg 'first', and 'last',
+    #
+    start = Timestamp("2020/01/01")
+    rr = np.random.default_rng(1)
+    N = 20
+    rand_ints = rr.integers(100, size=N)
+    rand_ints.sort()
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ref_idx = 10
+
+    ordered_on = "ts"
+    key_cf = {
+        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
+        "agg": {FIRST: ("val", FIRST), LAST: ("val", LAST)},
+    }
+    max_row_group_size = 6
+    as_ = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys=key,
+        **key_cf,
+        max_row_group_size=max_row_group_size,
+    )
+    # Seed data.
+    seed = pDataFrame({ordered_on: ts, "val": rand_ints})
+    # Set a 'NaT' in 'ordered_on' column, 2nd chunk for raising an exception.
+    seed.iloc[ref_idx, seed.columns.get_loc(ordered_on)] = pNaT
+    # Streamed aggregation, raising an exception, but 1st chunk should be
+    # written.
+    with pytest.raises(SeedCheckException, match="^seed data is not in"):
+        as_.agg(
+            seed=[seed[:ref_idx], seed[ref_idx:]],
+            trim_start=False,
+            discard_last=False,
+            final_write=True,
+        )
+    # Check 'restart_index' in results.
+    assert store[key]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == ts[ref_idx - 1]

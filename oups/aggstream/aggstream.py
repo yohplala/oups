@@ -378,11 +378,14 @@ class SeedCheckException(Exception):
     Exception related to user-defined checks on seed chunk.
     """
 
-    def __init__(self):
+    def __init__(self, message: str = None):
         """
         Exception message.
         """
-        self.message = "failing used-defined checks."
+        if message is None:
+            self.message = "failing user-defined checks."
+        else:
+            self.message = message
 
 
 def _iter_data(
@@ -472,20 +475,24 @@ def _iter_data(
         trim_start = False
     seed_remainder = None
     for seed_chunk in seed:
-        # Check seed chunk is ordered on 'ordered_on', else order.
+        # Check seed chunk is ordered on 'ordered_on'.
         # This re-ordering is made because for 'trim_start' and
         # 'discard_last', this ordereding is required.
         if not seed_chunk[ordered_on].is_monotonic_increasing:
-            seed_chunk.sort_values(by=ordered_on, inplace=True)
+            # Currently un-eased to silently modify seed data without knowing
+            # if it makes sense, so leaving this row commented.
+            # seed_chunk.sort_values(by=ordered_on, inplace=True)
+            # Instead, raise an exception.
+            raise SeedCheckException("seed data is not in ascending order.")
         # Step 1 / Seed check by user.
         if check:
             # Apply user checks.
             try:
                 check(seed_chunk, check_buffer)
-            except Exception:
+            except Exception as e:
                 # Stop iteration in case of failing check.
                 # Aggregation has been run up to the last valid chunk.
-                raise SeedCheckException()
+                raise SeedCheckException(str(e))
         # Step 2 / If a previous remainder, concatenate it to give current
         # DataFrame its 'final' length.
         if not (seed_remainder is None or seed_remainder.empty):
@@ -1350,8 +1357,9 @@ class AggStream:
                     # Set 'seed_index_restart' to the 'last_seed_index' with
                     # which restarting the next aggregation iteration.
                     self.seed_config[KEY_RESTART_INDEX] = _last_seed_index
-            except SeedCheckException:
+            except SeedCheckException as sce:
                 seed_check_exception = True
+                exception_message = str(sce)
         if final_write:
             # Post-process & write results from last iteration, this time
             # keeping last aggregation row, and recording metadata for a
@@ -1370,4 +1378,4 @@ class AggStream:
                 for key, agg_res in self.agg_buffers.items()
             )
         if seed and seed_check_exception:
-            raise SeedCheckException()
+            raise SeedCheckException(exception_message)

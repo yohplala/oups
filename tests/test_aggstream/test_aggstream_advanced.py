@@ -303,12 +303,22 @@ def test_exception_seed_check_and_restart(store, seed_path):
     # - key 1: filter1, time grouper '2T', agg 'first', and 'last',
     # - key 2: filter2, time grouper '15T', agg 'first', and 'max',
     #
+    start = Timestamp("2020/01/01")
+    rr = np.random.default_rng(1)
+    N = 20
+    rand_ints = rr.integers(100, size=N)
+    rand_ints.sort()
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ref_idx = 10
+
     def check(seed_chunk, check_buffer=None):
         """
-        Raise a 'ValueError' if a NaT is in 'ordered_on' column.
+        Raise a 'ValueError' if 'ts[10]' is at start in 'ordered_on' column.
         """
-        if seed_chunk.loc[:, ordered_on].isna().any():
-            raise ValueError
+        if seed_chunk.iloc[0].loc[ordered_on] == ts[ref_idx]:
+            raise ValueError(
+                f"not possible to have {ts[ref_idx]} as first value in 'ordered_on' column.",
+            )
 
     key1 = Indexer("agg_2T")
     key1_cf = {
@@ -339,47 +349,39 @@ def test_exception_seed_check_and_restart(store, seed_path):
         check=check,
     )
     # Seed data.
-    start = Timestamp("2020/01/01")
-    rr = np.random.default_rng(1)
-    N = 20
-    rand_ints = rr.integers(100, size=N)
-    rand_ints.sort()
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     filter_val = np.ones(len(ts), dtype=bool)
     filter_val[::2] = False
-    seed_orig = pDataFrame({ordered_on: ts, "val": rand_ints, filter_on: filter_val})
-    seed_mod = seed_orig.copy(deep=True)
-    # Set a 'NaT' in 'ordered_on' column, 2nd chunk for raising an exception.
-    seed_mod.iloc[11, seed_orig.columns.get_loc(ordered_on)] = pNaT
+    seed = pDataFrame({ordered_on: ts, "val": rand_ints, filter_on: filter_val})
     # Streamed aggregation, raising an exception, but 1st chunk should be
     # written.
-    with pytest.raises(SeedCheckException):
+    with pytest.raises(SeedCheckException, match="^not possible to have"):
         as_.agg(
-            seed=[seed_mod[:10], seed_mod[10:]],
+            seed=[seed[:ref_idx], seed[ref_idx:]],
             trim_start=False,
             discard_last=False,
             final_write=True,
         )
     # Check 'restart_index' in results.
-    restart_index = seed_mod.iloc[9, seed_mod.columns.get_loc(ordered_on)]
-    assert store[key1]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == restart_index
-    assert store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == restart_index
+    assert store[key1]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == ts[ref_idx - 1]
+    assert store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == ts[ref_idx - 1]
+    # "Correct" seed.
+    seed.iloc[ref_idx, seed.columns.get_loc(ordered_on)] = ts[ref_idx] + Timedelta("1s")
     # Restart with 'corrected' seed.
     as_.agg(
-        seed=seed_orig[10:],
+        seed=seed[ref_idx:],
         trim_start=False,
         discard_last=False,
         final_write=True,
     )
     # Check with ref results.
     bin_res_ref_key1 = cumsegagg(
-        data=seed_orig.loc[seed_orig[filter_on], :],
+        data=seed.loc[seed[filter_on], :],
         **key1_cf,
         ordered_on=ordered_on,
     )
     assert store[key1].pdf.equals(bin_res_ref_key1.reset_index())
     bin_res_ref_key2 = cumsegagg(
-        data=seed_orig.loc[~seed_orig[filter_on], :],
+        data=seed.loc[~seed[filter_on], :],
         **key2_cf,
         ordered_on=ordered_on,
     )
