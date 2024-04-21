@@ -41,7 +41,9 @@ from oups.aggstream.aggstream import FilterApp
 from oups.aggstream.jcumsegagg import FIRST
 from oups.aggstream.jcumsegagg import LAST
 from oups.aggstream.jcumsegagg import SUM
+from oups.aggstream.segmentby import KEY_BIN_BY
 from oups.aggstream.segmentby import KEY_ORDERED_ON
+from oups.aggstream.segmentby import KEY_SNAP_BY
 from oups.store.writer import KEY_DUPLICATES_ON
 from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
 
@@ -81,7 +83,7 @@ def always_false(**kwargs):
                 KEY_MAX_ROW_GROUP_SIZE: 6,
                 KEY_ORDERED_ON: "ts",
                 "keys": Indexer("key1"),
-                "bin_by": TimeGrouper(key="ts", freq="1H", closed="left", label="left"),
+                KEY_BIN_BY: TimeGrouper(key="ts", freq="1H", closed="left", label="left"),
                 KEY_AGG: {"agg_out": ("val", SUM)},
             },
             # ref_seed_config
@@ -131,22 +133,22 @@ def always_false(**kwargs):
                 "keys": {
                     Indexer("key1_some_default"): {
                         KEY_AGG: {"out_spec": ("in_spec", FIRST)},
-                        "bin_by": TimeGrouper(key="ts_dflt", freq="1H"),
+                        KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
                         KEY_POST: always_false,
                     },
                     Indexer("key2_only_specific"): {
                         KEY_AGG: {"out_spec": ("in_spec", FIRST)},
-                        "bin_by": always_true,
+                        KEY_BIN_BY: always_true,
                         KEY_POST: None,
                         KEY_MAX_ROW_GROUP_SIZE: 3000,
                         KEY_ORDERED_ON: "ts_spec",
                     },
                     Indexer("key3_only_default"): {
-                        "bin_by": always_false,
+                        KEY_BIN_BY: always_false,
                         "bin_on": ("bin_on_spec", "bin_out_spec"),
                     },
                     Indexer("key4_most_default"): {
-                        "bin_by": TimeGrouper(key="ts_dflt", freq="1H"),
+                        KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
                         KEY_ORDERED_ON: "ts_spec",
                     },
                 },
@@ -235,29 +237,29 @@ def always_false(**kwargs):
                 KEY_CHECK: always_true,
                 KEY_AGG: {"out_dflt": ("in_dflt", LAST)},
                 KEY_POST: always_true,
-                "snap_by": TimeGrouper(key="ts_dflt", freq="30T"),
+                KEY_SNAP_BY: TimeGrouper(key="ts_dflt", freq="30T"),
                 "keys": {
                     "filter1": {
                         Indexer("key1_some_default"): {
                             KEY_AGG: {"out_spec": ("in_spec", FIRST)},
-                            "bin_by": TimeGrouper(key="ts_dflt", freq="1H"),
+                            KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
                             KEY_POST: always_false,
                         },
                         Indexer("key2_only_specific"): {
                             KEY_AGG: {"out_spec": ("in_spec", FIRST)},
-                            "bin_by": always_true,
+                            KEY_BIN_BY: always_true,
                             KEY_POST: None,
                             KEY_MAX_ROW_GROUP_SIZE: 3000,
                             KEY_ORDERED_ON: "ts_spec",
                         },
                         Indexer("key3_only_default"): {
-                            "bin_by": always_false,
+                            KEY_BIN_BY: always_false,
                             "bin_on": ("bin_on_spec", "bin_out_spec"),
                         },
                     },
                     "filter2": {
                         Indexer("key4_most_default"): {
-                            "bin_by": TimeGrouper(key="ts_dflt", freq="1H"),
+                            KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
                             KEY_ORDERED_ON: "ts_spec",
                         },
                     },
@@ -357,9 +359,9 @@ def test_aggstream_init(
     assert as_.seed_config == ref_seed_config
     # Do not check 'seg_config' in 'keys_config'.
     res_keys_config = deepcopy(as_.keys_config)
-    if "snap_by" in root_parameters:
+    if KEY_SNAP_BY in root_parameters:
         # Check 'snap_by' is initialized in 'seg_config':
-        ref_grouper = root_parameters["snap_by"]
+        ref_grouper = root_parameters[KEY_SNAP_BY]
         ref_grouper_attr = {
             "key": ref_grouper.key,
             "freq": ref_grouper.freq,
@@ -373,7 +375,7 @@ def test_aggstream_init(
             "origin": ref_grouper.origin,
         }
         for key in ref_keys_config:
-            res_grouper = res_keys_config[key]["seg_config"]["snap_by"]
+            res_grouper = res_keys_config[key]["seg_config"][KEY_SNAP_BY]
             for attr in ref_grouper_attr:
                 assert getattr(res_grouper, attr) == ref_grouper_attr[attr]
     for key, ref in ref_keys_config.items():

@@ -424,6 +424,7 @@ def _iter_data(
             for storing temporary results from one chunk processing to
             the next. Its initial value is that provided by `check.buffer`.
 
+        In-place modifications of seed dataframe can be carried out here.
     check_buffer : dict or None
         Buffer to keep track of intermediate data that can be required for
         proceeding with check of individual seed item.

@@ -35,6 +35,7 @@ from pandas.core.resample import TimeGrouper
 from oups import AggStream
 from oups import ParquetSet
 from oups import toplevel
+from oups.aggstream.aggstream import KEY_AGG
 from oups.aggstream.aggstream import KEY_AGGSTREAM
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
 from oups.aggstream.aggstream import SeedCheckException
@@ -44,6 +45,8 @@ from oups.aggstream.jcumsegagg import FIRST
 from oups.aggstream.jcumsegagg import LAST
 from oups.aggstream.jcumsegagg import MAX
 from oups.aggstream.jcumsegagg import MIN
+from oups.aggstream.segmentby import KEY_BIN_BY
+from oups.aggstream.segmentby import KEY_SNAP_BY
 from oups.aggstream.segmentby import by_x_rows
 
 
@@ -77,16 +80,16 @@ def test_3_keys_only_bins(store, seed_path):
     key2 = Indexer("agg_13T")
     key3 = Indexer("agg_4rows")
     key1_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
-        "agg": {FIRST: ("val", FIRST), LAST: ("val", LAST)},
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
+        KEY_AGG: {FIRST: ("val", FIRST), LAST: ("val", LAST)},
     }
     key2_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="13T", closed="left", label="left"),
-        "agg": {FIRST: ("val", FIRST), MAX: ("val", MAX)},
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="13T", closed="left", label="left"),
+        KEY_AGG: {FIRST: ("val", FIRST), MAX: ("val", MAX)},
     }
     key3_cf = {
-        "bin_by": by_x_rows,
-        "agg": {MIN: ("val", MIN), MAX: ("val", MAX)},
+        KEY_BIN_BY: by_x_rows,
+        KEY_AGG: {MIN: ("val", MIN), MAX: ("val", MAX)},
     }
     max_row_group_size = 6
     key_configs = {
@@ -130,15 +133,15 @@ def test_3_keys_only_bins(store, seed_path):
             key3: deepcopy(key3_cf),
         }
         k1_res = (
-            seed_df.groupby(key_configs[key1]["bin_by"])
-            .agg(**key_configs[key1]["agg"])
+            seed_df.groupby(key_configs[key1][KEY_BIN_BY])
+            .agg(**key_configs[key1][KEY_AGG])
             .reset_index()
         )
         k1_res[FIRST] = k1_res[FIRST].astype(DTYPE_NULLABLE_INT64)
         k1_res[LAST] = k1_res[LAST].astype(DTYPE_NULLABLE_INT64)
         k2_res = (
-            seed_df.groupby(key_configs[key2]["bin_by"])
-            .agg(**key_configs[key2]["agg"])
+            seed_df.groupby(key_configs[key2][KEY_BIN_BY])
+            .agg(**key_configs[key2][KEY_AGG])
             .reset_index()
         )
         key3_bins = by_x_rows(on=seed_df[ordered_on], buffer={})
@@ -146,7 +149,7 @@ def test_3_keys_only_bins(store, seed_path):
         key3_bin_starts = np.arange(0, len(seed_df), 4)
         key3_bins.iloc[key3_bin_starts] = seed_df.iloc[key3_bin_starts].loc[:, ordered_on]
         key3_bins.ffill(inplace=True)
-        k3_res = seed_df.groupby(key3_bins).agg(**key_configs[key3]["agg"])
+        k3_res = seed_df.groupby(key3_bins).agg(**key_configs[key3][KEY_AGG])
         k3_res.index.name = ordered_on
         k3_res.reset_index(inplace=True)
         return k1_res, k2_res, k3_res
@@ -231,8 +234,8 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     # Setup a 1st separate streamed aggregations (awkward...).
     key1 = Indexer("agg_2T")
     key1_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
-        "agg": {FIRST: ("val", FIRST), LAST: ("val", LAST)},
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
+        KEY_AGG: {FIRST: ("val", FIRST), LAST: ("val", LAST)},
     }
     max_row_group_size = 6
     as1 = AggStream(
@@ -259,8 +262,8 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     # Setup a 2nd separate streamed aggregation.
     key2 = Indexer("agg_13T")
     key2_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="13T", closed="left", label="left"),
-        "agg": {FIRST: ("val", FIRST), MAX: ("val", MAX)},
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="13T", closed="left", label="left"),
+        KEY_AGG: {FIRST: ("val", FIRST), MAX: ("val", MAX)},
     }
     as2 = AggStream(
         ordered_on=ordered_on,
@@ -322,13 +325,13 @@ def test_exception_seed_check_and_restart(store, seed_path):
 
     key1 = Indexer("agg_2T")
     key1_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
-        "agg": {FIRST: ("val", FIRST), LAST: ("val", LAST)},
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
+        KEY_AGG: {FIRST: ("val", FIRST), LAST: ("val", LAST)},
     }
     key2 = Indexer("agg_60T")
     key2_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="60T", closed="left", label="left"),
-        "agg": {FIRST: ("val", FIRST), MAX: ("val", MAX)},
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="60T", closed="left", label="left"),
+        KEY_AGG: {FIRST: ("val", FIRST), MAX: ("val", MAX)},
     }
     filter1 = "filter1"
     filter2 = "filter2"
@@ -525,20 +528,20 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     max_row_group_size = 5
     snap_duration = "5T"
     common_key_params = {
-        "snap_by": TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
-        "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
+        KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
+        KEY_AGG: {FIRST: (val, FIRST), LAST: (val, LAST)},
     }
     key1 = Indexer("agg_10T")
     key1_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
     }
     key2 = Indexer("agg_20T")
     key2_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
     }
     key3 = Indexer("agg_2T")
     key3_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="right"),
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="right"),
     }
     filter1 = "filter1"
     filter2 = "filter2"
@@ -967,20 +970,20 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
     max_row_group_size = 5
     snap_duration = "5T"
     common_key_params = {
-        "snap_by": TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
-        "agg": {FIRST: (val, FIRST), LAST: (val, LAST)},
+        KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
+        KEY_AGG: {FIRST: (val, FIRST), LAST: (val, LAST)},
     }
     key1 = Indexer("agg_10T")
     key1_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
     }
     key2 = Indexer("agg_20T")
     key2_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
     }
     key3 = Indexer("agg_2T")
     key3_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="right"),
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="right"),
     }
     filter1 = "filter1"
     filter2 = "filter2"
