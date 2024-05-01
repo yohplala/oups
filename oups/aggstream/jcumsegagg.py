@@ -320,8 +320,6 @@ def jcsagg(
     # TODO: when creation 'null_bin_indices' and 'null_snap_indices', only
     # trim the trailing '-1' if there are less null indices than their initial
     # size.
-    # TODO: integrate in 'jcsagg()' a loopover the dtypes, with all input
-    # arrays for a dtype at same positions in different input tuples.
     bin_start = -1 if preserve_res else 0
     chunk_start = 0
     bin_res_idx = snap_res_idx = 0
@@ -383,6 +381,16 @@ def jcsagg(
             # If no data in current chunk, 'chunk_res' is naturally forwarded
             # to next iteration, no need to update it.
             if len(chunk) != 0:
+                # TODO: integrate in 'jcsagg()' a loopover the dtypes, with all
+                # input arrays and 'chunk_res' for a dtype at same positions in
+                # different input tuples. Motivation is that chunks are the
+                # same size whatever the dtype of seed data. It would prevent
+                # restarting 'jcsagg' for different dtypes.
+                # TODO: is usage of a tuple and 'literal_unroll' really
+                # necessary? 'aggs' is always a tuple of 3 components here.
+                # Create a parameter in 'jcsagg' for each component, and then
+                # use an index to iterate through the iterable inputs with the
+                # index.
                 # for agg in aggs:
                 for agg in literal_unroll(aggs):
                     agg_func, cols_data, cols_res = agg

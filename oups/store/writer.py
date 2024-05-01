@@ -90,7 +90,8 @@ def iter_dataframe(
       have to share the same value in ``sharp_on`` column.
 
     """
-    # TODO: implement 'replicate_groups' (use of 'ordered_on' column).
+    # TODO: implement 'group_as' (use of 'ordered_on' column) to replicate
+    #  row group 'boundaries' between 2 different data sets.
     if max_row_group_size is None:
         max_row_group_size = MAX_ROW_GROUP_SIZE
     if isinstance(data, vDataFrame):

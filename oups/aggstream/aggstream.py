@@ -1323,6 +1323,18 @@ class AggStream:
         """
         # TODO: add 'snap_by' parameter to 'agg()' to allow using list of
         # timestamps. 'cumsegagg()' is already compatible.
+        # TODO: add a writing step once aggregation on a seed chunk is done
+        # (keeping track of '_last_seed_index': as soon as it changes from
+        # one iteration to the next, trigger the intermediate writing step)
+        # Aggregation results to keep are listed through an additional
+        # 'group_res' parameter, in the form:
+        #   {key_to_write_grouped_res_to: [key1, key2, key3],
+        #    ...}
+        # Motivation is to be able to gather results for different filters and
+        # 'bin_by' value, and post-process them in a single 'post' function and
+        # write results in a single file.
+        # This particularly make sense if there is a single 'snap_by' value, as
+        # snapshots results will be easily merged.
         if isinstance(seed, pDataFrame):
             # Make the seed an iterable.
             seed = [seed]

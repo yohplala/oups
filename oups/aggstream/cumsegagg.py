@@ -379,9 +379,14 @@ def cumsegagg(
     # without snapshot in 1st iteration, an empty 'snap_res' gets returned
     # nonetheless and that concatenation can be managed with subsequent
     # 'snap_res' from next iterations.
-    # TODO: if requesting snapshots, bin aggregation results are not necessary.
-    # Consider just outputting label of bins in snapshot results, without
-    # agrgegation results for bins? (memory savings).
+    # TODO: make possible to pass several 'bin_by' (with same 'snap_by'):
+    #  - in segmentby, has to produce an array providing for each 'bin_by' when
+    #    the next bin start. Modify the existing 'mergesort' function for this.
+    #  - in jcumsegagg, change logic to have aggregation function without
+    #    'preserve_res'. Instead, create companion function that can be called
+    #    when storing results, achieving reconciliation of existing results
+    #    with new results (if not a new bin), or restarting the aggregation
+    #    if new results.
     len_data = len(data)
     if not len_data:
         # 'data' is empty. Simply return.
