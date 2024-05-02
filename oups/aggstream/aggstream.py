@@ -1335,6 +1335,8 @@ class AggStream:
         # write results in a single file.
         # This particularly make sense if there is a single 'snap_by' value, as
         # snapshots results will be easily merged.
+        # TODO: change default settings:
+        #  discard_last = trim_start = final_write = False
         if isinstance(seed, pDataFrame):
             # Make the seed an iterable.
             seed = [seed]
