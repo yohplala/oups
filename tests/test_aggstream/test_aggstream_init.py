@@ -29,11 +29,11 @@ from oups.aggstream.aggstream import KEY_AGG
 from oups.aggstream.aggstream import KEY_AGG_RES_BUFFER
 from oups.aggstream.aggstream import KEY_BIN_ON_OUT
 from oups.aggstream.aggstream import KEY_BIN_RES_BUFFER
-from oups.aggstream.aggstream import KEY_CHECK
-from oups.aggstream.aggstream import KEY_CHECK_BUFFER
 from oups.aggstream.aggstream import KEY_FILTERS
 from oups.aggstream.aggstream import KEY_POST
 from oups.aggstream.aggstream import KEY_POST_BUFFER
+from oups.aggstream.aggstream import KEY_PRE
+from oups.aggstream.aggstream import KEY_PRE_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
 from oups.aggstream.aggstream import KEY_SEGAGG_BUFFER
 from oups.aggstream.aggstream import NO_FILTER_ID
@@ -89,8 +89,8 @@ def always_false(**kwargs):
             # ref_seed_config
             {
                 KEY_ORDERED_ON: "ts",
-                KEY_CHECK: None,
-                KEY_CHECK_BUFFER: {},
+                KEY_PRE: None,
+                KEY_PRE_BUFFER: {},
                 KEY_FILTERS: {NO_FILTER_ID: None},
                 KEY_RESTART_INDEX: None,
             },
@@ -127,7 +127,7 @@ def always_false(**kwargs):
                 KEY_ORDERED_ON: "ts_dflt",
                 KEY_MAX_ROW_GROUP_SIZE: 1000,
                 "max_nirgs": 4,
-                KEY_CHECK: always_true,
+                KEY_PRE: always_true,
                 KEY_AGG: {"out_dflt": ("in_dflt", LAST)},
                 KEY_POST: always_true,
                 "keys": {
@@ -156,8 +156,8 @@ def always_false(**kwargs):
             # ref_seed_config
             {
                 KEY_ORDERED_ON: "ts_dflt",
-                KEY_CHECK: always_true,
-                KEY_CHECK_BUFFER: {},
+                KEY_PRE: always_true,
+                KEY_PRE_BUFFER: {},
                 KEY_FILTERS: {NO_FILTER_ID: None},
                 KEY_RESTART_INDEX: None,
             },
@@ -234,7 +234,7 @@ def always_false(**kwargs):
                 KEY_ORDERED_ON: "ts_dflt",
                 KEY_MAX_ROW_GROUP_SIZE: 1000,
                 "max_nirgs": 4,
-                KEY_CHECK: always_true,
+                KEY_PRE: always_true,
                 KEY_AGG: {"out_dflt": ("in_dflt", LAST)},
                 KEY_POST: always_true,
                 KEY_SNAP_BY: TimeGrouper(key="ts_dflt", freq="30T"),
@@ -272,8 +272,8 @@ def always_false(**kwargs):
             # ref_seed_config
             {
                 KEY_ORDERED_ON: "ts_dflt",
-                KEY_CHECK: always_true,
-                KEY_CHECK_BUFFER: {},
+                KEY_PRE: always_true,
+                KEY_PRE_BUFFER: {},
                 KEY_FILTERS: {
                     "filter1": [[("ts_dflt", ">=", 4)]],
                     "filter2": [[("in_spec", "<=", 10)]],

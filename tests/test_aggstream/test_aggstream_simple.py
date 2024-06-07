@@ -38,7 +38,7 @@ from oups.aggstream.aggstream import KEY_AGGSTREAM
 from oups.aggstream.aggstream import KEY_POST_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
 from oups.aggstream.aggstream import NO_FILTER_ID
-from oups.aggstream.aggstream import SeedCheckException
+from oups.aggstream.aggstream import SeedPreException
 from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
 from oups.aggstream.jcumsegagg import FIRST
 from oups.aggstream.jcumsegagg import LAST
@@ -1462,7 +1462,7 @@ def test_exception_unordered_seed(store, seed_path):
     seed.iloc[ref_idx, seed.columns.get_loc(ordered_on)] = pNaT
     # Streamed aggregation, raising an exception, but 1st chunk should be
     # written.
-    with pytest.raises(SeedCheckException, match="^seed data is not in"):
+    with pytest.raises(SeedPreException, match="^seed data is not in"):
         as_.agg(
             seed=[seed[:ref_idx], seed[ref_idx:]],
             trim_start=False,

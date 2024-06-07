@@ -38,7 +38,7 @@ from oups import toplevel
 from oups.aggstream.aggstream import KEY_AGG
 from oups.aggstream.aggstream import KEY_AGGSTREAM
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
-from oups.aggstream.aggstream import SeedCheckException
+from oups.aggstream.aggstream import SeedPreException
 from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
 from oups.aggstream.cumsegagg import cumsegagg
 from oups.aggstream.jcumsegagg import FIRST
@@ -349,7 +349,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
             filter2: [(filter_on, "==", False)],
         },
         max_row_group_size=max_row_group_size,
-        check=check,
+        pre=check,
     )
     # Seed data.
     filter_val = np.ones(len(ts), dtype=bool)
@@ -357,7 +357,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
     seed = pDataFrame({ordered_on: ts, "val": rand_ints, filter_on: filter_val})
     # Streamed aggregation, raising an exception, but 1st chunk should be
     # written.
-    with pytest.raises(SeedCheckException, match="^not possible to have"):
+    with pytest.raises(SeedPreException, match="^not possible to have"):
         as_.agg(
             seed=[seed[:ref_idx], seed[ref_idx:]],
             trim_start=False,

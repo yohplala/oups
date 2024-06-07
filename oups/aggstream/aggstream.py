@@ -56,8 +56,8 @@ KEY_POST_BUFFER = "post_buffer"
 KEY_BIN_ON_OUT = "bin_on_out"
 KEY_AGG_RES_BUFFER = "agg_res_buffer"
 KEY_BIN_RES_BUFFER = "bin_res_buffer"
-KEY_CHECK = "check"
-KEY_CHECK_BUFFER = "check_buffer"
+KEY_PRE = "pre"
+KEY_PRE_BUFFER = "pre_buffer"
 KEY_FILTERS = "filters"
 KEY_RESTART_INDEX = "restart_index"
 KEY_AGG_RES = "agg_res"
@@ -373,7 +373,7 @@ def _reset_agg_buffers(agg_buffers: Optional[dict] = None) -> Optional[dict]:
         agg_buffers |= init_values
 
 
-class SeedCheckException(Exception):
+class SeedPreException(Exception):
     """
     Exception related to user-defined checks on seed chunk.
     """
@@ -392,8 +392,8 @@ def _iter_data(
     seed: Iterable[pDataFrame],
     ordered_on: str,
     restart_index: Union[int, float, pTimestamp, None],
-    check: Union[Callable, None],
-    check_buffer: dict,
+    pre: Union[Callable, None],
+    pre_buffer: dict,
     filters: Union[dict, None],
     trim_start: bool,
     discard_last: bool,
@@ -414,7 +414,7 @@ def _iter_data(
     restart_index : int, float, pTimestamp or None
         Index (excluded) in `ordered_on` column before which rows in seed
         will be trimmed.
-    check : Callable or None
+    pre : Callable or None
         Used-defined Callable to proceed checks over each item of the seed
         Iterable, accepting 2 parameters:
 
@@ -422,12 +422,12 @@ def _iter_data(
             (before any filter is applied).
           - A ``buffer`` parameter, a dict that can be used as a buffer
             for storing temporary results from one chunk processing to
-            the next. Its initial value is that provided by `check.buffer`.
+            the next. Its initial value is that provided by `pre_buffer`.
 
-        In-place modifications of seed dataframe can be carried out here.
-    check_buffer : dict or None
+        In-place modifications of seed dataframe has to be carried out here.
+    pre_buffer : dict or None
         Buffer to keep track of intermediate data that can be required for
-        proceeding with check of individual seed item.
+        proceeding with pre of individual seed item.
     filters : dict or None
         Dict in the form
         ``{"filter_id":[[("col", op, val), ...], ...]}``
@@ -478,22 +478,22 @@ def _iter_data(
     for seed_chunk in seed:
         # Check seed chunk is ordered on 'ordered_on'.
         # This re-ordering is made because for 'trim_start' and
-        # 'discard_last', this ordereding is required.
+        # 'discard_last', this ordering is required.
         if not seed_chunk[ordered_on].is_monotonic_increasing:
             # Currently un-eased to silently modify seed data without knowing
             # if it makes sense, so leaving this row commented.
             # seed_chunk.sort_values(by=ordered_on, inplace=True)
             # Instead, raise an exception.
-            raise SeedCheckException("seed data is not in ascending order.")
-        # Step 1 / Seed check by user.
-        if check:
+            raise SeedPreException("seed data is not in ascending order.")
+        # Step 1 / Seed pre-processing by user.
+        if pre:
             # Apply user checks.
             try:
-                check(seed_chunk, check_buffer)
+                pre(seed_chunk, pre_buffer)
             except Exception as e:
-                # Stop iteration in case of failing check.
+                # Stop iteration in case of failing pre.
                 # Aggregation has been run up to the last valid chunk.
-                raise SeedCheckException(str(e))
+                raise SeedPreException(str(e))
         # Step 2 / If a previous remainder, concatenate it to give current
         # DataFrame its 'final' length.
         if not (seed_remainder is None or seed_remainder.empty):
@@ -814,9 +814,9 @@ class AggStream:
            'restart_index' : int, float or pTimestamp, the index from which
                              (included) should be restarted the next
                              aggregation iteration.
-           'check' : Callable, to apply user-defined check on each seed item.
-           'check_buffer' : dict, to keep track of intermediate values for
-                           `check` function.
+           'pre' : Callable, to apply user-defined pre-processing on seed.
+           'pre_buffer' : dict, to keep track of intermediate values for
+                          `pre` function.
            'filters' : dict, as per `filters` parameter.
           }``
       - ``self.store``, oups store, as per `store` parameter.
@@ -871,8 +871,8 @@ class AggStream:
         ordered_on: str,
         store: ParquetSet,
         keys: Union[dataclass, dict],
-        check: Optional[Callable] = None,
-        check_buffer: Optional[dict] = None,
+        pre: Optional[Callable] = None,
+        pre_buffer: Optional[dict] = None,
         filters: Optional[dict] = None,
         agg: Optional[dict] = None,
         bin_by: Optional[Union[TimeGrouper, Callable[[Series, dict], tuple]]] = None,
@@ -943,25 +943,27 @@ class AggStream:
                 For keys deriving from unfiltered data, use the `NO_FILTER_ID`
                 ``"_"``.
 
-        check : Callable, default None
-            Used-defined Callable to proceed checks over each item of the seed
-            Iterable, accepting 2 parameters:
+        pre : Callable, default None
+            Used-defined Callable to proceed with preèprocessing of each chunks
+            of the seed Iterable, accepting 2 parameters:
 
               - An ``on`` parameter, a pandas dataframe, the current seed item
                 (before any filter is applied).
               - A ``buffer`` parameter, a dict that can be used as a buffer
                 for storing temporary results from one chunk processing to
-                the next. Its initial value is that provided by `check.buffer`.
+                the next. Its initial value is that provided by `pre_buffer`.
 
-            If running ``check`` raises an exception (whichever type it is), a
-            ``SeedCheckException`` will subsequently be raised.
+            If running ``pre`` raises an exception (whichever type it is), a
+            ``SeedPreException`` will subsequently be raised.
+            Modification of seed chunk, if any, has to be realized in-place.
+            No DataFrame returned by this function is expected.
 
-        check_buffer : dict, default None
+        pre_buffer : dict, default None
             Buffer to keep track of intermediate data that can be required for
-            proceeding with check of individual seed item.
+            proceeding with pre-processing of individual seed item.
             Once aggregation stream is over, its value is not recorded.
             User has to take care of this if needed. Its value can be
-            retrieved with ``self.check_buffer`` object attribute.
+            retrieved with ``self.pre_buffer`` object attribute.
         filters : Union[dict, None], default None
             Dict in the form
             ``{"filter_id":[[("col", op, val), ...], ...]}``
@@ -1102,7 +1104,7 @@ class AggStream:
               the user omit a column name, it means that this is a voluntary
               choice from the user.
 
-        - If an exception is raised by ``check`` function on seed data, then,
+        - If an exception is raised by ``pre`` function on seed data, then,
           last good results are still written to disk with correct metadata. If
           an exception is raised at some other point of the aggregation
           process, results are not written.
@@ -1211,8 +1213,8 @@ class AggStream:
         ) = _init_agg_buffers(store, keys)
         self.seed_config = {
             KEY_ORDERED_ON: ordered_on,
-            KEY_CHECK: check,
-            KEY_CHECK_BUFFER: {} if check_buffer is None else check_buffer,
+            KEY_PRE: pre,
+            KEY_PRE_BUFFER: {} if pre_buffer is None else pre_buffer,
             KEY_FILTERS: filters,
             KEY_RESTART_INDEX: restart_index,
         }
@@ -1372,7 +1374,7 @@ class AggStream:
                     # Set 'seed_index_restart' to the 'last_seed_index' with
                     # which restarting the next aggregation iteration.
                     self.seed_config[KEY_RESTART_INDEX] = _last_seed_index
-            except SeedCheckException as sce:
+            except SeedPreException as sce:
                 seed_check_exception = True
                 exception_message = str(sce)
         if final_write:
@@ -1393,4 +1395,4 @@ class AggStream:
                 for key, agg_res in self.agg_buffers.items()
             )
         if seed and seed_check_exception:
-            raise SeedCheckException(exception_message)
+            raise SeedPreException(exception_message)
