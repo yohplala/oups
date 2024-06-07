@@ -314,7 +314,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     ref_idx = 10
 
-    def check(seed_chunk, check_buffer=None):
+    def check(seed_chunk, pre_buffer=None):
         """
         Raise a 'ValueError' if 'ts[10]' is at start in 'ordered_on' column.
         """
