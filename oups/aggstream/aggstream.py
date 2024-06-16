@@ -685,8 +685,6 @@ def _post_n_write_agg_chunks(
         proceeding with preprocessing of individual seed chunk.
 
     """
-    # TODO: rework to have 'OUPS_METADATA' be set incrementally.
-    # TODO: should it be 'is None'? or directly 'not'?
     if (agg_res := agg_buffers[KEY_AGG_RES]) is None:
         # No iteration has been achieved, as no data.
         if last_seed_index:
@@ -694,11 +692,9 @@ def _post_n_write_agg_chunks(
             # It is possible new seed data has been streamed and taken into
             # account, but used for this key, because having been filtered out.
             # Also set 'pre_buffer' if not null.
-            OUPS_METADATA[key] = (
-                {KEY_AGGSTREAM: {KEY_RESTART_INDEX: last_seed_index, KEY_PRE_BUFFER: pre_buffer}}
-                if pre_buffer
-                else {KEY_AGGSTREAM: {KEY_RESTART_INDEX: last_seed_index}}
-            )
+            OUPS_METADATA[key] = {
+                KEY_AGGSTREAM: {KEY_RESTART_INDEX: last_seed_index, KEY_PRE_BUFFER: pre_buffer},
+            }
             write_metadata(pf=store[key].pf, md_key=key)
         return
     # Concat list of aggregation results.
@@ -724,24 +720,14 @@ def _post_n_write_agg_chunks(
     if last_seed_index:
         # If 'last_seed_index', set oups metadata.
         # Also set 'pre_buffer' if not null.
-        OUPS_METADATA[key] = (
-            {
-                KEY_AGGSTREAM: {
-                    KEY_RESTART_INDEX: last_seed_index,
-                    KEY_SEGAGG_BUFFER: agg_buffers[KEY_SEGAGG_BUFFER],
-                    KEY_POST_BUFFER: post_buffer,
-                },
-            }
-            if pre_buffer
-            else {
-                KEY_AGGSTREAM: {
-                    KEY_RESTART_INDEX: last_seed_index,
-                    KEY_PRE_BUFFER: pre_buffer,
-                    KEY_SEGAGG_BUFFER: agg_buffers[KEY_SEGAGG_BUFFER],
-                    KEY_POST_BUFFER: post_buffer,
-                },
-            }
-        )
+        OUPS_METADATA[key] = {
+            KEY_AGGSTREAM: {
+                KEY_RESTART_INDEX: last_seed_index,
+                KEY_PRE_BUFFER: pre_buffer,
+                KEY_SEGAGG_BUFFER: agg_buffers[KEY_SEGAGG_BUFFER],
+                KEY_POST_BUFFER: post_buffer,
+            },
+        }
     # Record data.
     store[key] = write_config, agg_res
     # Reset aggregation buffers and counters.

@@ -37,6 +37,7 @@ from oups import ParquetSet
 from oups import toplevel
 from oups.aggstream.aggstream import KEY_AGG
 from oups.aggstream.aggstream import KEY_AGGSTREAM
+from oups.aggstream.aggstream import KEY_PRE_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
 from oups.aggstream.aggstream import SeedPreException
 from oups.aggstream.cumsegagg import DTYPE_NULLABLE_INT64
@@ -314,14 +315,19 @@ def test_exception_seed_check_and_restart(store, seed_path):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     ref_idx = 10
 
-    def check(on, buffer=None):
+    def check(on, buffer):
         """
         Raise a 'ValueError' if 'ts[10]' is at start in 'ordered_on' column.
         """
-        if on.iloc[0].loc[ordered_on] == ts[ref_idx]:
+        if on.loc[:, ordered_on].iloc[0] == ts[ref_idx]:
             raise ValueError(
                 f"not possible to have {ts[ref_idx]} as first value in 'ordered_on' column.",
             )
+        # Keep a result to check buffer recording and retrieving both work.
+        if not buffer:
+            buffer["seed_val"] = on.loc[:, "val"].iloc[-1]
+        else:
+            buffer["seed_val"] = on.loc[:, "val"].iloc[-1] + 10
 
     key1 = Indexer("agg_2T")
     key1_cf = {
@@ -364,9 +370,14 @@ def test_exception_seed_check_and_restart(store, seed_path):
             discard_last=False,
             final_write=True,
         )
-    # Check 'restart_index' in results.
-    assert store[key1]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == ts[ref_idx - 1]
-    assert store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == ts[ref_idx - 1]
+    # Check 'restart_index' & 'pre_buffer' in results.
+    pre_buffer_ref = {"seed_val": rand_ints[ref_idx - 1]}
+    streamagg_md_key1 = store[key1]._oups_metadata[KEY_AGGSTREAM]
+    assert streamagg_md_key1[KEY_RESTART_INDEX] == ts[ref_idx - 1]
+    assert streamagg_md_key1[KEY_PRE_BUFFER] == pre_buffer_ref
+    streamagg_md_key2 = store[key2]._oups_metadata[KEY_AGGSTREAM]
+    assert streamagg_md_key2[KEY_RESTART_INDEX] == ts[ref_idx - 1]
+    assert streamagg_md_key2[KEY_PRE_BUFFER] == pre_buffer_ref
     # "Correct" seed.
     seed.iloc[ref_idx, seed.columns.get_loc(ordered_on)] = ts[ref_idx] + Timedelta("1s")
     # Restart with 'corrected' seed.
@@ -389,6 +400,12 @@ def test_exception_seed_check_and_restart(store, seed_path):
         ordered_on=ordered_on,
     )
     assert store[key2].pdf.equals(bin_res_ref_key2.reset_index())
+    # Check 'pre_buffer' update.
+    pre_buffer_ref = {"seed_val": rand_ints[-1] + 10}
+    streamagg_md_key1 = store[key1]._oups_metadata[KEY_AGGSTREAM]
+    assert streamagg_md_key1[KEY_PRE_BUFFER] == pre_buffer_ref
+    streamagg_md_key2 = store[key2]._oups_metadata[KEY_AGGSTREAM]
+    assert streamagg_md_key2[KEY_PRE_BUFFER] == pre_buffer_ref
 
 
 def post(buffer: dict, bin_res: pDataFrame, snap_res: pDataFrame):

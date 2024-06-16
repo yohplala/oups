@@ -22,7 +22,7 @@ import pytest
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from pandas import NA as pNA
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import DatetimeIndex
 from pandas import NaT as pNaT
 from pandas import Series as pSeries
@@ -36,6 +36,7 @@ from oups import ParquetSet
 from oups import toplevel
 from oups.aggstream.aggstream import KEY_AGGSTREAM
 from oups.aggstream.aggstream import KEY_POST_BUFFER
+from oups.aggstream.aggstream import KEY_PRE_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
 from oups.aggstream.aggstream import NO_FILTER_ID
 from oups.aggstream.aggstream import SeedPreException
@@ -132,7 +133,7 @@ def test_time_grouper_sum_agg(store, seed_path):
             date + "14:20",
         ],
     )
-    seed_df = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_df = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
     row_group_offsets = [0, 4, 6, 10, 12, 13, 15]
     fp_write(seed_path, seed_df, row_group_offsets=row_group_offsets, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
@@ -156,7 +157,7 @@ def test_time_grouper_sum_agg(store, seed_path):
             date + "14:00",
         ],
     )
-    ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    ref_res = DataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index' is last timestamp, and 'post_buffer' is empty.
@@ -164,6 +165,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     # but 'cumsegagg' scope.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
     assert not streamagg_md[KEY_POST_BUFFER]
     # 1st append.
     # Complete seed_df with new data and continue aggregation.
@@ -176,7 +178,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     #     15:10   1        2 15:00 | no stitching
     #     15:11   2        2 15:00 |
     ts = DatetimeIndex([date + "15:10", date + "15:11"])
-    seed_df = pDataFrame({ordered_on: ts, "val": [1, 2]})
+    seed_df = DataFrame({ordered_on: ts, "val": [1, 2]})
     # Using a ParquetFile is counter performant as early data will be loaded,
     # but this also tests 'trim_start' parameter.
     # To prevent re-loading already processed data, use 'filters' in
@@ -205,17 +207,18 @@ def test_time_grouper_sum_agg(store, seed_path):
             date + "15:00",
         ],
     )
-    ref_res = pDataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    ref_res = DataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
     assert not streamagg_md[KEY_POST_BUFFER]
     # 2nd append, with 'discard_last=False'.
     # Check aggregation till the end of seed data.
     ts = DatetimeIndex([date + "15:20", date + "15:21"])
-    seed_df = pDataFrame({ordered_on: ts, "val": [11, 12]})
+    seed_df = DataFrame({ordered_on: ts, "val": [11, 12]})
     fp_write(seed_path, seed_df, file_scheme="hive", append=True)
     seed_pf = ParquetFile(seed_path)
     seed = seed_pf.iter_row_groups()
@@ -231,6 +234,8 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Check 'last_seed_index'.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
+    assert not streamagg_md[KEY_POST_BUFFER]
 
 
 def test_time_grouper_first_last_min_max_agg(store, seed_path):
@@ -261,7 +266,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     N = 20
     rand_ints = rr.integers(100, size=N)
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
-    seed_df = pDataFrame(
+    seed_df = DataFrame(
         {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)},
     ).sort_values(ordered_on)
     fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
@@ -279,7 +284,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     # 1st append of new data.
     start = seed_df[ordered_on].iloc[-1]
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
-    seed_df2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100}).sort_values(ordered_on)
+    seed_df2 = DataFrame({ordered_on: ts, "val": rand_ints + 100}).sort_values(ordered_on)
     fp_write(
         seed_path,
         seed_df2,
@@ -301,7 +306,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     # 2nd append of new data.
     start = seed_df2[ordered_on].iloc[-1]
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
-    seed_df3 = pDataFrame({ordered_on: ts, "val": rand_ints + 400}).sort_values(ordered_on)
+    seed_df3 = DataFrame({ordered_on: ts, "val": rand_ints + 400}).sort_values(ordered_on)
     fp_write(
         seed_path,
         seed_df3,
@@ -368,7 +373,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     }
 
     # Setup 'post'.
-    def post(buffer: dict, bin_res: pDataFrame):
+    def post(buffer: dict, bin_res: DataFrame):
         """
         Compute duration, weighted mean and keep track of data to buffer.
         """
@@ -427,7 +432,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
         ],
     )
     weights = [1, 2, 1, 0, 2, 1, 2, 1, 0, 3, 2, 1, 3, 0, 1, 2, 1]
-    seed_df = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1), "weight": weights})
+    seed_df = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1), "weight": weights})
     # Setup weighted mean: need 'weight' x 'val'.
     seed_df["weighted_val"] = seed_df["weight"] * seed_df["val"]
     row_group_offsets = [0, 4, 6, 10, 12, 13, 15]
@@ -452,6 +457,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     # Check metadata.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
     assert streamagg_md[KEY_POST_BUFFER] == {"iter_num": 1}
     # 1st append of new data.
     start = seed_df[ordered_on].iloc[-1]
@@ -459,7 +465,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     N = 30
     rand_ints = rr.integers(600, size=N)
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
-    seed_df2 = pDataFrame(
+    seed_df2 = DataFrame(
         {ordered_on: ts, "val": rand_ints + 100, "weight": rand_ints},
     ).sort_values(ordered_on)
     # Setup weighted mean: need 'weight' x 'val'.
@@ -485,6 +491,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     # Check metadata.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_POST_BUFFER] == {"iter_num": 2}
+    assert not streamagg_md[KEY_PRE_BUFFER]
 
 
 def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
@@ -523,7 +530,7 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
         ],
     )
     bin_on = "ts_bin"
-    seed_pdf = pDataFrame({ordered_on: ts, bin_on: ts, "val": range(1, len(ts) + 1)})
+    seed_pdf = DataFrame({ordered_on: ts, bin_on: ts, "val": range(1, len(ts) + 1)})
     row_group_offsets = [0, 4, 6]
     fp_write(seed_path, seed_pdf, row_group_offsets=row_group_offsets, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
@@ -540,7 +547,7 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
     assert rec_res.equals(ref_res)
     # 1st append of new data.
     ts2 = DatetimeIndex([date + "12:30", date + "13:00", date + "13:30", date + "14:00"])
-    seed_pdf2 = pDataFrame(
+    seed_pdf2 = DataFrame(
         {ordered_on: ts2, bin_on: ts2, "val": range(len(ts) + 1, len(ts) + len(ts2) + 1)},
     )
     fp_write(seed_path, seed_pdf2, file_scheme="hive", append=True)
@@ -628,7 +635,7 @@ def test_by_callable_wo_bin_on(store, seed_path):
         ],
     )
 
-    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_pdf = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
     # Forcing dtype of 'seed_pdf' to float.
     seed_pdf["val"] = seed_pdf["val"].astype("float64")
     fp_write(seed_path, seed_pdf, row_group_offsets=13, file_scheme="hive")
@@ -652,6 +659,8 @@ def test_by_callable_wo_bin_on(store, seed_path):
     # Check metadata.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
+    assert not streamagg_md[KEY_POST_BUFFER]
 
     # 1st append of new data.
     # RG    TS   VAL       ROW BIN LABEL | comments
@@ -676,7 +685,7 @@ def test_by_callable_wo_bin_on(store, seed_path):
             date + "16:40",
         ],
     )
-    seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
+    seed_pdf2 = DataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
     # Forcing dtype of 'seed_pdf' to float.
     seed_pdf2["val"] = seed_pdf2["val"].astype("float64")
     seed_pdf2 = pconcat([seed_pdf, seed_pdf2], ignore_index=True)
@@ -702,6 +711,8 @@ def test_by_callable_wo_bin_on(store, seed_path):
     # Check metadata.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts2[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
+    assert not streamagg_md[KEY_POST_BUFFER]
 
 
 def test_by_callable_with_bin_on(store, seed_path):
@@ -733,7 +744,7 @@ def test_by_callable_with_bin_on(store, seed_path):
     #     14:20  18                      | 'discard_last' True
     #
     # Setup streamed aggregation.
-    def by_1val(on: pDataFrame, buffer: dict):
+    def by_1val(on: DataFrame, buffer: dict):
         """
         Start a new bin each time a 1 is spot.
 
@@ -832,7 +843,7 @@ def test_by_callable_with_bin_on(store, seed_path):
     val[8] = 1
     val[12] = 1
     val[16] = 1
-    seed_pdf = pDataFrame({ordered_on: ts, bin_on: val})
+    seed_pdf = DataFrame({ordered_on: ts, bin_on: val})
     # Do not change this '13'. Test a restart right on a bin start.
     row_group_offsets = [0, 13]
     fp_write(seed_path, seed_pdf, row_group_offsets=row_group_offsets, file_scheme="hive")
@@ -902,7 +913,7 @@ def test_by_callable_with_bin_on(store, seed_path):
     )
     val = np.arange(1, len(ts2) + 1)
     val[3] = 1
-    seed_pdf = pconcat([seed_pdf, pDataFrame({ordered_on: ts2, bin_on: val})], ignore_index=True)
+    seed_pdf = pconcat([seed_pdf, DataFrame({ordered_on: ts2, bin_on: val})], ignore_index=True)
     fp_write(seed_path, seed_pdf, row_group_offsets=13, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Setup streamed aggregation.
@@ -917,6 +928,8 @@ def test_by_callable_with_bin_on(store, seed_path):
     # Check metadata.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts2[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
+    assert not streamagg_md[KEY_POST_BUFFER]
 
 
 def test_time_grouper_trim_start(store, seed_path):
@@ -938,7 +951,7 @@ def test_time_grouper_trim_start(store, seed_path):
 
     date = "2020/01/01 "
     ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "09:30"])
-    seed_pdf = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed_pdf = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
     fp_write(seed_path, seed_pdf, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
@@ -954,9 +967,11 @@ def test_time_grouper_trim_start(store, seed_path):
     # Check 'last_seed_index'.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
+    assert not streamagg_md[KEY_POST_BUFFER]
     # 1st append. 2nd stremagg with 'trim_start=False'.
     ts2 = DatetimeIndex([date + "09:00", date + "09:30", date + "10:00", date + "10:30"])
-    seed_pdf2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts) + 1)})
+    seed_pdf2 = DataFrame({ordered_on: ts2, "val": range(1, len(ts) + 1)})
     fp_write(seed_path, seed_pdf2, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
@@ -993,7 +1008,7 @@ def test_time_grouper_agg_first(store):
     # Seed data.
     date = "2020/01/01 "
     ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "10:00"])
-    seed = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
     # Streamed aggregation.
     as_.agg(
         seed=seed,
@@ -1004,7 +1019,7 @@ def test_time_grouper_agg_first(store):
     assert rec_res.equals(ref_res)
     # 1st append, starting a new bin.
     ts2 = DatetimeIndex([date + "10:20", date + "10:40", date + "11:00", date + "11:30"])
-    seed2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
+    seed2 = DataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
     seed2 = pconcat([seed, seed2])
     # Streamed aggregation.
     as_.agg(
@@ -1035,7 +1050,7 @@ def test_single_row(store):
     # Test results
     date = "2020/01/01 "
     ts = DatetimeIndex([date + "08:00"])
-    seed = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
     # Streamed aggregation: no aggregation, but no error message.
     as_.agg(
         seed=seed,
@@ -1108,7 +1123,7 @@ def test_single_row_within_seed(store, seed_path):
         ],
     )
     val = np.arange(1, len(ts) + 1)
-    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_pdf = DataFrame({ordered_on: ts, "val": val})
     fp_write(seed_path, seed_pdf, row_group_offsets=[0, 5, 6], file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation: no aggregation, but no error message.
@@ -1132,7 +1147,7 @@ def test_time_grouper_duplicates_on_wo_bin_on(store):
     ordered_on = "ts_order"
     agg = {SUM: ("val", SUM)}
 
-    def post(buffer: dict, bin_res: pDataFrame):
+    def post(buffer: dict, bin_res: DataFrame):
         """
         Remove 'bin_on' column.
         """
@@ -1161,14 +1176,14 @@ def test_time_grouper_duplicates_on_wo_bin_on(store):
     ts_bin = ts_order + +Timedelta("40T")
     val = range(1, len(ts_order) + 1)
     bin_on = "ts_bin"
-    seed = pDataFrame({ordered_on: ts_order, bin_on: ts_bin, "val": val})
+    seed = DataFrame({ordered_on: ts_order, bin_on: ts_bin, "val": val})
     # Streamed aggregation.
     as_.agg(
         seed=seed,
         discard_last=True,
     )
     # Test results.
-    ref_res = pDataFrame({ordered_on: ts_order[:1], SUM: [6]})
+    ref_res = DataFrame({ordered_on: ts_order[:1], SUM: [6]})
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
@@ -1236,7 +1251,7 @@ def test_bin_on_col_sum_agg(store):
             date + "14:10",  # 7
         ],
     )
-    seed = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
     # Setup streamed aggregation.
     as_.agg(
         seed=seed,
@@ -1255,6 +1270,8 @@ def test_bin_on_col_sum_agg(store):
     # Check 'last_seed_index'.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
+    assert not streamagg_md[KEY_POST_BUFFER]
     # 1st append.
     # Complete seed_df with new data and continue aggregation.
     # 'discard_last=False'
@@ -1272,7 +1289,7 @@ def test_bin_on_col_sum_agg(store):
             date + "15:10",  # 8
         ],
     )
-    seed2 = pDataFrame({ordered_on: ts, "val": [1, 2]})
+    seed2 = DataFrame({ordered_on: ts, "val": [1, 2]})
     seed = pconcat([seed, seed2])
     # Setup streamed aggregation.
     as_.agg(
@@ -1286,6 +1303,8 @@ def test_bin_on_col_sum_agg(store):
     # Check 'last_seed_index'.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
+    assert not streamagg_md[KEY_POST_BUFFER]
 
 
 def test_time_grouper_agg_first_filters_and_no_filter(store):
@@ -1318,14 +1337,14 @@ def test_time_grouper_agg_first_filters_and_no_filter(store):
     # Seed data.
     date = "2020/01/01 "
     ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "10:00"])
-    seed = pDataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
+    seed = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
     # Streamed aggregation.
     as_.agg(
         seed=seed,
     )
     # 1st append, starting a new bin.
     ts2 = DatetimeIndex([date + "10:20", date + "10:40", date + "11:00", date + "11:30"])
-    seed2 = pDataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
+    seed2 = DataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
     seed2 = pconcat([seed, seed2])
     # Streamed aggregation.
     as_.agg(
@@ -1376,7 +1395,7 @@ def test_different_ordered_on(store):
     key_ordered_on = "val"
     seed_ordered_on = "ts"
 
-    def post(buffer: dict, bin_res: pDataFrame):
+    def post(buffer: dict, bin_res: DataFrame):
         """
         Remove some columns before recording.
         """
@@ -1421,7 +1440,7 @@ def test_different_ordered_on(store):
             date + "14:10",  # 7
         ],
     )
-    seed = pDataFrame({seed_ordered_on: ts, key_ordered_on: range(1, len(ts) + 1)})
+    seed = DataFrame({seed_ordered_on: ts, key_ordered_on: range(1, len(ts) + 1)})
     # Setup streamed aggregation.
     as_.agg(
         seed=seed,
@@ -1457,7 +1476,7 @@ def test_exception_unordered_seed(store, seed_path):
     rand_ints.sort()
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     ref_idx = 10
-    seed = pDataFrame({ordered_on: ts, "val": rand_ints})
+    seed = DataFrame({ordered_on: ts, "val": rand_ints})
     # Set a 'NaT' in 'ordered_on' column, 2nd chunk for raising an exception.
     seed.iloc[ref_idx, seed.columns.get_loc(ordered_on)] = pNaT
     # Streamed aggregation, raising an exception, but 1st chunk should be
@@ -1470,4 +1489,7 @@ def test_exception_unordered_seed(store, seed_path):
             final_write=True,
         )
     # Check 'restart_index' in results.
-    assert store[key]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == ts[ref_idx - 1]
+    streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
+    assert streamagg_md[KEY_RESTART_INDEX] == ts[ref_idx - 1]
+    assert not streamagg_md[KEY_PRE_BUFFER]
+    assert not streamagg_md[KEY_POST_BUFFER]
