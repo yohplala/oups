@@ -18,7 +18,7 @@ from copy import deepcopy
 from os import path as os_path
 
 import pytest
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import DatetimeIndex
 from pandas.core.resample import TimeGrouper
 
@@ -415,7 +415,7 @@ def test_exception_not_key_of_streamagg_results(store):
     ts = DatetimeIndex([date + "08:00", date + "08:30"])
     ordered_on = "ts_order"
     val = range(1, len(ts) + 1)
-    seed_pdf = pDataFrame({ordered_on: ts, "val": val})
+    seed_pdf = DataFrame({ordered_on: ts, "val": val})
     store[key] = seed_pdf
     # Setup aggregation.
     bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")

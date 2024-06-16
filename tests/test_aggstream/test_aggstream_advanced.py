@@ -22,7 +22,7 @@ import numpy as np
 import pytest
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import NaT as pNaT
 from pandas import Series as pSeries
 from pandas import Timedelta
@@ -117,7 +117,7 @@ def test_3_keys_only_bins(store, seed_path):
         [1] * (N_third - 2) + [2] * (N_third - 4) + [3] * (N - 2 * N_third) + [4] * 6,
     )
     bin_on = "direct_bin"
-    seed_df = pDataFrame({ordered_on: ts, "val": rand_ints, bin_on: bin_val})
+    seed_df = DataFrame({ordered_on: ts, "val": rand_ints, bin_on: bin_val})
     fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
@@ -169,7 +169,7 @@ def test_3_keys_only_bins(store, seed_path):
     # 1st append of new data.
     start = seed_df[ordered_on].iloc[-1]
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
-    seed_df2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100, bin_on: bin_val + 10})
+    seed_df2 = DataFrame({ordered_on: ts, "val": rand_ints + 100, bin_on: bin_val + 10})
     fp_write(
         seed_path,
         seed_df2,
@@ -198,7 +198,7 @@ def test_3_keys_only_bins(store, seed_path):
     # 2nd append of new data.
     start = seed_df2[ordered_on].iloc[-1]
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
-    seed_df3 = pDataFrame({ordered_on: ts, "val": rand_ints + 400, bin_on: bin_val + 40})
+    seed_df3 = DataFrame({ordered_on: ts, "val": rand_ints + 400, bin_on: bin_val + 40})
     fp_write(
         seed_path,
         seed_df3,
@@ -252,7 +252,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     rand_ints = rr.integers(100, size=N)
     rand_ints.sort()
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
-    seed_df = pDataFrame({ordered_on: ts, "val": rand_ints})
+    seed_df = DataFrame({ordered_on: ts, "val": rand_ints})
     fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation for 'key1'.
@@ -275,7 +275,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     # Extend seed.
     start = seed_df[ordered_on].iloc[-1]
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
-    seed_df2 = pDataFrame({ordered_on: ts, "val": rand_ints + 100})
+    seed_df2 = DataFrame({ordered_on: ts, "val": rand_ints + 100})
     fp_write(
         seed_path,
         seed_df2,
@@ -360,7 +360,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
     # Seed data.
     filter_val = np.ones(len(ts), dtype=bool)
     filter_val[::2] = False
-    seed = pDataFrame({ordered_on: ts, "val": rand_ints, filter_on: filter_val})
+    seed = DataFrame({ordered_on: ts, "val": rand_ints, filter_on: filter_val})
     # Streamed aggregation, raising an exception, but 1st chunk should be
     # written.
     with pytest.raises(SeedPreException, match="^not possible to have"):
@@ -408,7 +408,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
     assert streamagg_md_key2[KEY_PRE_BUFFER] == pre_buffer_ref
 
 
-def post(buffer: dict, bin_res: pDataFrame, snap_res: pDataFrame):
+def post(buffer: dict, bin_res: DataFrame, snap_res: DataFrame):
     """
     Aggregate previous and current bin aggregation results.
 
@@ -520,7 +520,7 @@ def post(buffer: dict, bin_res: pDataFrame, snap_res: pDataFrame):
     return merged_res.dropna(subset=FIRST, ignore_index=True)
 
 
-def reference_results(seed: pDataFrame, key_conf: dict):
+def reference_results(seed: DataFrame, key_conf: dict):
     """
     Get reference results from cumsegagg and post for 2 next test cases.
     """
@@ -600,7 +600,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     filter_val = np.ones(len(ts), dtype=bool)
     filter_val[::2] = False
-    seed_df = pDataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
+    seed_df = DataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
     #
     # filter = 'True'
     #     ts  val  filt row     2T_agg_res
@@ -728,7 +728,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
             [117, -1, 117, -1],
         ],
     )
-    key3_res_ref = pDataFrame(key3_data, index=snap_ts).reset_index()
+    key3_res_ref = DataFrame(key3_data, index=snap_ts).reset_index()
     key3_res_ref = key3_res_ref.rename(
         columns={
             "index": ordered_on,
@@ -762,7 +762,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     # - one at same timestamp than last one.
     # - one at a new timestamp. This one will not be considered because when
     #   not writing final results, last row in agg res is set aside.
-    seed_df = pDataFrame(
+    seed_df = DataFrame(
         {
             ordered_on: [ts[-1], ts[-1] + Timedelta(snap_duration)],
             val: [rand_ints[-1] + 1, rand_ints[-1] + 10],
@@ -819,7 +819,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     # --------------#
     # Last data appending considering a single row in seed with same timestamp
     # and 'final_write' as last concatenation check with snapshots.
-    seed_df = pDataFrame(
+    seed_df = DataFrame(
         {
             ordered_on: [seed_df.loc[:, ordered_on].iloc[-1]],
             val: [rand_ints[-1] + 50],
@@ -853,7 +853,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     # Data stream 5 #
     # --------------#
     # Empty snapshots are generated between 2 row groups in key2.
-    seed_df = pDataFrame(
+    seed_df = DataFrame(
         {
             ordered_on: [
                 seed_df.loc[:, ordered_on].iloc[-1],
@@ -895,7 +895,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     # Data stream 6 #
     # --------------#
     # Several seed chunks where neither bins, nor snaps end.
-    seed_df = pDataFrame(
+    seed_df = DataFrame(
         {
             ordered_on: [
                 seed_df.loc[:, ordered_on].iloc[-1],
@@ -944,7 +944,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     rand_ints = np.array([1, 3, 4, 7, 10, 14, 14, 14, 16, 17])
     start = Timestamp("2020/01/01 03:00:00")
     ts = [start] + [start + Timedelta(f"{mn}T") for mn in rand_ints[1:]]
-    seed = pDataFrame({ordered_on: ts, val: rand_ints, filter_on: [True] * len(ts)})
+    seed = DataFrame({ordered_on: ts, val: rand_ints, filter_on: [True] * len(ts)})
     seed = [seed.iloc[:4], seed.iloc[4:]]
     as_.agg(
         seed=seed,
@@ -1038,7 +1038,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     filter_val = np.ones(len(ts), dtype=bool)
     filter_val[::2] = False
-    seed_df = pDataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
+    seed_df = DataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
     seed_list = [seed_df.iloc[:17], seed_df.iloc[17:31]]
     as1.agg(
         seed=seed_list,
