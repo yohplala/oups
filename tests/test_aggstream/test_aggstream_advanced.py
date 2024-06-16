@@ -314,11 +314,11 @@ def test_exception_seed_check_and_restart(store, seed_path):
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     ref_idx = 10
 
-    def check(seed_chunk, pre_buffer=None):
+    def check(on, buffer=None):
         """
         Raise a 'ValueError' if 'ts[10]' is at start in 'ordered_on' column.
         """
-        if seed_chunk.iloc[0].loc[ordered_on] == ts[ref_idx]:
+        if on.iloc[0].loc[ordered_on] == ts[ref_idx]:
             raise ValueError(
                 f"not possible to have {ts[ref_idx]} as first value in 'ordered_on' column.",
             )

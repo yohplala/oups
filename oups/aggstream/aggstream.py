@@ -271,9 +271,9 @@ def _init_buffers(
          }``
 
     """
+    pre_buffer = {}
     agg_buffers = {}
     seed_index_restart_set = set()
-    pre_buffer_set = set()
     for key in keys:
         # Default values for aggregation counters and buffers.
         # 'agg_n_rows' : number of rows in aggregation result.
@@ -304,7 +304,8 @@ def _init_buffers(
             # aggregation results, to be used by 'post'. If not used,
             # it is an empty dict.
             seed_index_restart_set.add(aggstream_md[KEY_RESTART_INDEX])
-            pre_buffer_set.add(aggstream_md[KEY_PRE_BUFFER])
+            if KEY_PRE_BUFFER in aggstream_md:
+                pre_buffer = aggstream_md[KEY_PRE_BUFFER]
             agg_buffers[key][KEY_SEGAGG_BUFFER] = (
                 aggstream_md[KEY_SEGAGG_BUFFER] if aggstream_md[KEY_SEGAGG_BUFFER] else {}
             )
@@ -320,14 +321,9 @@ def _init_buffers(
             "not possible to aggregate on multiple keys with existing "
             "aggregation results not aggregated up to the same seed index.",
         )
-    if len(pre_buffer_set) > 1:
-        raise ValueError(
-            "not possible to aggregate on multiple keys with existing "
-            "'pre_buffer' values, different between different keys.",
-        )
     return (
         None if not seed_index_restart_set else seed_index_restart_set.pop(),
-        {} if not pre_buffer_set else pre_buffer_set.pop(),
+        pre_buffer,
         agg_buffers,
     )
 
