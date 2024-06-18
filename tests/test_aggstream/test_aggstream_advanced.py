@@ -406,6 +406,22 @@ def test_exception_seed_check_and_restart(store, seed_path):
     assert streamagg_md_key1[KEY_PRE_BUFFER] == pre_buffer_ref
     streamagg_md_key2 = store[key2]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md_key2[KEY_PRE_BUFFER] == pre_buffer_ref
+    # Testing retrieval of 'pre_buffer'.
+    as_2 = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys={
+            filter1: {key1: deepcopy(key1_cf)},
+            filter2: {key2: deepcopy(key2_cf)},
+        },
+        filters={
+            filter1: [(filter_on, "==", True)],
+            filter2: [(filter_on, "==", False)],
+        },
+        max_row_group_size=max_row_group_size,
+        pre=check,
+    )
+    assert as_2.seed_config[KEY_PRE_BUFFER] == pre_buffer_ref
 
 
 def post(buffer: dict, bin_res: DataFrame, snap_res: DataFrame):
