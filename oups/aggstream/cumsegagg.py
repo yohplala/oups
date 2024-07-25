@@ -565,6 +565,7 @@ def cumsegagg(
                 "at least one null value exists in 'snap_res' which is likely to hint a bug.",
             )
         if bin_res.eq(0).any().any():
+            print(bin_res)
             raise ValueError(
                 "at least one null value exists in 'bin_res' which is likely to hint a bug.",
             )

@@ -28,7 +28,8 @@ from pandas import NaT as pNaT
 from pandas import Series as pSeries
 from pandas import Timedelta
 from pandas import Timestamp
-from pandas import concat as pconcat
+from pandas import concat
+from pandas import date_range
 from pandas.core.resample import TimeGrouper
 
 from oups import AggStream
@@ -299,7 +300,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
         discard_last=True,
     )
     # Test results
-    ref_res = pconcat([seed_df, seed_df2]).iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
+    ref_res = concat([seed_df, seed_df2]).iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
     ref_res[[FIRST, LAST, MIN, MAX]] = ref_res[[FIRST, LAST, MIN, MAX]].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
@@ -322,7 +323,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     )
     # Test results
     ref_res = (
-        pconcat([seed_df, seed_df2, seed_df3]).iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
+        concat([seed_df, seed_df2, seed_df3]).iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
     )
     ref_res[[FIRST, LAST, MIN, MAX]] = ref_res[[FIRST, LAST, MIN, MAX]].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key]
@@ -484,7 +485,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
         discard_last=True,
     )
     # Test results
-    ref_res_agg = pconcat([seed_df, seed_df2]).iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
+    ref_res_agg = concat([seed_df, seed_df2]).iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
     ref_res_post = post({}, ref_res_agg)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res_post)
@@ -559,7 +560,7 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
         discard_last=True,
     )
     # Test results
-    ref_res = pconcat([seed_pdf, seed_pdf2]).iloc[:-1].groupby(bin_by).agg(**agg)
+    ref_res = concat([seed_pdf, seed_pdf2]).iloc[:-1].groupby(bin_by).agg(**agg)
     ref_res.index.name = ts_open
     ref_res.reset_index(inplace=True)
     rec_res = store[key].pdf
@@ -688,7 +689,7 @@ def test_by_callable_wo_bin_on(store, seed_path):
     seed_pdf2 = DataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
     # Forcing dtype of 'seed_pdf' to float.
     seed_pdf2["val"] = seed_pdf2["val"].astype("float64")
-    seed_pdf2 = pconcat([seed_pdf, seed_pdf2], ignore_index=True)
+    seed_pdf2 = concat([seed_pdf, seed_pdf2], ignore_index=True)
     fp_write(seed_path, seed_pdf2, row_group_offsets=13, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
@@ -787,7 +788,7 @@ def test_by_callable_with_bin_on(store, seed_path):
         else:
             # 1st bin is one that was started before.
             ncs = np.append(ncs, len(on))
-            group_keys = pconcat([pSeries([first_lab]), group_keys])
+            group_keys = concat([pSeries([first_lab]), group_keys])
         buffer["last_key"] = group_keys.iloc[-1]
         return ncs, group_keys, 0, "left", ncs, True
 
@@ -913,7 +914,7 @@ def test_by_callable_with_bin_on(store, seed_path):
     )
     val = np.arange(1, len(ts2) + 1)
     val[3] = 1
-    seed_pdf = pconcat([seed_pdf, DataFrame({ordered_on: ts2, bin_on: val})], ignore_index=True)
+    seed_pdf = concat([seed_pdf, DataFrame({ordered_on: ts2, bin_on: val})], ignore_index=True)
     fp_write(seed_path, seed_pdf, row_group_offsets=13, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Setup streamed aggregation.
@@ -981,7 +982,7 @@ def test_time_grouper_trim_start(store, seed_path):
         discard_last=True,
     )
     # Test results.
-    seed_pdf_ref = pconcat([seed_pdf.iloc[:-1], seed_pdf2])
+    seed_pdf_ref = concat([seed_pdf.iloc[:-1], seed_pdf2])
     ref_res = seed_pdf_ref.iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
@@ -1020,7 +1021,7 @@ def test_time_grouper_agg_first(store):
     # 1st append, starting a new bin.
     ts2 = DatetimeIndex([date + "10:20", date + "10:40", date + "11:00", date + "11:30"])
     seed2 = DataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
-    seed2 = pconcat([seed, seed2])
+    seed2 = concat([seed, seed2])
     # Streamed aggregation.
     as_.agg(
         seed=seed2,
@@ -1290,7 +1291,7 @@ def test_bin_on_col_sum_agg(store):
         ],
     )
     seed2 = DataFrame({ordered_on: ts, "val": [1, 2]})
-    seed = pconcat([seed, seed2])
+    seed = concat([seed, seed2])
     # Setup streamed aggregation.
     as_.agg(
         seed=seed,
@@ -1345,7 +1346,7 @@ def test_time_grouper_agg_first_filters_and_no_filter(store):
     # 1st append, starting a new bin.
     ts2 = DatetimeIndex([date + "10:20", date + "10:40", date + "11:00", date + "11:30"])
     seed2 = DataFrame({ordered_on: ts2, "val": range(1, len(ts2) + 1)})
-    seed2 = pconcat([seed, seed2])
+    seed2 = concat([seed, seed2])
     # Streamed aggregation.
     as_.agg(
         seed=seed2,
@@ -1493,3 +1494,82 @@ def test_exception_unordered_seed(store, seed_path):
     assert streamagg_md[KEY_RESTART_INDEX] == ts[ref_idx - 1]
     assert not streamagg_md[KEY_PRE_BUFFER]
     assert not streamagg_md[KEY_POST_BUFFER]
+
+
+def test_post_with_warm_up(store):
+    # Test a 'post' with a warm-up period and check 'post_buffer' is correctly
+    # recorded even if 'post' does not output result yet.
+    # No binning so to say: keeping each value in 'val'.
+    #
+    # Setup aggregation.
+    agg_on = "val"
+    ordered_on = "ts"
+    ts_period = "2min"
+
+    def post(buffer: dict, bin_res: DataFrame):
+        """
+        Rolling sum of last ten values.
+
+        Warm-up period is then 10 rows.
+
+        """
+        print("post is running")
+        if buffer:
+            prev_bin = buffer["prev_bin"]
+            print("buffer with data / showing bin_res")
+            print(bin_res)
+            last_idx = (
+                -1
+                if bin_res.loc[:, ordered_on].iloc[0] != prev_bin.loc[:, ordered_on].iloc[-1]
+                else -2
+            )
+            bin_res = concat([prev_bin.iloc[:last_idx], bin_res], ignore_index=True)
+        # Keep in buffer last 10 rows.
+        buffer["prev_bin"] = bin_res[-10:].reset_index(drop=True)
+        if len(bin_res) >= 10:
+            return DataFrame(
+                {
+                    agg_on: bin_res[agg_on].rolling(10).sum().dropna().reset_index(drop=True),
+                    ordered_on: bin_res[ordered_on].iloc[9:].reset_index(drop=True),
+                },
+            )
+
+    max_row_group_size = 10
+    agg = {agg_on: (agg_on, FIRST)}
+    bin_by = TimeGrouper(key=ordered_on, freq=ts_period, closed="left", label="left")
+    as_ = AggStream(
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        keys={
+            key: {
+                "ordered_on": ordered_on,
+                "bin_by": bin_by,
+            },
+        },
+        max_row_group_size=max_row_group_size,
+        post=post,
+    )
+    # Setup seed data.
+    n_values = 20
+    ts = date_range("2020/01/01 08:00", freq=ts_period, periods=n_values)
+    seed = DataFrame({ordered_on: ts, agg_on: range(1, n_values + 1)})
+    # 1st chunk of data, not reaching the required number of warm-up rows.
+    as_.agg(
+        seed=seed.iloc[:5],
+        discard_last=False,
+        final_write=True,
+    )
+    # Check 'post_buffer'.
+    post_buffer = store[key]._oups_metadata[KEY_AGGSTREAM][KEY_POST_BUFFER]
+    assert post_buffer["prev_bin"].equals(seed.iloc[:5])
+    # 2nd chunk of data, starting to output actual data.
+    as_.agg(
+        seed=[seed.iloc[5:8], seed.iloc[8:14]],
+        discard_last=False,
+        final_write=True,
+    )
+    # Check /!\ not working /!\ rec_res != ref_res
+    ref_res = post({}, seed.iloc[:14])
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
