@@ -117,12 +117,16 @@ def iter_dataframe(
             # Case 'duplicates_on' is a single column name, but not
             # 'sharp_on'.
             duplicates_on = [duplicates_on, sharp_on]
-    # Define bins to split into row groups.
-    # Acknowledging this piece of code to be an extract from fastparquet.
     n_rows = len(data)
-    n_parts = (n_rows - 1) // max_row_group_size + 1
-    row_group_size = min((n_rows - 1) // n_parts + 1, n_rows)
-    starts = list(range(0, n_rows, row_group_size))
+    if n_rows:
+        # Define bins to split into row groups.
+        # Acknowledging this piece of code to be an extract from fastparquet.
+        n_parts = (n_rows - 1) // max_row_group_size + 1
+        row_group_size = min((n_rows - 1) // n_parts + 1, n_rows)
+        starts = list(range(0, n_rows, row_group_size))
+    else:
+        # If n_rows=0
+        starts = [0]
     if sharp_on:
         # Adjust bins so that they do not end in the middle of duplicate values
         # in `sharp_on` column.
@@ -424,7 +428,7 @@ def write(
             all_cols = data.get_column_names()
         if ordered_on not in all_cols:
             raise ValueError(f"column '{ordered_on}' does not exist in input data.")
-    if os_path.isdir(dirpath) and os_listdir(dirpath):
+    if os_path.isdir(dirpath) and any(file.endswith(".parquet") for file in os_listdir(dirpath)):
         # Case updating an existing dataset.
         # Identify overlaps in row groups between new data and recorded data.
         # Recorded row group start and end indexes.
