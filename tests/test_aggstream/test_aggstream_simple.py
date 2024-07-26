@@ -1513,15 +1513,12 @@ def test_post_with_warm_up(store):
         Warm-up period is then 10 rows.
 
         """
-        print("post is running")
         if buffer:
             prev_bin = buffer["prev_bin"]
-            print("buffer with data / showing bin_res")
-            print(bin_res)
             last_idx = (
                 -1
-                if bin_res.loc[:, ordered_on].iloc[0] != prev_bin.loc[:, ordered_on].iloc[-1]
-                else -2
+                if bin_res.loc[:, ordered_on].iloc[0] == prev_bin.loc[:, ordered_on].iloc[-1]
+                else len(prev_bin)
             )
             bin_res = concat([prev_bin.iloc[:last_idx], bin_res], ignore_index=True)
         # Keep in buffer last 10 rows.
@@ -1537,7 +1534,7 @@ def test_post_with_warm_up(store):
     max_row_group_size = 10
     agg = {agg_on: (agg_on, FIRST)}
     bin_by = TimeGrouper(key=ordered_on, freq=ts_period, closed="left", label="left")
-    as_ = AggStream(
+    as_1 = AggStream(
         ordered_on=ordered_on,
         agg=agg,
         store=store,
@@ -1555,7 +1552,7 @@ def test_post_with_warm_up(store):
     ts = date_range("2020/01/01 08:00", freq=ts_period, periods=n_values)
     seed = DataFrame({ordered_on: ts, agg_on: range(1, n_values + 1)})
     # 1st chunk of data, not reaching the required number of warm-up rows.
-    as_.agg(
+    as_1.agg(
         seed=seed.iloc[:5],
         discard_last=False,
         final_write=True,
@@ -1564,12 +1561,38 @@ def test_post_with_warm_up(store):
     post_buffer = store[key]._oups_metadata[KEY_AGGSTREAM][KEY_POST_BUFFER]
     assert post_buffer["prev_bin"].equals(seed.iloc[:5])
     # 2nd chunk of data, starting to output actual data.
-    as_.agg(
+    as_1.agg(
         seed=[seed.iloc[5:8], seed.iloc[8:14]],
         discard_last=False,
         final_write=True,
     )
-    # Check /!\ not working /!\ rec_res != ref_res
+    # Check.
     ref_res = post({}, seed.iloc[:14])
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
+    post_buffer = store[key]._oups_metadata[KEY_AGGSTREAM][KEY_POST_BUFFER]
+    assert post_buffer["prev_bin"].equals(seed.iloc[4:14].reset_index(drop=True))
+    # 3rd chunk, cold start.
+    as_2 = AggStream(
+        ordered_on=ordered_on,
+        agg=agg,
+        store=store,
+        keys={
+            key: {
+                "ordered_on": ordered_on,
+                "bin_by": bin_by,
+            },
+        },
+        max_row_group_size=max_row_group_size,
+        post=post,
+    )
+    as_2.agg(
+        seed=seed.iloc[14:],
+        discard_last=False,
+        final_write=True,
+    )
+    ref_res = post({}, seed)
+    rec_res = store[key].pdf
+    assert rec_res.equals(ref_res)
+    post_buffer = store[key]._oups_metadata[KEY_AGGSTREAM][KEY_POST_BUFFER]
+    assert post_buffer["prev_bin"].equals(seed.iloc[10:].reset_index(drop=True))
