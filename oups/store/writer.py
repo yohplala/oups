@@ -243,7 +243,11 @@ def check_cmidx(chunk):
     None
 
     """
+    # If a name is 'None', set it to '' instead.
     cmidx = chunk.columns
+    for i, name in enumerate(cmidx.names):
+        if name is None:
+            cmidx.set_names("", level=i, inplace=True)
     # If an item of the column name is not a string, turn it into a string.
     # Using 'set_levels()' instead of rconstructing a MultiIndex to preserve
     # index names directly.
@@ -256,11 +260,6 @@ def check_cmidx(chunk):
             level_updated.append(str_level)
     if level_updated:
         chunk.columns = chunk.columns.set_levels(level_updated, level=level_updated_idx)
-    # If a name is 'None', set it to '' instead.
-    cmidx = chunk.columns
-    for i, name in enumerate(cmidx.names):
-        if name is None:
-            cmidx.set_names("", level=i, inplace=True)
 
 
 def write_metadata(
