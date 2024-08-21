@@ -229,13 +229,14 @@ def check_cmidx(chunk):
 
     Most notably, fastparquet requires names for each level in a Multiindex.
     If these are not set, there are set to '', an empty string.
+    Also, column names have to be tuple of string.
 
-    Multiindex is modified in-place.
+    DataFrame is modified in-place.
 
     Parameters
     ----------
     chunk : DataFrame
-        DataFrame which multi-index is to check.
+        DataFrame with a column multi-index to check and possibly adjust.
 
     Returns
     -------
