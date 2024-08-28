@@ -968,15 +968,15 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
         KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
         KEY_AGG: {FIRST: (val, FIRST), LAST: (val, LAST)},
     }
-    key1 = Indexer("agg_10T")
+    key1 = Indexer("agg_10T_sst")
     key1_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
     }
-    key2 = Indexer("agg_20T")
+    key2 = Indexer("agg_20T_sst")
     key2_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
     }
-    key3 = Indexer("agg_2T")
+    key3 = Indexer("agg_2T_sst")
     key3_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="right"),
     }

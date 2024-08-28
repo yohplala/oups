@@ -36,7 +36,6 @@ from oups.aggstream.segmentby import KEY_SNAP_BY
 from oups.aggstream.segmentby import setup_segmentby
 from oups.aggstream.utils import dataframe_filter
 from oups.store import ParquetSet
-from oups.store import is_toplevel
 from oups.store.router import ParquetHandle
 from oups.store.writer import KEY_DUPLICATES_ON
 from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
@@ -721,13 +720,24 @@ def _post_n_write_agg_chunks(
                 else post(buffer=post_buffer, bin_res=bin_res, snap_res=snap_res)
             )
             if isinstance(main_res, tuple):
+                # First result, recorded with 'bin_key', is considered main
+                # result.
                 main_res, snap_res = main_res
+            else:
+                # Set to None 'bin_res' and 'snap_res'.
+                # This allows to catch possible mistake in 'key' parameter.
+                snap_res = None
+            bin_res = None
+        elif snap_res is None or isinstance(key, tuple):
+            # Case only 'bin_res' is recorded or both 'bin_res' and 'snap_res'.
+            main_res, bin_res = bin_res, None
         else:
-            main_res = snap_res if is_toplevel(key) and snap_res is not None else bin_res
+            # Case only 'snap_res' is recorded, and not 'bin_res'.
+            main_res, bin_res, snap_res = snap_res, None, None
     else:
         not_null_res = False
         main_res = None
-    main_key, snap_key = key if isinstance(key, tuple) else key, None
+    main_key, snap_key = key if isinstance(key, tuple) else (key, None)
     if last_seed_index:
         # If 'last_seed_index', set oups metadata.
         # It is possible there is no result yet to write for different reasons:
