@@ -1314,8 +1314,8 @@ class AggStream:
     def agg(
         self,
         seed: Union[DataFrame, Iterable[DataFrame]] = None,
-        trim_start: Optional[bool] = True,
-        discard_last: Optional[bool] = True,
+        trim_start: Optional[bool] = False,
+        discard_last: Optional[bool] = False,
         final_write: Optional[bool] = True,
     ):
         """

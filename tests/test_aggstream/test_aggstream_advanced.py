@@ -121,10 +121,7 @@ def test_3_keys_only_bins(store, seed_path):
     fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
-    as_.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as_.agg(seed=seed, trim_start=True, discard_last=True)
 
     def get_ref_results(seed_df):
         # Get results
@@ -179,10 +176,7 @@ def test_3_keys_only_bins(store, seed_path):
     )
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
-    as_.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
     seed_df2_trim = seed_df2[seed_df2[ordered_on] < seed_df2[ordered_on].iloc[-1]]
     seed_df2_ref = pconcat([seed_df, seed_df2_trim], ignore_index=True)
@@ -208,10 +202,7 @@ def test_3_keys_only_bins(store, seed_path):
     )
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
-    as_.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
     seed_df3_trim = seed_df3[seed_df3[ordered_on] < seed_df3[ordered_on].iloc[-1]]
     seed_df3_ref = pconcat([seed_df, seed_df2, seed_df3_trim], ignore_index=True)
@@ -256,10 +247,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation for 'key1'.
-    as1.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as1.agg(seed=seed, trim_start=True, discard_last=True)
     # Setup a 2nd separate streamed aggregation.
     key2 = Indexer("agg_13T")
     key2_cf = {
@@ -285,10 +273,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     )
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamagg for 'key2'.
-    as2.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as2.agg(seed=seed, trim_start=True, discard_last=True)
     # Now a streamed aggregation for both keys.
     with pytest.raises(
         ValueError,
@@ -803,10 +788,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     # --------------#
     # Write and check 'last_seed_index' has been correctly updated even for
     # 'key2'.
-    as_.agg(
-        seed=None,
-        final_write=True,
-    )
+    as_.agg(seed=None, trim_start=True, discard_last=True, final_write=True)
     # Reference results for 'key1' and 'key3'.
     seed_list.append(seed_df)
     seed_df = pconcat(seed_list)
@@ -842,12 +824,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
             filter_on: [True],
         },
     )
-    as_.agg(
-        seed=seed_df,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as_.agg(seed=seed_df, trim_start=False, discard_last=False, final_write=True)
     # Reference results.
     seed_list.append(seed_df)
     seed_df = pconcat(seed_list)
@@ -880,12 +857,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         },
     )
     seed = [seed_df.iloc[:1], seed_df.iloc[1:]]
-    as_.agg(
-        seed=seed,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as_.agg(seed=seed, trim_start=False, discard_last=False, final_write=True)
     # Reference results.
     seed_list.extend(seed)
     seed_df = pconcat(seed_list)
@@ -927,12 +899,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         },
     )
     seed = [seed_df.iloc[:1], seed_df.iloc[1:2], seed_df.iloc[2:]]
-    as_.agg(
-        seed=seed,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as_.agg(seed=seed, trim_start=False, discard_last=False, final_write=True)
     # Reference results.
     seed_list.extend(seed)
     seed_df = pconcat(seed_list)
@@ -962,12 +929,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     ts = [start] + [start + Timedelta(f"{mn}T") for mn in rand_ints[1:]]
     seed = DataFrame({ordered_on: ts, val: rand_ints, filter_on: [True] * len(ts)})
     seed = [seed.iloc[:4], seed.iloc[4:]]
-    as_.agg(
-        seed=seed,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as_.agg(seed=seed, trim_start=False, discard_last=False, final_write=True)
     seed_list.extend(seed)
     seed_df = pconcat(seed_list)
     key1_res_ref = reference_results(
@@ -1056,12 +1018,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
     filter_val[::2] = False
     seed_df = DataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
     seed_list = [seed_df.iloc[:17], seed_df.iloc[17:31]]
-    as1.agg(
-        seed=seed_list,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as1.agg(seed=seed_list, trim_start=False, discard_last=False, final_write=True)
     del as1
     # New aggregation.
     as2 = AggStream(
@@ -1083,12 +1040,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
         parallel=True,
         post=post,
     )
-    as2.agg(
-        seed=seed_df.iloc[31:],
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as2.agg(seed=seed_df.iloc[31:], trim_start=False, discard_last=False, final_write=True)
     # Reference results by continuous aggregation.
     key1_res_ref = reference_results(
         seed_df.loc[seed_df[filter_on], :],
