@@ -7,8 +7,10 @@ Created on Wed Jan 24 21:30:00 2024.
 """
 import operator
 
+from numpy import ndarray
 from numpy import ones
 from numpy import zeros
+from pandas import DataFrame
 
 
 ops = {
@@ -22,7 +24,7 @@ ops = {
 }
 
 
-def dataframe_filter(df, filters):
+def dataframe_filter(df: DataFrame, filters) -> ndarray:
     """
     Produce a column filter of the input dataframe.
 

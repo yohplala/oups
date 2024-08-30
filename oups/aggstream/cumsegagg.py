@@ -518,16 +518,19 @@ def cumsegagg(
     # Assemble 'bin_res' as a pandas DataFrame.
     bin_res = pDataFrame(bin_res, index=bin_labels, copy=False)
     bin_res.index.name = ordered_on if ordered_on else bin_by[KEY_BIN_ON]
+    if DTYPE_INT64 in agg:
+        # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
+        # (it is a pandas dtype, not a numpy one, which is why it is set only
+        # in pandas results, and not numpy inputs to 'cumsegagg()').
+        # Force 'int64' to nullable int, even if there is no null value, in
+        # case null values in a later aggregation.
+        bin_res[agg[DTYPE_INT64][1]] = bin_res[agg[DTYPE_INT64][1]].astype(
+            DTYPE_NULLABLE_INT64,
+        )
     # Set null values.
     if n_max_null_bins != 0:
         null_bin_labels = bin_labels.iloc[null_bin_indices[~nisin(null_bin_indices, -1)]]
         if not null_bin_labels.empty:
-            if DTYPE_INT64 in agg:
-                # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
-                # (it is a pandas dtype, not a numpy one)
-                bin_res[agg[DTYPE_INT64][1]] = bin_res[agg[DTYPE_INT64][1]].astype(
-                    DTYPE_NULLABLE_INT64,
-                )
             for dtype_, (
                 _,
                 cols_name_in_res,

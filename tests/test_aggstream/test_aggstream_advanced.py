@@ -142,6 +142,8 @@ def test_3_keys_only_bins(store, seed_path):
             .agg(**key_configs[key2][KEY_AGG])
             .reset_index()
         )
+        k2_res[FIRST] = k2_res[FIRST].astype(DTYPE_NULLABLE_INT64)
+        k2_res[MAX] = k2_res[MAX].astype(DTYPE_NULLABLE_INT64)
         key3_bins = by_x_rows(on=seed_df[ordered_on], buffer={})
         key3_bins = pSeries(pNaT, index=np.arange(len(seed_df)))
         key3_bin_starts = np.arange(0, len(seed_df), 4)
@@ -150,6 +152,8 @@ def test_3_keys_only_bins(store, seed_path):
         k3_res = seed_df.groupby(key3_bins).agg(**key_configs[key3][KEY_AGG])
         k3_res.index.name = ordered_on
         k3_res.reset_index(inplace=True)
+        k3_res[MIN] = k3_res[MIN].astype(DTYPE_NULLABLE_INT64)
+        k3_res[MAX] = k3_res[MAX].astype(DTYPE_NULLABLE_INT64)
         return k1_res, k2_res, k3_res
 
     # Remove last 'group' as per 'ordered_on' in 'seed_df'.
@@ -1060,3 +1064,111 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
     assert key2_res.equals(key2_res_ref)
     key3_res = store[key3].pdf
     assert key3_res.equals(key3_res_ref)
+
+
+def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path):
+    # Test with 3 keys, bins and snapshots, filters and parallel iterations.
+    # - filter 'True' : key 1: time grouper '10T', agg 'first' & 'last',
+    #   recording bins and snaps.
+    # - filter 'False' : key 2: time grouper '20T', agg 'first' & 'last',
+    #   recording snaps.
+    # - filter 'True' : key 3: time grouper '2T', agg 'first' & 'last',
+    #   recording bins.
+    # - snap '5T'
+    # No head or tail trimming.
+    # Restarting aggregation with a new AggStream instance.
+    #
+    # Setup streamed aggregation.
+    val = "val"
+    max_row_group_size = 5
+    snap_duration = "5T"
+    common_key_params = {
+        KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
+        KEY_AGG: {FIRST: (val, FIRST), LAST: (val, LAST)},
+    }
+    key1_bin = Indexer("agg_10T_bin")
+    key1_sst = Indexer("agg_10T_sst")
+    key1_cf = {
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
+    }
+    key2_sst = Indexer("agg_20T_sst")
+    key2_cf = {
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
+    }
+    key3_bin = Indexer("agg_2T_bin")
+    key3_cf = {
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="right"),
+        KEY_SNAP_BY: None,
+    }
+    filter1 = "filter1"
+    filter2 = "filter2"
+    filter_on = "filter_on"
+    as1 = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys={
+            filter1: {
+                (key1_bin, key1_sst): deepcopy(key1_cf),
+                key3_bin: deepcopy(key3_cf),
+            },
+            filter2: {key2_sst: deepcopy(key2_cf)},
+        },
+        filters={
+            filter1: [(filter_on, "==", True)],
+            filter2: [(filter_on, "==", False)],
+        },
+        max_row_group_size=max_row_group_size,
+        **common_key_params,
+        parallel=True,
+        post=None,
+    )
+    # Seed data.
+    rand_ints = np.hstack(
+        [
+            np.array([2, 3, 4, 7, 10, 14, 14, 14, 16, 17]),
+            np.array([24, 29, 30, 31, 32, 33, 36, 37, 39, 45]),
+            np.array([48, 49, 50, 54, 54, 56, 58, 59, 60, 61]),
+            np.array([64, 65, 77, 89, 90, 90, 90, 94, 98, 98]),
+            np.array([99, 100, 103, 104, 108, 113, 114, 115, 117, 117]),
+        ],
+    )
+    start = Timestamp("2020/01/01")
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    filter_val = np.ones(len(ts), dtype=bool)
+    filter_val[::2] = False
+    seed_df = DataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
+    seed_list = [seed_df.iloc[:17], seed_df.iloc[17:31]]
+    as1.agg(seed=seed_list, trim_start=False, discard_last=False, final_write=True)
+    del as1
+    # New aggregation.
+    as2 = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys={
+            filter1: {
+                (key1_bin, key1_sst): deepcopy(key1_cf),
+                key3_bin: deepcopy(key3_cf),
+            },
+            filter2: {key2_sst: deepcopy(key2_cf)},
+        },
+        filters={
+            filter1: [(filter_on, "==", True)],
+            filter2: [(filter_on, "==", False)],
+        },
+        max_row_group_size=max_row_group_size,
+        **common_key_params,
+        parallel=True,
+        post=None,
+    )
+    as2.agg(seed=seed_df.iloc[31:], trim_start=False, discard_last=False, final_write=True)
+    # Reference results by continuous aggregation.
+    key1_bin_ref, key1_sst_ref = cumsegagg(
+        data=seed_df.loc[seed_df[filter_on], :],
+        **(key1_cf | common_key_params),
+        ordered_on=ordered_on,
+    )
+    key1_bin_res = store[key1_bin].pdf
+    assert key1_bin_res.equals(key1_bin_ref.reset_index())
+    key1_sst_res = store[key1_sst].pdf
+    assert key1_sst_res.equals(key1_sst_ref.reset_index())
+    # TODO: set int64 typde to nullable int int64 right away instead of doing afterwards. in cumsegagg
