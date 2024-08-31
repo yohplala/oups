@@ -159,6 +159,7 @@ def test_time_grouper_sum_agg(store, seed_path):
         ],
     )
     ref_res = DataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    ref_res[agg_col] = ref_res[agg_col].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index' is last timestamp, and 'post_buffer' is empty.
@@ -209,6 +210,7 @@ def test_time_grouper_sum_agg(store, seed_path):
         ],
     )
     ref_res = DataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
+    ref_res[agg_col] = ref_res[agg_col].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
@@ -227,6 +229,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     as_.agg(seed=seed, trim_start=True, discard_last=False)
     # Test results (not trimming seed data).
     ref_res = seed_pf.to_pandas().groupby(bin_by).agg(**agg).reset_index()
+    ref_res[agg_col] = ref_res[agg_col].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
@@ -523,6 +526,7 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
     ref_res = seed_pdf.iloc[:-1].groupby(bin_by).agg(**agg)
     ref_res.index.name = ts_open
     ref_res.reset_index(inplace=True)
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # 1st append of new data.
@@ -538,6 +542,7 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
     ref_res = concat([seed_pdf, seed_pdf2]).iloc[:-1].groupby(bin_by).agg(**agg)
     ref_res.index.name = ts_open
     ref_res.reset_index(inplace=True)
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
@@ -839,6 +844,7 @@ def test_by_callable_with_bin_on(store, seed_path):
             trimmed_seed["bins"].iloc[0] = -1
         trimmed_seed["bins"] = trimmed_seed["bins"].ffill()
         ref_res_agg = trimmed_seed.groupby("bins").agg(**agg)
+        ref_res_agg[MAX] = ref_res_agg[MAX].astype(DTYPE_NULLABLE_INT64)
         ref_res_agg.index.name = bin_out_col
         ref_res_agg.reset_index(inplace=True)
         # Set correct bin labels (same label can be used for several bins)
@@ -897,7 +903,7 @@ def test_by_callable_with_bin_on(store, seed_path):
 
 
 def test_time_grouper_trim_start(store, seed_path):
-    # Test with time grouper and 'first' aggregation.
+    # Test with time grouper and 'sum' aggregation.
     # No post, 'discard_last=True'.
     # Test 'trim_start=False' when appending.
     # Setup aggregation.
@@ -922,6 +928,7 @@ def test_time_grouper_trim_start(store, seed_path):
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results.
     ref_res = seed_pdf.iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
@@ -939,12 +946,13 @@ def test_time_grouper_trim_start(store, seed_path):
     # Test results.
     seed_pdf_ref = concat([seed_pdf.iloc[:-1], seed_pdf2])
     ref_res = seed_pdf_ref.iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
 
-def test_time_grouper_agg_first(store):
-    # Test with time grouper and 'first' aggregation.
+def test_time_grouper_agg_sum(store):
+    # Test with time grouper and 'sum' aggregation.
     # Seed as simple pandas DataFrame.
     # No post, 'discard_last=True'.
     # 1st agg ends on a full bin (no stitching required when re-starting).
@@ -969,6 +977,7 @@ def test_time_grouper_agg_first(store):
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results.
     ref_res = seed.iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # 1st append, starting a new bin.
@@ -979,12 +988,13 @@ def test_time_grouper_agg_first(store):
     as_.agg(seed=seed2, trim_start=True, discard_last=True)
     # Test results.
     ref_res = seed2.iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
 
 def test_single_row(store):
-    # Test with time grouper and 'first' aggregation.
+    # Test with time grouper and 'sum' aggregation.
     # Single row.
     # No post, 'discard_last=True'.
     #
@@ -1010,7 +1020,7 @@ def test_single_row(store):
 
 
 def test_single_row_within_seed(store, seed_path):
-    # Test with time grouper and 'first' aggregation.
+    # Test with time grouper and 'sum' aggregation.
     # Single row in the middle of otherwise larger chunks.
     # No post, 'discard_last=True'.
     # Seed data
@@ -1080,12 +1090,13 @@ def test_single_row_within_seed(store, seed_path):
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results.
     ref_res = seed_pdf.iloc[:-2].groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
 
 def test_time_grouper_duplicates_on_wo_bin_on(store):
-    # Test with time grouper and 'first' aggregation.
+    # Test with time grouper and 'sum' aggregation.
     # No post, 'discard_last=True'.
     # Test 'duplicates_on=[ordered_on]' (without 'bin_on')
     # No error should raise at recording.
@@ -1129,6 +1140,7 @@ def test_time_grouper_duplicates_on_wo_bin_on(store):
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results.
     ref_res = DataFrame({ordered_on: ts_order[:1], SUM: [6]})
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 

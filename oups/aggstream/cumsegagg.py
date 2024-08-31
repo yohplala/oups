@@ -522,8 +522,9 @@ def cumsegagg(
         # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
         # (it is a pandas dtype, not a numpy one, which is why it is set only
         # in pandas results, and not numpy inputs to 'cumsegagg()').
-        # Force 'int64' to nullable int, even if there is no null value, in
-        # case null values in a later aggregation.
+        # Force 'int64' to pandas nullable 'Int64', even if there is no null
+        # value in results at the moment. Indeed null values can appear in a
+        # later aggregation step (use of 'restart' feature).
         bin_res[agg[DTYPE_INT64][1]] = bin_res[agg[DTYPE_INT64][1]].astype(
             DTYPE_NULLABLE_INT64,
         )
