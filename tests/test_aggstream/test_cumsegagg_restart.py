@@ -183,9 +183,9 @@ def test_cumsegagg_bin_only(
     else:
         # Last cosmetic changes on 'bin_res_ref' if a DataFrame.
         bin_res_ref.index.name = dti
+    bin_res_ref[SUM] = bin_res_ref[SUM].astype(DTYPE_NULLABLE_INT64)
     if indices_of_null_res:
         # Update null int values.
-        bin_res_ref[SUM] = bin_res_ref[SUM].astype(DTYPE_NULLABLE_INT64)
         bin_res_ref.loc[indices_of_null_res, SUM] = pNA
     # Initialize.
     agg = setup_cumsegagg(agg, data.dtypes.to_dict())
@@ -264,6 +264,7 @@ def test_cumsegagg_bin_only(
             pDataFrame(
                 {MIN: [1, 1, 2], LAST: [2, 3, 2]},
                 index=DatetimeIndex(["2020-01-01 08:10", "2020-01-01 08:19", "2020-01-01 09:30"]),
+                dtype=DTYPE_NULLABLE_INT64,
             ),
             # snap_ref
             pDataFrame(
@@ -281,6 +282,7 @@ def test_cumsegagg_bin_only(
                         "2020-01-01 09:40",
                     ],
                 ),
+                dtype=DTYPE_NULLABLE_INT64,
             ),
         ),
         (
@@ -321,11 +323,13 @@ def test_cumsegagg_bin_only(
             pDataFrame(
                 {MIN: [1, 2], LAST: [1, 2]},
                 index=DatetimeIndex(["2020-01-01 08:00", "2020-01-01 09:00"]),
+                dtype=DTYPE_NULLABLE_INT64,
             ),
             # snap_ref
             pDataFrame(
                 {MIN: [1, 9], LAST: [4, 9]},
                 index=DatetimeIndex(["2020-01-01 08:12", "2020-01-01 09:10"]),
+                dtype=DTYPE_NULLABLE_INT64,
             ),
         ),
         (
@@ -458,6 +462,7 @@ def test_cumsegagg_bin_only(
                         "2020-01-01 09:10",
                     ],
                 ),
+                dtype=DTYPE_NULLABLE_INT64,
             ),
         ),
         (

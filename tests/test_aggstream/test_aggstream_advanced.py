@@ -1171,4 +1171,6 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path):
     assert key1_bin_res.equals(key1_bin_ref.reset_index())
     key1_sst_res = store[key1_sst].pdf
     assert key1_sst_res.equals(key1_sst_ref.reset_index())
-    # TODO: set int64 typde to nullable int int64 right away instead of doing afterwards. in cumsegagg
+    # TODO: validate other results (other keys)
+    # TODO: validate with a test case using 'post' as well. (checking a tuple of 2 df is outputted)
+    # TODO: clean multiindex management in oups (raise error + multiindex_conpat() function)

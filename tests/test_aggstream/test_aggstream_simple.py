@@ -1219,6 +1219,7 @@ def test_bin_on_col_sum_agg(store):
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
     ref_res = seed.iloc[:-2].groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
@@ -1249,6 +1250,7 @@ def test_bin_on_col_sum_agg(store):
     as_.agg(seed=seed, trim_start=True, discard_last=False)
     # Check aggregated results: last row has not been discarded.
     ref_res = seed.groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
@@ -1258,8 +1260,8 @@ def test_bin_on_col_sum_agg(store):
     assert not streamagg_md[KEY_POST_BUFFER]
 
 
-def test_time_grouper_agg_first_filters_and_no_filter(store):
-    # Test with time grouper and 'first' aggregation, with and w/o filters.
+def test_time_grouper_agg_sum_filters_and_no_filter(store):
+    # Test with time grouper and 'sum' aggregation, with and w/o filters.
     # Seed as simple pandas DataFrame.
     # No post, 'discard_last=True'.
     #
@@ -1301,14 +1303,17 @@ def test_time_grouper_agg_first_filters_and_no_filter(store):
     seed2 = seed2.iloc[:-1]
     # 'key'
     ref_res = seed2.groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     # 'key_a'
     ref_res = seed2.loc[seed2["val"] >= 2].groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key_a].pdf
     assert rec_res.equals(ref_res)
     # 'key_b'
     ref_res = seed2.loc[seed2["val"] >= 3].groupby(bin_by).agg(**agg).reset_index()
+    ref_res[SUM] = ref_res[SUM].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key_b].pdf
     assert rec_res.equals(ref_res)
 
@@ -1392,6 +1397,7 @@ def test_different_ordered_on(store):
     as_.agg(seed=seed, trim_start=True, discard_last=False, final_write=True)
     # Check
     ref_res = seed.groupby(bin_by).agg(**agg).reset_index(drop=True)
+    ref_res[key_ordered_on] = ref_res[key_ordered_on].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
 
@@ -1496,8 +1502,10 @@ def test_post_with_warm_up(store):
     # 1st chunk of data, not reaching the required number of warm-up rows.
     as_1.agg(seed=seed.iloc[:5], trim_start=True, discard_last=False, final_write=True)
     # Check 'post_buffer'.
+    seed_as_ref_res = seed.copy()
+    seed_as_ref_res[agg_on] = seed_as_ref_res[agg_on].astype(DTYPE_NULLABLE_INT64)
     post_buffer = store[key]._oups_metadata[KEY_AGGSTREAM][KEY_POST_BUFFER]
-    assert post_buffer["prev_bin"].equals(seed.iloc[:5])
+    assert post_buffer["prev_bin"].equals(seed_as_ref_res.iloc[:5])
     # 2nd chunk of data, starting to output actual data.
     as_1.agg(
         seed=[seed.iloc[5:8], seed.iloc[8:14]],
@@ -1510,7 +1518,7 @@ def test_post_with_warm_up(store):
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     post_buffer = store[key]._oups_metadata[KEY_AGGSTREAM][KEY_POST_BUFFER]
-    assert post_buffer["prev_bin"].equals(seed.iloc[4:14].reset_index(drop=True))
+    assert post_buffer["prev_bin"].equals(seed_as_ref_res.iloc[4:14].reset_index(drop=True))
     # 3rd chunk, cold start.
     as_2 = AggStream(
         ordered_on=ordered_on,
@@ -1535,4 +1543,4 @@ def test_post_with_warm_up(store):
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
     post_buffer = store[key]._oups_metadata[KEY_AGGSTREAM][KEY_POST_BUFFER]
-    assert post_buffer["prev_bin"].equals(seed.iloc[10:].reset_index(drop=True))
+    assert post_buffer["prev_bin"].equals(seed_as_ref_res.iloc[10:].reset_index(drop=True))
