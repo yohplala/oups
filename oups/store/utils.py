@@ -105,9 +105,7 @@ def conform_cmidx(df: DataFrame):
     cmidx = df.columns
     level_updated_idx = []
     if None in cmidx.names:
-        for i, name in enumerate(cmidx.names):
-            if name is None:
-                level_updated_idx.append(i)
+        level_updated_idx = [i for i, name in enumerate(cmidx.names) if name is None]
     cmidx.set_names([""] * len(level_updated_idx), level=level_updated_idx, inplace=True)
     # If an item of the column name is not a string, turn it into a string.
     # Using 'set_levels()' instead of rconstructing a MultiIndex to preserve
