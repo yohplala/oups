@@ -4,6 +4,10 @@ Created on Sat Dec 18 15:00:00 2021.
 
 @author: yoh
 
+Test utils.
+- Initialize path:
+tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+
 """
 from os import path as os_path
 
@@ -11,7 +15,7 @@ import pytest
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from numpy import arange
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import MultiIndex
 from pandas import concat
 from vaex import from_pandas
@@ -20,13 +24,10 @@ from oups.store.writer import to_midx
 from oups.store.writer import write as pswrite
 
 
-# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
-
-
 def test_init_and_append_pandas_std(tmp_path):
     # Initialize a parquet dataset from pandas dataframe. Existing folder.
     # (no row index, compression SNAPPY, row group size: 2)
-    pdf1 = pDataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
+    pdf1 = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     pswrite(str(tmp_path), pdf1, max_row_group_size=2)
     pf1 = ParquetFile(str(tmp_path))
     assert len(pf1.row_groups) == 3
@@ -35,7 +36,7 @@ def test_init_and_append_pandas_std(tmp_path):
     res1 = pf1.to_pandas()
     assert pdf1.equals(res1)
     # Append
-    pdf2 = pDataFrame({"a": range(2), "b": ["at", "of"]})
+    pdf2 = DataFrame({"a": range(2), "b": ["at", "of"]})
     pswrite(str(tmp_path), pdf2, max_row_group_size=2)
     res2 = ParquetFile(str(tmp_path)).to_pandas()
     assert concat([pdf1, pdf2]).reset_index(drop=True).equals(res2)
@@ -45,7 +46,7 @@ def test_init_pandas_no_folder(tmp_path):
     # Initialize a parquet dataset from pandas dataframe. No folder.
     # (no row index, compression SNAPPY, row group size: 2)
     tmp_path = os_path.join(tmp_path, "test")
-    pdf = pDataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
+    pdf = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     pswrite(str(tmp_path), pdf, max_row_group_size=2)
     res = ParquetFile(str(tmp_path)).to_pandas()
     assert pdf.equals(res)
@@ -54,7 +55,7 @@ def test_init_pandas_no_folder(tmp_path):
 def test_init_pandas_compression_brotli(tmp_path):
     # Initialize a parquet dataset from pandas dataframe. Compression 'BROTLI'.
     # (no row index)
-    pdf = pDataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
+    pdf = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     tmp_path1 = os_path.join(tmp_path, "brotli")
     pswrite(str(tmp_path1), pdf, compression="BROTLI")
     brotli_s = os_path.getsize(os_path.join(tmp_path1, "part.0.parquet"))
@@ -67,7 +68,7 @@ def test_init_pandas_compression_brotli(tmp_path):
 def test_init_and_append_vaex_std(tmp_path):
     # Initialize a parquet dataset from vaex dataframe. Existing folder.
     # (no row index, compression SNAPPY, row group size: 2)
-    pdf1 = pDataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
+    pdf1 = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     vdf1 = from_pandas(pdf1)
     pswrite(str(tmp_path), vdf1, max_row_group_size=2)
     pf1 = ParquetFile(str(tmp_path))
@@ -77,7 +78,7 @@ def test_init_and_append_vaex_std(tmp_path):
     res1 = pf1.to_pandas()
     assert pdf1.equals(res1)
     # Append
-    pdf2 = pDataFrame({"a": range(2), "b": ["at", "of"]})
+    pdf2 = DataFrame({"a": range(2), "b": ["at", "of"]})
     vdf2 = from_pandas(pdf2)
     pswrite(str(tmp_path), vdf2, max_row_group_size=2)
     res2 = ParquetFile(str(tmp_path)).to_pandas()
@@ -87,7 +88,7 @@ def test_init_and_append_vaex_std(tmp_path):
 def test_init_idx_expansion_vaex(tmp_path):
     # Expanding column index into a 2-level column multi-index.
     # No level names.
-    pdf = pDataFrame(
+    pdf = DataFrame(
         {
             "('lev1-col1','lev2-col1')": range(6, 12),
             "('lev1-col2','lev2-col2')": ["ah", "oh", "uh", "ih", "ai", "oi"],
@@ -109,7 +110,7 @@ def test_init_idx_expansion_vaex(tmp_path):
 def test_init_idx_expansion_sparse_levels(tmp_path):
     # Expanding column index into a 2-level column multi-index.
     # Sparse level names.
-    pdf = pDataFrame(
+    pdf = DataFrame(
         {
             "('lev1-col1','lev2-col1')": range(6, 12),
             "('lev1-col2','lev2-col2')": ["ah", "oh", "uh", "ih", "ai", "oi"],
@@ -126,7 +127,7 @@ def test_init_idx_expansion_sparse_levels(tmp_path):
 def test_init_and_select_vaex(tmp_path):
     # Initialize a parquet dataset from vaex dataframe. Existing folder.
     # (no row index, compression SNAPPY, row group size: 2)
-    pdf = pDataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
+    pdf = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     vdf = from_pandas(pdf)
     # Select
     vdf = vdf[vdf.a > 3]
@@ -146,7 +147,7 @@ def test_vaex_coalescing_first_rgs(tmp_path):
     # a                            [ 0, 1]
     # a (new data)                       [20]
     # rgs (new)                    [ 0,  , 1]
-    pdf = pDataFrame({"a": [0, 1]})
+    pdf = DataFrame({"a": [0, 1]})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf, row_group_offsets=[0], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -154,12 +155,12 @@ def test_vaex_coalescing_first_rgs(tmp_path):
     assert len_rgs == [2]
     max_row_group_size = 3
     max_nirgs = 2
-    vdf = from_pandas(pDataFrame({"a": [20]}))
+    vdf = from_pandas(DataFrame({"a": [20]}))
     pswrite(dn, vdf, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
     pf_rec = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
     assert len_rgs == [3]
-    df_ref = concat([pdf, pDataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
+    df_ref = concat([pdf, DataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -179,7 +180,7 @@ def test_pandas_coalescing_simple_irgs(tmp_path):
     # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     # a (new data)                                               [20]
     # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3,4 ]
-    pdf1 = pDataFrame({"a": range(10)})
+    pdf1 = DataFrame({"a": range(10)})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf1, row_group_offsets=[0, 4, 5, 9], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -187,12 +188,12 @@ def test_pandas_coalescing_simple_irgs(tmp_path):
     assert len_rgs == [4, 1, 4, 1]
     max_row_group_size = 4
     max_nirgs = 2
-    pdf2 = pDataFrame({"a": [20]})
+    pdf2 = DataFrame({"a": [20]})
     pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
     assert len_rgs == [4, 1, 4, 1, 1]
-    df_ref1 = concat([pdf1, pDataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
+    df_ref1 = concat([pdf1, DataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
     assert pf_rec1.to_pandas().equals(df_ref1)
 
     # Case 2, 'max_nirgs" now reached.
@@ -205,7 +206,7 @@ def test_pandas_coalescing_simple_irgs(tmp_path):
     pf_rec2 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec2.row_groups]
     assert len_rgs == [4, 1, 4, 3]
-    df_ref2 = concat([df_ref1, pDataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
+    df_ref2 = concat([df_ref1, DataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
     assert pf_rec2.to_pandas().equals(df_ref2)
 
 
@@ -221,7 +222,7 @@ def test_pandas_coalescing_simple_max_row_group_size(tmp_path):
     # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11]
     # a (new data)                                                     [20]
     # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3,  ,  ,  ]
-    pdf1 = pDataFrame({"a": range(12)})
+    pdf1 = DataFrame({"a": range(12)})
     dn = os_path.join(tmp_path, "test")
     fp_write(
         dn,
@@ -236,12 +237,12 @@ def test_pandas_coalescing_simple_max_row_group_size(tmp_path):
     max_row_group_size = 4
     max_nirgs = 5
     # With additional row of new data, 'max_row_group_size' is reached.
-    pdf2 = pDataFrame({"a": [20]})
+    pdf2 = DataFrame({"a": [20]})
     pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
     assert len_rgs == [4, 1, 4, 4]
-    df_ref1 = concat([pdf1, pDataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
+    df_ref1 = concat([pdf1, DataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
     assert pf_rec1.to_pandas().equals(df_ref1)
 
 
@@ -254,21 +255,21 @@ def test_pandas_appending_data_with_drop_duplicates(tmp_path):
     # b (new data, check last)                                      [11,31]
     # 1 duplicate                                                  x  x
     # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3, x, 4,  ]
-    pdf1 = pDataFrame({"a": range(11), "b": range(10, 21)})
+    pdf1 = DataFrame({"a": range(11), "b": range(10, 21)})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf1, row_group_offsets=[0, 4, 5, 9, 10], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [4, 1, 4, 1, 1]
     max_row_group_size = 4
-    pdf2 = pDataFrame({"a": [10, 20], "b": [11, 31]})
+    pdf2 = DataFrame({"a": [10, 20], "b": [11, 31]})
     # Dropping duplicates '10', 'ordered_on' with 'a'.
     pswrite(dn, pdf2, max_row_group_size=max_row_group_size, ordered_on="a", duplicates_on="a")
     pf_rec = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
     # 'coalesce' mode not requested, so no end row group merging.
     assert len_rgs == [4, 1, 4, 1, 2]
-    df_ref = concat([pdf1, pDataFrame({"a": 20, "b": 31}, index=[0])]).reset_index(drop=True)
+    df_ref = concat([pdf1, DataFrame({"a": 20, "b": 31}, index=[0])]).reset_index(drop=True)
     df_ref.iloc[10] = [10, 11]
     assert pf_rec.to_pandas().equals(df_ref)
 
@@ -295,7 +296,7 @@ def test_pandas_appending_data_with_sharp_starts(tmp_path):
     len_a1 = len(a1)
     b1 = range(len_a1)
     c1 = [0] * len_a1
-    pdf1 = pDataFrame({"a": a1, "b": b1, "c": c1})
+    pdf1 = DataFrame({"a": a1, "b": b1, "c": c1})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf1, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -306,7 +307,7 @@ def test_pandas_appending_data_with_sharp_starts(tmp_path):
     len_a2 = len(a2)
     b2 = [7, 7, 8, 9, 9, 9, 10, 10]
     c2 = arange(len_a2) + 1
-    pdf2 = pDataFrame({"a": a2, "b": b2, "c": c2})
+    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
     # 'ordered_on' with 'a', duplicates on 'b' ('a' added implicitly)
     pswrite(dn, pdf2, max_row_group_size=max_row_group_size, ordered_on="a", duplicates_on="b")
     pf_rec = ParquetFile(dn)
@@ -338,7 +339,7 @@ def test_pandas_appending_duplicates_on_a_list(tmp_path):
     len_a1 = len(a1)
     b1 = range(len_a1)
     c1 = [0] * len_a1
-    pdf1 = pDataFrame({"a": a1, "b": b1, "c": c1})
+    pdf1 = DataFrame({"a": a1, "b": b1, "c": c1})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf1, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -349,7 +350,7 @@ def test_pandas_appending_duplicates_on_a_list(tmp_path):
     len_a2 = len(a2)
     b2 = [7, 7, 8, 9, 9, 9, 10, 10]
     c2 = arange(len_a2) + 1
-    pdf2 = pDataFrame({"a": a2, "b": b2, "c": c2})
+    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
     # ordered on 'a', duplicates on 'b' ('a' added implicitly)
     pswrite(dn, pdf2, max_row_group_size=max_row_group_size, ordered_on="a", duplicates_on=["b"])
     pf_rec = ParquetFile(dn)
@@ -378,7 +379,7 @@ def test_pandas_appending_span_several_rgs(tmp_path):
     len_a1 = len(a1)
     b1 = range(len_a1)
     c1 = [0] * len_a1
-    pdf1 = pDataFrame({"a": a1, "b": b1, "c": c1})
+    pdf1 = DataFrame({"a": a1, "b": b1, "c": c1})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf1, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -389,7 +390,7 @@ def test_pandas_appending_span_several_rgs(tmp_path):
     len_a2 = len(a2)
     b2 = [7, 7, 8, 9, 9, 9, 10, 10]
     c2 = arange(len_a2) + 1
-    pdf2 = pDataFrame({"a": a2, "b": b2, "c": c2})
+    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
     # ordered on 'a', duplicates on 'b' ('a' added implicitly)
     pswrite(dn, pdf2, max_row_group_size=max_row_group_size, ordered_on="a", duplicates_on="b")
     pf_rec = ParquetFile(dn)
@@ -398,7 +399,7 @@ def test_pandas_appending_span_several_rgs(tmp_path):
     a_ref = [0, 1, 2, 3, 3, 3, 3, 4, 5, 5, 5, 6, 7, 8]
     b_ref = [0, 1, 2, 3, 4, 5, 7, 6, 7, 8, 9, 9, 10, 10]
     c_ref = [0, 0, 0, 0, 0, 0, 1, 0, 2, 3, 4, 6, 7, 8]
-    df_ref = pDataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
+    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -425,7 +426,7 @@ def test_pandas_inserting_data(tmp_path):
     len_a1 = len(a1)
     b1 = range(len_a1)
     c1 = [0] * len_a1
-    pdf1 = pDataFrame({"a": a1, "b": b1, "c": c1})
+    pdf1 = DataFrame({"a": a1, "b": b1, "c": c1})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf1, row_group_offsets=[0, 3, 6, 9], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -436,7 +437,7 @@ def test_pandas_inserting_data(tmp_path):
     len_a2 = len(a2)
     b2 = [7, 7, 4, 9]
     c2 = [1] * len_a2
-    pdf2 = pDataFrame({"a": a2, "b": b2, "c": c2})
+    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
     # ordered on 'a', duplicates on 'b' ('a' added implicitly)
     pswrite(dn, pdf2, max_row_group_size=max_row_group_size, ordered_on="a", duplicates_on="b")
     pf_rec = ParquetFile(dn)
@@ -445,7 +446,7 @@ def test_pandas_inserting_data(tmp_path):
     a_ref = [0, 1, 3, 3, 3, 4, 5, 7, 7, 8, 8, 9, 11, 12]
     b_ref = [0, 1, 2, 3, 7, 7, 4, 5, 6, 7, 9, 8, 9, 10]
     c_ref = [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0]
-    df_ref = pDataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
+    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -473,7 +474,7 @@ def test_vaex_inserting_data(tmp_path):
     len_a1 = len(a1)
     b1 = range(len_a1)
     c1 = [0] * len_a1
-    pdf = pDataFrame({"a": a1, "b": b1, "c": c1})
+    pdf = DataFrame({"a": a1, "b": b1, "c": c1})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf, row_group_offsets=[0, 3, 6, 9], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -484,7 +485,7 @@ def test_vaex_inserting_data(tmp_path):
     len_a2 = len(a2)
     b2 = [7, 7, 4, 9]
     c2 = [1] * len_a2
-    vdf = from_pandas(pDataFrame({"a": a2, "b": b2, "c": c2}))
+    vdf = from_pandas(DataFrame({"a": a2, "b": b2, "c": c2}))
     # ordered on 'a', duplicates on 'b' ('a' added implicitly)
     pswrite(dn, vdf, max_row_group_size=max_row_group_size, ordered_on="a", duplicates_on="b")
     pf_rec = ParquetFile(dn)
@@ -493,7 +494,7 @@ def test_vaex_inserting_data(tmp_path):
     a_ref = [0, 1, 3, 3, 3, 4, 5, 7, 7, 8, 8, 9, 11, 12]
     b_ref = [0, 1, 2, 3, 7, 7, 4, 5, 6, 7, 9, 8, 9, 10]
     c_ref = [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0]
-    df_ref = pDataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
+    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -521,7 +522,7 @@ def test_vaex_no_duplicate_drop(tmp_path):
     len_a1 = len(a1)
     b1 = range(len_a1)
     c1 = [0] * len_a1
-    pdf = pDataFrame({"a": a1, "b": b1, "c": c1})
+    pdf = DataFrame({"a": a1, "b": b1, "c": c1})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf, row_group_offsets=[0, 3, 6, 9], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -532,7 +533,7 @@ def test_vaex_no_duplicate_drop(tmp_path):
     len_a2 = len(a2)
     b2 = [7, 7, 4, 9]
     c2 = [1] * len_a2
-    vdf = from_pandas(pDataFrame({"a": a2, "b": b2, "c": c2}))
+    vdf = from_pandas(DataFrame({"a": a2, "b": b2, "c": c2}))
     # ordered on 'a', duplicates on 'b' ('a' added implicitly)
     pswrite(dn, vdf, max_row_group_size=max_row_group_size, ordered_on="a")
     pf_rec = ParquetFile(dn)
@@ -541,7 +542,7 @@ def test_vaex_no_duplicate_drop(tmp_path):
     a_ref = [0, 1, 3, 3, 3, 4, 5, 5, 7, 7, 8, 8, 9, 11, 12]
     b_ref = [0, 1, 2, 3, 7, 7, 4, 4, 5, 6, 7, 9, 8, 9, 10]
     c_ref = [0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0]
-    df_ref = pDataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
+    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -567,7 +568,7 @@ def test_vaex_appending_as_if_inserting_no_coalesce(tmp_path):
     len_a1 = len(a1)
     b1 = range(len_a1)
     c1 = [0] * len_a1
-    pdf = pDataFrame({"a": a1, "b": b1, "c": c1})
+    pdf = DataFrame({"a": a1, "b": b1, "c": c1})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -578,7 +579,7 @@ def test_vaex_appending_as_if_inserting_no_coalesce(tmp_path):
     len_a2 = len(a2)
     b2 = [9, 9, 10, 10]
     c2 = arange(len_a2) + 5
-    vdf = from_pandas(pDataFrame({"a": a2, "b": b2, "c": c2}))
+    vdf = from_pandas(DataFrame({"a": a2, "b": b2, "c": c2}))
     # ordered on 'a', duplicates on 'b' ('a' added implicitly)
     pswrite(dn, vdf, max_row_group_size=max_row_group_size, ordered_on="a", duplicates_on=["b"])
     pf_rec = ParquetFile(dn)
@@ -610,7 +611,7 @@ def test_vaex_appending_as_if_inserting_with_coalesce(tmp_path):
     len_a1 = len(a1)
     b1 = range(len_a1)
     c1 = [0] * len_a1
-    pdf = pDataFrame({"a": a1, "b": b1, "c": c1})
+    pdf = DataFrame({"a": a1, "b": b1, "c": c1})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -622,7 +623,7 @@ def test_vaex_appending_as_if_inserting_with_coalesce(tmp_path):
     len_a2 = len(a2)
     b2 = [9, 9, 10, 10]
     c2 = arange(len_a2) + 5
-    vdf = from_pandas(pDataFrame({"a": a2, "b": b2, "c": c2}))
+    vdf = from_pandas(DataFrame({"a": a2, "b": b2, "c": c2}))
     # ordered on 'a', duplicates on 'b' ('a' added implicitly)
     pswrite(
         dn,
@@ -657,7 +658,7 @@ def test_vaex_duplicates_all_cols(tmp_path):
     len_a1 = len(a1)
     b1 = range(len_a1)
     c1 = [0] * (len_a1 - 1) + [2]
-    pdf = pDataFrame({"a": a1, "b": b1, "c": c1})
+    pdf = DataFrame({"a": a1, "b": b1, "c": c1})
     dn = os_path.join(tmp_path, "test")
     fp_write(dn, pdf, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
     pf = ParquetFile(dn)
@@ -667,7 +668,7 @@ def test_vaex_duplicates_all_cols(tmp_path):
     a2 = [3, 5, 5, 5, 6]
     b2 = [7, 7, 7, 7, 9]
     c2 = [1, 2, 3, 2, 5]
-    vdf = from_pandas(pDataFrame({"a": a2, "b": b2, "c": c2}))
+    vdf = from_pandas(DataFrame({"a": a2, "b": b2, "c": c2}))
     # ordered on 'a', duplicates on 'b' ('a' added implicitly)
     pswrite(dn, vdf, max_row_group_size=max_row_group_size, ordered_on="a", duplicates_on=[])
     pf_rec = ParquetFile(dn)
@@ -676,7 +677,7 @@ def test_vaex_duplicates_all_cols(tmp_path):
     a_ref = [0, 1, 2, 3, 3, 3, 3, 4, 5, 5, 6]
     b_ref = [0, 1, 2, 3, 4, 5, 7, 6, 7, 7, 9]
     c_ref = [0, 0, 0, 0, 0, 0, 1, 0, 3, 2, 5]
-    df_ref = pDataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
+    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
     assert pf_rec.to_pandas().equals(df_ref)
 
 
@@ -699,7 +700,7 @@ def test_pandas_drop_duplicates_wo_coalescing_irgs(tmp_path):
     # b (new data)                               [1]
     # rgs (new)                    [0, , , , ,1,x,2]
     n_val = 7
-    pdf = pDataFrame({"a": range(n_val), "b": [0] * n_val})
+    pdf = DataFrame({"a": range(n_val), "b": [0] * n_val})
     dn = os_path.join(tmp_path, "test")
     fp_write(
         dn,
@@ -713,7 +714,7 @@ def test_pandas_drop_duplicates_wo_coalescing_irgs(tmp_path):
     assert len_rgs == [n_val - 2, 1, 1]
     max_row_group_size = 5
     max_nirgs = 3
-    pdf2 = pDataFrame({"a": [n_val - 1], "b": [1]})
+    pdf2 = DataFrame({"a": [n_val - 1], "b": [1]})
     pswrite(
         dn,
         pdf2,
@@ -731,10 +732,10 @@ def test_pandas_drop_duplicates_wo_coalescing_irgs(tmp_path):
     assert pf_rec.to_pandas().equals(df_ref)
 
 
-def test_ordered_on_not_existing_pandas_vaex(tmp_path):
+def test_exception_ordered_on_not_existing_pandas_vaex(tmp_path):
     # While 'ordered_on' is defined, it is not in seed data.
     n_val = 5
-    pdf = pDataFrame({"a": range(n_val), "b": [0] * n_val})
+    pdf = DataFrame({"a": range(n_val), "b": [0] * n_val})
     dn = os_path.join(tmp_path, "test")
     # Write a 1st set of data.
     fp_write(
@@ -750,3 +751,15 @@ def test_ordered_on_not_existing_pandas_vaex(tmp_path):
     # Append with oups same set of data, vaex dataframe.
     with pytest.raises(ValueError, match="^column 'ts'"):
         pswrite(dn, from_pandas(pdf), ordered_on="ts")
+
+
+def test_exception_check_cmix(tmp_path):
+    # Check 1st no column level names.
+    df = DataFrame({("a", 1): [1]})
+    with pytest.raises(ValueError, match="^not possible to have level name"):
+        pswrite(tmp_path, df)
+    # Check with one column name not being a string.
+    # Correcting column names.
+    df.columns.set_names(["1", "2"], level=[0, 1], inplace=True)
+    with pytest.raises(TypeError, match="^name 1 has to be"):
+        pswrite(tmp_path, df)

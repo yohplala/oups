@@ -4,11 +4,21 @@ Created on Wed Dec  1 18:35:00 2021.
 
 @author: yoh
 
+Test utils.
+- Initialize path:
+tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+
 """
 import zipfile
 from os import path as os_path
 
+import pytest
+from fastparquet import write
+from pandas import DataFrame
+from pandas import MultiIndex
+
 from oups.store.defines import DIR_SEP
+from oups.store.utils import conform_cmidx
 from oups.store.utils import files_at_depth
 
 from .. import TEST_DATA
@@ -59,3 +69,22 @@ def test_files_at_depth(tmp_path):
         (f"stockholm.pressure{DIR_SEP}flemings.spring{DIR_SEP}innerplace.morning", ["_metadata"]),
     ]
     assert paths_files == paths_ref
+
+
+def test_conform_cmidx(tmp_path):
+    # Check first that fastparquet is unable to write a DataFrame with
+    # identified shortcomings, then confirm it works with 'conform_cmidx()'.
+    # Check 1st no column level names.
+    df = DataFrame({("a", 1): [1]})
+    with pytest.raises(TypeError, match="^Column name must be a string"):
+        write(tmp_path, df, file_scheme="hive")
+    # Check then one column name is not a string.
+    # Correcting column names.
+    df.columns.set_names(["1", "2"], level=[0, 1], inplace=True)
+    with pytest.raises(ValueError, match="^\\('Column names must be multi-index,"):
+        write(tmp_path, df, file_scheme="hive")
+    df = DataFrame({("a", 1, "o"): [1]})
+    df.columns.set_names(["oh"], level=[1], inplace=True)
+    # Conform cmidx.
+    conform_cmidx(df)
+    assert df.columns == MultiIndex.from_tuples([("a", "1", "o")], names=["", "oh", ""])

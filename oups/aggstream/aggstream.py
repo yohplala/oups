@@ -1464,11 +1464,3 @@ class AggStream:
             )
         if seed and seed_check_exception:
             raise SeedPreException(exception_message)
-
-
-# TODO
-# Test when bin key and snap key (in a tuple), both results are saved
-# Check error message when there is a post with both bin_key and snap_key, but only one dataframe is returned
-# Check both dataframes are recorded from post if both bin key and snap key are provided
-# Change milti index in oups.write: do not force change, but implement a dataframe compat
-# to be used by user before recording dataframe / raise error otherwise

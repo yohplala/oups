@@ -223,43 +223,29 @@ def to_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
     return MultiIndex.from_tuples(tuples, names=levels)
 
 
-def check_cmidx(chunk):
+def check_cmidx(cmidx: MultiIndex):
     """
-    Check cmidx to have it complying with fastparquet limitations.
+    Check if column multi-index complies with fastparquet requirements.
 
-    Most notably, fastparquet requires names for each level in a Multiindex.
-    If these are not set, there are set to '', an empty string.
+    Library fastparquet requires names for each level in a Multiindex.
     Also, column names have to be tuple of string.
-
-    DataFrame is modified in-place.
 
     Parameters
     ----------
-    chunk : DataFrame
-        DataFrame with a column multi-index to check and possibly adjust.
-
-    Returns
-    -------
-    None
+    cmidx : MultiIndex
+        MultiIndex to check.
 
     """
-    # If a name is 'None', set it to '' instead.
-    cmidx = chunk.columns
-    for i, name in enumerate(cmidx.names):
-        if name is None:
-            cmidx.set_names("", level=i, inplace=True)
-    # If an item of the column name is not a string, turn it into a string.
-    # Using 'set_levels()' instead of rconstructing a MultiIndex to preserve
-    # index names directly.
-    level_updated_idx = []
-    level_updated = []
-    for i, level in enumerate(cmidx.levels):
-        str_level = [name if isinstance(name, str) else str(name) for name in level]
-        if level.to_list() != str_level:
-            level_updated_idx.append(i)
-            level_updated.append(str_level)
-    if level_updated:
-        chunk.columns = chunk.columns.set_levels(level_updated, level=level_updated_idx)
+    # Check level names.
+    if None in cmidx.names:
+        raise ValueError(
+            "not possible to have level name set to None.",
+        )  # If an item of the column name is not a string, turn it into a string.
+    # Check column names.
+    for level in cmidx.levels:
+        for name in level:
+            if not isinstance(name, str):
+                raise TypeError(f"name {name} has to be of type 'string', not '{type(name)}'.")
 
 
 def write_metadata(
@@ -605,7 +591,7 @@ def write(
         # In case multi-index is used, check that it complies with fastparquet
         # limitations.
         if isinstance(chunk.columns, MultiIndex):
-            check_cmidx(chunk)
+            check_cmidx(chunk.columns)
         fp_write(
             dirpath,
             chunk,
