@@ -1066,7 +1066,16 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
     assert key3_res.equals(key3_res_ref)
 
 
-def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path):
+@pytest.mark.parametrize(
+    "with_post",
+    [
+        # 1/ Without post.
+        False,
+        # 2/ With post.
+        True,
+    ],
+)
+def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post):
     # Test with 3 keys, bins and snapshots, filters and parallel iterations.
     # - filter 'True' : key 1: time grouper '10T', agg 'first' & 'last',
     #   recording bins and snaps.
@@ -1079,6 +1088,25 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path):
     # Restarting aggregation with a new AggStream instance.
     #
     # Setup streamed aggregation.
+
+    def post_bin_snap(buffer: dict, bin_res: DataFrame = None, snap_res: DataFrame = None):
+        """
+        Nothing too crazy, only to test with a 'post()' function.
+        """
+        bin_res.iloc[:, 1:] = bin_res.iloc[:, 1:] + 1
+        if snap_res is None:
+            return bin_res
+        else:
+            snap_res.iloc[:, 1:] = snap_res.iloc[:, 1:] + 1
+            return bin_res, snap_res
+
+    def post_only_snap(buffer: dict, bin_res: DataFrame = None, snap_res: DataFrame = None):
+        """
+        Same as above, but only returning 'snap_res'.
+        """
+        snap_res.iloc[:, 1:] = snap_res.iloc[:, 1:] + 1
+        return snap_res
+
     val = "val"
     max_row_group_size = 5
     snap_duration = "5T"
@@ -1094,6 +1122,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path):
     key2_sst = Indexer("agg_20T_sst")
     key2_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
+        "post": post_only_snap if with_post else None,
     }
     key3_bin = Indexer("agg_2T_bin")
     key3_cf = {
@@ -1120,7 +1149,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path):
         max_row_group_size=max_row_group_size,
         **common_key_params,
         parallel=True,
-        post=None,
+        post=post_bin_snap if with_post else None,
     )
     # Seed data.
     rand_ints = np.hstack(
@@ -1158,7 +1187,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path):
         max_row_group_size=max_row_group_size,
         **common_key_params,
         parallel=True,
-        post=None,
+        post=post_bin_snap if with_post else None,
     )
     as2.agg(seed=seed_df.iloc[31:], trim_start=False, discard_last=False, final_write=True)
     # Reference results by continuous aggregation.
@@ -1167,16 +1196,35 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path):
         **(key1_cf | common_key_params),
         ordered_on=ordered_on,
     )
+    key1_bin_ref.reset_index(inplace=True)
+    key1_sst_ref.reset_index(inplace=True)
     key1_bin_res = store[key1_bin].pdf
-    assert key1_bin_res.equals(key1_bin_ref.reset_index())
     key1_sst_res = store[key1_sst].pdf
-    assert key1_sst_res.equals(key1_sst_ref.reset_index())
+    key2_cf.pop("post")
+    _, key2_sst_ref = cumsegagg(
+        data=seed_df.loc[~seed_df[filter_on], :],
+        **(key2_cf | common_key_params),
+        ordered_on=ordered_on,
+    )
+    key2_sst_ref.reset_index(inplace=True)
+    key2_sst_res = store[key2_sst].pdf
+    key3_bin_ref, _ = cumsegagg(
+        data=seed_df.loc[seed_df[filter_on], :],
+        **(key3_cf | common_key_params),
+        ordered_on=ordered_on,
+    )
+    key3_bin_ref.reset_index(inplace=True)
+    key3_bin_res = store[key3_bin].pdf
+    if with_post:
+        key1_bin_ref.iloc[:, 1:] = key1_bin_ref.iloc[:, 1:] + 1
+        key1_sst_ref.iloc[:, 1:] = key1_sst_ref.iloc[:, 1:] + 1
+        key2_sst_ref.iloc[:, 1:] = key2_sst_ref.iloc[:, 1:] + 1
+        key3_bin_ref.iloc[:, 1:] = key3_bin_ref.iloc[:, 1:] + 1
+    assert key1_bin_res.equals(key1_bin_ref)
+    assert key1_sst_res.equals(key1_sst_ref)
+    assert key2_sst_res.equals(key2_sst_ref)
+    assert key3_bin_res.equals(key3_bin_ref)
 
 
-# TODO: validate other results (other keys)
-# TODO: validate with a test case using 'post' as well. (checking a tuple of 2 df is outputted)
-# TODO
-# Test when bin key and snap key (in a tuple), both results are saved
-# Check error message when there is a post with both bin_key and snap_key, but only one dataframe is returned
-# Check both dataframes are recorded from post if both bin key and snap key are provided
+# TODO: Check error message when there is a post with both bin_key and snap_key, but only one dataframe is returned
 # TODO: in the end, clean 'aggstream': not set bin_res or snap_res to None if not necessary.
