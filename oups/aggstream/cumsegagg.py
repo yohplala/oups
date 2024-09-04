@@ -518,16 +518,20 @@ def cumsegagg(
     # Assemble 'bin_res' as a pandas DataFrame.
     bin_res = pDataFrame(bin_res, index=bin_labels, copy=False)
     bin_res.index.name = ordered_on if ordered_on else bin_by[KEY_BIN_ON]
+    if DTYPE_INT64 in agg:
+        # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
+        # (it is a pandas dtype, not a numpy one, which is why it is set only
+        # in pandas results, and not numpy inputs to 'cumsegagg()').
+        # Force 'int64' to pandas nullable 'Int64', even if there is no null
+        # value in results at the moment. Indeed null values can appear in a
+        # later aggregation step (use of 'restart' feature).
+        bin_res[agg[DTYPE_INT64][1]] = bin_res[agg[DTYPE_INT64][1]].astype(
+            DTYPE_NULLABLE_INT64,
+        )
     # Set null values.
     if n_max_null_bins != 0:
         null_bin_labels = bin_labels.iloc[null_bin_indices[~nisin(null_bin_indices, -1)]]
         if not null_bin_labels.empty:
-            if DTYPE_INT64 in agg:
-                # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
-                # (it is a pandas dtype, not a numpy one)
-                bin_res[agg[DTYPE_INT64][1]] = bin_res[agg[DTYPE_INT64][1]].astype(
-                    DTYPE_NULLABLE_INT64,
-                )
             for dtype_, (
                 _,
                 cols_name_in_res,
@@ -538,6 +542,16 @@ def cumsegagg(
     if snap_by is not None:
         snap_res = pDataFrame(snap_res, index=snap_labels, copy=False)
         snap_res.index.name = ordered_on
+        if DTYPE_INT64 in agg:
+            # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
+            # It is a pandas dtype, not a numpy one, which is why it is set
+            # only in pandas results, and not numpy inputs to 'cumsegagg()').
+            # Force 'int64' to pandas nullable 'Int64', even if there is no
+            # null value in results at the moment. Indeed null values can
+            # appear in a later aggregation step (use of 'restart' feature).
+            snap_res[agg[DTYPE_INT64][1]] = snap_res[agg[DTYPE_INT64][1]].astype(
+                DTYPE_NULLABLE_INT64,
+            )
         # Set null values.
         if n_max_null_snaps != 0:
             # Remove -1 indices.
@@ -546,12 +560,6 @@ def cumsegagg(
             # Alternatively, output number of empty snaps from 'jcumsegagg()'?
             null_snap_labels = snap_labels[null_snap_indices[~nisin(null_snap_indices, -1)]]
             if not null_snap_labels.empty:
-                if DTYPE_INT64 in agg:
-                    # As of pandas 1.5.3, use "Int64" dtype to work with nullable 'int'.
-                    # (it is a pandas dtype, not a numpy one)
-                    snap_res[agg[DTYPE_INT64][1]] = snap_res[agg[DTYPE_INT64][1]].astype(
-                        DTYPE_NULLABLE_INT64,
-                    )
                 for dtype_, (
                     _,
                     cols_name_in_res,

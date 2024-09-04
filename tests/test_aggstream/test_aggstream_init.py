@@ -25,27 +25,33 @@ from pandas.core.resample import TimeGrouper
 from oups import AggStream
 from oups import ParquetSet
 from oups import toplevel
+from oups.aggstream.aggstream import FIRST
 from oups.aggstream.aggstream import KEY_AGG
-from oups.aggstream.aggstream import KEY_AGG_RES_BUFFER
+from oups.aggstream.aggstream import KEY_AGG_N_ROWS
+from oups.aggstream.aggstream import KEY_BIN_BY
+from oups.aggstream.aggstream import KEY_BIN_ON
 from oups.aggstream.aggstream import KEY_BIN_ON_OUT
+from oups.aggstream.aggstream import KEY_BIN_RES
 from oups.aggstream.aggstream import KEY_BIN_RES_BUFFER
+from oups.aggstream.aggstream import KEY_DUPLICATES_ON
 from oups.aggstream.aggstream import KEY_FILTERS
+from oups.aggstream.aggstream import KEY_MAX_ROW_GROUP_SIZE
+from oups.aggstream.aggstream import KEY_ORDERED_ON
 from oups.aggstream.aggstream import KEY_POST
 from oups.aggstream.aggstream import KEY_POST_BUFFER
 from oups.aggstream.aggstream import KEY_PRE
 from oups.aggstream.aggstream import KEY_PRE_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
+from oups.aggstream.aggstream import KEY_SEG_CONFIG
 from oups.aggstream.aggstream import KEY_SEGAGG_BUFFER
+from oups.aggstream.aggstream import KEY_SNAP_BY
+from oups.aggstream.aggstream import KEY_SNAP_RES
+from oups.aggstream.aggstream import KEY_SNAP_RES_BUFFER
+from oups.aggstream.aggstream import KEY_WRITE_CONFIG
+from oups.aggstream.aggstream import LAST
 from oups.aggstream.aggstream import NO_FILTER_ID
+from oups.aggstream.aggstream import SUM
 from oups.aggstream.aggstream import FilterApp
-from oups.aggstream.jcumsegagg import FIRST
-from oups.aggstream.jcumsegagg import LAST
-from oups.aggstream.jcumsegagg import SUM
-from oups.aggstream.segmentby import KEY_BIN_BY
-from oups.aggstream.segmentby import KEY_ORDERED_ON
-from oups.aggstream.segmentby import KEY_SNAP_BY
-from oups.store.writer import KEY_DUPLICATES_ON
-from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
 
 
 @toplevel
@@ -99,7 +105,7 @@ def always_false(**kwargs):
                 Indexer("key1"): {
                     KEY_BIN_ON_OUT: "ts",
                     KEY_POST: None,
-                    "write_config": {
+                    KEY_WRITE_CONFIG: {
                         KEY_ORDERED_ON: "ts",
                         KEY_MAX_ROW_GROUP_SIZE: 6,
                         KEY_DUPLICATES_ON: "ts",
@@ -145,7 +151,7 @@ def always_false(**kwargs):
                     },
                     Indexer("key3_only_default"): {
                         KEY_BIN_BY: always_false,
-                        "bin_on": ("bin_on_spec", "bin_out_spec"),
+                        KEY_BIN_ON: ("bin_on_spec", "bin_out_spec"),
                     },
                     Indexer("key4_most_default"): {
                         KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
@@ -166,7 +172,7 @@ def always_false(**kwargs):
                 Indexer("key1_some_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_false,
-                    "write_config": {
+                    KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
                         KEY_ORDERED_ON: "ts_dflt",
@@ -176,7 +182,7 @@ def always_false(**kwargs):
                 Indexer("key2_only_specific"): {
                     KEY_BIN_ON_OUT: None,
                     KEY_POST: None,
-                    "write_config": {
+                    KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 3000,
                         "max_nirgs": 4,
                         KEY_ORDERED_ON: "ts_spec",
@@ -186,7 +192,7 @@ def always_false(**kwargs):
                 Indexer("key3_only_default"): {
                     KEY_BIN_ON_OUT: "bin_out_spec",
                     KEY_POST: always_true,
-                    "write_config": {
+                    KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
                         KEY_ORDERED_ON: "ts_dflt",
@@ -196,7 +202,7 @@ def always_false(**kwargs):
                 Indexer("key4_most_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_true,
-                    "write_config": {
+                    KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
                         KEY_ORDERED_ON: "ts_spec",
@@ -254,7 +260,7 @@ def always_false(**kwargs):
                         },
                         Indexer("key3_only_default"): {
                             KEY_BIN_BY: always_false,
-                            "bin_on": ("bin_on_spec", "bin_out_spec"),
+                            KEY_BIN_ON: ("bin_on_spec", "bin_out_spec"),
                         },
                     },
                     "filter2": {
@@ -285,7 +291,7 @@ def always_false(**kwargs):
                 Indexer("key1_some_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_false,
-                    "write_config": {
+                    KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
                         KEY_ORDERED_ON: "ts_dflt",
@@ -295,7 +301,7 @@ def always_false(**kwargs):
                 Indexer("key2_only_specific"): {
                     KEY_BIN_ON_OUT: None,
                     KEY_POST: None,
-                    "write_config": {
+                    KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 3000,
                         "max_nirgs": 4,
                         KEY_ORDERED_ON: "ts_spec",
@@ -305,7 +311,7 @@ def always_false(**kwargs):
                 Indexer("key3_only_default"): {
                     KEY_BIN_ON_OUT: "bin_out_spec",
                     KEY_POST: always_true,
-                    "write_config": {
+                    KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
                         KEY_ORDERED_ON: "ts_dflt",
@@ -315,7 +321,7 @@ def always_false(**kwargs):
                 Indexer("key4_most_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_true,
-                    "write_config": {
+                    KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
                         KEY_ORDERED_ON: "ts_spec",
@@ -375,17 +381,17 @@ def test_aggstream_init(
             "origin": ref_grouper.origin,
         }
         for key in ref_keys_config:
-            res_grouper = res_keys_config[key]["seg_config"][KEY_SNAP_BY]
+            res_grouper = res_keys_config[key][KEY_SEG_CONFIG][KEY_SNAP_BY]
             for attr in ref_grouper_attr:
                 assert getattr(res_grouper, attr) == ref_grouper_attr[attr]
     for key, ref in ref_keys_config.items():
-        del res_keys_config[key]["seg_config"]
+        del res_keys_config[key][KEY_SEG_CONFIG]
         assert res_keys_config[key] == ref
     ref_agg_buffers = {
-        "agg_n_rows": 0,
-        "agg_res": None,
-        "bin_res": None,
-        KEY_AGG_RES_BUFFER: [],
+        KEY_AGG_N_ROWS: 0,
+        KEY_SNAP_RES: None,
+        KEY_BIN_RES: None,
+        KEY_SNAP_RES_BUFFER: [],
         KEY_BIN_RES_BUFFER: [],
         KEY_SEGAGG_BUFFER: {},
         KEY_POST_BUFFER: {},

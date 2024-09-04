@@ -4,6 +4,10 @@ Created on Wed Dec  1 18:35:00 2021.
 
 @author: yoh
 
+Test utils.
+- Initialize path:
+tmp_path = os_path.expanduser('~/Documents/code/data/oups')
+
 """
 import zipfile
 from os import path as os_path
@@ -19,9 +23,6 @@ from oups import sublevel
 from oups import toplevel
 
 from .. import TEST_DATA
-
-
-# tmp_path = os_path.expanduser('~/Documents/code/data/oups')
 
 
 @sublevel

@@ -121,10 +121,7 @@ def test_3_keys_only_bins(store, seed_path):
     fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
-    as_.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as_.agg(seed=seed, trim_start=True, discard_last=True)
 
     def get_ref_results(seed_df):
         # Get results
@@ -145,6 +142,8 @@ def test_3_keys_only_bins(store, seed_path):
             .agg(**key_configs[key2][KEY_AGG])
             .reset_index()
         )
+        k2_res[FIRST] = k2_res[FIRST].astype(DTYPE_NULLABLE_INT64)
+        k2_res[MAX] = k2_res[MAX].astype(DTYPE_NULLABLE_INT64)
         key3_bins = by_x_rows(on=seed_df[ordered_on], buffer={})
         key3_bins = pSeries(pNaT, index=np.arange(len(seed_df)))
         key3_bin_starts = np.arange(0, len(seed_df), 4)
@@ -153,6 +152,8 @@ def test_3_keys_only_bins(store, seed_path):
         k3_res = seed_df.groupby(key3_bins).agg(**key_configs[key3][KEY_AGG])
         k3_res.index.name = ordered_on
         k3_res.reset_index(inplace=True)
+        k3_res[MIN] = k3_res[MIN].astype(DTYPE_NULLABLE_INT64)
+        k3_res[MAX] = k3_res[MAX].astype(DTYPE_NULLABLE_INT64)
         return k1_res, k2_res, k3_res
 
     # Remove last 'group' as per 'ordered_on' in 'seed_df'.
@@ -179,10 +180,7 @@ def test_3_keys_only_bins(store, seed_path):
     )
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
-    as_.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
     seed_df2_trim = seed_df2[seed_df2[ordered_on] < seed_df2[ordered_on].iloc[-1]]
     seed_df2_ref = pconcat([seed_df, seed_df2_trim], ignore_index=True)
@@ -208,10 +206,7 @@ def test_3_keys_only_bins(store, seed_path):
     )
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
-    as_.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
     seed_df3_trim = seed_df3[seed_df3[ordered_on] < seed_df3[ordered_on].iloc[-1]]
     seed_df3_ref = pconcat([seed_df, seed_df2, seed_df3_trim], ignore_index=True)
@@ -256,10 +251,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation for 'key1'.
-    as1.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as1.agg(seed=seed, trim_start=True, discard_last=True)
     # Setup a 2nd separate streamed aggregation.
     key2 = Indexer("agg_13T")
     key2_cf = {
@@ -285,10 +277,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     )
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamagg for 'key2'.
-    as2.agg(
-        seed=seed,
-        discard_last=True,
-    )
+    as2.agg(seed=seed, trim_start=True, discard_last=True)
     # Now a streamed aggregation for both keys.
     with pytest.raises(
         ValueError,
@@ -803,10 +792,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     # --------------#
     # Write and check 'last_seed_index' has been correctly updated even for
     # 'key2'.
-    as_.agg(
-        seed=None,
-        final_write=True,
-    )
+    as_.agg(seed=None, trim_start=True, discard_last=True, final_write=True)
     # Reference results for 'key1' and 'key3'.
     seed_list.append(seed_df)
     seed_df = pconcat(seed_list)
@@ -842,12 +828,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
             filter_on: [True],
         },
     )
-    as_.agg(
-        seed=seed_df,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as_.agg(seed=seed_df, trim_start=False, discard_last=False, final_write=True)
     # Reference results.
     seed_list.append(seed_df)
     seed_df = pconcat(seed_list)
@@ -880,12 +861,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         },
     )
     seed = [seed_df.iloc[:1], seed_df.iloc[1:]]
-    as_.agg(
-        seed=seed,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as_.agg(seed=seed, trim_start=False, discard_last=False, final_write=True)
     # Reference results.
     seed_list.extend(seed)
     seed_df = pconcat(seed_list)
@@ -927,12 +903,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         },
     )
     seed = [seed_df.iloc[:1], seed_df.iloc[1:2], seed_df.iloc[2:]]
-    as_.agg(
-        seed=seed,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as_.agg(seed=seed, trim_start=False, discard_last=False, final_write=True)
     # Reference results.
     seed_list.extend(seed)
     seed_df = pconcat(seed_list)
@@ -962,12 +933,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     ts = [start] + [start + Timedelta(f"{mn}T") for mn in rand_ints[1:]]
     seed = DataFrame({ordered_on: ts, val: rand_ints, filter_on: [True] * len(ts)})
     seed = [seed.iloc[:4], seed.iloc[4:]]
-    as_.agg(
-        seed=seed,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as_.agg(seed=seed, trim_start=False, discard_last=False, final_write=True)
     seed_list.extend(seed)
     seed_df = pconcat(seed_list)
     key1_res_ref = reference_results(
@@ -1006,15 +972,15 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
         KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
         KEY_AGG: {FIRST: (val, FIRST), LAST: (val, LAST)},
     }
-    key1 = Indexer("agg_10T")
+    key1 = Indexer("agg_10T_sst")
     key1_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
     }
-    key2 = Indexer("agg_20T")
+    key2 = Indexer("agg_20T_sst")
     key2_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
     }
-    key3 = Indexer("agg_2T")
+    key3 = Indexer("agg_2T_sst")
     key3_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="right"),
     }
@@ -1056,12 +1022,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
     filter_val[::2] = False
     seed_df = DataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
     seed_list = [seed_df.iloc[:17], seed_df.iloc[17:31]]
-    as1.agg(
-        seed=seed_list,
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as1.agg(seed=seed_list, trim_start=False, discard_last=False, final_write=True)
     del as1
     # New aggregation.
     as2 = AggStream(
@@ -1083,12 +1044,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
         parallel=True,
         post=post,
     )
-    as2.agg(
-        seed=seed_df.iloc[31:],
-        trim_start=False,
-        discard_last=False,
-        final_write=True,
-    )
+    as2.agg(seed=seed_df.iloc[31:], trim_start=False, discard_last=False, final_write=True)
     # Reference results by continuous aggregation.
     key1_res_ref = reference_results(
         seed_df.loc[seed_df[filter_on], :],
@@ -1108,3 +1064,208 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
     assert key2_res.equals(key2_res_ref)
     key3_res = store[key3].pdf
     assert key3_res.equals(key3_res_ref)
+
+
+@pytest.mark.parametrize(
+    "with_post",
+    [
+        # 1/ Without post.
+        False,
+        # 2/ With post.
+        True,
+    ],
+)
+def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post):
+    # Test with 3 keys, bins and snapshots, filters and parallel iterations.
+    # - filter 'True' : key 1: time grouper '10T', agg 'first' & 'last',
+    #   recording bins and snaps.
+    # - filter 'False' : key 2: time grouper '20T', agg 'first' & 'last',
+    #   recording snaps.
+    # - filter 'True' : key 3: time grouper '2T', agg 'first' & 'last',
+    #   recording bins.
+    # - snap '5T'
+    # No head or tail trimming.
+    # Restarting aggregation with a new AggStream instance.
+    #
+    # Setup streamed aggregation.
+
+    def post_bin_snap(buffer: dict, bin_res: DataFrame = None, snap_res: DataFrame = None):
+        """
+        Nothing too crazy, only to test with a 'post()' function.
+        """
+        bin_res.iloc[:, 1:] = bin_res.iloc[:, 1:] + 1
+        if snap_res is None:
+            return bin_res
+        else:
+            snap_res.iloc[:, 1:] = snap_res.iloc[:, 1:] + 1
+            return bin_res, snap_res
+
+    def post_only_snap(buffer: dict, bin_res: DataFrame = None, snap_res: DataFrame = None):
+        """
+        Same as above, but only returning 'snap_res'.
+        """
+        snap_res.iloc[:, 1:] = snap_res.iloc[:, 1:] + 1
+        return snap_res
+
+    val = "val"
+    max_row_group_size = 5
+    snap_duration = "5T"
+    common_key_params = {
+        KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
+        KEY_AGG: {FIRST: (val, FIRST), LAST: (val, LAST)},
+    }
+    key1_bin = Indexer("agg_10T_bin")
+    key1_sst = Indexer("agg_10T_sst")
+    key1_cf = {
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
+    }
+    key2_sst = Indexer("agg_20T_sst")
+    key2_cf = {
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="20T", closed="left", label="right"),
+        "post": post_only_snap if with_post else None,
+    }
+    key3_bin = Indexer("agg_2T_bin")
+    key3_cf = {
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="right"),
+        KEY_SNAP_BY: None,
+    }
+    filter1 = "filter1"
+    filter2 = "filter2"
+    filter_on = "filter_on"
+    as1 = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys={
+            filter1: {
+                (key1_bin, key1_sst): deepcopy(key1_cf),
+                key3_bin: deepcopy(key3_cf),
+            },
+            filter2: {key2_sst: deepcopy(key2_cf)},
+        },
+        filters={
+            filter1: [(filter_on, "==", True)],
+            filter2: [(filter_on, "==", False)],
+        },
+        max_row_group_size=max_row_group_size,
+        **common_key_params,
+        parallel=True,
+        post=post_bin_snap if with_post else None,
+    )
+    # Seed data.
+    rand_ints = np.hstack(
+        [
+            np.array([2, 3, 4, 7, 10, 14, 14, 14, 16, 17]),
+            np.array([24, 29, 30, 31, 32, 33, 36, 37, 39, 45]),
+            np.array([48, 49, 50, 54, 54, 56, 58, 59, 60, 61]),
+            np.array([64, 65, 77, 89, 90, 90, 90, 94, 98, 98]),
+            np.array([99, 100, 103, 104, 108, 113, 114, 115, 117, 117]),
+        ],
+    )
+    start = Timestamp("2020/01/01")
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    filter_val = np.ones(len(ts), dtype=bool)
+    filter_val[::2] = False
+    seed_df = DataFrame({ordered_on: ts, val: rand_ints, filter_on: filter_val})
+    seed_list = [seed_df.iloc[:17], seed_df.iloc[17:31]]
+    as1.agg(seed=seed_list, trim_start=False, discard_last=False, final_write=True)
+    del as1
+    # New aggregation.
+    as2 = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys={
+            filter1: {
+                (key1_bin, key1_sst): deepcopy(key1_cf),
+                key3_bin: deepcopy(key3_cf),
+            },
+            filter2: {key2_sst: deepcopy(key2_cf)},
+        },
+        filters={
+            filter1: [(filter_on, "==", True)],
+            filter2: [(filter_on, "==", False)],
+        },
+        max_row_group_size=max_row_group_size,
+        **common_key_params,
+        parallel=True,
+        post=post_bin_snap if with_post else None,
+    )
+    as2.agg(seed=seed_df.iloc[31:], trim_start=False, discard_last=False, final_write=True)
+    # Reference results by continuous aggregation.
+    key1_bin_ref, key1_sst_ref = cumsegagg(
+        data=seed_df.loc[seed_df[filter_on], :],
+        **(key1_cf | common_key_params),
+        ordered_on=ordered_on,
+    )
+    key1_bin_ref.reset_index(inplace=True)
+    key1_sst_ref.reset_index(inplace=True)
+    key1_bin_res = store[key1_bin].pdf
+    key1_sst_res = store[key1_sst].pdf
+    key2_cf.pop("post")
+    _, key2_sst_ref = cumsegagg(
+        data=seed_df.loc[~seed_df[filter_on], :],
+        **(key2_cf | common_key_params),
+        ordered_on=ordered_on,
+    )
+    key2_sst_ref.reset_index(inplace=True)
+    key2_sst_res = store[key2_sst].pdf
+    key3_bin_ref, _ = cumsegagg(
+        data=seed_df.loc[seed_df[filter_on], :],
+        **(key3_cf | common_key_params),
+        ordered_on=ordered_on,
+    )
+    key3_bin_ref.reset_index(inplace=True)
+    key3_bin_res = store[key3_bin].pdf
+    if with_post:
+        key1_bin_ref.iloc[:, 1:] = key1_bin_ref.iloc[:, 1:] + 1
+        key1_sst_ref.iloc[:, 1:] = key1_sst_ref.iloc[:, 1:] + 1
+        key2_sst_ref.iloc[:, 1:] = key2_sst_ref.iloc[:, 1:] + 1
+        key3_bin_ref.iloc[:, 1:] = key3_bin_ref.iloc[:, 1:] + 1
+    assert key1_bin_res.equals(key1_bin_ref)
+    assert key1_sst_res.equals(key1_sst_ref)
+    assert key2_sst_res.equals(key2_sst_ref)
+    assert key3_bin_res.equals(key3_bin_ref)
+
+
+def test_exception_two_keys_but_single_result_from_post(store, seed_path):
+    # A key is provided for bins and one for snapshots, byt 'post()' only
+    # return one result.
+
+    def post(buffer: dict, bin_res: DataFrame, snap_res: DataFrame):
+        """
+        Nothing too crazy, only to test with a 'post()' function.
+        """
+        return bin_res
+
+    val = "val"
+    max_row_group_size = 5
+    snap_duration = "5T"
+    key_bin = Indexer("agg_10T_bin")
+    key_sst = Indexer("agg_10T_sst")
+    key_cf = {
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
+        KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
+        KEY_AGG: {FIRST: (val, FIRST), LAST: (val, LAST)},
+    }
+    as_ = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys=(key_bin, key_sst),
+        **key_cf,
+        max_row_group_size=max_row_group_size,
+        post=post,
+    )
+    # Seed data.
+    rand_ints = np.hstack(
+        [
+            np.array([2, 3, 4, 7, 10, 14, 14, 14, 16, 17]),
+            np.array([24, 29, 30, 31, 32, 33, 36, 37, 39, 45]),
+            np.array([48, 49, 50, 54, 54, 56, 58, 59, 60, 61]),
+            np.array([64, 65, 77, 89, 90, 90, 90, 94, 98, 98]),
+            np.array([99, 100, 103, 104, 108, 113, 114, 115, 117, 117]),
+        ],
+    )
+    start = Timestamp("2020/01/01")
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed_df = DataFrame({ordered_on: ts, val: rand_ints})
+    with pytest.raises(ValueError, match="^not possible to have key 'agg_10T_bin'"):
+        as_.agg(seed=seed_df, trim_start=False, discard_last=False, final_write=True)

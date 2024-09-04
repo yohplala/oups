@@ -8,6 +8,8 @@ Created on Wed Dec  4 21:30:00 2021.
 from os import scandir
 from typing import Iterator, List, Tuple
 
+from pandas import DataFrame
+
 from oups.store.defines import DIR_SEP
 
 
@@ -73,3 +75,46 @@ def strip_path_tail(dirpath: str) -> str:
     """
     if DIR_SEP in dirpath:
         return dirpath.rsplit("/", 1)[0]
+
+
+def conform_cmidx(df: DataFrame):
+    """
+    Conform pandas column multi-index.
+
+    Library fastparquet has several requirements to handle column MultiIndex.
+
+      - It requires names for each level in a Multiindex. If these are not set,
+        there are set to '', an empty string.
+      - It requires column names to be tuple of string. If an object is
+        different than a string (for instance float or int), it is turned into
+        a string.
+
+    DataFrame is modified in-place.
+
+    Parameters
+    ----------
+    df : DataFrame
+        DataFrame with a column multi-index to check and possibly adjust.
+
+    Returns
+    -------
+    None
+
+    """
+    # If a name is 'None', set it to '' instead.
+    cmidx = df.columns
+    if None in cmidx.names:
+        level_updated_idx = [i for i, name in enumerate(cmidx.names) if name is None]
+        cmidx.set_names([""] * len(level_updated_idx), level=level_updated_idx, inplace=True)
+    # If an item of the column name is not a string, turn it into a string.
+    # Using 'set_levels()' instead of rconstructing a MultiIndex to preserve
+    # index names directly.
+    level_updated_idx = []
+    level_updated = []
+    for i, level in enumerate(cmidx.levels):
+        str_level = [name if isinstance(name, str) else str(name) for name in level]
+        if level.to_list() != str_level:
+            level_updated_idx.append(i)
+            level_updated.append(str_level)
+    if level_updated:
+        df.columns = df.columns.set_levels(level_updated, level=level_updated_idx)

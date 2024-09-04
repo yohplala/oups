@@ -209,6 +209,9 @@ def test_cumsegagg_bin_single_dtype(ndata, cols):
     by = TimeGrouper(freq="5T", closed="left", label="left", key=time_idx)
     bin_res = cumsegagg(data=data, agg=agg, bin_by=by)
     bin_res_ref = data.groupby(by).agg(**agg)
+    for col, dtype_ in bin_res_ref.dtypes.to_dict().items():
+        if dtype_ == DTYPE_INT64:
+            bin_res_ref[col] = bin_res_ref[col].astype(DTYPE_NULLABLE_INT64)
     assert bin_res.equals(bin_res_ref)
 
 
@@ -243,13 +246,15 @@ def test_cumsegagg_bin_mixed_dtype():
         "res_first_f": ("col1_f", "first"),
         "res_sum_f": ("col1_f", "sum"),
         "res_last_f": ("col2_f", "last"),
-        "res_min_f": ("col3_i", "min"),
-        "res_max_f": ("col4_i", "max"),
+        "res_min_i": ("col3_i", "min"),
+        "res_max_i": ("col4_i", "max"),
         "res_first_d": ("datetime_idx", "first"),
     }
     bin_by = TimeGrouper(freq="5T", closed="left", label="left", key=time_idx)
     agg_res = cumsegagg(data=data, agg=agg, bin_by=bin_by)
     agg_res_ref = data.groupby(bin_by).agg(**agg)
+    agg_res_ref["res_min_i"] = agg_res_ref["res_min_i"].astype(DTYPE_NULLABLE_INT64)
+    agg_res_ref["res_max_i"] = agg_res_ref["res_max_i"].astype(DTYPE_NULLABLE_INT64)
     assert agg_res.equals(agg_res_ref)
 
 
@@ -406,8 +411,8 @@ def test_cumsegagg_bin_snap_with_null_chunks(
         snap_by=snap_by,
     )
     bins_ref = data.groupby(bin_by).agg(**agg)
+    bins_ref[SUM] = bins_ref[SUM].astype(DTYPE_NULLABLE_INT64)
     if null_b_dti:
-        bins_ref[SUM] = bins_ref[SUM].astype(DTYPE_NULLABLE_INT64)
         bins_ref.loc[null_b_dti, SUM] = pNA
     assert bins_res.equals(bins_ref)
     snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5T")
@@ -571,8 +576,8 @@ def test_cumsegagg_bin_snap_with_null_chunks_other(
         snap_by=snap_by,
     )
     bins_ref = data.groupby(bin_by).agg(**agg)
+    bins_ref[SUM] = bins_ref[SUM].astype(DTYPE_NULLABLE_INT64)
     if null_b_dti:
-        bins_ref[SUM] = bins_ref[SUM].astype(DTYPE_NULLABLE_INT64)
         bins_ref.loc[null_b_dti, SUM] = pNA
     assert bins_res.equals(bins_ref)
     snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5T")
