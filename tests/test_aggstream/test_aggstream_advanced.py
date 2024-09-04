@@ -1269,7 +1269,3 @@ def test_exception_two_keys_but_single_result_from_post(store, seed_path):
     seed_df = DataFrame({ordered_on: ts, val: rand_ints})
     with pytest.raises(ValueError, match="^not possible to have key 'agg_10T_bin'"):
         as_.agg(seed=seed_df, trim_start=False, discard_last=False, final_write=True)
-
-
-# TODO: Check error message when there is a post with both bin_key and snap_key, but only one dataframe is returned
-# TODO: in the end, clean 'aggstream': not set bin_res or snap_res to None if not necessary.

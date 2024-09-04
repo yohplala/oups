@@ -730,16 +730,18 @@ def _post_n_write_agg_chunks(
                         f"key '{key[1]}' for snapshots but 'post()' function "
                         "only returning one result.",
                     )
-                # Set to None 'bin_res' and 'snap_res'.
-                # This allows to catch possible mistake in 'key' parameter.
-                snap_res = None
-            bin_res = None
+                # Set to None 'bin_res' and 'snap_res' to catch possible
+                # mistake in 'key' parameter (finally commented out).
+                # snap_res = None
+            # bin_res = None
         elif snap_res is None or isinstance(key, tuple):
             # Case only 'bin_res' is recorded or both 'bin_res' and 'snap_res'.
-            main_res, bin_res = bin_res, None
+            # main_res, bin_res = bin_res, None
+            main_res = bin_res
         else:
             # Case only 'snap_res' is recorded, and not 'bin_res'.
-            main_res, bin_res, snap_res = snap_res, None, None
+            # main_res, bin_res, snap_res = snap_res, None, None
+            main_res = snap_res
     else:
         not_null_res = False
         main_res = None
