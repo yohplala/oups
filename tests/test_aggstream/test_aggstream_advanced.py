@@ -1226,5 +1226,50 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
     assert key3_bin_res.equals(key3_bin_ref)
 
 
+def test_exception_two_keys_but_single_result_from_post(store, seed_path):
+    # A key is provided for bins and one for snapshots, byt 'post()' only
+    # return one result.
+
+    def post(buffer: dict, bin_res: DataFrame, snap_res: DataFrame):
+        """
+        Nothing too crazy, only to test with a 'post()' function.
+        """
+        return bin_res
+
+    val = "val"
+    max_row_group_size = 5
+    snap_duration = "5T"
+    key_bin = Indexer("agg_10T_bin")
+    key_sst = Indexer("agg_10T_sst")
+    key_cf = {
+        KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
+        KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
+        KEY_AGG: {FIRST: (val, FIRST), LAST: (val, LAST)},
+    }
+    as_ = AggStream(
+        ordered_on=ordered_on,
+        store=store,
+        keys=(key_bin, key_sst),
+        **key_cf,
+        max_row_group_size=max_row_group_size,
+        post=post,
+    )
+    # Seed data.
+    rand_ints = np.hstack(
+        [
+            np.array([2, 3, 4, 7, 10, 14, 14, 14, 16, 17]),
+            np.array([24, 29, 30, 31, 32, 33, 36, 37, 39, 45]),
+            np.array([48, 49, 50, 54, 54, 56, 58, 59, 60, 61]),
+            np.array([64, 65, 77, 89, 90, 90, 90, 94, 98, 98]),
+            np.array([99, 100, 103, 104, 108, 113, 114, 115, 117, 117]),
+        ],
+    )
+    start = Timestamp("2020/01/01")
+    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    seed_df = DataFrame({ordered_on: ts, val: rand_ints})
+    with pytest.raises(ValueError, match="^not possible to have key 'agg_10T_bin'"):
+        as_.agg(seed=seed_df, trim_start=False, discard_last=False, final_write=True)
+
+
 # TODO: Check error message when there is a post with both bin_key and snap_key, but only one dataframe is returned
 # TODO: in the end, clean 'aggstream': not set bin_res or snap_res to None if not necessary.

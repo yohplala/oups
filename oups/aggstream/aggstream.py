@@ -724,6 +724,12 @@ def _post_n_write_agg_chunks(
                 # result.
                 main_res, snap_res = main_res
             else:
+                if isinstance(key, tuple):
+                    raise ValueError(
+                        f"not possible to have key '{key[0]}' for bins and "
+                        f"key '{key[1]}' for snapshots but 'post()' function "
+                        "only returning one result.",
+                    )
                 # Set to None 'bin_res' and 'snap_res'.
                 # This allows to catch possible mistake in 'key' parameter.
                 snap_res = None
