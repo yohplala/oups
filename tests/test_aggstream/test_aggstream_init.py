@@ -27,7 +27,7 @@ from oups import ParquetSet
 from oups import toplevel
 from oups.aggstream.aggstream import FIRST
 from oups.aggstream.aggstream import KEY_AGG
-from oups.aggstream.aggstream import KEY_AGG_N_ROWS
+from oups.aggstream.aggstream import KEY_AGG_IN_MEMORY_SIZE
 from oups.aggstream.aggstream import KEY_BIN_BY
 from oups.aggstream.aggstream import KEY_BIN_ON
 from oups.aggstream.aggstream import KEY_BIN_ON_OUT
@@ -35,7 +35,8 @@ from oups.aggstream.aggstream import KEY_BIN_RES
 from oups.aggstream.aggstream import KEY_BIN_RES_BUFFER
 from oups.aggstream.aggstream import KEY_DUPLICATES_ON
 from oups.aggstream.aggstream import KEY_FILTERS
-from oups.aggstream.aggstream import KEY_MAX_ROW_GROUP_SIZE
+from oups.aggstream.aggstream import KEY_MAX_IN_MEMORY_SIZE_B
+from oups.aggstream.aggstream import KEY_MAX_IN_MEMORY_SIZE_MB
 from oups.aggstream.aggstream import KEY_ORDERED_ON
 from oups.aggstream.aggstream import KEY_POST
 from oups.aggstream.aggstream import KEY_POST_BUFFER
@@ -52,6 +53,7 @@ from oups.aggstream.aggstream import LAST
 from oups.aggstream.aggstream import NO_FILTER_ID
 from oups.aggstream.aggstream import SUM
 from oups.aggstream.aggstream import FilterApp
+from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
 
 
 @toplevel
@@ -110,6 +112,7 @@ def always_false(**kwargs):
                         KEY_MAX_ROW_GROUP_SIZE: 6,
                         KEY_DUPLICATES_ON: "ts",
                     },
+                    KEY_MAX_IN_MEMORY_SIZE_B: 146800640,
                 },
             },
             # ref_agg_pd
@@ -136,11 +139,13 @@ def always_false(**kwargs):
                 KEY_PRE: always_true,
                 KEY_AGG: {"out_dflt": ("in_dflt", LAST)},
                 KEY_POST: always_true,
+                KEY_MAX_IN_MEMORY_SIZE_MB: 10,
                 "keys": {
                     Indexer("key1_some_default"): {
                         KEY_AGG: {"out_spec": ("in_spec", FIRST)},
                         KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
                         KEY_POST: always_false,
+                        KEY_MAX_IN_MEMORY_SIZE_MB: 1,
                     },
                     Indexer("key2_only_specific"): {
                         KEY_AGG: {"out_spec": ("in_spec", FIRST)},
@@ -172,6 +177,7 @@ def always_false(**kwargs):
                 Indexer("key1_some_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_false,
+                    KEY_MAX_IN_MEMORY_SIZE_B: 1048576,
                     KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
@@ -182,6 +188,7 @@ def always_false(**kwargs):
                 Indexer("key2_only_specific"): {
                     KEY_BIN_ON_OUT: None,
                     KEY_POST: None,
+                    KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 3000,
                         "max_nirgs": 4,
@@ -192,6 +199,7 @@ def always_false(**kwargs):
                 Indexer("key3_only_default"): {
                     KEY_BIN_ON_OUT: "bin_out_spec",
                     KEY_POST: always_true,
+                    KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
@@ -202,6 +210,7 @@ def always_false(**kwargs):
                 Indexer("key4_most_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_true,
+                    KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
@@ -244,6 +253,7 @@ def always_false(**kwargs):
                 KEY_AGG: {"out_dflt": ("in_dflt", LAST)},
                 KEY_POST: always_true,
                 KEY_SNAP_BY: TimeGrouper(key="ts_dflt", freq="30T"),
+                KEY_MAX_IN_MEMORY_SIZE_MB: 10,
                 "keys": {
                     "filter1": {
                         Indexer("key1_some_default"): {
@@ -257,6 +267,7 @@ def always_false(**kwargs):
                             KEY_POST: None,
                             KEY_MAX_ROW_GROUP_SIZE: 3000,
                             KEY_ORDERED_ON: "ts_spec",
+                            KEY_MAX_IN_MEMORY_SIZE_MB: 1,
                         },
                         Indexer("key3_only_default"): {
                             KEY_BIN_BY: always_false,
@@ -291,6 +302,7 @@ def always_false(**kwargs):
                 Indexer("key1_some_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_false,
+                    KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
@@ -301,6 +313,7 @@ def always_false(**kwargs):
                 Indexer("key2_only_specific"): {
                     KEY_BIN_ON_OUT: None,
                     KEY_POST: None,
+                    KEY_MAX_IN_MEMORY_SIZE_B: 1048576,
                     KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 3000,
                         "max_nirgs": 4,
@@ -311,6 +324,7 @@ def always_false(**kwargs):
                 Indexer("key3_only_default"): {
                     KEY_BIN_ON_OUT: "bin_out_spec",
                     KEY_POST: always_true,
+                    KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
@@ -321,6 +335,7 @@ def always_false(**kwargs):
                 Indexer("key4_most_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
                     KEY_POST: always_true,
+                    KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
                         KEY_MAX_ROW_GROUP_SIZE: 1000,
                         "max_nirgs": 4,
@@ -388,7 +403,7 @@ def test_aggstream_init(
         del res_keys_config[key][KEY_SEG_CONFIG]
         assert res_keys_config[key] == ref
     ref_agg_buffers = {
-        KEY_AGG_N_ROWS: 0,
+        KEY_AGG_IN_MEMORY_SIZE: 0,
         KEY_SNAP_RES: None,
         KEY_BIN_RES: None,
         KEY_SNAP_RES_BUFFER: [],

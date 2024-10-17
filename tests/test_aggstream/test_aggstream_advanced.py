@@ -104,6 +104,7 @@ def test_3_keys_only_bins(store, seed_path):
         keys=key_configs,
         max_row_group_size=max_row_group_size,
         parallel=True,
+        max_in_memory_size=0.0004,
     )
     # Seed data.
     start = Timestamp("2020/01/01")
@@ -239,6 +240,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
         store=store,
         keys={key1: deepcopy(key1_cf)},
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.0004,
     )
     # Seed data.
     start = Timestamp("2020/01/01")
@@ -345,6 +347,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
         },
         max_row_group_size=max_row_group_size,
         pre=check,
+        max_in_memory_size=0.0004,
     )
     # Seed data.
     filter_val = np.ones(len(ts), dtype=bool)
@@ -409,6 +412,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
         },
         max_row_group_size=max_row_group_size,
         pre=check,
+        max_in_memory_size=0.0004,
     )
     assert as_2.seed_config[KEY_PRE_BUFFER] == pre_buffer_ref
 
@@ -586,6 +590,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         **common_key_params,
         parallel=True,
         post=post,
+        max_in_memory_size=0.0004,
     )
     # Seed data & streamed aggregation over a list of 2 seed chunks.
     #    rr = np.random.default_rng(1)
@@ -1002,6 +1007,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
             filter2: [(filter_on, "==", False)],
         },
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.0004,
         **common_key_params,
         parallel=True,
         post=post,
@@ -1150,6 +1156,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
         **common_key_params,
         parallel=True,
         post=post_bin_snap if with_post else None,
+        max_in_memory_size=0.0004,
     )
     # Seed data.
     rand_ints = np.hstack(
@@ -1253,6 +1260,7 @@ def test_exception_two_keys_but_single_result_from_post(store, seed_path):
         **key_cf,
         max_row_group_size=max_row_group_size,
         post=post,
+        max_in_memory_size=0.0004,
     )
     # Seed data.
     rand_ints = np.hstack(

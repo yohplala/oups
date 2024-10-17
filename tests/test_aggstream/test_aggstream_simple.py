@@ -106,6 +106,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     as_ = AggStream(
         store=store,
         max_row_group_size=6,
+        max_in_memory_size=0.0002,
         ordered_on=ordered_on,
         keys=key,
         bin_by=bin_by,
@@ -256,6 +257,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     as_ = AggStream(
         store=store,
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.00001,
         ordered_on=ordered_on,
         keys=key,
         bin_by=bin_by,
@@ -320,7 +322,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     rec_res = store[key]
     assert rec_res.pdf.equals(ref_res)
     n_rows_res = [rg.num_rows for rg in rec_res.pf.row_groups]
-    n_rows_ref = [4, 5, 4, 3, 5, 6, 4, 4, 5, 6, 4, 4, 3]
+    n_rows_ref = [4, 5, 4, 3, 5, 6, 6, 4, 5, 4, 6, 5]
     assert n_rows_res == n_rows_ref
 
 
@@ -394,6 +396,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     as_ = AggStream(
         store=store,
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.00016,
         ordered_on=ordered_on,
         keys=key,
         bin_by=bin_by,
@@ -441,13 +444,13 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
     n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
-    n_rows_ref = [4, 3]
+    n_rows_ref = [3, 2, 2]
     assert n_rows_res == n_rows_ref
     # Check metadata.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
     assert not streamagg_md[KEY_PRE_BUFFER]
-    assert streamagg_md[KEY_POST_BUFFER] == {"iter_num": 1}
+    assert streamagg_md[KEY_POST_BUFFER] == {"iter_num": 3}
     # 1st append of new data.
     start = seed_df[ordered_on].iloc[-1]
     rr = np.random.default_rng(3)
@@ -476,7 +479,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     assert rec_res.equals(ref_res_post)
     # Check metadata.
     streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
-    assert streamagg_md[KEY_POST_BUFFER] == {"iter_num": 2}
+    assert streamagg_md[KEY_POST_BUFFER] == {"iter_num": 6}
     assert not streamagg_md[KEY_PRE_BUFFER]
 
 
@@ -493,6 +496,7 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
     as_ = AggStream(
         store=store,
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.00001,
         ordered_on=ordered_on,
         keys=key,
         bin_by=bin_by,
@@ -590,6 +594,7 @@ def test_by_callable_wo_bin_on(store, seed_path):
         keys=key,
         bin_by=by_x_rows,
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.00001,
     )
     # Setup seed data.
     date = "2020/01/01 "
@@ -785,6 +790,7 @@ def test_by_callable_with_bin_on(store, seed_path):
         bin_by=by_1val,
         bin_on=(bin_on, bin_out_col),
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.000007,
         duplicates_on=[ordered_on, MAX],
     )
 
@@ -1184,6 +1190,7 @@ def test_bin_on_col_sum_agg(store):
         keys=key,
         bin_by=bin_by,
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.00001,
     )
     # Setup seed data.
     date = "2020/01/01 "
@@ -1367,6 +1374,7 @@ def test_different_ordered_on(store):
             },
         },
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.000005,
         post=post,
     )
     # Setup seed data.
@@ -1416,6 +1424,7 @@ def test_exception_unordered_seed(store, seed_path):
         keys=key,
         **key_cf,
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.00001,
     )
     # Seed data.
     start = Timestamp("2020/01/01")
@@ -1493,6 +1502,7 @@ def test_post_with_warm_up(store):
             },
         },
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.000015,
         post=post,
     )
     # Setup seed data.
@@ -1531,6 +1541,7 @@ def test_post_with_warm_up(store):
             },
         },
         max_row_group_size=max_row_group_size,
+        max_in_memory_size=0.000015,
         post=post,
     )
     as_2.agg(
