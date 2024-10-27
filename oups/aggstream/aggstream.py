@@ -8,6 +8,7 @@ Created on Wed Nov 15 21:30:00 2023.
 from collections import ChainMap
 from collections import namedtuple
 from dataclasses import dataclass
+from enum import Enum
 from itertools import chain
 from multiprocessing import cpu_count
 from typing import Callable, Iterable, List, Optional, Tuple, Union
@@ -39,7 +40,6 @@ from oups.store import ParquetSet
 from oups.store.router import ParquetHandle
 from oups.store.writer import KEY_DUPLICATES_ON
 from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
-from oups.store.writer import MAX_ROW_GROUP_SIZE
 from oups.store.writer import OUPS_METADATA
 from oups.store.writer import OUPS_METADATA_KEY
 from oups.store.writer import write
@@ -62,7 +62,10 @@ KEY_RESTART_INDEX = "restart_index"
 KEY_BIN_RES = "bin_res"
 KEY_SNAP_RES = "snap_res"
 KEY_WRITE_CONFIG = "write_config"
-KEY_AGG_N_ROWS = "agg_n_rows"
+KEY_AGG_IN_MEMORY_SIZE = "agg_in_memory_size"
+KEY_MAX_IN_MEMORY_SIZE_B = "max_in_memory_size_b"
+KEY_MAX_IN_MEMORY_SIZE_MB = "max_in_memory_size"
+KEY_AGG_RES_TYPE = "agg_res_type"
 KEY_SEG_CONFIG = "seg_config"
 # Filters
 NO_FILTER_ID = "_"
@@ -72,17 +75,29 @@ KEY_POST = "post"
 # 'bin_by' is a compulsory parameter, and a specific check is made for it.
 # It is not added in 'KEY_CONF_IN_PARAMS'.
 WRITE_PARAMS = set(write.__code__.co_varnames[: write.__code__.co_argcount])
-KEY_CONF_IN_PARAMS = {KEY_BIN_ON, KEY_SNAP_BY, KEY_AGG, KEY_POST} | WRITE_PARAMS
+KEY_CONF_IN_PARAMS = {
+    KEY_BIN_ON,
+    KEY_SNAP_BY,
+    KEY_AGG,
+    KEY_POST,
+    KEY_MAX_IN_MEMORY_SIZE_B,
+} | WRITE_PARAMS
 # Parallel jobs, at most using 75% of available cpus.
 KEY_MAX_P_JOBS = max(int(cpu_count() * 3 / 4), 1)
+# Max in memory size of result dataframes allowed before writing to disk.
+# Provided in bytes.
+MEGABYTES_TO_BYTES = 1048576
+MAX_IN_MEMORY_SIZE_MB = 140
+MAX_IN_MEMORY_SIZE_B = MAX_IN_MEMORY_SIZE_MB * MEGABYTES_TO_BYTES
 
 
 FilterApp = namedtuple("FilterApp", "keys n_jobs")
+AggResType = Enum("AggResType", ["BINS", "SNAPS", "BOTH"])
 
 
 def _is_aggstream_result(handle: ParquetHandle) -> bool:
     """
-    Check if input handle is that of a dataset produced by streamaag.
+    Check if input handle is that of a dataset produced by streamagg.
 
     Parameters
     ----------
@@ -138,10 +153,14 @@ def _init_keys_config(
                                 with bin ids.
                  'seg_config' : dict specifying the segmentation config,
                  'post' : Callable or None,
+                 'max_in_memory_size_b': int, max allowed result in memory size,
+                                         in bytes
                  'write_config' : {'ordered_on' : str,
                                    'duplicates_on' : str or list,
+                                   'max_row_group_size' : Union[str, int, tuple]
                                    ...
                                   },
+                 'agg_res_rype' : AggResType, either 'BINS', 'SNAPS', or 'BOTH'.
                },
          }``
       - ``self.agg_pd``, dict, specifying per key the aggregation
@@ -159,6 +178,11 @@ def _init_keys_config(
             bin_by = key_conf_in.pop(KEY_BIN_BY)
         except KeyError:
             raise ValueError(f"'{KEY_BIN_BY}' parameter is missing for key '{key}'.")
+        if KEY_MAX_IN_MEMORY_SIZE_MB in key_conf_in:
+            # Switch from MB to B.
+            key_conf_in[KEY_MAX_IN_MEMORY_SIZE_B] = int(
+                key_conf_in.pop(KEY_MAX_IN_MEMORY_SIZE_MB) * MEGABYTES_TO_BYTES,
+            )
         key_conf_in = keys_default | key_conf_in
         # Check parameters in 'key_conf_in' are valid ones.
         for param in key_conf_in:
@@ -205,12 +229,6 @@ def _init_keys_config(
                 " aggregated results as it is also for column"
                 " containing group keys.",
             )
-        # Setup 'max_agg_row_group' and 'write_config'.
-        # Initialize aggregation result max size before writing to disk.
-        # If present, keep 'max_row_group_size' within 'key_conf_in' as
-        # it is a parameter to be forwarded to the writer.
-        if KEY_MAX_ROW_GROUP_SIZE not in key_conf_in:
-            key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = MAX_ROW_GROUP_SIZE
         # Initialize 'write_config', which are parameters remaining in
         # 'key_conf_in' and some adjustments.
         # Adding 'bin_on_out' to 'duplicates_on' except if
@@ -226,11 +244,34 @@ def _init_keys_config(
             key_conf_in[KEY_DUPLICATES_ON] = (
                 bin_on_out if bin_on_out else key_conf_in[KEY_ORDERED_ON]
             )
+        if seg_config[KEY_SNAP_BY] is None:
+            # Snapshots not requested, aggreagtation results are necessarily
+            # bins.
+            agg_res_type = AggResType.BINS
+        elif isinstance(key, tuple):
+            # 2 keys are provided, aggregation results are necessarily both
+            # bins and snapshots.
+            agg_res_type = AggResType.BOTH
+        else:
+            # Otherwise, a single aggregation result is expected, and it is
+            # created from both bins and snapshots. Hence it is snaps like.
+            agg_res_type = AggResType.SNAPS
+        if agg_res_type is AggResType.BOTH:
+            if KEY_MAX_ROW_GROUP_SIZE in key_conf_in:
+                if not isinstance(key_conf_in[KEY_MAX_ROW_GROUP_SIZE], tuple):
+                    key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = (
+                        key_conf_in[KEY_MAX_ROW_GROUP_SIZE],
+                        key_conf_in[KEY_MAX_ROW_GROUP_SIZE],
+                    )
+            else:
+                key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = (None, None)
         consolidated_keys_config[key] = {
             KEY_SEG_CONFIG: seg_config,
             KEY_BIN_ON_OUT: bin_on_out,
+            KEY_MAX_IN_MEMORY_SIZE_B: key_conf_in.pop(KEY_MAX_IN_MEMORY_SIZE_B),
             KEY_POST: key_conf_in.pop(KEY_POST),
             KEY_WRITE_CONFIG: key_conf_in,
+            KEY_AGG_RES_TYPE: agg_res_type,
         }
     return consolidated_keys_config, agg_pd
 
@@ -256,13 +297,13 @@ def _init_buffers(
     -------
     The following AggStream's parameters are initialized in this function.
       - ``seed_index_restart``, int, float or pTimestamp, the index
-        from which (included) should be restarted the nex aggregation
+        from which (included) should be restarted the next aggregation
         iteration.
       - ``pre_buffer``, dict, user-defined buffer to keep track of intermediate
         variables between successive pre-processing of individual seed chunk.
       - ``agg_buffers``, dict of aggregation buffer variables specific for each
         key, in the form:
-        ``{key: {'agg_n_rows' : 0,
+        ``{key: {'agg_in_memory_size' : 0,
                  'bin_res' : None,
                  'snap_res' : None,
                  'bin_res_buffer' : list,
@@ -278,7 +319,7 @@ def _init_buffers(
     seed_index_restart_set = set()
     for key in keys:
         # Default values for aggregation counters and buffers.
-        # 'agg_n_rows' : number of rows in aggregation result.
+        # 'agg_in_memory_size' : number of rows in aggregation result.
         # 'agg_res_buffer' and 'bin_res_buffer' are buffers to keep
         # aggregation chunks before a concatenation to record. Because
         # they are appended in-place for each key, they are created
@@ -371,7 +412,7 @@ def _reset_agg_buffers(agg_buffers: Optional[dict] = None) -> Optional[dict]:
 
     """
     init_values = {
-        KEY_AGG_N_ROWS: 0,
+        KEY_AGG_IN_MEMORY_SIZE: 0,
         KEY_BIN_RES: None,
         KEY_SNAP_RES: None,
         KEY_BIN_RES_BUFFER: [],
@@ -407,7 +448,7 @@ def _iter_data(
     filters: Union[dict, None],
     trim_start: bool,
     discard_last: bool,
-) -> Tuple[str, DataFrame]:
+):
     """
     Iterate provided seed, applying sequentially (optionally) filters.
 
@@ -598,6 +639,7 @@ def _concat_agg_res(
 
 def _post_n_write_agg_chunks(
     agg_buffers: dict,
+    agg_res_type: Enum,
     append_last_res: bool,
     store: ParquetSet,
     key: Union[dataclass, Tuple[dataclass, dataclass]],
@@ -617,9 +659,9 @@ def _post_n_write_agg_chunks(
     agg_buffers : dict
         Buffer to keep track of aggregation sequence intermediate results.
 
-        - n_rows : int, number of rows in main aggregation results (snapshots
-          is snapshots are quested, or bins otherwise). It is reset here after
-          writing.
+        - agg_in_memory_size : int, size in bytes of aggregation results (bins
+          only or bins and snapshots if snapshots are requested. It is reset
+          here after writing.
         - bin_res : DataFrame, last aggregation results, to reset to None
           after writing.
         - snap_res : DataFrame, last aggregation results, to reset to None
@@ -645,6 +687,8 @@ def _post_n_write_agg_chunks(
           It is NOT reset after writing. It is however required to be
           written in metadata.
 
+    agg_res_type : Enum
+        Either 'BINS', 'SNAPS', or 'BOTH'.
     append_last_res : bool
         If 'agg_res' should be appended to 'agg_res_buffer' and if 'bin_res'
         should be appended to 'bin_res_buffers'.
@@ -692,7 +736,7 @@ def _post_n_write_agg_chunks(
     # When there is no result, 'agg_res' is None.
     if isinstance((bin_res := agg_buffers[KEY_BIN_RES]), DataFrame):
         # To keep track there has been res in the 1st place.
-        not_null_res = True
+        initial_agg_res = True
         # Concat list of aggregation results.
         bin_res = _concat_agg_res(
             agg_buffers[KEY_BIN_RES_BUFFER],
@@ -701,8 +745,7 @@ def _post_n_write_agg_chunks(
             index_name,
         )
         # Same if needed with 'snap_res_buffer'.
-        snap_res = agg_buffers[KEY_SNAP_RES]
-        if snap_res is not None:
+        if isinstance((snap_res := agg_buffers[KEY_SNAP_RES]), DataFrame):
             snap_res = _concat_agg_res(
                 agg_buffers[KEY_SNAP_RES_BUFFER],
                 snap_res,
@@ -716,15 +759,15 @@ def _post_n_write_agg_chunks(
             # number of rows before outputting results (warm-up).
             main_res = (
                 post(buffer=post_buffer, bin_res=bin_res)
-                if snap_res is None
+                if agg_res_type is AggResType.BINS
                 else post(buffer=post_buffer, bin_res=bin_res, snap_res=snap_res)
             )
-            if isinstance(main_res, tuple):
+            if agg_res_type is AggResType.BOTH:
                 # First result, recorded with 'bin_key', is considered main
                 # result.
-                main_res, snap_res = main_res
-            else:
-                if isinstance(key, tuple):
+                try:
+                    main_res, snap_res = main_res
+                except ValueError:
                     raise ValueError(
                         f"not possible to have key '{key[0]}' for bins and "
                         f"key '{key[1]}' for snapshots but 'post()' function "
@@ -734,7 +777,7 @@ def _post_n_write_agg_chunks(
                 # mistake in 'key' parameter (finally commented out).
                 # snap_res = None
             # bin_res = None
-        elif snap_res is None or isinstance(key, tuple):
+        elif agg_res_type is not AggResType.SNAPS:
             # Case only 'bin_res' is recorded or both 'bin_res' and 'snap_res'.
             # main_res, bin_res = bin_res, None
             main_res = bin_res
@@ -743,7 +786,7 @@ def _post_n_write_agg_chunks(
             # main_res, bin_res, snap_res = snap_res, None, None
             main_res = snap_res
     else:
-        not_null_res = False
+        initial_agg_res = False
         main_res = None
     main_key, snap_key = key if isinstance(key, tuple) else (key, None)
     if last_seed_index:
@@ -769,9 +812,17 @@ def _post_n_write_agg_chunks(
     # When there is no result, 'main_res' is None.
     if isinstance(main_res, DataFrame):
         # Record data (with metadata possibly updated).
-        store[main_key] = write_config, main_res
-        if snap_key is not None:
-            store[snap_key] = write_config, snap_res
+        if agg_res_type is AggResType.BOTH:
+            store[main_key] = (
+                write_config | {KEY_MAX_ROW_GROUP_SIZE: write_config[KEY_MAX_ROW_GROUP_SIZE][0]},
+                main_res,
+            )
+            store[snap_key] = (
+                write_config | {KEY_MAX_ROW_GROUP_SIZE: write_config[KEY_MAX_ROW_GROUP_SIZE][1]},
+                snap_res,
+            )
+        else:
+            store[main_key] = write_config, main_res
     elif last_seed_index:
         # If no result, metadata is possibly to be written, as this is the
         # flag indicating the last 'aggstream' local iteration.
@@ -781,7 +832,7 @@ def _post_n_write_agg_chunks(
             # In case no Parquet file exist yet, need to initiate one to start
             # storing metadata.
             store[main_key] = DataFrame()
-    if not_null_res:
+    if initial_agg_res:
         # If there have been results, they have been processed (either written
         # directly or through 'post()'). Time to reset aggregation buffers and
         # counters.
@@ -824,42 +875,43 @@ def agg_iter(
 
     """
     # Post process and write.
-    if (bin_res := agg_buffers[KEY_BIN_RES]) is not None:
-        snap_res = agg_buffers[KEY_SNAP_RES]
+    if not ((bin_res := agg_buffers[KEY_BIN_RES]) is None or bin_res.empty):
         # If previous results, check if this is write time.
-        # Retrieve length of aggregation results.
-        agg_res_len = max(len(bin_res), len(snap_res)) if snap_res is not None else len(bin_res)
         bin_res_buffer = agg_buffers[KEY_BIN_RES_BUFFER]
-        if agg_res_len > 1:
-            # Add 'agg_res' to 'agg_res_buffer' ignoring last row.
-            # It is incomplete, so useless to write it to results while
-            # aggregation iterations are on-going.
-            bin_res_buffer.append(bin_res.iloc[:-1])
-            # Remove last row that is not recorded from total number of rows.
-            agg_buffers[KEY_AGG_N_ROWS] += agg_res_len - 1
-            agg_n_rows = agg_buffers[KEY_AGG_N_ROWS]
-            if snap_res is not None:
-                # If we have bins & snapshots, do same with snapshots.
-                agg_buffers[KEY_SNAP_RES_BUFFER].append(snap_res.iloc[:-1])
-            # Keep floor part.
-            if agg_n_rows:
-                # Length of 'bin_res_buffer' is number of times it has been
-                # appended. Be it from bins, or snapshots, length is same.
-                agg_mean_row_group_size = agg_n_rows // len(bin_res_buffer)
-                if (
-                    agg_n_rows + agg_mean_row_group_size
-                    > keys_config[KEY_WRITE_CONFIG][KEY_MAX_ROW_GROUP_SIZE]
-                ):
-                    # Write results from previous iteration.
-                    _post_n_write_agg_chunks(
-                        agg_buffers=agg_buffers,
-                        append_last_res=False,
-                        store=store,
-                        key=key,
-                        write_config=keys_config[KEY_WRITE_CONFIG],
-                        index_name=keys_config[KEY_BIN_ON_OUT],
-                        post=keys_config[KEY_POST],
-                    )
+        # Add 'agg_res' to 'agg_res_buffer' ignoring last row.
+        # It is incomplete, so useless to write it to results while
+        # aggregation iterations are on-going.
+        bin_res_buffer.append(bin_res.iloc[:-1])
+        agg_in_memory_size = agg_buffers[KEY_AGG_IN_MEMORY_SIZE]
+        if (snap_res := agg_buffers[KEY_SNAP_RES]) is None:
+            agg_buffers[KEY_AGG_IN_MEMORY_SIZE] += bin_res.memory_usage().sum()
+        else:
+            # If we have bins & snapshots, do same with snapshots.
+            agg_buffers[KEY_SNAP_RES_BUFFER].append(snap_res.iloc[:-1])
+            agg_buffers[KEY_AGG_IN_MEMORY_SIZE] += (
+                bin_res.memory_usage().sum() + snap_res.memory_usage().sum()
+            )
+        # Length of 'bin_res_buffer' is number of times it has been
+        # appended. Be it from bins, or snapshots, length is same.
+        # Keep floor part.
+        agg_mean_in_memory_group_size = agg_in_memory_size // len(bin_res_buffer)
+        if (
+            agg_in_memory_size + agg_mean_in_memory_group_size
+            > keys_config[KEY_MAX_IN_MEMORY_SIZE_B]
+        ):
+            # For next iteration, chances are that 'agg_in_memory_size' will be
+            # larger than threshold. Time to write results from previous
+            # iteration.
+            _post_n_write_agg_chunks(
+                agg_buffers=agg_buffers,
+                agg_res_type=keys_config[KEY_AGG_RES_TYPE],
+                append_last_res=False,
+                store=store,
+                key=key,
+                write_config=keys_config[KEY_WRITE_CONFIG],
+                index_name=keys_config[KEY_BIN_ON_OUT],
+                post=keys_config[KEY_POST],
+            )
     # Segment and aggregate. Group keys becomes the index.
     agg_res = cumsegagg(
         data=seed_chunk,
@@ -909,6 +961,8 @@ class AggStream:
                                 with bin ids.
                  'seg_config' : dict specifying the segmentation config,
                  'post' : Callable or None,
+                 'max_in_memory_size_b': int, max allowed result in memory size,
+                                         in bytes.
                  'write_config' : {'ordered_on' : str,
                                    'duplicates_on' : str or list,
                                    ...
@@ -917,8 +971,9 @@ class AggStream:
          }``
       - ``self.agg_buffers``, dict to keep track of aggregation iteration
                               intermediate results.
-        ``{key: {'agg_n_rows' : int, number of rows in aggregation results,
-                            for bins (if snapshots not requested) or snapshots.
+        ``{key: {'agg_in_memory_size' : int, size in bytes of current
+                            aggregation results, for bins (if snapshots not
+                            requested) or bins and snapshots.
                  'bin_res' : None or DataFrame, last aggregation results,
                             for bins,
                  'snap_res' : None or DataFrame, last aggregation results,
@@ -953,6 +1008,7 @@ class AggStream:
         bin_on: Optional[Union[str, Tuple[str, str]]] = None,
         snap_by: Optional[Union[TimeGrouper, Series, DatetimeIndex]] = None,
         post: Optional[Callable] = None,
+        max_in_memory_size: Optional[int] = MAX_IN_MEMORY_SIZE_MB,
         parallel: Optional[bool] = False,
         **kwargs,
     ):
@@ -1121,6 +1177,8 @@ class AggStream:
             several columns), or dataframe formatting before results are
             finally recorded.
             Please, read the note below regarding 'post' parameter.
+        max_in_memory_size : int, default 'MAX_IN_MEMORY_SIZE_MB'
+            Maximum allowed size in Megabytes of results stored in memory.
         parallel : bool, default False
             Conduct processing of keys in parallel, with one process per `key`.
             If a single `key`, only one process is possible.
@@ -1138,11 +1196,6 @@ class AggStream:
         - Result is necessarily added to a dataset from an instantiated oups
           ``ParquetSet``. ``AggStream`` actually relies on the update feature
           from oups.
-        - If ``kwargs`` defines a maximum row group size to write to disk, this
-          value is also used to define a maximum size of aggregation results
-          before actually triggering a write. If no maximum row group size is
-          defined, then ``MAX_ROW_GROUP_SIZE`` defined in ``oups.writer.write``
-          is used.
         - With the post-processing step, user can also take care of removing
           columns produced by the aggregation step, but not needed afterwards.
           Other formatting operations on the dataframe can also be achieved
@@ -1214,6 +1267,7 @@ class AggStream:
             KEY_AGG: agg,
             KEY_POST: post,
             KEY_ORDERED_ON: ordered_on,
+            KEY_MAX_IN_MEMORY_SIZE_B: int(max_in_memory_size * MEGABYTES_TO_BYTES),
         } | kwargs
         if not isinstance(keys, dict):
             keys = {keys: keys_default | {KEY_BIN_BY: bin_by, KEY_BIN_ON: bin_on}}
@@ -1423,6 +1477,8 @@ class AggStream:
                 seed = self._init_agg_cs(seed)
             seed_check_exception = False
             try:
+                # TODO: '_pre_buffer' is modified in-place. It should not be
+                # needed to return it. It is within 'self.seed_config'.
                 for _last_seed_index, _pre_buffer, filter_id, filtered_chunk in _iter_data(
                     seed=seed,
                     **self.seed_config,
@@ -1461,6 +1517,7 @@ class AggStream:
                     store=self.store,
                     key=key,
                     agg_buffers=agg_res,
+                    agg_res_type=self.keys_config[key][KEY_AGG_RES_TYPE],
                     append_last_res=True,
                     write_config=self.keys_config[key][KEY_WRITE_CONFIG],
                     index_name=self.keys_config[key][KEY_BIN_ON_OUT],
