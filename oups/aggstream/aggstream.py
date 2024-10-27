@@ -8,6 +8,7 @@ Created on Wed Nov 15 21:30:00 2023.
 from collections import ChainMap
 from collections import namedtuple
 from dataclasses import dataclass
+from enum import Enum
 from itertools import chain
 from multiprocessing import cpu_count
 from typing import Callable, Iterable, List, Optional, Tuple, Union
@@ -38,6 +39,7 @@ from oups.aggstream.utils import dataframe_filter
 from oups.store import ParquetSet
 from oups.store.router import ParquetHandle
 from oups.store.writer import KEY_DUPLICATES_ON
+from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
 from oups.store.writer import OUPS_METADATA
 from oups.store.writer import OUPS_METADATA_KEY
 from oups.store.writer import write
@@ -63,6 +65,7 @@ KEY_WRITE_CONFIG = "write_config"
 KEY_AGG_IN_MEMORY_SIZE = "agg_in_memory_size"
 KEY_MAX_IN_MEMORY_SIZE_B = "max_in_memory_size_b"
 KEY_MAX_IN_MEMORY_SIZE_MB = "max_in_memory_size"
+KEY_AGG_RES_TYPE = "agg_res_type"
 KEY_SEG_CONFIG = "seg_config"
 # Filters
 NO_FILTER_ID = "_"
@@ -89,6 +92,7 @@ MAX_IN_MEMORY_SIZE_B = MAX_IN_MEMORY_SIZE_MB * MEGABYTES_TO_BYTES
 
 
 FilterApp = namedtuple("FilterApp", "keys n_jobs")
+AggResType = Enum("AggResType", ["BINS", "SNAPS", "BOTH"])
 
 
 def _is_aggstream_result(handle: ParquetHandle) -> bool:
@@ -153,8 +157,10 @@ def _init_keys_config(
                                          in bytes
                  'write_config' : {'ordered_on' : str,
                                    'duplicates_on' : str or list,
+                                   'max_row_group_size' : Union[str, int, tuple]
                                    ...
                                   },
+                 'agg_res_rype' : AggResType, either 'BINS', 'SNAPS', or 'BOTH'.
                },
          }``
       - ``self.agg_pd``, dict, specifying per key the aggregation
@@ -238,12 +244,34 @@ def _init_keys_config(
             key_conf_in[KEY_DUPLICATES_ON] = (
                 bin_on_out if bin_on_out else key_conf_in[KEY_ORDERED_ON]
             )
+        if seg_config[KEY_SNAP_BY] is None:
+            # Snapshots not requested, aggreagtation results are necessarily
+            # bins.
+            agg_res_type = AggResType.BINS
+        elif isinstance(key, tuple):
+            # 2 keys are provided, aggregation results are necessarily both
+            # bins and snapshots.
+            agg_res_type = AggResType.BOTH
+        else:
+            # Otherwise, a single aggregation result is expected, and it is
+            # created from both bins and snapshots. Hence it is snaps like.
+            agg_res_type = AggResType.SNAPS
+        if agg_res_type is AggResType.BOTH:
+            if KEY_MAX_ROW_GROUP_SIZE in key_conf_in:
+                if not isinstance(key_conf_in[KEY_MAX_ROW_GROUP_SIZE], tuple):
+                    key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = (
+                        key_conf_in[KEY_MAX_ROW_GROUP_SIZE],
+                        key_conf_in[KEY_MAX_ROW_GROUP_SIZE],
+                    )
+            else:
+                key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = (None, None)
         consolidated_keys_config[key] = {
             KEY_SEG_CONFIG: seg_config,
             KEY_BIN_ON_OUT: bin_on_out,
             KEY_MAX_IN_MEMORY_SIZE_B: key_conf_in.pop(KEY_MAX_IN_MEMORY_SIZE_B),
             KEY_POST: key_conf_in.pop(KEY_POST),
             KEY_WRITE_CONFIG: key_conf_in,
+            KEY_AGG_RES_TYPE: agg_res_type,
         }
     return consolidated_keys_config, agg_pd
 
@@ -611,6 +639,7 @@ def _concat_agg_res(
 
 def _post_n_write_agg_chunks(
     agg_buffers: dict,
+    agg_res_type: Enum,
     append_last_res: bool,
     store: ParquetSet,
     key: Union[dataclass, Tuple[dataclass, dataclass]],
@@ -658,6 +687,8 @@ def _post_n_write_agg_chunks(
           It is NOT reset after writing. It is however required to be
           written in metadata.
 
+    agg_res_type : Enum
+        Either 'BINS', 'SNAPS', or 'BOTH'.
     append_last_res : bool
         If 'agg_res' should be appended to 'agg_res_buffer' and if 'bin_res'
         should be appended to 'bin_res_buffers'.
@@ -705,7 +736,7 @@ def _post_n_write_agg_chunks(
     # When there is no result, 'agg_res' is None.
     if isinstance((bin_res := agg_buffers[KEY_BIN_RES]), DataFrame):
         # To keep track there has been res in the 1st place.
-        not_null_res = True
+        initial_agg_res = True
         # Concat list of aggregation results.
         bin_res = _concat_agg_res(
             agg_buffers[KEY_BIN_RES_BUFFER],
@@ -714,8 +745,7 @@ def _post_n_write_agg_chunks(
             index_name,
         )
         # Same if needed with 'snap_res_buffer'.
-        snap_res = agg_buffers[KEY_SNAP_RES]
-        if snap_res is not None:
+        if isinstance((snap_res := agg_buffers[KEY_SNAP_RES]), DataFrame):
             snap_res = _concat_agg_res(
                 agg_buffers[KEY_SNAP_RES_BUFFER],
                 snap_res,
@@ -729,15 +759,15 @@ def _post_n_write_agg_chunks(
             # number of rows before outputting results (warm-up).
             main_res = (
                 post(buffer=post_buffer, bin_res=bin_res)
-                if snap_res is None
+                if agg_res_type is AggResType.BINS
                 else post(buffer=post_buffer, bin_res=bin_res, snap_res=snap_res)
             )
-            if isinstance(main_res, tuple):
+            if agg_res_type is AggResType.BOTH:
                 # First result, recorded with 'bin_key', is considered main
                 # result.
-                main_res, snap_res = main_res
-            else:
-                if isinstance(key, tuple):
+                try:
+                    main_res, snap_res = main_res
+                except ValueError:
                     raise ValueError(
                         f"not possible to have key '{key[0]}' for bins and "
                         f"key '{key[1]}' for snapshots but 'post()' function "
@@ -747,7 +777,7 @@ def _post_n_write_agg_chunks(
                 # mistake in 'key' parameter (finally commented out).
                 # snap_res = None
             # bin_res = None
-        elif snap_res is None or isinstance(key, tuple):
+        elif agg_res_type is not AggResType.SNAPS:
             # Case only 'bin_res' is recorded or both 'bin_res' and 'snap_res'.
             # main_res, bin_res = bin_res, None
             main_res = bin_res
@@ -756,7 +786,7 @@ def _post_n_write_agg_chunks(
             # main_res, bin_res, snap_res = snap_res, None, None
             main_res = snap_res
     else:
-        not_null_res = False
+        initial_agg_res = False
         main_res = None
     main_key, snap_key = key if isinstance(key, tuple) else (key, None)
     if last_seed_index:
@@ -782,9 +812,17 @@ def _post_n_write_agg_chunks(
     # When there is no result, 'main_res' is None.
     if isinstance(main_res, DataFrame):
         # Record data (with metadata possibly updated).
-        store[main_key] = write_config, main_res
-        if snap_key is not None:
-            store[snap_key] = write_config, snap_res
+        if agg_res_type is AggResType.BOTH:
+            store[main_key] = (
+                write_config | {KEY_MAX_ROW_GROUP_SIZE: write_config[KEY_MAX_ROW_GROUP_SIZE][0]},
+                main_res,
+            )
+            store[snap_key] = (
+                write_config | {KEY_MAX_ROW_GROUP_SIZE: write_config[KEY_MAX_ROW_GROUP_SIZE][1]},
+                snap_res,
+            )
+        else:
+            store[main_key] = write_config, main_res
     elif last_seed_index:
         # If no result, metadata is possibly to be written, as this is the
         # flag indicating the last 'aggstream' local iteration.
@@ -794,7 +832,7 @@ def _post_n_write_agg_chunks(
             # In case no Parquet file exist yet, need to initiate one to start
             # storing metadata.
             store[main_key] = DataFrame()
-    if not_null_res:
+    if initial_agg_res:
         # If there have been results, they have been processed (either written
         # directly or through 'post()'). Time to reset aggregation buffers and
         # counters.
@@ -866,6 +904,7 @@ def agg_iter(
             # iteration.
             _post_n_write_agg_chunks(
                 agg_buffers=agg_buffers,
+                agg_res_type=keys_config[KEY_AGG_RES_TYPE],
                 append_last_res=False,
                 store=store,
                 key=key,
@@ -1478,6 +1517,7 @@ class AggStream:
                     store=self.store,
                     key=key,
                     agg_buffers=agg_res,
+                    agg_res_type=self.keys_config[key][KEY_AGG_RES_TYPE],
                     append_last_res=True,
                     write_config=self.keys_config[key][KEY_WRITE_CONFIG],
                     index_name=self.keys_config[key][KEY_BIN_ON_OUT],

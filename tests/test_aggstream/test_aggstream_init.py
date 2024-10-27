@@ -28,6 +28,7 @@ from oups import toplevel
 from oups.aggstream.aggstream import FIRST
 from oups.aggstream.aggstream import KEY_AGG
 from oups.aggstream.aggstream import KEY_AGG_IN_MEMORY_SIZE
+from oups.aggstream.aggstream import KEY_AGG_RES_TYPE
 from oups.aggstream.aggstream import KEY_BIN_BY
 from oups.aggstream.aggstream import KEY_BIN_ON
 from oups.aggstream.aggstream import KEY_BIN_ON_OUT
@@ -52,6 +53,7 @@ from oups.aggstream.aggstream import KEY_WRITE_CONFIG
 from oups.aggstream.aggstream import LAST
 from oups.aggstream.aggstream import NO_FILTER_ID
 from oups.aggstream.aggstream import SUM
+from oups.aggstream.aggstream import AggResType
 from oups.aggstream.aggstream import FilterApp
 from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
 
@@ -113,6 +115,7 @@ def always_false(**kwargs):
                         KEY_DUPLICATES_ON: "ts",
                     },
                     KEY_MAX_IN_MEMORY_SIZE_B: 146800640,
+                    KEY_AGG_RES_TYPE: AggResType.BINS,
                 },
             },
             # ref_agg_pd
@@ -184,6 +187,7 @@ def always_false(**kwargs):
                         KEY_ORDERED_ON: "ts_dflt",
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },
+                    KEY_AGG_RES_TYPE: AggResType.BINS,
                 },
                 Indexer("key2_only_specific"): {
                     KEY_BIN_ON_OUT: None,
@@ -195,6 +199,7 @@ def always_false(**kwargs):
                         KEY_ORDERED_ON: "ts_spec",
                         KEY_DUPLICATES_ON: "ts_spec",
                     },
+                    KEY_AGG_RES_TYPE: AggResType.BINS,
                 },
                 Indexer("key3_only_default"): {
                     KEY_BIN_ON_OUT: "bin_out_spec",
@@ -206,6 +211,7 @@ def always_false(**kwargs):
                         KEY_ORDERED_ON: "ts_dflt",
                         KEY_DUPLICATES_ON: "bin_out_spec",
                     },
+                    KEY_AGG_RES_TYPE: AggResType.BINS,
                 },
                 Indexer("key4_most_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
@@ -217,6 +223,7 @@ def always_false(**kwargs):
                         KEY_ORDERED_ON: "ts_spec",
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },
+                    KEY_AGG_RES_TYPE: AggResType.BINS,
                 },
             },
             # ref_agg_pd
@@ -309,6 +316,7 @@ def always_false(**kwargs):
                         KEY_ORDERED_ON: "ts_dflt",
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },
+                    KEY_AGG_RES_TYPE: AggResType.SNAPS,
                 },
                 Indexer("key2_only_specific"): {
                     KEY_BIN_ON_OUT: None,
@@ -320,6 +328,7 @@ def always_false(**kwargs):
                         KEY_ORDERED_ON: "ts_spec",
                         KEY_DUPLICATES_ON: "ts_spec",
                     },
+                    KEY_AGG_RES_TYPE: AggResType.SNAPS,
                 },
                 Indexer("key3_only_default"): {
                     KEY_BIN_ON_OUT: "bin_out_spec",
@@ -331,6 +340,7 @@ def always_false(**kwargs):
                         KEY_ORDERED_ON: "ts_dflt",
                         KEY_DUPLICATES_ON: "bin_out_spec",
                     },
+                    KEY_AGG_RES_TYPE: AggResType.SNAPS,
                 },
                 Indexer("key4_most_default"): {
                     KEY_BIN_ON_OUT: "ts_dflt",
@@ -342,6 +352,7 @@ def always_false(**kwargs):
                         KEY_ORDERED_ON: "ts_spec",
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },
+                    KEY_AGG_RES_TYPE: AggResType.SNAPS,
                 },
             },
             # ref_agg_pd

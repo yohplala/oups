@@ -37,6 +37,7 @@ from oups import ParquetSet
 from oups import toplevel
 from oups.aggstream.aggstream import KEY_AGG
 from oups.aggstream.aggstream import KEY_AGGSTREAM
+from oups.aggstream.aggstream import KEY_MAX_ROW_GROUP_SIZE
 from oups.aggstream.aggstream import KEY_PRE_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
 from oups.aggstream.aggstream import SeedPreException
@@ -1114,7 +1115,8 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
         return snap_res
 
     val = "val"
-    max_row_group_size = 5
+    max_row_group_size_5 = 5
+    max_row_group_size_8 = 8
     snap_duration = "5T"
     common_key_params = {
         KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
@@ -1124,6 +1126,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
     key1_sst = Indexer("agg_10T_sst")
     key1_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
+        KEY_MAX_ROW_GROUP_SIZE: (max_row_group_size_8, max_row_group_size_5),
     }
     key2_sst = Indexer("agg_20T_sst")
     key2_cf = {
@@ -1152,7 +1155,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        max_row_group_size=max_row_group_size,
+        max_row_group_size=max_row_group_size_5,
         **common_key_params,
         parallel=True,
         post=post_bin_snap if with_post else None,
@@ -1176,6 +1179,9 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
     seed_list = [seed_df.iloc[:17], seed_df.iloc[17:31]]
     as1.agg(seed=seed_list, trim_start=False, discard_last=False, final_write=True)
     del as1
+    # Check 'max_row_group_size' values have been both used.
+    assert [rg.num_rows for rg in store[key1_sst].pf.row_groups] == [5, 5, 3]
+    assert [rg.num_rows for rg in store[key1_bin].pf.row_groups] == [7]
     # New aggregation.
     as2 = AggStream(
         ordered_on=ordered_on,
@@ -1191,13 +1197,14 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        max_row_group_size=max_row_group_size,
+        max_row_group_size=max_row_group_size_5,
         **common_key_params,
         parallel=True,
         post=post_bin_snap if with_post else None,
     )
     as2.agg(seed=seed_df.iloc[31:], trim_start=False, discard_last=False, final_write=True)
     # Reference results by continuous aggregation.
+    del key1_cf[KEY_MAX_ROW_GROUP_SIZE]
     key1_bin_ref, key1_sst_ref = cumsegagg(
         data=seed_df.loc[seed_df[filter_on], :],
         **(key1_cf | common_key_params),
@@ -1234,7 +1241,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
 
 
 def test_exception_two_keys_but_single_result_from_post(store, seed_path):
-    # A key is provided for bins and one for snapshots, byt 'post()' only
+    # A key is provided for bins and one for snapshots, but 'post()' only
     # return one result.
 
     def post(buffer: dict, bin_res: DataFrame, snap_res: DataFrame):
