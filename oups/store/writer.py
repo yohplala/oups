@@ -10,7 +10,7 @@ from os import listdir as os_listdir
 from os import path as os_path
 from pickle import dumps
 from pickle import loads
-from typing import Dict, Hashable, List, Tuple, Union
+from typing import Dict, Hashable, List, Optional, Tuple, Union
 
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
@@ -19,12 +19,10 @@ from fastparquet.api import statistics
 from fastparquet.util import update_custom_metadata
 from numpy import searchsorted as np_searchsorted
 from numpy import unique as np_unique
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import Index
 from pandas import MultiIndex
-from vaex import from_pandas
-from vaex import open_many
-from vaex.dataframe import DataFrame as vDataFrame
+from pandas import concat
 
 
 COMPRESSION = "SNAPPY"
@@ -47,8 +45,8 @@ OUPS_METADATA_KEY = "oups"
 
 
 def iter_dataframe(
-    data: Union[pDataFrame, vDataFrame],
-    max_row_group_size: int = None,
+    data: DataFrame,
+    max_row_group_size: Union[int, str],
     sharp_on: str = None,
     duplicates_on: Union[str, List[str]] = None,
 ):
@@ -57,29 +55,26 @@ def iter_dataframe(
 
     Parameters
     ----------
-    data : Union[pDataFrame, vDataFrame]
+    data : DataFrame
         Data to split in row groups.
-    max_row_group_size : int, optional
+    max_row_group_size : Union[int, str]
         Max size of row groups. It is a max as duplicates are dropped by row
         group to be written, hereby reducing the row group size (if
         ``duplicates_on`` parameter is set).
-        If not set, default to ``6_345_000``.
     sharp_on : str, optional
         Name of column where to check that ends of bins (which split the data
         to be written) do not fall in the middle of duplicate values.
         This parameter is required when ``duplicates_on`` is used.
-        This option requires a vaex dataframe.
         If not set, default to ``None``.
     duplicates_on : Union[str, List[str]], optional
         If set, drop duplicates based on list of column names, keeping last.
         Only duplicates within the same row group to be written are identified.
-        This option requires a vaex dataframe.
         If not set, default to ``None``.
         If an empty list ``[]``, all columns are used to identify duplicates.
 
     Yields
     ------
-    pDataFrame
+    DataFrame
         Chunk of data.
 
     Notes
@@ -90,19 +85,6 @@ def iter_dataframe(
       have to share the same value in ``sharp_on`` column.
 
     """
-    # TODO: implement 'group_as' (use of 'ordered_on' column) to replicate
-    #  row group 'boundaries' between 2 different data sets.
-    if max_row_group_size is None:
-        max_row_group_size = MAX_ROW_GROUP_SIZE
-    if isinstance(data, vDataFrame):
-        # Drop any possible lazy indexing, to make the length of data equals
-        # its filtered length.
-        data = data.extract()
-    elif sharp_on or isinstance(duplicates_on, list):
-        raise TypeError("vaex dataframe required when using 'sharp_on' and/or 'duplicates_on'.")
-    # TODO: if dropping duplicates over the full dataset with vaex, then remove
-    # this exception and subsequent conditional cases. It is not necessary any
-    # longer to relate 'sharp_on' and 'duplicates_on'.
     if duplicates_on is not None:
         if not sharp_on:
             raise ValueError(
@@ -117,48 +99,26 @@ def iter_dataframe(
             # Case 'duplicates_on' is a single column name, but not
             # 'sharp_on'.
             duplicates_on = [duplicates_on, sharp_on]
-    n_rows = len(data)
-    if n_rows:
+    if n_rows := len(data):
         # Define bins to split into row groups.
         # Acknowledging this piece of code to be an extract from fastparquet.
         n_parts = (n_rows - 1) // max_row_group_size + 1
         row_group_size = min((n_rows - 1) // n_parts + 1, n_rows)
         starts = list(range(0, n_rows, row_group_size))
+        if sharp_on:
+            # Adjust bins so that they do not end in the middle of duplicate
+            # values in `sharp_on` column.
+            val_at_start = data.loc[:, sharp_on].iloc[starts]
+            starts = np_unique(np_searchsorted(data[sharp_on].to_numpy(), val_at_start)).tolist()
     else:
         # If n_rows=0
         starts = [0]
-    if sharp_on:
-        # Adjust bins so that they do not end in the middle of duplicate values
-        # in `sharp_on` column.
-        # TODO: shorten this piece of code the day vaex accepts lists of
-        # integers. Line of code currently taken from
-        # vaex-core.vaex.dataframe.__getitem__ (L5230)
-        val_at_start = [
-            data.evaluate(sharp_on, idx, idx + 1, array_type="numpy")[0] for idx in starts
-        ]
-        # TODO: vaex searchsorted kind of broken. Re-try when solved?
-        # https://github.com/vaexio/vaex/issues/1674
-        # Doing with numpy.
-        starts = np_unique(np_searchsorted(data[sharp_on].to_numpy(), val_at_start)).tolist()
     ends = starts[1:] + [None]
-    if isinstance(data, vDataFrame):
-        if duplicates_on is not None:
-            if duplicates_on == []:
-                columns = data.get_column_names()
-                duplicates_on = columns
-            for start, end in zip(starts, ends):
-                # TODO: possible 'drop_duplicates' directly in vaex as per:
-                # https://github.com/vaexio/vaex/pull/1623
-                # check if answer from
-                # https://github.com/vaexio/vaex/issues/1378
-                # If dropping duplicates with vaex, drop before the chunking.
-                # This removes then the constraints to have 'sharp_on' set and
-                # and in 'duplicates_on'. Duplicates are then dropped over the
-                # full dataset to be written.
-                yield data[start:end].to_pandas_df().drop_duplicates(duplicates_on, keep="last")
-        else:
-            for start, end in zip(starts, ends):
-                yield data[start:end].to_pandas_df()
+    if duplicates_on is not None:
+        if duplicates_on == []:
+            duplicates_on = data.columns
+        for start, end in zip(starts, ends):
+            yield data[start:end].drop_duplicates(duplicates_on, keep="last")
     else:
         for start, end in zip(starts, ends):
             yield data.iloc[start:end]
@@ -325,8 +285,8 @@ def write_metadata(
 
 def write(
     dirpath: str,
-    data: Union[pDataFrame, vDataFrame],
-    max_row_group_size: int = None,
+    data: DataFrame,
+    max_row_group_size: Optional[Union[int, str]] = MAX_ROW_GROUP_SIZE,
     compression: str = COMPRESSION,
     cmidx_expand: bool = False,
     cmidx_levels: List[str] = None,
@@ -343,9 +303,9 @@ def write(
     ----------
     dirpath : str
         Directory where writing pandas dataframe.
-    data : Union[pDataFrame, vDataFrame]
+    data : DataFrame
         Data to write.
-    max_row_group_size : int, optional
+    max_row_group_size : Optional[Union[int, str]]
         Max row group size. If not set, default to ``6_345_000``, which for a
         dataframe with 6 columns of ``float64`` or ``int64`` results in a
         memory footprint (RAM) of about 290MB.
@@ -443,15 +403,9 @@ def write(
     """
     if ordered_on is not None:
         if isinstance(ordered_on, tuple):
-            raise TypeError(f"tuple for {ordered_on} not yet supported.")
-        # Check 'ordered_on' column is within input dataframe.
-        if isinstance(data, pDataFrame):
-            # pandas case
-            all_cols = data.columns
-        else:
-            # vaex case
-            all_cols = data.get_column_names()
-        if ordered_on not in all_cols:
+            raise TypeError(f"tuple for {ordered_on} not supported.")
+        if ordered_on not in data.columns:
+            # Check 'ordered_on' column is within input dataframe.
             raise ValueError(f"column '{ordered_on}' does not exist in input data.")
     if os_path.isdir(dirpath) and any(file.endswith(".parquet") for file in os_listdir(dirpath)):
         # Case updating an existing dataset.
@@ -483,17 +437,14 @@ def write(
                 duplicates_on = [duplicates_on, ordered_on]
         if ordered_on is not None:
             # Get 'rrg_start_idx' & 'rrg_end_idx'.
-            if isinstance(data, pDataFrame):
-                # Case 'pandas'.
-                start = data[ordered_on].iloc[0]
-                end = data[ordered_on].iloc[-1]
-            else:
-                # Case 'vaex'.
-                start = data[ordered_on][:0].to_numpy()[0]
-                end = data[ordered_on][-1:].to_numpy()[0]
             rrgs_idx = filter_row_groups(
                 pf,
-                [[(ordered_on, ">=", start), (ordered_on, "<=", end)]],
+                [
+                    [
+                        (ordered_on, ">=", data.loc[:, ordered_on].iloc[0]),
+                        (ordered_on, "<=", data.loc[:, ordered_on].iloc[-1]),
+                    ],
+                ],
                 as_idx=True,
             )
             if rrgs_idx:
@@ -544,18 +495,14 @@ def write(
             )
         else:
             # Case 'updating' (with existing row groups removal).
-            # Read row groups that have impacted data as a vaex dataframe.
-            overlapping_rgs = pf[rrg_start_idx:rrg_end_idx].row_groups
-            files = [pf.row_group_filename(rg) for rg in overlapping_rgs]
-            recorded = open_many(files)
-            if isinstance(data, pDataFrame):
-                # Convert to vaex.
-                data = from_pandas(data)
-            # For concatenation of numpy 'timedelta64' to arrow 'time64', check
-            # https://github.com/vaexio/vaex/issues/2024
-            data = recorded.concat(data)
+            # Read row groups that have impacted data.
+            overlapping_pf = pf[rrg_start_idx:rrg_end_idx]
+            # TODO: should iterate row groups instead of opening them all at
+            # once.
+            recorded = overlapping_pf.to_pandas()
+            data = concat([recorded, data], ignore_index=True)
             if ordered_on:
-                data = data.sort(by=ordered_on)
+                data.sort_values(by=ordered_on, ignore_index=True, inplace=True)
             iter_data = iter_dataframe(
                 data,
                 max_row_group_size=max_row_group_size,
@@ -571,7 +518,7 @@ def write(
                 write_fmd=False,
             )
             # Remove row groups of data that is overlapping.
-            pf.remove_row_groups(overlapping_rgs, write_fmd=False)
+            pf.remove_row_groups(overlapping_pf.row_groups, write_fmd=False)
             if rrg_end_idx is not None:
                 # New data has been inserted in the middle of existing row groups.
                 # Sorting row groups based on 'max' in 'ordered_on'.
@@ -613,3 +560,13 @@ def write(
         )
     # Manage and write metadata.
     write_metadata(pf=pf, metadata=metadata, md_key=md_key)
+
+
+# TODO
+# - make ordered_on compulsory parameter, and remove all checks if it is provided
+#   or not.
+# - remove vaex
+# - implement row group split by date
+# - in aggstream, use "standard" metadata recording, and remove the use of
+#   OUPS_METADATA general dict.
+# - remove in store ability to generate vaex dataframe, simplify oups Handle.
