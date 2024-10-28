@@ -42,8 +42,8 @@ from oups.store.writer import KEY_DUPLICATES_ON
 from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
 from oups.store.writer import OUPS_METADATA
 from oups.store.writer import OUPS_METADATA_KEY
-from oups.store.writer import write
 from oups.store.writer import write_metadata
+from oups.store.writer import write_ordered
 
 
 # Aggregation functions.
@@ -74,7 +74,7 @@ KEY_AGG = "agg"
 KEY_POST = "post"
 # 'bin_by' is a compulsory parameter, and a specific check is made for it.
 # It is not added in 'KEY_CONF_IN_PARAMS'.
-WRITE_PARAMS = set(write.__code__.co_varnames[: write.__code__.co_argcount])
+WRITE_PARAMS = set(write_ordered.__code__.co_varnames[: write_ordered.__code__.co_argcount])
 KEY_CONF_IN_PARAMS = {
     KEY_BIN_ON,
     KEY_SNAP_BY,
@@ -831,7 +831,7 @@ def _post_n_write_agg_chunks(
         except FileNotFoundError:
             # In case no Parquet file exist yet, need to initiate one to start
             # storing metadata.
-            store[main_key] = DataFrame()
+            store[main_key] = write_config, DataFrame()
     if initial_agg_res:
         # If there have been results, they have been processed (either written
         # directly or through 'post()'). Time to reset aggregation buffers and

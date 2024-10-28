@@ -283,14 +283,14 @@ def write_metadata(
     pf._write_common_metadata()
 
 
-def write(
+def write_ordered(
     dirpath: str,
     data: DataFrame,
+    ordered_on: Union[str, Tuple[str]],
     max_row_group_size: Optional[Union[int, str]] = MAX_ROW_GROUP_SIZE,
     compression: str = COMPRESSION,
     cmidx_expand: bool = False,
     cmidx_levels: List[str] = None,
-    ordered_on: Union[str, Tuple[str]] = None,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_nirgs: int = None,
     metadata: Dict[str, str] = None,
@@ -305,10 +305,25 @@ def write(
         Directory where writing pandas dataframe.
     data : DataFrame
         Data to write.
+    ordered_on : Union[str, Tuple[str]]
+        Name of the column with respect to which dataset is in ascending order.
+        If column multi-index, name of the column is a tuple.
+        It has two effects:
+
+          - it allows knowing 'where' to insert new data into existing data,
+            i.e. completing or correcting past records (but it does not allow
+            to remove prior data).
+          - along with 'sharp_on', it ensures that two consecutive row groups do
+            not have duplicate values in column defined by ``ordered_on`` (only
+            in row groups to be written). This implies that all possible
+            duplicates in ``ordered_on`` column will lie in the same row group.
+
     max_row_group_size : Optional[Union[int, str]]
         Max row group size. If not set, default to ``6_345_000``, which for a
         dataframe with 6 columns of ``float64`` or ``int64`` results in a
         memory footprint (RAM) of about 290MB.
+        It can be a pandas `freqstr` as well, to gather data by timestamp over a
+        defined period.
     compression : str, default SNAPPY
         Algorithm to use for compressing data. This parameter is fastparquet
         specific. Please see fastparquet documentation for more information.
@@ -319,23 +334,6 @@ def write(
     cmidx_levels : List[str], optional
         Names of levels to be used when expanding column names into a
         multi-index. If not provided, levels are given names 'l1', 'l2', ...
-    ordered_on : Union[str, Tuple[str]] optional
-        Name of the column with respect to which dataset is in ascending order.
-        If column multi-index, name of the column is a tuple.
-        This parameter is optional, and required so that data overlaps between
-        new data and existing recorded row groups can be identified.
-        This parameter is compulsory when ``duplicates_on`` is used.
-        If not set, default to ``None``.
-        It has two effects:
-
-          - it allows knowing 'where' to insert new data into existing data,
-            i.e. completing or correcting past records (but it does not allow
-            to remove prior data).
-          - it ensures that two consecutive row groups do not have duplicate
-            values in column defined by ``ordered_on`` (only in row groups to
-            be written). This implies that all possible duplicates in
-            ``ordered_on`` column will lie in the same row group.
-
     duplicates_on : Union[str, List[str], List[Tuple[str]]], optional
         Column names according which 'row duplicates' can be identified (i.e.
         rows sharing same values on these specific columns) so as to drop
@@ -401,33 +399,19 @@ def write(
       parameters will trigger unnecessary evaluations.
 
     """
-    if ordered_on is not None:
-        if isinstance(ordered_on, tuple):
-            raise TypeError(f"tuple for {ordered_on} not supported.")
+    if os_path.isdir(dirpath) and any(file.endswith(".parquet") for file in os_listdir(dirpath)):
+        # Case updating an existing dataset.
         if ordered_on not in data.columns:
             # Check 'ordered_on' column is within input dataframe.
             raise ValueError(f"column '{ordered_on}' does not exist in input data.")
-    if os_path.isdir(dirpath) and any(file.endswith(".parquet") for file in os_listdir(dirpath)):
-        # Case updating an existing dataset.
-        # Identify overlaps in row groups between new data and recorded data.
-        # Recorded row group start and end indexes.
-        rrg_start_idx, rrg_end_idx = None, None
-        pf = ParquetFile(dirpath)
-        n_rrgs = len(pf.row_groups)
         if duplicates_on is not None:
-            if not ordered_on:
-                raise ValueError(
-                    "duplicates are looked for over the overlap between new data and existing data. "
-                    "This overlap being identified thanks to 'ordered_on', "
-                    "it is compulsory to set 'ordered_on' while setting 'duplicates_on'.",
-                )
             # Enforce 'ordered_on' in 'duplicates_on', as per logic of
             # duplicate identification restricted to the data overlap between new
             # data and existing data. This overlap being identified thanks to
             # 'ordered_on', it implies that duplicate rows can be identified being
             # so at the condition they share the same value in 'ordered_on' (among
             # other columns).
-            elif isinstance(duplicates_on, list):
+            if isinstance(duplicates_on, list):
                 if duplicates_on and ordered_on not in duplicates_on:
                     # Case 'not an empty list', and 'ordered_on' not in.
                     duplicates_on.append(ordered_on)
@@ -435,30 +419,30 @@ def write(
                 # Case 'duplicates_on' is a single column name, but not
                 # 'ordered_on'.
                 duplicates_on = [duplicates_on, ordered_on]
-        if ordered_on is not None:
-            # Get 'rrg_start_idx' & 'rrg_end_idx'.
-            rrgs_idx = filter_row_groups(
-                pf,
+        # Identify overlaps in row groups between new data and recorded data.
+        # Recorded row group start and end indexes.
+        rrg_start_idx, rrg_end_idx = None, None
+        pf = ParquetFile(dirpath)
+        n_rrgs = len(pf.row_groups)
+        # Get 'rrg_start_idx' & 'rrg_end_idx'.
+        rrgs_idx = filter_row_groups(
+            pf,
+            [
                 [
-                    [
-                        (ordered_on, ">=", data.loc[:, ordered_on].iloc[0]),
-                        (ordered_on, "<=", data.loc[:, ordered_on].iloc[-1]),
-                    ],
+                    (ordered_on, ">=", data.loc[:, ordered_on].iloc[0]),
+                    (ordered_on, "<=", data.loc[:, ordered_on].iloc[-1]),
                 ],
-                as_idx=True,
-            )
-            if rrgs_idx:
-                if len(rrgs_idx) == 1:
-                    rrg_start_idx = rrgs_idx[0]
-                else:
-                    rrg_start_idx = rrgs_idx[0]
-                    # For slicing, 'rrg_end_idx' is increased by 1.
-                    rrg_end_idx = rrgs_idx[-1] + 1
-                    if rrg_end_idx == n_rrgs:
-                        rrg_end_idx = None
+            ],
+            as_idx=True,
+        )
+        if rrgs_idx:
+            rrg_start_idx = rrgs_idx[0]
+            if len(rrgs_idx) > 1 and rrgs_idx[-1] + 1 != n_rrgs:
+                # For slicing, 'rrg_end_idx' is increased by 1.
+                rrg_end_idx = rrgs_idx[-1] + 1
         if max_nirgs is not None:
             # Number of incomplete row groups at end of recorded data.
-            # Initialize number of rows with number to be written.
+            # Initialize number of rows with length of data to be written.
             total_rows_in_irgs = len(data)
             rrg_start_idx_tmp = n_rrgs - 1
             min_row_group_size = int(max_row_group_size * 0.9)
@@ -472,14 +456,13 @@ def write(
                 if rrg_start_idx and (
                     not rrg_end_idx or (rrg_end_idx and rrg_start_idx_tmp < rrg_end_idx)
                 ):
-                    # 1st case checked: case 'ordered_on' is used with potential
-                    # insertion of new data in existing one, in row groups not at
-                    # the tail, in which case coalescing of end data would not be
-                    # performed.
+                    # 1st case checked: case overlap between existing data and
+                    # new data.
                     rrg_start_idx = min(rrg_start_idx_tmp, rrg_start_idx)
                 elif not rrg_end_idx:
-                    # 2nd case checked: case 'ordered_on' is not used. New data is
-                    # necessarily appended in this case.
+                    # 2nd case checked: case no overlap between existing data
+                    # and new data. New data is necessarily appended in this
+                    # case.
                     rrg_start_idx = rrg_start_idx_tmp
         if rrg_start_idx is None:
             # Case 'appending' (no overlap with recorded data identified).
@@ -565,7 +548,7 @@ def write(
 # TODO
 # - make ordered_on compulsory parameter, and remove all checks if it is provided
 #   or not.
-# - remove vaex
+# - remove vaex (in all oups module, then from poetry)
 # - implement row group split by date
 # - in aggstream, use "standard" metadata recording, and remove the use of
 #   OUPS_METADATA general dict.

@@ -20,14 +20,14 @@ from pandas import MultiIndex
 from pandas import concat
 
 from oups.store.writer import to_midx
-from oups.store.writer import write as pswrite
+from oups.store.writer import write_ordered as pswrite
 
 
 def test_init_and_append_std(tmp_path):
     # Initialize a parquet dataset from pandas dataframe. Existing folder.
     # (no row index, compression SNAPPY, row group size: 2)
     pdf1 = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
-    pswrite(str(tmp_path), pdf1, max_row_group_size=2)
+    pswrite(str(tmp_path), pdf1, max_row_group_size=2, ordered_on="a")
     pf1 = ParquetFile(str(tmp_path))
     assert len(pf1.row_groups) == 3
     for rg in pf1.row_groups:
@@ -35,8 +35,8 @@ def test_init_and_append_std(tmp_path):
     res1 = pf1.to_pandas()
     assert pdf1.equals(res1)
     # Append
-    pdf2 = DataFrame({"a": range(2), "b": ["at", "of"]})
-    pswrite(str(tmp_path), pdf2, max_row_group_size=2)
+    pdf2 = DataFrame({"a": [6, 7], "b": ["at", "of"]})
+    pswrite(str(tmp_path), pdf2, max_row_group_size=2, ordered_on="a")
     res2 = ParquetFile(str(tmp_path)).to_pandas()
     assert concat([pdf1, pdf2]).reset_index(drop=True).equals(res2)
 
@@ -46,7 +46,7 @@ def test_init_no_folder(tmp_path):
     # (no row index, compression SNAPPY, row group size: 2)
     tmp_path = os_path.join(tmp_path, "test")
     pdf = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
-    pswrite(str(tmp_path), pdf, max_row_group_size=2)
+    pswrite(str(tmp_path), pdf, max_row_group_size=2, ordered_on="a")
     res = ParquetFile(str(tmp_path)).to_pandas()
     assert pdf.equals(res)
 
@@ -56,10 +56,10 @@ def test_init_compression_brotli(tmp_path):
     # (no row index)
     pdf = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     tmp_path1 = os_path.join(tmp_path, "brotli")
-    pswrite(str(tmp_path1), pdf, compression="BROTLI")
+    pswrite(str(tmp_path1), pdf, compression="BROTLI", ordered_on="a")
     brotli_s = os_path.getsize(os_path.join(tmp_path1, "part.0.parquet"))
     tmp_path2 = os_path.join(tmp_path, "snappy")
-    pswrite(str(tmp_path2), pdf, compression="SNAPPY")
+    pswrite(str(tmp_path2), pdf, compression="SNAPPY", ordered_on="a")
     snappy_s = os_path.getsize(os_path.join(tmp_path2, "part.0.parquet"))
     assert brotli_s < snappy_s
 
@@ -79,7 +79,7 @@ def test_init_idx_expansion(tmp_path):
         names=["l0", "l1"],
     )
     assert res_midx.equals(ref_midx)
-    pswrite(str(tmp_path), pdf, cmidx_expand=True)
+    pswrite(str(tmp_path), pdf, cmidx_expand=True, ordered_on=("lev1-col1", "lev2-col1"))
     res = ParquetFile(str(tmp_path)).to_pandas()
     pdf.columns = ref_midx
     assert res.equals(pdf)
@@ -122,7 +122,7 @@ def test_coalescing_first_rgs(tmp_path):
     max_row_group_size = 3
     max_nirgs = 2
     pdf2 = DataFrame({"a": [20]}, index=[0])
-    pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
+    pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs, ordered_on="a")
     pf_rec = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
     assert len_rgs == [3]
@@ -154,12 +154,12 @@ def test_coalescing_simple_irgs(tmp_path):
     assert len_rgs == [4, 1, 4, 1]
     max_row_group_size = 4
     max_nirgs = 2
-    pdf2 = DataFrame({"a": [20]})
-    pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
+    pdf2 = DataFrame({"a": [20]}, index=[0])
+    pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs, ordered_on="a")
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
     assert len_rgs == [4, 1, 4, 1, 1]
-    df_ref1 = concat([pdf1, DataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
+    df_ref1 = concat([pdf1, pdf2]).reset_index(drop=True)
     assert pf_rec1.to_pandas().equals(df_ref1)
 
     # Case 2, 'max_nirgs" now reached.
@@ -168,11 +168,11 @@ def test_coalescing_simple_irgs(tmp_path):
     # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,20]
     # a (new data)                                                  [20]
     # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3,  ,  ]
-    pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
+    pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs, ordered_on="a")
     pf_rec2 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec2.row_groups]
     assert len_rgs == [4, 1, 4, 3]
-    df_ref2 = concat([df_ref1, DataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
+    df_ref2 = concat([df_ref1, pdf2]).reset_index(drop=True)
     assert pf_rec2.to_pandas().equals(df_ref2)
 
 
@@ -203,12 +203,12 @@ def test_coalescing_simple_max_row_group_size(tmp_path):
     max_row_group_size = 4
     max_nirgs = 5
     # With additional row of new data, 'max_row_group_size' is reached.
-    pdf2 = DataFrame({"a": [20]})
-    pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs)
+    pdf2 = DataFrame({"a": [20]}, index=[0])
+    pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs, ordered_on="a")
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
     assert len_rgs == [4, 1, 4, 4]
-    df_ref1 = concat([pdf1, DataFrame({"a": 20}, index=[0])]).reset_index(drop=True)
+    df_ref1 = concat([pdf1, pdf2]).reset_index(drop=True)
     assert pf_rec1.to_pandas().equals(df_ref1)
 
 
@@ -718,9 +718,9 @@ def test_exception_check_cmidx(tmp_path):
     # Check 1st no column level names.
     df = DataFrame({("a", 1): [1]})
     with pytest.raises(ValueError, match="^not possible to have level name"):
-        pswrite(tmp_path, df)
+        pswrite(tmp_path, df, ordered_on="a")
     # Check with one column name not being a string.
     # Correcting column names.
     df.columns.set_names(["1", "2"], level=[0, 1], inplace=True)
     with pytest.raises(TypeError, match="^name 1 has to be"):
-        pswrite(tmp_path, df)
+        pswrite(tmp_path, df, ordered_on="a")

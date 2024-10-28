@@ -21,7 +21,7 @@ from oups.store.indexer import is_toplevel
 from oups.store.router import ParquetHandle
 from oups.store.utils import files_at_depth
 from oups.store.utils import strip_path_tail
-from oups.store.writer import write
+from oups.store.writer import write_ordered
 
 
 def is_parquet_file(file: str) -> bool:
@@ -197,7 +197,7 @@ class ParquetSet:
         if not isinstance(data, (pDataFrame, vDataFrame)):
             raise TypeError("data should be a pandas or vaex dataframe.")
         dirpath = os_path.join(self._basepath, key.to_path)
-        write(dirpath=dirpath, data=data, md_key=key, **kwargs)
+        write_ordered(dirpath=dirpath, data=data, md_key=key, **kwargs)
         if key not in self:
             # If no trouble from writing, add key.
             self._keys.add(key)

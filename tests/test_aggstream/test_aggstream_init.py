@@ -448,7 +448,7 @@ def test_exception_not_key_of_streamagg_results(store):
     ordered_on = "ts_order"
     val = range(1, len(ts) + 1)
     seed_pdf = DataFrame({ordered_on: ts, "val": val})
-    store[key] = seed_pdf
+    store[key] = {KEY_ORDERED_ON: ordered_on}, seed_pdf
     # Setup aggregation.
     bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
     agg = {SUM: ("val", SUM)}

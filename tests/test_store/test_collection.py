@@ -21,6 +21,7 @@ from pandas import date_range
 from oups import ParquetSet
 from oups import sublevel
 from oups import toplevel
+from oups.aggstream.segmentby import KEY_ORDERED_ON
 
 from .. import TEST_DATA
 
@@ -101,7 +102,7 @@ def test_set_parquet(tmp_path):
             "temperature": [8.4, 5.3],
         },
     )
-    ps[we] = df
+    ps[we] = {KEY_ORDERED_ON: "timestamp"}, df
     assert we in ps
     res = ParquetFile(os_path.join(basepath, we.to_path)).to_pandas()
     assert res.equals(df)
@@ -119,7 +120,7 @@ def test_set_parquet_with_config(tmp_path):
         },
     )
     rg_size = 2
-    config = {"max_row_group_size": rg_size}
+    config = {KEY_ORDERED_ON: "timestamp", "max_row_group_size": rg_size}
     ps[we] = config, df
     assert we in ps
     # Load only first row group.
@@ -165,7 +166,7 @@ def test_iterator(tmp_path):
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
-    ps[we1], ps[we2] = df, df
+    ps[we1], ps[we2] = ({KEY_ORDERED_ON: "timestamp"}, df), ({KEY_ORDERED_ON: "timestamp"}, df)
     for key in ps:
         assert key in (we1, we2)
 
@@ -180,7 +181,7 @@ def test_set_and_get_roundtrip_pandas(tmp_path):
             "temperature": [8.4, 5.3, 2.9, 6.4],
         },
     )
-    config = {"max_row_group_size": 2}
+    config = {KEY_ORDERED_ON: "timestamp", "max_row_group_size": 2}
     ps[we] = config, df
     df_res = ps[we].pdf
     assert df_res.equals(df)
@@ -196,7 +197,7 @@ def test_set_pandas_and_get_vaex(tmp_path):
             "temperature": [8.4, 5.3, 2.9, 6.4],
         },
     )
-    config = {"max_row_group_size": 2}
+    config = {KEY_ORDERED_ON: "timestamp", "max_row_group_size": 2}
     ps[we] = config, df
     vdf = ps[we].vdf
     assert vdf.to_pandas_df().equals(df)
@@ -212,7 +213,7 @@ def test_set_pandas_and_get_parquet_file(tmp_path):
             "temperature": [8.4, 5.3, 2.9, 6.4],
         },
     )
-    config = {"max_row_group_size": 2}
+    config = {KEY_ORDERED_ON: "timestamp", "max_row_group_size": 2}
     ps[we] = config, df
     pf = ps[we].pf
     assert len(pf.row_groups) == 2
@@ -234,7 +235,8 @@ def test_set_cmidx_get_vaex(tmp_path):
     )
     ps = ParquetSet(tmp_path, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
-    ps[we] = pdf
+    config = {KEY_ORDERED_ON: ("ts", "")}
+    ps[we] = config, pdf
     vdf = ps[we].vdf
     assert list(map(str, pdf.columns)) == vdf.get_column_names()
     df_res = vdf.to_pandas_df()
@@ -255,7 +257,8 @@ def test_dataset_removal(tmp_path):
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
-    ps[we1], ps[we2], ps[we3] = df, df, df
+    config = {KEY_ORDERED_ON: "timestamp"}
+    ps[we1], ps[we2], ps[we3] = (config, df), (config, df), (config, df)
     # Delete london-related data.
     we3_path = os_path.join(basepath, we3.to_path)
     assert os_path.exists(we3_path)
@@ -286,7 +289,7 @@ def test_11_rgs_pandas_to_vaex(tmp_path):
             "temperature": temp,
         },
     )
-    config = {"max_row_group_size": 1}
+    config = {KEY_ORDERED_ON: "timestamp", "max_row_group_size": 1}
     ps[we] = config, df
     vdf = ps[we].vdf
     assert vdf.to_pandas_df().equals(df)

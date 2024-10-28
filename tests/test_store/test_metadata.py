@@ -17,6 +17,7 @@ from pandas import DataFrame as pDataFrame
 
 from oups import ParquetSet
 from oups import toplevel
+from oups.aggstream.segmentby import KEY_ORDERED_ON
 from oups.store.writer import OUPS_METADATA
 from oups.store.writer import OUPS_METADATA_KEY
 from oups.store.writer import write_metadata
@@ -42,7 +43,7 @@ def test_custom_metadata(store):
     # No oups specific metadata.
     # Step 1: write.
     metadata = {"md1": "step1", "md2": "step1", "md3": "step1"}
-    store[sidx] = {"metadata": metadata}, pdf
+    store[sidx] = {KEY_ORDERED_ON: "a", "metadata": metadata}, pdf
     # Retrieve metadata.
     md_rec = store[sidx].metadata
     # Remove 'pandas' key and item.
@@ -50,7 +51,7 @@ def test_custom_metadata(store):
     assert md_rec == metadata
     # Step 2: update.
     metadata = {"md1": None, "md2": "step2", "md4": "step2"}
-    store[sidx] = {"metadata": metadata}, pdf
+    store[sidx] = {KEY_ORDERED_ON: "a", "metadata": metadata}, pdf
     # Retrieve metadata.
     md_rec = store[sidx].metadata
     md_ref = {"md2": "step2", "md3": "step1", "md4": "step2"}
@@ -64,7 +65,7 @@ def test_oups_metadata_wo_custom_metadata(store):
     # Step 1: write.
     metadata = {"md1": "step1", "md2": "step1", "md3": "step1"}
     OUPS_METADATA[sidx] = metadata
-    store[sidx] = pdf
+    store[sidx] = {KEY_ORDERED_ON: "a"}, pdf
     # Retrieve oups metadata.
     md_rec = store[sidx]._oups_metadata
     assert md_rec == metadata
@@ -73,7 +74,7 @@ def test_oups_metadata_wo_custom_metadata(store):
     # Step 2: update.
     metadata = {"md1": None, "md2": "step2", "md4": "step2"}
     OUPS_METADATA[sidx] = metadata
-    store[sidx] = pdf
+    store[sidx] = {KEY_ORDERED_ON: "a"}, pdf
     # Retrieve oups metadata.
     md_rec = store[sidx]._oups_metadata
     md_ref = {"md2": "step2", "md3": "step1", "md4": "step2"}
@@ -87,7 +88,7 @@ def test_oups_metadata_with_custom_metadata(store):
     # Step 1: write.
     metadata = {"md1": "step1", "md2": "step1", "md3": "step1"}
     OUPS_METADATA[sidx] = metadata
-    store[sidx] = {"metadata": metadata.copy()}, pdf
+    store[sidx] = {KEY_ORDERED_ON: "a", "metadata": metadata.copy()}, pdf
     # Retrieve oups metadata.
     md_rec = store[sidx]._oups_metadata
     assert md_rec == metadata
@@ -102,7 +103,7 @@ def test_oups_metadata_with_custom_metadata(store):
     # Step 2: update.
     metadata = {"md1": None, "md2": "step2", "md4": "step2"}
     OUPS_METADATA[sidx] = metadata
-    store[sidx] = {"metadata": metadata.copy()}, pdf
+    store[sidx] = {KEY_ORDERED_ON: "a", "metadata": metadata.copy()}, pdf
     # Retrieve oups metadata.
     md_rec = store[sidx]._oups_metadata
     md_ref = {"md2": "step2", "md3": "step1", "md4": "step2"}
@@ -118,7 +119,7 @@ def test_oups_metadata_with_custom_metadata(store):
 def test_write_metadata(store):
     # Only updating metadata, that 's all. No data being written.
     # Write parquet file.
-    store[sidx] = pdf
+    store[sidx] = {KEY_ORDERED_ON: "a"}, pdf
     # Write application-related metadata.
     md_ref = {"my_app": "lala"}
     OUPS_METADATA[sidx] = md_ref
