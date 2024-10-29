@@ -23,6 +23,7 @@ from pandas import DataFrame
 from pandas import Index
 from pandas import MultiIndex
 from pandas import concat
+from pandas import date_range
 
 
 COMPRESSION = "SNAPPY"
@@ -283,6 +284,152 @@ def write_metadata(
     pf._write_common_metadata()
 
 
+def _indexes_of_overlapping_rrgs(
+    new_data: DataFrame,
+    recorded_pf: ParquetFile,
+    ordered_on: str,
+    max_row_group_size: Union[int, str],
+    max_nirgs: int = None,
+):
+    """
+    Identify overlaps between recorded row groups and new data.
+
+    Overlaps may occur in the middle of recorded data.
+    It may also occur at its tail in case there are incomplete row groups.
+
+    Parameters
+    ----------
+    new_data : Dataframe
+        New data.
+    recorded_pf : ParquetFile
+        ParquetFile of recorded data.
+    ordered_on : Union[str, Tuple[str]]
+        Name of the column with respect to which dataset is in ascending order.
+        If column multi-index, name of the column is a tuple.
+        It allows knowing 'where' to insert new data into existing data, i.e.
+        completing or correcting past records (but it does not allow to remove
+        prior data).
+    max_row_group_size : Union[int, str]
+        Define how to group data, either an ``int`` or a ``str``.
+        If an ``int``, define the maximum number of rows allowed.
+        If a ``str``, it has then to be a pandas `freqstr`, to gather data by
+        timestamp over a defined period.
+    max_nirgs : int, optional
+        Max expected number of 'incomplete' row groups.
+        To evaluate number of 'incomplete' row groups, only those at the end of
+        an existing dataset are accounted for. 'Incomplete' row groups in the
+        middle of 'complete' row groups are not accounted for (they can be
+        created by insertion of new data 'in the middle' of existing data).
+        If not set, default to ``None``.
+
+          - ``None`` value induces no coalescing of row groups. If there is no
+            drop of duplicates, new data is systematically appended.
+          - A value of ``0`` or ``1`` means that new data should systematically
+            be merged to the last existing one to 'complete' it (if it is not
+            'complete' already).
+
+    Returns
+    -------
+    int, int
+        rrg_start_idx, rrg_end_idx, indices of recorded row group overlapping
+        with new data.
+        If there is not overlapping row group, they are both set to ``None``.
+        If there is overlapping with incomplete row groups (by definition of
+        incomplete row groups, at the tail of the recorded data), then only
+        'rrg_end_idx' is set to ``None``.
+
+    """
+    # Case 1: assess existing overlaps.
+    # Get 'rrg_start_idx' & 'rrg_end_idx'.
+    new_data_last = new_data.loc[:, ordered_on].iloc[-1]
+    overlapping_rrgs_idx = filter_row_groups(
+        recorded_pf,
+        [
+            [
+                (ordered_on, ">=", new_data.loc[:, ordered_on].iloc[0]),
+                (ordered_on, "<=", new_data_last),
+            ],
+        ],
+        as_idx=True,
+    )
+    # Recorded row group start and end indexes.
+    rrg_start_idx, rrg_end_idx = None, None
+    n_rrgs = len(recorded_pf.row_groups)
+    if overlapping_rrgs_idx:
+        print(f"overlapping_rrgs_idx: {overlapping_rrgs_idx}")
+        rrg_start_idx = overlapping_rrgs_idx[0]
+        if overlapping_rrgs_idx[-1] + 1 != n_rrgs:
+            # For slicing, 'rrg_end_idx' is increased by 1.
+            # If 'rrg_end_idx' is the index of the last row group, it keeps its
+            # default 'None' value.
+            rrg_end_idx = overlapping_rrgs_idx[-1] + 1
+    print(f"rrg_end_idx: {rrg_end_idx}")
+    # Case 2: if incomplete row groups are allowed, and incomplete row groups
+    # location is connected to where the new data will be written (be it at the
+    # tail of recorded data, or within it).
+    if max_nirgs is not None:
+        # Number of incomplete row groups at end of recorded data.
+        # Initialize number of rows with length of data to be written if it is
+        # located at the end of recorded data.
+        total_rows_in_irgs = len(new_data) if rrg_end_idx is None else 0
+        rrg_start_idx_tmp = n_rrgs - 1
+        if isinstance(max_row_group_size, int):
+            # Case 2.a: 'max_row_group_size' is an 'int'.
+            min_row_group_size = int(max_row_group_size * 0.9)
+            while (
+                recorded_pf[rrg_start_idx_tmp].count() <= min_row_group_size
+                and rrg_start_idx_tmp >= 0
+            ):
+                total_rows_in_irgs += recorded_pf[rrg_start_idx_tmp].count()
+                rrg_start_idx_tmp -= 1
+            coalesce_due_to_boundary_exceeded = total_rows_in_irgs >= max_row_group_size
+            print(f"total_rows_in_irgs: {total_rows_in_irgs}")
+            print(f"coalesce_due_to_boundary_exceeded: {coalesce_due_to_boundary_exceeded}")
+        else:
+            # Case 2.b: 'max_row_group_size' is a str.
+            # Only the last row group is incomplete, and it is always considered
+            # so.
+            # Get the 1st timestamp allowed in the last "valid" row group (as if
+            # complete).
+            # TODO: if solved, select directly last row group in
+            # recorded_pf.statistics["min"][ordered_on][-1] ?
+            # https://github.com/dask/fastparquet/issues/938
+            last_vrg_first_ts, new_rg_first_ts = date_range(
+                start=recorded_pf.statistics["min"][ordered_on][-1].floor(max_row_group_size),
+                freq=max_row_group_size,
+                periods=2,
+            )[0]
+            while (
+                recorded_pf.statistics["min"][ordered_on][rrg_start_idx_tmp] >= last_vrg_first_ts
+                and rrg_start_idx_tmp >= 0
+            ):
+                rrg_start_idx_tmp -= 1
+            # Coalesce if last row group is incomplete (more than 1) and the new
+            # data exceeds last ts of last "valid" row group.
+            coalesce_due_to_boundary_exceeded = (n_rrgs - rrg_start_idx_tmp > 2) and (
+                new_data_last >= new_rg_first_ts
+            )
+        rrg_start_idx_tmp += 1
+        print(f"rrg_start_idx_tmp: {rrg_start_idx_tmp}")
+        # Confirm or not coalescing of incomplete row groups.
+        n_irgs = n_rrgs - rrg_start_idx_tmp
+        if coalesce_due_to_boundary_exceeded or n_irgs >= max_nirgs:
+            # Coalesce recorded data only it new data overlaps with it, or
+            # if new data is appended at the tail.
+            if rrg_start_idx and (
+                rrg_end_idx is None or (rrg_end_idx and rrg_start_idx_tmp < rrg_end_idx)
+            ):
+                # 1st case checked: case overlap between existing data and
+                # new data.
+                rrg_start_idx = min(rrg_start_idx_tmp, rrg_start_idx)
+            elif rrg_start_idx is None:
+                # 2nd case checked: case no overlap between existing data
+                # and new data but new data is appended at the tail, and there
+                # does be incomplete row groups.
+                rrg_start_idx = rrg_start_idx_tmp
+    return rrg_start_idx, rrg_end_idx
+
+
 def write_ordered(
     dirpath: str,
     data: DataFrame,
@@ -419,51 +566,14 @@ def write_ordered(
                 # Case 'duplicates_on' is a single column name, but not
                 # 'ordered_on'.
                 duplicates_on = [duplicates_on, ordered_on]
-        # Identify overlaps in row groups between new data and recorded data.
-        # Recorded row group start and end indexes.
-        rrg_start_idx, rrg_end_idx = None, None
         pf = ParquetFile(dirpath)
-        n_rrgs = len(pf.row_groups)
-        # Get 'rrg_start_idx' & 'rrg_end_idx'.
-        rrgs_idx = filter_row_groups(
-            pf,
-            [
-                [
-                    (ordered_on, ">=", data.loc[:, ordered_on].iloc[0]),
-                    (ordered_on, "<=", data.loc[:, ordered_on].iloc[-1]),
-                ],
-            ],
-            as_idx=True,
+        rrg_start_idx, rrg_end_idx = _indexes_of_overlapping_rrgs(
+            new_data=data,
+            recorded_pf=pf,
+            ordered_on=ordered_on,
+            max_row_group_size=max_row_group_size,
+            max_nirgs=max_nirgs,
         )
-        if rrgs_idx:
-            rrg_start_idx = rrgs_idx[0]
-            if len(rrgs_idx) > 1 and rrgs_idx[-1] + 1 != n_rrgs:
-                # For slicing, 'rrg_end_idx' is increased by 1.
-                rrg_end_idx = rrgs_idx[-1] + 1
-        if max_nirgs is not None:
-            # Number of incomplete row groups at end of recorded data.
-            # Initialize number of rows with length of data to be written.
-            total_rows_in_irgs = len(data)
-            rrg_start_idx_tmp = n_rrgs - 1
-            min_row_group_size = int(max_row_group_size * 0.9)
-            while pf[rrg_start_idx_tmp].count() <= min_row_group_size and rrg_start_idx_tmp >= 0:
-                total_rows_in_irgs += pf[rrg_start_idx_tmp].count()
-                rrg_start_idx_tmp -= 1
-            rrg_start_idx_tmp += 1
-            # Confirm or not coalescing of incomplete row groups.
-            n_irgs = n_rrgs - rrg_start_idx_tmp
-            if total_rows_in_irgs >= max_row_group_size or n_irgs >= max_nirgs:
-                if rrg_start_idx and (
-                    not rrg_end_idx or (rrg_end_idx and rrg_start_idx_tmp < rrg_end_idx)
-                ):
-                    # 1st case checked: case overlap between existing data and
-                    # new data.
-                    rrg_start_idx = min(rrg_start_idx_tmp, rrg_start_idx)
-                elif not rrg_end_idx:
-                    # 2nd case checked: case no overlap between existing data
-                    # and new data. New data is necessarily appended in this
-                    # case.
-                    rrg_start_idx = rrg_start_idx_tmp
         if rrg_start_idx is None:
             # Case 'appending' (no overlap with recorded data identified).
             # 'coalesce' has possibly been requested but not needed, hence no row
@@ -505,6 +615,7 @@ def write_ordered(
             if rrg_end_idx is not None:
                 # New data has been inserted in the middle of existing row groups.
                 # Sorting row groups based on 'max' in 'ordered_on'.
+                # TODO: why using 'ordered_on' index?
                 ordered_on_idx = pf.columns.index(ordered_on)
                 pf.fmd.row_groups = sorted(
                     pf.fmd.row_groups,
@@ -553,3 +664,18 @@ def write_ordered(
 # - in aggstream, use "standard" metadata recording, and remove the use of
 #   OUPS_METADATA general dict.
 # - remove in store ability to generate vaex dataframe, simplify oups Handle.
+
+
+# Cas test:
+# - test specific append case
+#    - max_row_group_size an int
+#    - new data with length above "max_row_group_size"
+#    - last row group is already above "max_row_groups_size"
+#    - in this case, there should be a bug:
+#       at the end, "rrg_start_idx" should be equal to n_rrgs
+# - test case with pandas freqstr:
+#    - new data in last recorded row group
+#    - new data starting in a new period, with several incomplete row groups in
+#      last recorded row group which should get merged
+#    - new data starting in a new period, with a single row group in last
+#      recorded row group: this one should not get updated. (check timestamp of writing)

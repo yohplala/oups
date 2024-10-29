@@ -19,8 +19,54 @@ from pandas import DataFrame
 from pandas import MultiIndex
 from pandas import concat
 
+from oups.store.writer import _indexes_of_overlapping_rrgs
 from oups.store.writer import to_midx
 from oups.store.writer import write_ordered as pswrite
+
+
+@pytest.mark.parametrize(
+    ("df_to_record, row_group_offsets, max_row_group_size, new_data, max_nirgs, ref_rrg_indexes"),
+    [
+        (
+            # Test  1 /
+            # Writing in-between existing data, with incomplete row groups at
+            # the end of recorded data.
+            # Row groups in recorded data:
+            # [0,1], [2,6], [7, 8], [9], [10]
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10]}),
+            [0, 2, 4, 6, 7],
+            2,
+            DataFrame({"ordered_on": [2, 3, 4]}),
+            2,
+            (1, 2),
+        ),
+    ],
+)
+def test_indexes_of_overlapping_rrgs(
+    tmp_path,
+    df_to_record,
+    row_group_offsets,
+    max_row_group_size,
+    new_data,
+    max_nirgs,
+    ref_rrg_indexes,
+):
+    fp_write(
+        f"{tmp_path}/test",
+        df_to_record,
+        row_group_offsets=row_group_offsets,
+        file_scheme="hive",
+        write_index=False,
+    )
+    recorded_pf = ParquetFile(f"{tmp_path}/test")
+    res_rrg_indexes = _indexes_of_overlapping_rrgs(
+        new_data=new_data,
+        recorded_pf=recorded_pf,
+        ordered_on="ordered_on",
+        max_row_group_size=max_row_group_size,
+        max_nirgs=max_nirgs,
+    )
+    assert res_rrg_indexes == ref_rrg_indexes
 
 
 def test_init_and_append_std(tmp_path):
