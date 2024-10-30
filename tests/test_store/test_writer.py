@@ -17,39 +17,225 @@ from fastparquet import write as fp_write
 from numpy import arange
 from pandas import DataFrame
 from pandas import MultiIndex
+from pandas import Timestamp
 from pandas import concat
+from pandas import date_range
 
 from oups.store.writer import _indexes_of_overlapping_rrgs
 from oups.store.writer import to_midx
 from oups.store.writer import write_ordered as pswrite
 
 
+REF_D = "2020/01/01 "
+
+
 @pytest.mark.parametrize(
-    ("df_to_record, row_group_offsets, max_row_group_size, new_data, max_nirgs, ref_rrg_indexes"),
+    (
+        "new_data, df_to_record, row_group_offsets, max_row_group_size, drop_duplicates, max_nirgs, expected"
+    ),
     [
         (
-            # Test  1 /
-            # Writing in-between existing data, with incomplete row groups at
+            # Test  0 /
+            # Max row group size as int.
+            # Writing in-between recorded data, with incomplete row groups at
             # the end of recorded data.
-            # Row groups in recorded data:
-            # [0,1], [2,6], [7, 8], [9], [10]
+            # drop_duplicates = True
+            # row grps:  0      1            2       3    4
+            # recorded: [0,1], [2,      6], [7, 8], [9], [10]
+            # new data:        [2, 3, 4]
+            DataFrame({"ordered_on": [2, 3, 4]}),
             DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10]}),
             [0, 2, 4, 6, 7],
             2,
-            DataFrame({"ordered_on": [2, 3, 4]}),
+            True,
+            2,
+            (1, 2, True),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  1 /
+            # Max row group size as int.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # drop_duplicates = True
+            # row grps:  0      1            2       3    4
+            # recorded: [0,1], [2,      6], [7, 8], [9], [10]
+            # new data:                                  [10, 11, 12]
+            DataFrame({"ordered_on": [10, 11, 12]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10]}),
+            [0, 2, 4, 6, 7],
+            2,
+            True,
+            2,
+            (3, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  2 /
+            # Max row group size as int.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # drop_duplicates = True
+            # row grps:  0      1        2
+            # recorded: [0,1,2],[6,7,8],[9]
+            # new data:                 [9]
+            DataFrame({"ordered_on": [9]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
+            [0, 3, 6],
+            3,  # max_row_group_size
+            True,
+            2,
+            (2, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  3 /
+            # Max row group size as int.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # drop_duplicates = False
+            # row grps:  0      1        2
+            # recorded: [0,1,2],[6,7,8],[9]
+            # new data:                    [9]
+            DataFrame({"ordered_on": [9]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
+            [0, 3, 6],
+            3,  # max_row_group_size
+            False,
+            2,
+            (None, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  4 /
+            # Max row group size as int.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # drop_duplicates = False
+            # row grps:  0           1        2
+            # recorded: [0,1,2],    [6,7,8],[9]
+            # new data:         [3]
+            DataFrame({"ordered_on": [3]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
+            [0, 3, 6],
+            3,  # max_row_group_size
+            False,
+            2,
+            (None, None, True),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  5 /
+            # Max row group size as int.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # drop_duplicates = False
+            # But enough rows to rewrite all tail.
+            # row grps:  0       1              2
+            # recorded: [0,1,2],[6,7,8],       [10]
+            # new data:                 [8, 9]
+            DataFrame({"ordered_on": [8, 9]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10]}),
+            [0, 3, 6],
+            3,  # max_row_group_size
+            False,
+            2,
+            (2, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  6 /
+            # Max row group size as int.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # drop_duplicates = False
+            # But enough rows to rewrite all tail.
+            # row grps:  0         1                2
+            # recorded: [0,1,2,3],[6,7,8,8],       [10]
+            # new data:                     [8, 9]
+            DataFrame({"ordered_on": [8, 9]}),
+            DataFrame({"ordered_on": [0, 1, 2, 3, 6, 7, 8, 8, 10]}),
+            [0, 4, 8],
+            4,  # max_row_group_size
+            False,
+            2,
+            (None, None, True),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  7 /
+            # Max row group size as int.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # drop_duplicates = True
+            # One-but last row group is complete, but because new data is
+            # overlapping with it, it has to be rewritten.
+            # By choice, the rewrite does not propagate till the end.
+            # row grps:  0       1              2             3
+            # recorded: [0,1,2],[6,7,8],       [10, 11, 12], [13]
+            # new data:                 [9, 10]
+            DataFrame({"ordered_on": [9, 10]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10, 11, 12, 13]}),
+            [0, 3, 6, 9],
+            3,  # max_row_group_size
+            True,
+            2,
+            (2, 3, True),
+        ),
+        (
+            # Test  5 /
+            # Max row group size as pandas freqstr.
+            # Writing in-between recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # drop_duplicates = True
+            # row grps:  0        1           2           3      4
+            # recorded: [8h,9h], [10h, 11h], [12h, 13h], [14h], [15h]
+            # new data:               [11h]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}11:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": date_range(
+                        Timestamp(f"{REF_D}8:00"),
+                        freq="1h",
+                        periods=8,
+                    ),
+                },
+            ),
+            [0, 2, 4, 6, 7],
+            2,
+            True,
             2,
             (1, 2),
+        ),
+        (
+            # Test  6 /
+            # Max row group size as pandas freqstr.
+            # Writing in-between recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # drop_duplicates = False
+            # row grps:  0        1           2           3      4
+            # recorded: [8h,9h], [10h, 11h], [12h, 13h], [14h], [15h]
+            # new data:       [9h]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}9:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": date_range(
+                        Timestamp(f"{REF_D}8:00"),
+                        freq="1h",
+                        periods=8,
+                    ),
+                },
+            ),
+            [0, 2, 4, 6, 7],
+            2,
+            False,
+            "2h",  # max_row_group_size
+            (2, 2),
         ),
     ],
 )
 def test_indexes_of_overlapping_rrgs(
     tmp_path,
+    new_data,
     df_to_record,
     row_group_offsets,
     max_row_group_size,
-    new_data,
+    drop_duplicates,
     max_nirgs,
-    ref_rrg_indexes,
+    expected,
 ):
     fp_write(
         f"{tmp_path}/test",
@@ -59,14 +245,15 @@ def test_indexes_of_overlapping_rrgs(
         write_index=False,
     )
     recorded_pf = ParquetFile(f"{tmp_path}/test")
-    res_rrg_indexes = _indexes_of_overlapping_rrgs(
+    res = _indexes_of_overlapping_rrgs(
         new_data=new_data,
         recorded_pf=recorded_pf,
         ordered_on="ordered_on",
         max_row_group_size=max_row_group_size,
+        drop_duplicates=drop_duplicates,
         max_nirgs=max_nirgs,
     )
-    assert res_rrg_indexes == ref_rrg_indexes
+    assert res == expected
 
 
 def test_init_and_append_std(tmp_path):
@@ -519,7 +706,7 @@ def test_inserting_data_no_drop_duplicate(tmp_path):
     # b                    [0, , ,3, , ,6, , , 9,  ]
     # c                    [0,0,0,0,0,0,0,0,0, 0, 0]
     # a (new data, ordered_on)    [3,4,5,  8]
-    # b (new data, duplicates_on) [7,7,4,  9]
+    # b (new data)                [7,7,4,  9]
     # c (new data, check last)    [1,1,1,  1]
     # 1 duplicate (on b)            x  x
     # a (concat)           [11,12,0,1,3,3,3,4,5,5,7,7,8,8, 9] (before rg sorting)
@@ -544,11 +731,11 @@ def test_inserting_data_no_drop_duplicate(tmp_path):
     b2 = [7, 7, 4, 9]
     c2 = [1] * len_a2
     pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
-    # ordered on 'a', duplicates on 'b' ('a' added implicitly)
+    # ordered on 'a', no 'duplicates_on
     pswrite(dn, pdf2, max_row_group_size=max_row_group_size, ordered_on="a")
     pf_rec = ParquetFile(dn)
     len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs_rec == [2, 4, 2, 4, 1, 2]
+    assert len_rgs_rec == [3, 3, 2, 4, 1, 2]
     a_ref = [0, 1, 3, 3, 3, 4, 5, 5, 7, 7, 8, 8, 9, 11, 12]
     b_ref = [0, 1, 2, 3, 7, 7, 4, 4, 5, 6, 7, 9, 8, 9, 10]
     c_ref = [0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0]
