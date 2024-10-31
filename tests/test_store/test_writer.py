@@ -34,12 +34,349 @@ REF_D = "2020/01/01 "
         "new_data, df_to_record, row_group_offsets, max_row_group_size, drop_duplicates, max_nirgs, expected"
     ),
     [
+        # 1/ Adding data at complete tail, testing 'drop_duplicates'.
+        # 'max_nirgs' is never triggered.
+        (
+            # Test  0 (0.a.a) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing after recorded data, no incomplete row groups.
+            # row grps:  0      1
+            # recorded: [0,1], [2,3]
+            # new data:             [3]
+            DataFrame({"ordered_on": [3]}),
+            DataFrame({"ordered_on": [0, 1, 2, 3]}),
+            [0, 2],
+            2,  # max_row_group_size
+            False,  # drop_duplicates
+            2,  # max_nirgs
+            (None, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  1 (0.a.b) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # row grps:  0        1        2
+            # recorded: [0,1,2], [6,7,8], [9]
+            # new data:                   [9]
+            DataFrame({"ordered_on": [9]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
+            [0, 3, 6],
+            3,  # max_row_group_size
+            True,  # drop_duplicates
+            2,  # max_nirgs
+            (2, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  2 (0.b.a) /
+            # Max row group size as freqstr | New data connected to incomplete rgs.
+            # Values on boundary to check 'floor()'.
+            # Writing after recorded data.
+            # row grps:  0            1
+            # recorded: [8h10,9h10], [10h10]
+            # new data:                     [10h10]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}10:10")]}),
+            DataFrame(
+                {
+                    "ordered_on": date_range(
+                        Timestamp(f"{REF_D}8:10"),
+                        freq="1h",
+                        periods=3,
+                    ),
+                },
+            ),
+            [0, 2],
+            "2h",  # max_row_group_size | not triggered
+            False,  # drop_duplicates
+            3,  # max_nirgs | not triggered
+            (None, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  3 (0.b.b) /
+            # Max row group size as freqstr | New data connected to incomplete rgs.
+            # Values on boundary.
+            # Writing after recorded data, incomplete row groups.
+            # row grps:  0            1
+            # recorded: [8h00,9h00], [10h00]
+            # new data:                     [10h00]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}10:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": date_range(
+                        Timestamp(f"{REF_D}8:00"),
+                        freq="1h",
+                        periods=3,
+                    ),
+                },
+            ),
+            [0, 2],
+            "2h",  # max_row_group_size
+            False,  # drop_duplicates
+            3,  # max_nirgs
+            (None, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  4 (0.b.c) /
+            # Max row group size as freqstr | New data connected to incomplete rgs.
+            # Values on boundary.
+            # Writing after recorded data, incomplete row groups.
+            # row grps:  0            1
+            # recorded: [8h00,9h00], [10h00]
+            # new data:              [10h00]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}10:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": date_range(
+                        Timestamp(f"{REF_D}8:00"),
+                        freq="1h",
+                        periods=3,
+                    ),
+                },
+            ),
+            [0, 2],
+            "2h",  # max_row_group_size
+            True,  # drop_duplicates
+            3,  # max_nirgs
+            (1, None, False),  # bool: need to sort rgs after write
+        ),
+        # 2/ Adding data at complete tail, testing 'max_nirgs'.
+        (
+            # Test  5 (1.a) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # row grps:  0          1           2     3
+            # recorded: [0,1,2,6], [7,8,9,10], [11], [12]
+            # new data:                                [12]
+            DataFrame({"ordered_on": [12]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10, 11, 12]}),
+            [0, 4, 8, 9],
+            4,  # max_row_group_size
+            False,  # drop_duplicates
+            3,  # max_nirgs
+            (2, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  6 (1.b) /
+            # Max row group size as freqstr | New data connected to incomplete rgs.
+            # Values on boundary.
+            # Writing after recorded data, incomplete row groups.
+            # row grps:  0            1        2
+            # recorded: [8h00,9h00], [10h00], [11h00]
+            # new data:                       [11h00]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}11:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": date_range(
+                        Timestamp(f"{REF_D}8:00"),
+                        freq="1h",
+                        periods=4,
+                    ),
+                },
+            ),
+            [0, 2, 3],
+            "2h",  # max_row_group_size
+            False,  # drop_duplicates
+            3,  # max_nirgs
+            (1, None, False),  # bool: need to sort rgs after write
+        ),
+        # 3/ Adding data at complete tail, testing 'max_nirgs=None'.
+        (
+            # Test  7 (2.a) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # row grps:  0          1           2     3
+            # recorded: [0,1,2,6], [7,8,9,10], [11], [12]
+            # new data:                                [12]
+            DataFrame({"ordered_on": [12]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10, 11, 12]}),
+            [0, 4, 8, 9],
+            4,  # max_row_group_size
+            False,  # drop_duplicates
+            None,  # max_nirgs
+            (None, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  8 (2.b) /
+            # Max row group size as freqstr | New data connected to incomplete rgs.
+            # Values on boundary.
+            # Writing after recorded data, incomplete row groups.
+            # row grps:  0            1        2
+            # recorded: [8h00,9h00], [10h00], [11h00]
+            # new data:                       [11h00]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}11:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": date_range(
+                        Timestamp(f"{REF_D}8:00"),
+                        freq="1h",
+                        periods=4,
+                    ),
+                },
+            ),
+            [0, 2, 3],
+            "2h",  # max_row_group_size
+            False,  # drop_duplicates
+            None,  # max_nirgs
+            (None, None, False),  # bool: need to sort rgs after write
+        ),
+        # 4/ Adding data just before last incomplete row groups.
+        (
+            # Test  9 (3.a) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # Enough rows to rewrite all tail.
+            # row grps:  0        1              2
+            # recorded: [0,1,2], [6,7,8],       [10]
+            # new data:                  [8, 9]
+            DataFrame({"ordered_on": [8, 9]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10]}),
+            [0, 3, 6],
+            3,  # max_row_group_size | should rewrite tail
+            False,  # drop_duplicates
+            3,  # max_nirgs | should not rewrite tail
+            (2, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  10 (3.b) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # Tail is rewritten because with new data, 'max_row_group_size' is
+            # reached.
+            # row grps:  0        1              2
+            # recorded: [0,1,2], [6,7,8],       [10]
+            # new data:                  [8, 9]
+            DataFrame({"ordered_on": [8, 9]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10]}),
+            [0, 3, 6],
+            3,  # max_row_group_size | should rewrite tail
+            True,  # drop_duplicates
+            3,  # max_nirgs | should not rewrite tail
+            (1, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  11 (3.c) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # Tail is rewritten because with new data, 'max_nirgs' is reached.
+            # row grps:  0       1              2
+            # recorded: [0,1,2],[6,7,8],       [10]
+            # new data:                 [8]
+            DataFrame({"ordered_on": [8, 9]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10]}),
+            [0, 3, 6],
+            3,  # max_row_group_size | should not rewrite tail
+            True,  # drop_duplicates
+            2,  # max_nirgs | should rewrite tail
+            (1, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  12 (3.d) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # Should not rewrite all tail.
+            # row grps:  0         1                2
+            # recorded: [0,1,2,3],[6,7,8,8],       [10]
+            # new data:                     [8, 9]
+            DataFrame({"ordered_on": [8, 9]}),
+            DataFrame({"ordered_on": [0, 1, 2, 3, 6, 7, 8, 8, 10]}),
+            [0, 4, 8],
+            4,  # max_row_group_size | should not rewrite tail
+            False,  # drop_duplicates
+            3,  # max_nirgs | should not rewrite tail
+            (None, None, True),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  13 (3.c) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # 'max_nirgs' reached to rewrite all tail.
+            # row grps:  0            1                 2
+            # recorded: [8h00,9h00], [10h00],          [13h00]
+            # new data:                       [12h00]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}12:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": [
+                        Timestamp(f"{REF_D}08:00"),
+                        Timestamp(f"{REF_D}09:00"),
+                        Timestamp(f"{REF_D}10:00"),
+                        Timestamp(f"{REF_D}13:00"),
+                    ],
+                },
+            ),
+            [0, 2, 3],
+            "2h",  # max_row_group_size | should not specifically rewrite tail
+            True,  # drop_duplicates
+            2,  # max_nirgs | should rewrite tail
+            (2, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  14 (3.d) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # New data is not directly connected to existing values in row
+            # groups, so tail is not rewritten.
+            # row grps:  0            1                 2
+            # recorded: [8h00,9h00], [10h00],          [13h00]
+            # new data:                       [11h00]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}11:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": [
+                        Timestamp(f"{REF_D}08:00"),
+                        Timestamp(f"{REF_D}09:00"),
+                        Timestamp(f"{REF_D}10:00"),
+                        Timestamp(f"{REF_D}13:00"),
+                    ],
+                },
+            ),
+            [0, 2, 3],
+            "2h",  # max_row_group_size | should not specifically rewrite tail
+            True,  # drop_duplicates
+            2,  # max_nirgs | should not rewrite tail
+            (None, None, True),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  15 (3.e) /
+            # Max row group size as int | New data connected to incomplete rgs.
+            # Writing at end of recorded data, with incomplete row groups at
+            # the end of recorded data.
+            # New data is not overlapping with existing row groups.
+            # It should be added.
+            # row grps:  0                   1        2
+            # recorded: [8h00,9h00],        [12h00], [14h00]
+            # new data:             [10h30]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}10:30")]}),
+            DataFrame(
+                {
+                    "ordered_on": [
+                        Timestamp(f"{REF_D}08:00"),
+                        Timestamp(f"{REF_D}09:00"),
+                        Timestamp(f"{REF_D}12:00"),
+                        Timestamp(f"{REF_D}14:00"),
+                    ],
+                },
+            ),
+            [0, 2, 3],
+            "2h",  # max_row_group_size | should not specifically rewrite tail
+            True,  # drop_duplicates
+            2,  # max_nirgs | should not rewrite tail
+            (None, None, True),  # bool: need to sort rgs after write
+        ),
         (
             # Test  0 /
             # Max row group size as int.
+            # drop_duplicates = True
             # Writing in-between recorded data, with incomplete row groups at
             # the end of recorded data.
-            # drop_duplicates = True
             # row grps:  0      1            2       3    4
             # recorded: [0,1], [2,      6], [7, 8], [9], [10]
             # new data:        [2, 3, 4]
@@ -50,57 +387,6 @@ REF_D = "2020/01/01 "
             True,
             2,
             (1, 2, True),  # bool: need to sort rgs after write
-        ),
-        (
-            # Test  1 /
-            # Max row group size as int.
-            # Writing at end of recorded data, with incomplete row groups at
-            # the end of recorded data.
-            # drop_duplicates = True
-            # row grps:  0      1            2       3    4
-            # recorded: [0,1], [2,      6], [7, 8], [9], [10]
-            # new data:                                  [10, 11, 12]
-            DataFrame({"ordered_on": [10, 11, 12]}),
-            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10]}),
-            [0, 2, 4, 6, 7],
-            2,
-            True,
-            2,
-            (3, None, False),  # bool: need to sort rgs after write
-        ),
-        (
-            # Test  2 /
-            # Max row group size as int.
-            # Writing at end of recorded data, with incomplete row groups at
-            # the end of recorded data.
-            # drop_duplicates = True
-            # row grps:  0      1        2
-            # recorded: [0,1,2],[6,7,8],[9]
-            # new data:                 [9]
-            DataFrame({"ordered_on": [9]}),
-            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
-            [0, 3, 6],
-            3,  # max_row_group_size
-            True,
-            2,
-            (2, None, False),  # bool: need to sort rgs after write
-        ),
-        (
-            # Test  3 /
-            # Max row group size as int.
-            # Writing at end of recorded data, with incomplete row groups at
-            # the end of recorded data.
-            # drop_duplicates = False
-            # row grps:  0      1        2
-            # recorded: [0,1,2],[6,7,8],[9]
-            # new data:                    [9]
-            DataFrame({"ordered_on": [9]}),
-            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
-            [0, 3, 6],
-            3,  # max_row_group_size
-            False,
-            2,
-            (None, None, False),  # bool: need to sort rgs after write
         ),
         (
             # Test  4 /
@@ -115,42 +401,6 @@ REF_D = "2020/01/01 "
             DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
             [0, 3, 6],
             3,  # max_row_group_size
-            False,
-            2,
-            (None, None, True),  # bool: need to sort rgs after write
-        ),
-        (
-            # Test  5 /
-            # Max row group size as int.
-            # Writing at end of recorded data, with incomplete row groups at
-            # the end of recorded data.
-            # drop_duplicates = False
-            # But enough rows to rewrite all tail.
-            # row grps:  0       1              2
-            # recorded: [0,1,2],[6,7,8],       [10]
-            # new data:                 [8, 9]
-            DataFrame({"ordered_on": [8, 9]}),
-            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10]}),
-            [0, 3, 6],
-            3,  # max_row_group_size
-            False,
-            2,
-            (2, None, False),  # bool: need to sort rgs after write
-        ),
-        (
-            # Test  6 /
-            # Max row group size as int.
-            # Writing at end of recorded data, with incomplete row groups at
-            # the end of recorded data.
-            # drop_duplicates = False
-            # But enough rows to rewrite all tail.
-            # row grps:  0         1                2
-            # recorded: [0,1,2,3],[6,7,8,8],       [10]
-            # new data:                     [8, 9]
-            DataFrame({"ordered_on": [8, 9]}),
-            DataFrame({"ordered_on": [0, 1, 2, 3, 6, 7, 8, 8, 10]}),
-            [0, 4, 8],
-            4,  # max_row_group_size
             False,
             2,
             (None, None, True),  # bool: need to sort rgs after write
@@ -225,6 +475,32 @@ REF_D = "2020/01/01 "
             "2h",  # max_row_group_size
             (2, 2),
         ),
+        (
+            # Test  16 (3.f) /
+            # Max row group size as int | New data at the very start.
+            # New data is not overlapping with existing row groups.
+            # It should be added.
+            # row grps:            0            1        2
+            # recorded:           [8h00,9h00], [12h00], [14h00]
+            # new data:  [7h30]
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}7:30")]}),
+            DataFrame(
+                {
+                    "ordered_on": [
+                        Timestamp(f"{REF_D}08:00"),
+                        Timestamp(f"{REF_D}09:00"),
+                        Timestamp(f"{REF_D}12:00"),
+                        Timestamp(f"{REF_D}14:00"),
+                    ],
+                },
+            ),
+            [0, 2, 3],
+            "2h",  # max_row_group_size | should not specifically rewrite tail
+            True,  # drop_duplicates
+            2,  # max_nirgs | should not rewrite tail
+            (None, None, True),  # bool: need to sort rgs after write
+        ),
+        # do a test with half month freqstr to check shift(freq=SMS) is accepted
     ],
 )
 def test_indexes_of_overlapping_rrgs(
@@ -367,13 +643,14 @@ def test_coalescing_simple_irgs(tmp_path):
     # Initialize a parquet dataset directly with fastparquet.
     # max_row_group_size = 4
     # (incomplete row group size: 1 to be 'incomplete')
-    # max_nirgs = 2
+    # max_nirgs = 3
 
     # Case 1, 'max_nirgs" not reached yet.
     # (size of new data: 1)
     # One incomplete row group in the middle of otherwise complete row groups.
-    # Because there is only 1 irgs (while max is 2), and 2 rows over all irgs
-    # (including data to be written), coalescing is not activated.
+    # Because there is only 1 irgs, +1 with the new data to be added (while max
+    # is 3), and 2 rows over all irgs (including data to be written), coalescing
+    # is not activated.
     # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3]
     # idx                          [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -386,7 +663,7 @@ def test_coalescing_simple_irgs(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [4, 1, 4, 1]
     max_row_group_size = 4
-    max_nirgs = 2
+    max_nirgs = 3
     pdf2 = DataFrame({"a": [20]}, index=[0])
     pswrite(dn, pdf2, max_row_group_size=max_row_group_size, max_nirgs=max_nirgs, ordered_on="a")
     pf_rec1 = ParquetFile(dn)
@@ -887,7 +1164,7 @@ def test_drop_duplicates_wo_coalescing_irgs(tmp_path):
     # Targeted result is that one-but-last row group (incomplete one) is not
     # coalesced.
     # max_row_group_size = 5 (one row per row group for incomplete rgs)
-    # max_nirgs = 3 (3 incomplete rgs, but drop duplicate with new data, so
+    # max_nirgs = 4 (4 incomplete rgs, but drop duplicate with new data, so
     # after merging new data, only 2 incomplete row groups will remain)
     # rgs                          [0, , , , ,1,2]
     # idx                          [0,1,2,3,4,5,6]
@@ -910,7 +1187,7 @@ def test_drop_duplicates_wo_coalescing_irgs(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [n_val - 2, 1, 1]
     max_row_group_size = 5
-    max_nirgs = 3
+    max_nirgs = 4
     pdf2 = DataFrame({"a": [n_val - 1], "b": [1]})
     pswrite(
         dn,
