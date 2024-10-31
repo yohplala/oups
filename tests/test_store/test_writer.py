@@ -371,10 +371,10 @@ REF_D = "2020/01/01 "
             2,  # max_nirgs | should not rewrite tail
             (None, None, True),  # bool: need to sort rgs after write
         ),
+        # 5/ Adding data in the middle of recorded data.
         (
-            # Test  0 /
-            # Max row group size as int.
-            # drop_duplicates = True
+            # Test  16 (4.a) /
+            # Max row group size as int | New data within recorded data.
             # Writing in-between recorded data, with incomplete row groups at
             # the end of recorded data.
             # row grps:  0      1            2       3    4
@@ -383,54 +383,51 @@ REF_D = "2020/01/01 "
             DataFrame({"ordered_on": [2, 3, 4]}),
             DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10]}),
             [0, 2, 4, 6, 7],
-            2,
-            True,
-            2,
+            2,  # max_row_group_size | should rewrite tail
+            True,  # drop_duplicates
+            2,  # max_nirgs | should rewrite tail
             (1, 2, True),  # bool: need to sort rgs after write
         ),
         (
-            # Test  4 /
-            # Max row group size as int.
-            # Writing at end of recorded data, with incomplete row groups at
+            # Test  17 (4.b) /
+            # Max row group size as int | New data within recorded data.
+            # Writing in-between recorded data, with incomplete row groups at
             # the end of recorded data.
-            # drop_duplicates = False
             # row grps:  0           1        2
             # recorded: [0,1,2],    [6,7,8],[9]
             # new data:         [3]
             DataFrame({"ordered_on": [3]}),
             DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
             [0, 3, 6],
-            3,  # max_row_group_size
-            False,
-            2,
+            3,  # max_row_group_size | should not rewrite tail
+            False,  # drop_duplicates
+            2,  # max_nirgs | should not rewrite tail
             (None, None, True),  # bool: need to sort rgs after write
         ),
         (
-            # Test  7 /
-            # Max row group size as int.
+            # Test  18 (4.c) /
+            # Max row group size as int | New data within recorded data.
             # Writing at end of recorded data, with incomplete row groups at
             # the end of recorded data.
-            # drop_duplicates = True
             # One-but last row group is complete, but because new data is
             # overlapping with it, it has to be rewritten.
             # By choice, the rewrite does not propagate till the end.
-            # row grps:  0       1              2             3
-            # recorded: [0,1,2],[6,7,8],       [10, 11, 12], [13]
-            # new data:                 [9, 10]
+            # row grps:  0        1              2             3
+            # recorded: [0,1,2], [6,7,8],       [10, 11, 12], [13]
+            # new data:                  [9, 10]
             DataFrame({"ordered_on": [9, 10]}),
             DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10, 11, 12, 13]}),
             [0, 3, 6, 9],
-            3,  # max_row_group_size
-            True,
-            2,
+            3,  # max_row_group_size | should not rewrite tail
+            True,  # drop_duplicates
+            2,  # max_nirgs | should not rewrite tail
             (2, 3, True),
         ),
         (
-            # Test  5 /
-            # Max row group size as pandas freqstr.
+            # Test  19 (4.d) /
+            # Max row group size as pandas freqstr | New data within recorded data.
             # Writing in-between recorded data, with incomplete row groups at
             # the end of recorded data.
-            # drop_duplicates = True
             # row grps:  0        1           2           3      4
             # recorded: [8h,9h], [10h, 11h], [12h, 13h], [14h], [15h]
             # new data:               [11h]
@@ -445,20 +442,19 @@ REF_D = "2020/01/01 "
                 },
             ),
             [0, 2, 4, 6, 7],
-            2,
-            True,
-            2,
-            (1, 2),
+            "2h",  # max_row_group_size
+            True,  # drop_duplicates
+            2,  # max_nirgs | should rewrite tail
+            (1, 2, True),
         ),
         (
-            # Test  6 /
-            # Max row group size as pandas freqstr.
+            # Test  20 (4.e) /
+            # Max row group size as pandas freqstr | New data within recorded data.
             # Writing in-between recorded data, with incomplete row groups at
             # the end of recorded data.
-            # drop_duplicates = False
-            # row grps:  0        1           2           3      4
-            # recorded: [8h,9h], [10h, 11h], [12h, 13h], [14h], [15h]
-            # new data:       [9h]
+            # row grps:  0          1           2           3      4
+            # recorded: [8h,9h],   [10h, 11h], [12h, 13h], [14h], [15h]
+            # new data:        [9h]
             DataFrame({"ordered_on": [Timestamp(f"{REF_D}9:00")]}),
             DataFrame(
                 {
@@ -470,18 +466,32 @@ REF_D = "2020/01/01 "
                 },
             ),
             [0, 2, 4, 6, 7],
-            2,
-            False,
             "2h",  # max_row_group_size
-            (2, 2),
+            False,  # drop_duplicates
+            2,  # max_nirgs
+            (None, None, True),
+        ),
+        # 6/ Adding data right at the start.
+        (
+            # Test  21 (5.a) /
+            # Max row group size as int | New data at the start of recorded data.
+            # row grps:       0       1       2    3
+            # recorded:      [2, 6], [7, 8], [9], [10]
+            # new data: [0,1]
+            DataFrame({"ordered_on": [0, 1]}),
+            DataFrame({"ordered_on": [2, 6, 7, 8, 9, 10]}),
+            [0, 2, 4, 5],
+            2,  # max_row_group_size | should rewrite tail
+            True,  # drop_duplicates
+            2,  # max_nirgs | should rewrite tail
+            (None, None, True),  # bool: need to sort rgs after write
         ),
         (
-            # Test  16 (3.f) /
+            # Test  22 (5.b) /
             # Max row group size as int | New data at the very start.
             # New data is not overlapping with existing row groups.
-            # It should be added.
             # row grps:            0            1        2
-            # recorded:           [8h00,9h00], [12h00], [14h00]
+            # recorded:           [8h00,9h00], [12h00], [13h00]
             # new data:  [7h30]
             DataFrame({"ordered_on": [Timestamp(f"{REF_D}7:30")]}),
             DataFrame(
@@ -497,10 +507,9 @@ REF_D = "2020/01/01 "
             [0, 2, 3],
             "2h",  # max_row_group_size | should not specifically rewrite tail
             True,  # drop_duplicates
-            2,  # max_nirgs | should not rewrite tail
+            2,  # max_nirgs | should rewrite tail
             (None, None, True),  # bool: need to sort rgs after write
         ),
-        # do a test with half month freqstr to check shift(freq=SMS) is accepted
     ],
 )
 def test_indexes_of_overlapping_rrgs(

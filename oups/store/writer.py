@@ -352,7 +352,6 @@ def _indexes_of_overlapping_rrgs(
 
     """
     # 1: assess existing overlaps.
-    # Get 'rrg_start_idx' & 'rrg_end_idx'.
     new_data_first = new_data.loc[:, ordered_on].iloc[0]
     new_data_last = new_data.loc[:, ordered_on].iloc[-1]
     ordered_on_recorded_max_vals = recorded_pf.statistics["max"][ordered_on]
@@ -378,10 +377,6 @@ def _indexes_of_overlapping_rrgs(
             # If 'rrg_end_idx' is the index of the last row group, it keeps its
             # default 'None' value.
             rrg_end_idx = overlapping_rrgs_idx[-1] + 1
-    print(f"overlapping_rrgs_idx: {overlapping_rrgs_idx}")
-    print("checking standard overlaps")
-    print(f"rrg_start_idx: {rrg_start_idx}")
-    print(f"rrg_end_idx: {rrg_end_idx}")
     # 2: if incomplete row groups are allowed, and incomplete row groups
     # location is connected to where the new data will be written (be it at the
     # tail of recorded data, or within it).
@@ -411,8 +406,6 @@ def _indexes_of_overlapping_rrgs(
                 new_data_connected_to_set_of_incomplete_rgs = True
             if total_rows_in_irgs >= max_row_group_size:
                 last_group_boundary_exceeded = True
-            print(f"total_rows_in_irgs: {total_rows_in_irgs}")
-            print(f"last_group_boundary_exceeded: {last_group_boundary_exceeded}")
         else:
             # Case 2.b: 'max_row_group_size' is a str.
             # Get the 1st timestamp allowed in the last open period.
@@ -441,12 +434,7 @@ def _indexes_of_overlapping_rrgs(
         # This account for the new data that will make at least one row group
         # more.
         n_irgs = n_rrgs - rrg_start_idx_tmp
-        print(f"n_irgs: {n_irgs}")
         rrg_start_idx_tmp += 1
-        print(f"rrg_start_idx_tmp: {rrg_start_idx_tmp}")
-        print(
-            f"new_data_connected_to_set_of_incomplete_rgs: {new_data_connected_to_set_of_incomplete_rgs}",
-        )
         if new_data_connected_to_set_of_incomplete_rgs and (
             last_group_boundary_exceeded or n_irgs >= max_nirgs
         ):
@@ -460,8 +448,6 @@ def _indexes_of_overlapping_rrgs(
             # Force 'rrg_end_idx' to None.
             rrg_end_idx = None
             full_tail_to_rewrite = True
-    #    new_data_within_complete_rgs = rrg_end_idx is not None or not new_data_connected_to_set_of_incomplete_rgs
-    print(f"full tail to rewrite: {full_tail_to_rewrite}")
     return (
         rrg_start_idx,
         rrg_end_idx,
@@ -601,7 +587,7 @@ def write_ordered(
         if ordered_on not in data.columns:
             # Check 'ordered_on' column is within input dataframe.
             raise ValueError(f"column '{ordered_on}' does not exist in input data.")
-        if isinstance(ordered_on, str) and data.dtypes[ordered_on] != DTYPE_DATETIME64:
+        if isinstance(max_row_group_size, str) and data.dtypes[ordered_on] != DTYPE_DATETIME64:
             raise TypeError(
                 "if 'max_row_group_size' is a pandas freqstr, dtype"
                 f" of column {ordered_on} has to be 'datetime64[ns]'.",
