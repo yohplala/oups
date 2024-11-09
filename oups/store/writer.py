@@ -31,6 +31,7 @@ from pandas import date_range
 DTYPE_DATETIME64 = dtype("datetime64[ns]")
 COMPRESSION = "SNAPPY"
 MAX_ROW_GROUP_SIZE = 6_345_000
+MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.9
 KEY_MAX_ROW_GROUP_SIZE = "max_row_group_size"
 KEY_DUPLICATES_ON = "duplicates_on"
 # Notes to any dev.
@@ -290,7 +291,7 @@ def write_metadata(
 def _indexes_of_overlapping_rrgs(
     new_data: DataFrame,
     recorded_pf: ParquetFile,
-    ordered_on: str,
+    ordered_on: Union[str, Tuple[str]],
     max_row_group_size: Union[int, str],
     drop_duplicates: bool,
     max_nirgs: Union[int, None],
@@ -350,7 +351,18 @@ def _indexes_of_overlapping_rrgs(
         'new_data_within_complete_rgs' is a flag indicating if once written, the
         row groups need to be sorted.
 
+    Notes
+    -----
+    The function handles two cases for max_row_group_size:
+
+      - Integer case: based on row count
+      - String case: based on time periods
+
     """
+    if not isinstance(max_row_group_size, (int, str)):
+        raise TypeError("max_row_group_size must be int or str")
+    if isinstance(max_row_group_size, int) and max_row_group_size <= 0:
+        raise ValueError("max_row_group_size must be positive")
     # 1: assess existing overlaps.
     new_data_first = new_data.loc[:, ordered_on].iloc[0]
     new_data_last = new_data.loc[:, ordered_on].iloc[-1]
@@ -389,7 +401,7 @@ def _indexes_of_overlapping_rrgs(
             # Case 2.a: 'max_row_group_size' is an 'int'.
             # Number of incomplete row groups at end of recorded data.
             total_rows_in_irgs = 0
-            min_row_group_size = int(max_row_group_size * 0.9)
+            min_row_group_size = int(max_row_group_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
             while (
                 recorded_pf[rrg_start_idx_tmp].count() <= min_row_group_size
                 and rrg_start_idx_tmp >= 0
@@ -582,8 +594,7 @@ def write_ordered(
       of recorded data.
 
     """
-    if os_path.isdir(dirpath) and any(file.endswith(".parquet") for file in os_listdir(dirpath)):
-        # Case updating an existing dataset.
+    if not data.empty:
         if ordered_on not in data.columns:
             # Check 'ordered_on' column is within input dataframe.
             raise ValueError(f"column '{ordered_on}' does not exist in input data.")
@@ -592,6 +603,8 @@ def write_ordered(
                 "if 'max_row_group_size' is a pandas freqstr, dtype"
                 f" of column {ordered_on} has to be 'datetime64[ns]'.",
             )
+    if os_path.isdir(dirpath) and any(file.endswith(".parquet") for file in os_listdir(dirpath)):
+        # Case updating an existing dataset.
         if duplicates_on is not None:
             # Enforce 'ordered_on' in 'duplicates_on', as per logic of
             # duplicate identification restricted to the data overlap between new
@@ -636,8 +649,7 @@ def write_ordered(
             # once.
             recorded = overlapping_pf.to_pandas()
             data = concat([recorded, data], ignore_index=True)
-            if ordered_on:
-                data.sort_values(by=ordered_on, ignore_index=True, inplace=True)
+            data.sort_values(by=ordered_on, ignore_index=True, inplace=True)
             iter_data = iter_dataframe(
                 data,
                 max_row_group_size=max_row_group_size,
