@@ -7,6 +7,8 @@ with various configurations of distinct bounds and duplicate handling.
 
 """
 
+from typing import Iterable
+
 import pytest
 from fastparquet import ParquetFile
 from fastparquet import write
@@ -87,6 +89,15 @@ def test_get_next_chunk(
     assert end_idx == expected_end_idx
 
 
+def yield_all(iterator: Iterable[DataFrame]) -> Iterable[DataFrame]:
+    """
+    Yield all chunks from an iterator, including any remainder.
+    """
+    remainder = yield from iterator
+    if remainder is not None:
+        yield remainder
+
+
 @pytest.mark.parametrize(
     "start_df, duplicates_on, yield_remainder",
     [
@@ -146,13 +157,7 @@ def test_iter_pandas_dataframe(
         all_chunks = list(iterator)
         yielded_chunks = all_chunks
     else:
-
-        def yield_all():
-            remainder = yield from iterator
-            if remainder is not None:
-                yield remainder
-
-        all_chunks = list(yield_all())
+        all_chunks = list(yield_all(iterator))
         # Do a 2nd time to check only yielded chunks.
         iterator2 = _iter_pandas_dataframe(
             sample_df,
@@ -164,14 +169,9 @@ def test_iter_pandas_dataframe(
             yield_remainder=yield_remainder,
         )
         yielded_chunks = list(iterator2)
-        print("yielded_chunks")
-        print(yielded_chunks)
-
-    print("all_chunks")
-    print(all_chunks)
-    complete_chunks = all_chunks[:-1] if has_remainder else all_chunks
 
     # Verify chunk sizes
+    complete_chunks = all_chunks[:-1] if has_remainder else all_chunks
     for chunk in complete_chunks:
         assert len(chunk) == row_group_size
 
@@ -185,10 +185,6 @@ def test_iter_pandas_dataframe(
         expected_without_remainder = expected.iloc[
             : (len(expected) // row_group_size) * row_group_size
         ]
-        print("expected_without_remainder")
-        print(expected_without_remainder)
-        print("result")
-        print(result)
         assert_frame_equal(result, expected_without_remainder)
 
 
@@ -207,11 +203,12 @@ def create_parquet_file(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "start_df,yield_remainder,has_remainder",
+    "start_df,yield_remainder",
     [
-        (None, True, False),  # Basic case
-        (DataFrame({"ordered": [0], "values": ["z"]}), True, False),  # With start_df
-        (None, False, True),  # Return remainder
+        (None, True),  # Basic case
+        (DataFrame({"ordered": [0], "values": ["z"]}), True),  # With start_df
+        (None, False),  # Return remainder
+        (DataFrame({"ordered": [0], "values": ["z"]}), False),  # With start_df
     ],
 )
 def test_iter_resized_parquet_file(
@@ -219,7 +216,6 @@ def test_iter_resized_parquet_file(
     create_parquet_file,
     start_df,
     yield_remainder,
-    has_remainder,
 ):
     """
     Test _iter_resized_parquet_file with various configurations.
@@ -234,15 +230,17 @@ def test_iter_resized_parquet_file(
         Optional starter DataFrame.
     yield_remainder : bool
         Whether to yield the last chunk.
-    has_remainder : bool
-        Whether a remainder is expected.
 
     """
-    pf = create_parquet_file(sample_df)
-    row_group_size = 3
+    sample_pf = create_parquet_file(sample_df)
+    row_group_size = 4
+    expected = (
+        concat([start_df, sample_df], ignore_index=True) if start_df is not None else sample_df
+    )
+    has_remainder = len(expected) % row_group_size > 0
 
     iterator = _iter_resized_parquet_file(
-        pf,
+        sample_pf,
         row_group_size,
         "ordered",
         start_df=start_df,
@@ -251,35 +249,35 @@ def test_iter_resized_parquet_file(
     )
 
     # Collect all chunks
-    chunks = []
-    returned_remainder = None
-    for chunk in iterator:
-        chunks.append(chunk)
-
-    # Get remainder if it was returned
-    if not yield_remainder:
-        returned_remainder = iterator.send(None)
+    if yield_remainder:
+        all_chunks = list(iterator)
+        yielded_chunks = all_chunks
+    else:
+        all_chunks = list(yield_all(iterator))
+        # Do a 2nd time to check only yielded chunks.
+        iterator2 = _iter_resized_parquet_file(
+            sample_pf,
+            row_group_size,
+            "ordered",
+            start_df=start_df.copy(deep=True) if start_df is not None else None,
+            distinct_bounds=False,
+            yield_remainder=yield_remainder,
+        )
+        yielded_chunks = list(iterator2)
 
     # Verify chunk sizes
-    for chunk in chunks[:-1]:  # All but last chunk
-        assert len(chunk) <= row_group_size
+    complete_chunks = all_chunks[:-1] if has_remainder else all_chunks
+    for chunk in complete_chunks:
+        assert len(chunk) == row_group_size
 
-    # Verify total data
-    result = concat(chunks, ignore_index=True)
-    expected = (
-        concat([start_df, sample_df], ignore_index=True) if start_df is not None else sample_df
-    )
+    # Verify yielded data
+    result = concat(yielded_chunks, ignore_index=True)
 
-    if not yield_remainder:
+    if yield_remainder:
+        assert_frame_equal(result, expected)
+    else:
         # When not yielding last chunk, expected data should exclude remainder
         expected_without_remainder = expected.iloc[
             : (len(expected) // row_group_size) * row_group_size
         ]
-        n_expected_rows = len(expected_without_remainder)
-        expected_remainder = expected.iloc[n_expected_rows:]
-        assert returned_remainder is not None
-        assert_frame_equal(returned_remainder, expected_remainder)
         assert_frame_equal(result, expected_without_remainder)
-    else:
-        assert returned_remainder is None
-        assert_frame_equal(result, expected)

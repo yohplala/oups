@@ -595,6 +595,8 @@ def write_ordered(
 
     """
     if not data.empty:
+        if cmidx_expand:
+            data.columns = to_midx(data.columns, cmidx_levels)
         if ordered_on not in data.columns:
             # Check 'ordered_on' column is within input dataframe.
             raise ValueError(f"column '{ordered_on}' does not exist in input data.")
@@ -686,8 +688,6 @@ def write_ordered(
         # Case initiating a new dataset.
         iter_data = iter_dataframe(data, max_row_group_size)
         chunk = next(iter_data)
-        if cmidx_expand:
-            chunk.columns = to_midx(chunk.columns, cmidx_levels)
         # In case multi-index is used, check that it complies with fastparquet
         # limitations.
         if isinstance(chunk.columns, MultiIndex):

@@ -141,7 +141,9 @@ def _iter_pandas_dataframe(
     Yields
     ------
     DataFrame
-        Chunks of the DataFrame, each with size <= max_row_group_size.
+        Chunks of the DataFrame, each with size <= max_row_group_size, except
+        if distinct_bounds is True and there are more duplicates in the
+        'ordered_on' column than max_row_group_size.
 
     Returns
     -------
@@ -214,7 +216,9 @@ def _iter_resized_parquet_file(
     Yields
     ------
     DataFrame
-        Chunks of data with size <= max_row_group_size.
+        Chunks of data, each with size <= max_row_group_size, except if
+        distinct_bounds is True and there are more duplicates in the
+        'ordered_on' column than max_row_group_size.
 
     Returns
     -------
@@ -241,7 +245,7 @@ def _iter_resized_parquet_file(
         if buffer_num_rows >= max_row_group_size:
             data = pf[start_rg_idx:rg_idx].to_pandas()
             if remainder is not None:
-                data = concat([remainder, data], ignore_index=True, inplace=True)
+                data = concat([remainder, data], ignore_index=True)
                 del remainder
             chunk, end_idx = _get_next_chunk(
                 data,
@@ -251,12 +255,15 @@ def _iter_resized_parquet_file(
                 distinct_bounds,
             )
             yield chunk
-            remainder = data.iloc[end_idx:].copy(deep=True) if buffer_num_rows > end_idx else None
-            del data
-            start_rg_idx = rg_idx - 1
-            buffer_num_rows = len(remainder) if remainder is not None else 0
+            if buffer_num_rows > end_idx:
+                remainder = data.iloc[end_idx:]
+                buffer_num_rows = len(remainder)
+            else:
+                buffer_num_rows = 0
+                remainder = None
+            start_rg_idx = rg_idx
 
-    if yield_remainder:
+    if yield_remainder and remainder is not None:
         yield remainder
     else:
         return remainder
