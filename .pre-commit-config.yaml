@@ -85,15 +85,18 @@ repos:
             --statistics,
             --ignore=C101 RST210 S101 W503,
             --per-file-ignores=
-                tests/*.py:D103
                 oups/__init__.py:F401
                 oups/store/__init__.py:F401
                 oups/store/writer.py:C901 S403 S301
+                oups/store/iter_data.py:C901
                 oups/aggstream/__init__.py:F401
                 oups/aggstream/jcumsegagg.py:C901
                 oups/aggstream/segmentby.py:C901
                 oups/aggstream/cumsegagg.py:C901 E203
                 oups/aggstream/aggstream.py:C901
+                tests/*.py:D103
+                tests/test_store/test_data_overlap.py:F401 F811
+                tests/test_store/test_iter_data.py:F401 F811
         ]
 
   # Pydocstyle

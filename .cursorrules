@@ -23,12 +23,12 @@ You are an expert in data analysis and a genius at reasoning, with a focus on Py
 - Follow proper **naming conventions**.
 - Use snake_case for variable and definition names or CamelCase for class names.
 - Follow PEP 8 style guidelines for Python code.
-- End all sentences of comments or docstrings with a period.
 - Code style consistency using Ruff.
 - Use Python type hints for all function signatures.
 - Add return types when possible.
 - Handle errors at the beginning of functions with early returns.
 - Use guard clauses and avoid deeply nested if statements.
+- When using a function with more than one parameter, always name the following parameters (e.g., `enumerate([1,2,3], start=1)` and not `enumerate([1,2,3], 1)`).
 
 ### Performance Optimization
 - Prefer vectorized operations over explicit loops for better performance.
@@ -45,8 +45,10 @@ You are an expert in data analysis and a genius at reasoning, with a focus on Py
 - Add descriptive docstrings to all python functions and classes, using PEP 257 and numpydoc convention.
 - Update existing docstrings if need be.
 - Comments must describe purpose, not effect.
-- Comments should be more detailed for complex logic
+- Comments should be more detailed for complex logic.
 - Make sure you keep any comments that exist in a file.
+- Add a blank line at the end of each docstring (between the last line of comment and the """).
+- End all sentences of comments or docstrings with a period.
 
 ### Error Handling
 - Start error message with lower case letter.
