@@ -127,7 +127,7 @@ def _iter_pandas_dataframe(
         Column name by which data is ordered. Data must be in ascending order.
     max_row_group_size : int
         Maximum number of rows per row group.
-    df : Optional[DataFrame]
+    df : DataFrame
         Pandas DataFrame to split.
     start_df : Optional[DataFrame]
         Data to start the iteration with. Must be ordered by the same column.
@@ -154,16 +154,9 @@ def _iter_pandas_dataframe(
         than max_row_group_size.
 
     """
-    if df is None and start_df is None:
-        raise ValueError("either 'df' or 'start_df' must be provided.")
-
-    if df is not None and start_df is not None:
-        # Case both 'df' and 'start_df' are provided.
+    if start_df is not None:
         df = concat([start_df, df])
         del start_df
-    elif start_df is not None:
-        # Case only 'start_df' is provided.
-        df = start_df
 
     if duplicates_on:
         df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
@@ -276,9 +269,6 @@ def _iter_resized_parquet_file(
             else:
                 remainder = data
 
-    print("remainder")
-    print(remainder)
-
     if yield_remainder and remainder is not None:
         yield remainder
     else:
@@ -286,10 +276,10 @@ def _iter_resized_parquet_file(
 
 
 def iter_merged_pandas_parquet_file(
-    ordered_on: str,
-    max_row_group_size: int,
     df: DataFrame,
     pf: ParquetFile,
+    ordered_on: str,
+    max_row_group_size: int,
     distinct_bounds: Optional[bool] = False,
     duplicates_on: Optional[Union[str, Iterable[str]]] = None,
 ):
@@ -448,13 +438,12 @@ def iter_merged_pandas_parquet_file(
             distinct_bounds=distinct_bounds,
             yield_remainder=True,
         )
-    elif overlap_info.has_df_tail or remainder:
-        # Case there is remaining data in pandas DataFrame and/or there is a
-        # remainder from previous iterations.
+    elif overlap_info.has_df_tail:
+        # Case there is remaining data in pandas DataFrame.
         print("is ending with yielding df only")
         df_idx_overlap_end_excl = overlap_info.df_idx_overlap_end_excl
         yield from _iter_pandas_dataframe(
-            df=df.iloc[df_idx_overlap_end_excl:] if overlap_info.has_df_tail else None,
+            df=df.iloc[df_idx_overlap_end_excl:],
             ordered_on=ordered_on,
             max_row_group_size=max_row_group_size,
             start_df=remainder,
@@ -462,3 +451,6 @@ def iter_merged_pandas_parquet_file(
             duplicates_on=None if remainder is None else duplicates_on,
             yield_remainder=True,
         )
+    elif remainder:
+        # Case there only is a remainder from previous iterations.
+        yield remainder

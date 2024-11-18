@@ -99,34 +99,25 @@ def yield_all(iterator: Iterable[DataFrame]) -> Iterable[DataFrame]:
 
 
 @pytest.mark.parametrize(
-    "use_sample_df, start_df, duplicates_on, yield_remainder",
+    "start_df, duplicates_on, yield_remainder",
     [
-        (True, None, None, True),  # Basic case, no remainder
-        (True, DataFrame({"ordered": [0], "values": ["z"]}), None, True),  # With start_df
+        (None, None, True),  # Basic case, no remainder
+        (DataFrame({"ordered": [0], "values": ["z"]}), None, True),  # With start_df
         (
-            True,
             DataFrame({"ordered": [-1, 0], "values": ["w", "z"]}),
             "ordered",
             False,
         ),  # With start_df
         (
-            True,
             DataFrame({"ordered": [-1, 0, 1], "values": ["w", "z", "u"]}),
             "ordered",
             False,
         ),  # With start_df
-        (True, None, "ordered", True),  # With duplicates
-        (True, None, False, True),  # Return remainder
-        (
-            False,
-            DataFrame({"ordered": [-1, 0], "values": ["w", "z"]}),
-            "ordered",
-            True,
-        ),  # No sample_df
+        (None, "ordered", True),  # With duplicates
+        (None, False, True),  # Return remainder
     ],
 )
 def test_iter_pandas_dataframe(
-    use_sample_df,
     sample_df,
     start_df,
     duplicates_on,
@@ -151,19 +142,17 @@ def test_iter_pandas_dataframe(
     iterator = _iter_pandas_dataframe(
         ordered_on="ordered",
         max_row_group_size=row_group_size,
-        df=sample_df if use_sample_df else None,
+        df=sample_df,
         start_df=start_df.copy(deep=True) if start_df is not None else None,
         distinct_bounds=bool(duplicates_on),
         duplicates_on=duplicates_on,
         yield_remainder=yield_remainder,
     )
 
-    if start_df is not None and use_sample_df:
+    if start_df is not None:
         expected = concat([start_df, sample_df], ignore_index=True)
-    elif use_sample_df:
-        expected = sample_df
     else:
-        expected = start_df
+        expected = sample_df
 
     if duplicates_on:
         expected = expected.drop_duplicates(duplicates_on, keep="last", ignore_index=True)
@@ -179,7 +168,7 @@ def test_iter_pandas_dataframe(
         iterator2 = _iter_pandas_dataframe(
             ordered_on="ordered",
             max_row_group_size=row_group_size,
-            df=sample_df if use_sample_df else None,
+            df=sample_df,
             start_df=start_df.copy(deep=True) if start_df is not None else None,
             distinct_bounds=bool(duplicates_on),
             duplicates_on=duplicates_on,
