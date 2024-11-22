@@ -15,9 +15,8 @@ from pandas import concat
 from pandas.testing import assert_frame_equal
 
 from oups.store.iter_data import _get_next_chunk
-from oups.store.iter_data import _iter_pandas_dataframe
-from oups.store.iter_data import _iter_resized_parquet_file
-from oups.store.iter_data import iter_merged_pandas_parquet_file
+from oups.store.iter_data import _iter_df
+from oups.store.iter_data import iter_merged_pf_df
 from tests.test_store.conftest import create_parquet_file
 
 
@@ -117,14 +116,14 @@ def yield_all(iterator: Iterable[DataFrame]) -> Iterable[DataFrame]:
         (None, False, True),  # Return remainder
     ],
 )
-def test_iter_pandas_dataframe(
+def test_iter_df(
     sample_df,
     start_df,
     duplicates_on,
     yield_remainder,
 ):
     """
-    Test _iter_pandas_dataframe with various configurations.
+    Test _iter_df with various configurations.
 
     Parameters
     ----------
@@ -139,11 +138,10 @@ def test_iter_pandas_dataframe(
 
     """
     row_group_size = 3
-    iterator = _iter_pandas_dataframe(
+    iterator = _iter_df(
         ordered_on="ordered",
         max_row_group_size=row_group_size,
-        df=sample_df,
-        start_df=start_df.copy(deep=True) if start_df is not None else None,
+        df=[start_df, sample_df] if start_df is not None else sample_df,
         distinct_bounds=bool(duplicates_on),
         duplicates_on=duplicates_on,
         yield_remainder=yield_remainder,
@@ -165,94 +163,12 @@ def test_iter_pandas_dataframe(
     else:
         all_chunks = list(yield_all(iterator))
         # Do a 2nd time to check only yielded chunks.
-        iterator2 = _iter_pandas_dataframe(
+        iterator2 = _iter_df(
             ordered_on="ordered",
             max_row_group_size=row_group_size,
-            df=sample_df,
-            start_df=start_df.copy(deep=True) if start_df is not None else None,
+            df=[start_df, sample_df] if start_df is not None else sample_df,
             distinct_bounds=bool(duplicates_on),
             duplicates_on=duplicates_on,
-            yield_remainder=yield_remainder,
-        )
-        yielded_chunks = list(iterator2)
-
-    # Verify chunk sizes
-    complete_chunks = all_chunks[:-1] if has_remainder else all_chunks
-    for chunk in complete_chunks:
-        assert len(chunk) == row_group_size
-
-    # Verify yielded data
-    result = concat(yielded_chunks, ignore_index=True)
-
-    if yield_remainder:
-        assert_frame_equal(result, expected)
-    else:
-        # When not yielding last chunk, expected data should exclude remainder
-        expected_without_remainder = expected.iloc[
-            : (len(expected) // row_group_size) * row_group_size
-        ]
-        assert_frame_equal(result, expected_without_remainder)
-
-
-@pytest.mark.parametrize(
-    "start_df,yield_remainder",
-    [
-        (None, True),  # Basic case
-        (DataFrame({"ordered": [0], "values": ["z"]}), True),  # With start_df
-        (None, False),  # Return remainder
-        (DataFrame({"ordered": [0], "values": ["z"]}), False),  # With start_df
-    ],
-)
-def test_iter_resized_parquet_file(
-    sample_df,
-    create_parquet_file,
-    start_df,
-    yield_remainder,
-):
-    """
-    Test _iter_resized_parquet_file with various configurations.
-
-    Parameters
-    ----------
-    sample_df : DataFrame
-        Test DataFrame fixture.
-    create_parquet_file : callable
-        Fixture to create temporary parquet files.
-    start_df : DataFrame or None
-        Optional starter DataFrame.
-    yield_remainder : bool
-        Whether to yield the last chunk.
-
-    """
-    sample_pf = create_parquet_file(sample_df, row_group_offsets=3)
-    row_group_size = 4
-    expected = (
-        concat([start_df, sample_df], ignore_index=True) if start_df is not None else sample_df
-    )
-    has_remainder = len(expected) % row_group_size > 0
-
-    iterator = _iter_resized_parquet_file(
-        ordered_on="ordered",
-        max_row_group_size=row_group_size,
-        pf=sample_pf,
-        start_df=start_df,
-        distinct_bounds=False,
-        yield_remainder=yield_remainder,
-    )
-
-    # Collect all chunks
-    if yield_remainder:
-        all_chunks = list(iterator)
-        yielded_chunks = all_chunks
-    else:
-        all_chunks = list(yield_all(iterator))
-        # Do a 2nd time to check only yielded chunks.
-        iterator2 = _iter_resized_parquet_file(
-            ordered_on="ordered",
-            max_row_group_size=row_group_size,
-            pf=sample_pf,
-            start_df=start_df.copy(deep=True) if start_df is not None else None,
-            distinct_bounds=False,
             yield_remainder=yield_remainder,
         )
         yielded_chunks = list(iterator2)
@@ -390,7 +306,7 @@ def test_iter_resized_parquet_file(
         ),
     ],
 )
-def test_iter_merged_pandas_parquet_file(
+def test_iter_merged_pf_df(
     df_data,
     pf_data,
     expected_chunks,
@@ -400,7 +316,7 @@ def test_iter_merged_pandas_parquet_file(
     create_parquet_file,
 ):
     """
-    Test iter_merged_pandas_parquet_file with various overlap scenarios.
+    Test iter_merged_pf_df with various overlap scenarios.
 
     Parameters
     ----------
@@ -420,7 +336,7 @@ def test_iter_merged_pandas_parquet_file(
     pf = create_parquet_file(DataFrame(pf_data), row_group_offsets=max_row_group_size)
 
     chunks = list(
-        iter_merged_pandas_parquet_file(
+        iter_merged_pf_df(
             ordered_on="ordered",
             df=df,
             pf=pf,
@@ -435,9 +351,6 @@ def test_iter_merged_pandas_parquet_file(
         assert_frame_equal(chunk.reset_index(drop=True), expected.reset_index(drop=True))
 
 
-" Add test case with values between df and pf the same / overlaps in bounds"
-
-
 @pytest.mark.parametrize(
     "duplicates_on,distinct_bounds,error_expected",
     [
@@ -447,14 +360,14 @@ def test_iter_merged_pandas_parquet_file(
         ("invalid_col", True, True),  # Invalid column name
     ],
 )
-def test_iter_merged_pandas_parquet_file_exceptions(
+def test_iter_merged_pf_df_exceptions(
     duplicates_on,
     distinct_bounds,
     error_expected,
     create_parquet_file,
 ):
     """
-    Test validation in iter_merged_pandas_parquet_file.
+    Test validation in iter_merged_pf_df.
 
     Parameters
     ----------
@@ -477,7 +390,7 @@ def test_iter_merged_pandas_parquet_file_exceptions(
     if error_expected:
         with pytest.raises(ValueError):
             list(
-                iter_merged_pandas_parquet_file(
+                iter_merged_pf_df(
                     df,
                     pf,
                     ordered_on="ordered",
@@ -488,7 +401,7 @@ def test_iter_merged_pandas_parquet_file_exceptions(
             )
     else:
         chunks = list(
-            iter_merged_pandas_parquet_file(
+            iter_merged_pf_df(
                 df,
                 pf,
                 ordered_on="ordered",
@@ -500,7 +413,7 @@ def test_iter_merged_pandas_parquet_file_exceptions(
         assert len(chunks) > 0
 
 
-def test_iter_merged_pandas_parquet_file_empty_df(create_parquet_file):
+def test_iter_merged_pf_df_empty_df(create_parquet_file):
     """
     Test handling of empty DataFrame input.
     """
@@ -511,7 +424,7 @@ def test_iter_merged_pandas_parquet_file_empty_df(create_parquet_file):
     )
 
     chunks = list(
-        iter_merged_pandas_parquet_file(
+        iter_merged_pf_df(
             df,
             pf,
             ordered_on="ordered",
