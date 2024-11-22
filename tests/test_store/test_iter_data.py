@@ -276,7 +276,7 @@ def test_iter_resized_parquet_file(
 
 
 @pytest.mark.parametrize(
-    "df_data,pf_data,expected_chunks,max_row_group_size",
+    "df_data,pf_data,expected_chunks,max_row_group_size,distinct_bounds,duplicates_on",
     [
         # Case 1: DataFrame before ParquetFile (no overlap)
         (
@@ -288,6 +288,8 @@ def test_iter_resized_parquet_file(
                 DataFrame({"ordered": [5], "values": ["e"]}),
             ],
             2,
+            False,
+            None,
         ),
         # Case 2: DataFrame after ParquetFile (no overlap)
         (
@@ -295,35 +297,96 @@ def test_iter_resized_parquet_file(
             {"ordered": [1, 2, 3], "values": ["a", "b", "c"]},
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
-                DataFrame({"ordered": [3], "values": ["c"]}),
-                DataFrame({"ordered": [4, 5], "values": ["d", "e"]}),
+                DataFrame({"ordered": [3, 4], "values": ["c", "d"]}),
+                DataFrame({"ordered": [5], "values": ["e"]}),
             ],
             2,
+            False,
+            None,
         ),
         # Case 3: DataFrame spans over ParquetFile
         (
             {"ordered": [1, 2, 4, 5], "values": ["a", "b", "d", "e"]},
             {"ordered": [2, 3, 4], "values": ["x", "c", "y"]},
             [
-                DataFrame({"ordered": [1], "values": ["a"]}),
-                DataFrame({"ordered": [2, 2], "values": ["b", "x"]}),
-                DataFrame({"ordered": [3, 4, 4], "values": ["c", "d", "y"]}),
+                DataFrame({"ordered": [1, 2, 2], "values": ["a", "x", "b"]}),
+                DataFrame({"ordered": [3, 4, 4], "values": ["c", "y", "d"]}),
                 DataFrame({"ordered": [5], "values": ["e"]}),
             ],
             3,
+            False,
+            None,
         ),
-        # Case 4: ParquetFile spans over DataFrame
+        # Case 4: ParquetFile spans over DataFrame, wo distinct bounds
+        (
+            {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
+            {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},
+            [
+                DataFrame({"ordered": [1, 2], "values": ["a", "x"]}),
+                DataFrame({"ordered": [2, 3], "values": ["b", "y"]}),
+                DataFrame({"ordered": [3, 4], "values": ["c", "z"]}),
+                DataFrame({"ordered": [4, 5], "values": ["d", "e"]}),
+            ],
+            2,
+            False,
+            None,
+        ),
+        # Case 5: ParquetFile spans over DataFrame, with distinct bounds
         (
             {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
             {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},
             [
                 DataFrame({"ordered": [1], "values": ["a"]}),
-                DataFrame({"ordered": [2, 2], "values": ["b", "x"]}),
-                DataFrame({"ordered": [3, 3], "values": ["c", "y"]}),
-                DataFrame({"ordered": [4, 4], "values": ["d", "z"]}),
+                DataFrame({"ordered": [2, 2], "values": ["x", "b"]}),
+                DataFrame({"ordered": [3, 3], "values": ["y", "c"]}),
+                DataFrame({"ordered": [4, 4], "values": ["z", "d"]}),
                 DataFrame({"ordered": [5], "values": ["e"]}),
             ],
             2,
+            True,
+            None,
+        ),
+        # Case 6: Remainder from dataframe, wo distinct bounds.
+        (
+            {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
+            {"ordered": [1, 2, 3, 4], "values": ["a", "x", "y", "z"]},
+            [
+                DataFrame({"ordered": [1, 2], "values": ["a", "x"]}),
+                DataFrame({"ordered": [2, 3], "values": ["b", "y"]}),
+                DataFrame({"ordered": [3, 4], "values": ["c", "z"]}),
+                DataFrame({"ordered": [4], "values": ["d"]}),
+            ],
+            2,
+            False,
+            None,
+        ),
+        # Case 7: ParquetFile spans over DataFrame, drop duplicates.
+        (
+            {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
+            {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},
+            [
+                DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
+                DataFrame({"ordered": [3, 4], "values": ["c", "d"]}),
+                DataFrame({"ordered": [5], "values": ["e"]}),
+            ],
+            2,
+            True,
+            "ordered",
+        ),
+        # Case 8: DataFrame with long chunk between 2 row groups.
+        (
+            {"ordered": [2, 3, 4, 5, 6, 7, 8], "values": ["b", "c", "d", "e", "f", "g", "h"]},
+            {"ordered": [1, 2, 6], "values": ["a", "x", "y"]},
+            [
+                DataFrame({"ordered": [1, 2], "values": ["a", "x"]}),
+                DataFrame({"ordered": [2, 3], "values": ["b", "c"]}),
+                DataFrame({"ordered": [4, 5], "values": ["d", "e"]}),
+                DataFrame({"ordered": [6, 6], "values": ["y", "f"]}),
+                DataFrame({"ordered": [7, 8], "values": ["g", "h"]}),
+            ],
+            2,
+            False,
+            None,
         ),
     ],
 )
@@ -332,6 +395,8 @@ def test_iter_merged_pandas_parquet_file(
     pf_data,
     expected_chunks,
     max_row_group_size,
+    distinct_bounds,
+    duplicates_on,
     create_parquet_file,
 ):
     """
@@ -360,12 +425,10 @@ def test_iter_merged_pandas_parquet_file(
             df=df,
             pf=pf,
             max_row_group_size=max_row_group_size,
-            distinct_bounds=True,
+            distinct_bounds=distinct_bounds,
+            duplicates_on=duplicates_on,
         ),
     )
-
-    print("chunks")
-    print(chunks)
 
     assert len(chunks) == len(expected_chunks)
     for chunk, expected in zip(chunks, expected_chunks):
@@ -384,7 +447,7 @@ def test_iter_merged_pandas_parquet_file(
         ("invalid_col", True, True),  # Invalid column name
     ],
 )
-def test_iter_merged_pandas_parquet_file_validation(
+def test_iter_merged_pandas_parquet_file_exceptions(
     duplicates_on,
     distinct_bounds,
     error_expected,
@@ -406,16 +469,19 @@ def test_iter_merged_pandas_parquet_file_validation(
 
     """
     df = DataFrame({"ordered": [1, 2], "values": ["a", "b"]})
-    pf = create_parquet_file(DataFrame({"ordered": [3, 4], "values": ["c", "d"]}))
+    pf = create_parquet_file(
+        DataFrame({"ordered": [3, 4], "values": ["c", "d"]}),
+        row_group_offsets=2,
+    )
 
     if error_expected:
         with pytest.raises(ValueError):
             list(
                 iter_merged_pandas_parquet_file(
-                    2,
-                    "ordered",
                     df,
                     pf,
+                    ordered_on="ordered",
+                    max_row_group_size=2,
                     distinct_bounds=distinct_bounds,
                     duplicates_on=duplicates_on,
                 ),
@@ -423,10 +489,10 @@ def test_iter_merged_pandas_parquet_file_validation(
     else:
         chunks = list(
             iter_merged_pandas_parquet_file(
-                2,
-                "ordered",
                 df,
                 pf,
+                ordered_on="ordered",
+                max_row_group_size=2,
                 distinct_bounds=distinct_bounds,
                 duplicates_on=duplicates_on,
             ),
@@ -439,14 +505,17 @@ def test_iter_merged_pandas_parquet_file_empty_df(create_parquet_file):
     Test handling of empty DataFrame input.
     """
     df = DataFrame({"ordered": [], "values": []})
-    pf = create_parquet_file(DataFrame({"ordered": [1, 2], "values": ["a", "b"]}))
+    pf = create_parquet_file(
+        DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
+        row_group_offsets=2,
+    )
 
     chunks = list(
         iter_merged_pandas_parquet_file(
-            2,
-            "ordered",
             df,
             pf,
+            ordered_on="ordered",
+            max_row_group_size=2,
         ),
     )
     assert len(chunks) == 0

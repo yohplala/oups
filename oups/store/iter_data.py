@@ -49,18 +49,18 @@ def _validate_duplicate_on_param(
     if duplicates_on is not None:
         if not distinct_bounds:
             raise ValueError(
-                "Distinct bounds must be enabled when setting 'duplicates_on'.",
+                "distinct bounds must be enabled when setting 'duplicates_on'.",
             )
         if isinstance(duplicates_on, list):
             if duplicates_on == []:
                 return list(columns)
             if not all(col in columns for col in duplicates_on):
-                raise ValueError("one or more duplicate columns not found in input DataFrame")
+                raise ValueError("one or more duplicate columns not found in input DataFrame.")
             if ordered_on not in duplicates_on:
                 duplicates_on.append(ordered_on)
         else:
             if duplicates_on not in columns:
-                raise ValueError(f"column '{duplicates_on}' not found in input DataFrame")
+                raise ValueError(f"column '{duplicates_on}' not found in input DataFrame.")
             if duplicates_on != ordered_on:
                 return [duplicates_on, ordered_on]
             return [ordered_on]
@@ -162,6 +162,7 @@ def _iter_pandas_dataframe(
         df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
 
     start_idx = 0
+    print(f"len(df): {len(df)}")
     while len(df) - start_idx >= max_row_group_size:
         chunk, next_idx = _get_next_chunk(
             df=df,
@@ -172,6 +173,7 @@ def _iter_pandas_dataframe(
         )
         yield chunk
         start_idx = next_idx
+        print(f"start_idx: {start_idx}")
 
     if start_idx < len(df):
         chunk = df.iloc[start_idx:].copy(deep=True)
@@ -195,8 +197,8 @@ def _iter_resized_parquet_file(
 
     Reads row groups from ParquetFile and yields chunks of data that respect
     the maximum row group size. If a starter DataFrame is provided, it will be
-    concatenated with the first chunk. Handles distinct bounds to prevent splitting
-    of duplicate values.
+    concatenated with the first chunk. Handles distinct bounds to prevent
+    splitting of duplicate values.
 
     Parameters
     ----------
@@ -293,9 +295,10 @@ def iter_merged_pandas_parquet_file(
     max_row_group_size : int
         Max number of rows per chunk.
     df : DataFrame
-        In-memory pandas DataFrame to process. Must be ordered by ordered_on column.
+        In-memory pandas DataFrame to process. Must be ordered by 'ordered_on'
+        column.
     pf : ParquetFile
-        ParquetFile to merge with data. Must be ordered by ordered_on column.
+        ParquetFile to merge with data. Must be ordered by 'ordered_on' column.
     distinct_bounds : Optional[bool], default False
         If True, ensures that row group boundaries do not split duplicate rows.
     duplicates_on : Optional[Union[str, Iterable[str]]]
@@ -321,12 +324,16 @@ def iter_merged_pandas_parquet_file(
     is no overlap with the pandas DataFrame, then duplicates are not removed
     from ParquetFile.
 
+    Data in ParquetFile is supposed to be anterior to data in pandas DataFrame.
+    It means that in case of duplicate values in 'ordered_on' column, the last
+    occurrence are those from the pandas DataFrame.
+
     """
     if df.empty:
         return
 
     if ordered_on not in df.columns:
-        raise ValueError(f"column '{ordered_on}' not found in input DataFrame")
+        raise ValueError(f"column '{ordered_on}' not found in input DataFrame.")
 
     if duplicates_on is not None:
         duplicates_on = _validate_duplicate_on_param(
@@ -347,18 +354,11 @@ def iter_merged_pandas_parquet_file(
         max_row_group_size=max_row_group_size,
     )
 
-    print(f"rg_df_start_idxs: {overlap_info.df_idx_overlap_start}")
-    print(f"rg_df_end_idxs: {overlap_info.df_idx_overlap_end}")
-    print(f"rg_df_start_idxs: {overlap_info.rg_idx_overlap_start}")
-    print(f"rg_df_end_idxs: {overlap_info.rg_idx_overlap_end}")
-    print(f"rg_mins: {overlap_info.df_idx_rg_starts}")
-    print(f"rg_maxs: {overlap_info.df_idx_rg_ends}")
-
     # Handle data before the first overlaps.
     remainder = None
+    df_idx_start = 0
     if overlap_info.has_pf_head:
         # Case there is parquet file data before the first overlapping row group.
-        print("is starting to yield pf only")
         remainder = yield from _iter_resized_parquet_file(
             pf=pf[: overlap_info.rg_idx_overlap_start],
             ordered_on=ordered_on,
@@ -371,7 +371,6 @@ def iter_merged_pandas_parquet_file(
         # row group.
         # If 'duplicates_on' is provided, duplicates have been removed already,
         # so no need to remove them again.
-        print("is starting to yield df only")
         remainder = yield from _iter_pandas_dataframe(
             df=df.iloc[: overlap_info.df_idx_overlap_start],
             ordered_on=ordered_on,
@@ -380,34 +379,43 @@ def iter_merged_pandas_parquet_file(
             duplicates_on=None,
             yield_remainder=False,
         )
+        # Correct then 'df_idx_start' to account for the dataframe head already
+        # yielded.
+        df_idx_start = overlap_info.df_idx_overlap_start
 
-    rg_idx_overlap_end = overlap_info.rg_idx_overlap_end
+    rg_idx_overlap_end_excl = overlap_info.rg_idx_overlap_end_excl
     if overlap_info.has_overlap:
         # Merge overlapping data.
-        print("is starting to merge")
-        df_idx_start = overlap_info.df_idx_overlap_start
         rg_idx_start = overlap_info.rg_idx_overlap_start
         buffer_num_rows = 0 if remainder is None else len(remainder)
         for rg_idx, (_df_idx_start, df_idx_end) in enumerate(
             zip(
-                overlap_info.df_idx_rg_starts[rg_idx_start:rg_idx_overlap_end],
-                overlap_info.df_idx_rg_ends[rg_idx_start:rg_idx_overlap_end],
+                overlap_info.df_idx_rg_starts[rg_idx_start:rg_idx_overlap_end_excl],
+                overlap_info.df_idx_rg_ends_excl[rg_idx_start:rg_idx_overlap_end_excl],
             ),
             start=rg_idx_start,
         ):
             n_data_rows = df_idx_end - _df_idx_start
             buffer_num_rows += pf.row_groups[rg_idx].num_rows + n_data_rows
-
             if buffer_num_rows >= max_row_group_size:
                 rg_idx_1 = rg_idx + 1
-                chunk = pf[rg_idx_start:rg_idx_1].to_pandas()
+                chunk = (
+                    [remainder, pf[rg_idx_start:rg_idx_1].to_pandas()]
+                    if remainder is not None
+                    else pf[rg_idx_start:rg_idx_1].to_pandas()
+                )
                 if df_idx_start != df_idx_end:
                     # Merge with pandas DataFrame chunk.
                     # DataFrame chunk is added last in concat, to preserve
                     # its values in case of duplicates found with values in
                     # ParquetFile chunk.
+                    if isinstance(chunk, list):
+                        chunk.append(df.iloc[df_idx_start:df_idx_end])
+                    else:
+                        chunk = [chunk, df.iloc[df_idx_start:df_idx_end]]
+                if isinstance(chunk, list):
                     chunk = concat(
-                        [remainder, chunk, df.iloc[df_idx_start:df_idx_end]],
+                        chunk,
                         ignore_index=True,
                     )
                     chunk.sort_values(ordered_on, inplace=True, ignore_index=True)
@@ -416,7 +424,7 @@ def iter_merged_pandas_parquet_file(
                     df=chunk,
                     ordered_on=ordered_on,
                     max_row_group_size=max_row_group_size,
-                    start_df=remainder,
+                    start_df=None,
                     distinct_bounds=distinct_bounds,
                     duplicates_on=duplicates_on,
                     yield_remainder=False,
@@ -429,9 +437,8 @@ def iter_merged_pandas_parquet_file(
     # Handle data after the last overlaps.
     if overlap_info.has_pf_tail:
         # Case there is parquet file data after the last overlapping row group.
-        print("is ending with yielding pf only")
         yield from _iter_resized_parquet_file(
-            pf=pf[rg_idx_overlap_end:],
+            pf=pf[rg_idx_overlap_end_excl:],
             ordered_on=ordered_on,
             max_row_group_size=max_row_group_size,
             start_df=remainder,
@@ -440,7 +447,6 @@ def iter_merged_pandas_parquet_file(
         )
     elif overlap_info.has_df_tail:
         # Case there is remaining data in pandas DataFrame.
-        print("is ending with yielding df only")
         df_idx_overlap_end_excl = overlap_info.df_idx_overlap_end_excl
         yield from _iter_pandas_dataframe(
             df=df.iloc[df_idx_overlap_end_excl:],
@@ -451,6 +457,6 @@ def iter_merged_pandas_parquet_file(
             duplicates_on=None if remainder is None else duplicates_on,
             yield_remainder=True,
         )
-    elif remainder:
+    elif remainder is not None:
         # Case there only is a remainder from previous iterations.
         yield remainder
