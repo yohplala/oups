@@ -12,7 +12,7 @@ from numpy import searchsorted
 from pandas import DataFrame
 from pandas import concat
 
-from oups.store.data_overlap import DataOverlapInfo
+from oups.store.ordered_merge_info import OrderedMergeInfo
 
 
 def _validate_duplicate_on_param(
@@ -96,8 +96,9 @@ def _get_next_chunk(
         The chunk and the next starting index.
 
     """
-    end_idx = min(start_idx + size, len(df))
-    if distinct_bounds and end_idx < len(df):
+    df_n_rows = len(df)
+    end_idx = min(start_idx + size, df_n_rows)
+    if distinct_bounds and end_idx < df_n_rows:
         val_at_end = df[ordered_on].iloc[end_idx]
         # Find the leftmost index to not split duplicates.
         end_idx = searchsorted(df[ordered_on].to_numpy(), val_at_end)
@@ -159,7 +160,8 @@ def _iter_df(
         df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
 
     start_idx = 0
-    while len(df) - start_idx >= max_row_group_size:
+    df_n_rows = len(df)
+    while df_n_rows - start_idx >= max_row_group_size:
         chunk, next_idx = _get_next_chunk(
             df=df,
             start_idx=start_idx,
@@ -170,7 +172,7 @@ def _iter_df(
         yield chunk
         start_idx = next_idx
 
-    if start_idx < len(df):
+    if start_idx < df_n_rows:
         chunk = df.iloc[start_idx:].copy(deep=True)
         del df
         if yield_remainder:
@@ -249,7 +251,7 @@ def iter_merged_pf_df(
         df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
 
     # Identify overlapping row groups
-    overlap_info = DataOverlapInfo.analyze(
+    overlap_info = OrderedMergeInfo.analyze(
         df=df,
         pf=pf,
         ordered_on=ordered_on,
@@ -277,14 +279,16 @@ def iter_merged_pf_df(
         df_idx_start = overlap_info.df_idx_overlap_start if overlap_info.has_overlap else len(df)
 
     # Merge possibly overlapping data (full loop over 'pf' row groups).
-    rg_idx_start = 0
+    rg_idx_start = 0  # HERE: overlap_info.rg_idx_overlap_start
     buffer_num_rows = 0 if remainder is None else len(remainder)
     for rg_idx_1, (_df_idx_start, df_idx_end) in enumerate(
         zip(overlap_info.df_idx_rg_starts, overlap_info.df_idx_rg_ends_excl),
         start=1,
     ):
         n_data_rows = df_idx_end - _df_idx_start
+        # HERE: overlap_info.rg_n_rows[rg_idx_1 - 1] + n_data_rows
         buffer_num_rows += pf.row_groups[rg_idx_1 - 1].num_rows + n_data_rows
+        # HERE: ...or rg_idx_1 == overlap_info.n_rgs_overlap
         if buffer_num_rows >= max_row_group_size or rg_idx_1 == len(pf):
             chunk = pf[rg_idx_start:rg_idx_1].to_pandas()
             if df_idx_start != df_idx_end:

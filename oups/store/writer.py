@@ -590,7 +590,7 @@ def write_ordered(
       lie within recorded data. If there is no intersection with existing data,
       new data is only added, without merging with existing incomplete row
       groups.
-    - the algorithm will try to complete only incomplete row groups at the tail
+    - The algorithm will try to complete only incomplete row groups at the tail
       of recorded data.
 
     """

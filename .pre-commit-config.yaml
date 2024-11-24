@@ -95,7 +95,7 @@ repos:
                 oups/aggstream/cumsegagg.py:C901 E203
                 oups/aggstream/aggstream.py:C901
                 tests/*.py:D103
-                tests/test_store/test_data_overlap.py:F401 F811
+                tests/test_store/test_ordered_merge_info.py:F401 F811
                 tests/test_store/test_iter_data.py:F401 F811
         ]
 
