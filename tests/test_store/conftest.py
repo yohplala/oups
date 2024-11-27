@@ -1,29 +1,32 @@
-import pytest
 from fastparquet import ParquetFile
 from fastparquet import write
 from pandas import DataFrame
 
 
-@pytest.fixture
-def create_parquet_file(tmp_path):
+def create_parquet_file(tmp_path: str, df: DataFrame, row_group_offsets: int) -> ParquetFile:
     """
     Create a temporary parquet file for testing.
 
     Parameters
     ----------
-    tmp_path : Path
+    tmp_path : str
         Temporary directory provided by pytest.
+    df : DataFrame
+        Data to write to the parquet file.
+    row_group_offsets : int
+        Number of rows per row group.
 
     Returns
     -------
-    callable
-        Function that creates a ParquetFile with specified row group size.
+    ParquetFile
+        The created parquet file object.
+
+    Notes
+    -----
+    The file is created using the 'hive' file scheme and stored in a directory
+    named 'test_parquet' within the temporary directory.
 
     """
-
-    def _create_parquet(df: DataFrame, row_group_offsets: int) -> ParquetFile:
-        path = f"{tmp_path}/test.parquet"
-        write(path, df, row_group_offsets=row_group_offsets, file_scheme="hive")
-        return ParquetFile(path)
-
-    return _create_parquet
+    path = f"{tmp_path}/test_parquet"
+    write(path, df, row_group_offsets=row_group_offsets, file_scheme="hive")
+    return ParquetFile(path)
