@@ -27,12 +27,11 @@ REF_D = "2020/01/01 "
         # 'max_n_irgs' is never triggered.
         (
             # Max row group size as int.
-            # df connected to incomplete rgs.
-            # Writing after pf data, no incomplete row groups.
+            # Writing after pf data, no incomplete row group.
             # rg:  0      1
             # pf: [0,1], [2,3]
             # df:               [3]
-            "no_drop_duplicates_simple_append_int",
+            "new_rg_simple_append_int",
             [3],
             [0, 1, 2, 3],
             [0, 2],  # row_group_offsets
@@ -45,10 +44,26 @@ REF_D = "2020/01/01 "
             },
         ),
         (
+            # Max row group size as freqstr.
+            # Writing after pf data, no incomplete row group.
+            # rg:  0            1
+            # pf: [8h10,9h10], [10h10]
+            # df:                      [12h10]
+            "new_rg_simple_append_timestamp_not_on_boundary",
+            [Timestamp(f"{REF_D}12:10")],
+            date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
+            [0, 2],
+            "2h",  # row_group_size_target | should not merge irg
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
             # Max row group size as int.
-            # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at the end
-            # of pf data.
+            # Writing at end of pf data, merging with incomplete row group.
             # rg:  0        1        2
             # pf: [0,1,2], [6,7,8], [9]
             # df:                   [9]
@@ -66,9 +81,8 @@ REF_D = "2020/01/01 "
         ),
         (
             # Max row group size as freqstr.
-            # df connected to incomplete rgs.
             # Values not on boundary to check 'floor()'.
-            # Writing after pf data.
+            # Writing after pf data, not merging with incomplete row group.
             # rg:  0            1
             # pf: [8h10,9h10], [10h10]
             # df:                      [10h10]
@@ -86,9 +100,8 @@ REF_D = "2020/01/01 "
         ),
         (
             # Max row group size as freqstr.
-            # df connected to incomplete rgs.
             # Values not on boundary to check 'floor()'.
-            # Writing after pf data.
+            # Writing after pf data, merging with incomplete row group.
             # rg:  0            1
             # pf: [8h10,9h10], [10h10]
             # df:              [10h10]
@@ -106,9 +119,8 @@ REF_D = "2020/01/01 "
         ),
         (
             # Max row group size as freqstr.
-            # df connected to incomplete rgs.
             # Values on boundary.
-            # Writing after pf data, incomplete row groups.
+            # Writing after pf data, not merging with incomplete row group.
             # rg:  0            1
             # pf: [8h00,9h00], [10h00]
             # df:                      [10h00]
@@ -126,9 +138,8 @@ REF_D = "2020/01/01 "
         ),
         (
             # Max row group size as freqstr.
-            # df connected to incomplete rgs.
             # Values on boundary.
-            # Writing after pf data, incomplete row groups.
+            # Writing after pf data, merging with incomplete row group.
             # rg:  0            1
             # pf: [8h00,9h00], [10h00]
             # df:              [10h00]
@@ -144,20 +155,55 @@ REF_D = "2020/01/01 "
                 "sort_rgs_after_write": True,
             },
         ),
+        (
+            # Max row group size as int.
+            # Writing after pf data, incomplete row group to merge.
+            # rg:  0        1        2    3
+            # pf: [0,1,2], [3,4,5], [6], [7],
+            # df:                             [8]
+            "last_row_group_exceeded_merge_tail_int",
+            [8],
+            range(8),
+            [0, 3, 6, 7],  # row_group_offsets
+            3,  # row_group_size_target | should merge irgs
+            False,  # drop_duplicates | should not merge with preceding rg
+            4,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [0, 0, 0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # Writing after pf data, incomplete row group should be merged.
+            # rg:  0            1        2
+            # pf: [8h00,9h00], [10h00], [11h00]
+            # df:                               [13h00]
+            "last_row_group_exceeded_merge_tail_timestamp",
+            [Timestamp(f"{REF_D}13:00")],
+            date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
+            [0, 2, 3],  # row_group_offsets
+            "2h",  # row_group_size_target | new period, should merge irgs
+            True,  # drop_duplicates | no duplicates to drop
+            3,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [0, 0, 0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
         # 2/ Adding data right at the start.
         (
-            # Test  21 (5.a) /
             # Max row group size as int.
             # df at the start of pf data.
             # rg:         0       1       2    3
             # pf:        [2, 6], [7, 8], [9], [10]
             # df: [0,1]
-            "drop_duplicates_insert_at_start_new_rg",
+            "no_duplicates_insert_at_start_new_rg_int",
             [0, 1],
             [2, 6, 7, 8, 9, 10],
             [0, 2, 4, 5],  # row_group_offsets
-            2,  # row_group_size_target
-            True,  # drop_duplicates
+            2,  # row_group_size_target | df enough to make complete rg, should merge.
+            True,  # no duplicates to drop
             2,  # max_n_irgs | not triggered
             {
                 "chunk_counter": [2],
@@ -165,18 +211,17 @@ REF_D = "2020/01/01 "
             },
         ),
         (
-            # Test  21 (5.a) /
             # Max row group size as int.
             # df at the start of pf data.
             # rg:       0       1       2    3
             # pf:      [2, 6], [7, 8], [9], [10]
             # df: [0]
-            "drop_duplicates_insert_at_start_no_new_rg",
+            "no_duplicates_insert_at_start_no_new_rg_int",
             [0],
             [2, 6, 7, 8, 9, 10],
             [0, 2, 4, 5],  # row_group_offsets
-            2,  # row_group_size_target
-            True,  # drop_duplicates
+            2,  # row_group_size_target | df not enough to make complete rg, should not merge.
+            True,  # no duplicates to drop
             2,  # max_n_irgs | not triggered
             {
                 "chunk_counter": [0, 1],
@@ -184,14 +229,13 @@ REF_D = "2020/01/01 "
             },
         ),
         (
-            # Test  22 (5.b) /
             # Max row group size as freqstr.
-            # df at the very start.
+            # df at the start of pf data.
             # df is not overlapping with existing row groups.
             # rg:           0            1        2
             # pf:          [8h00,9h00], [12h00], [13h00]
             # df:  [7h30]
-            "drop_duplicates_insert_at_start_new_rg_timestamp_not_on_boundary",
+            "no_duplicates_insert_at_start_new_rg_timestamp_not_on_boundary",
             [Timestamp(f"{REF_D}7:30")],
             [
                 Timestamp(f"{REF_D}08:00"),
@@ -200,8 +244,8 @@ REF_D = "2020/01/01 "
                 Timestamp(f"{REF_D}14:00"),
             ],
             [0, 2, 3],
-            "2h",  # row_group_size_target
-            True,  # drop_duplicates
+            "2h",  # row_group_size_target | no rg in same period to merge with
+            True,  # no duplicates to drop
             2,  # max_n_irgs | should rewrite tail
             {
                 "chunk_counter": [1],
@@ -209,14 +253,13 @@ REF_D = "2020/01/01 "
             },
         ),
         (
-            # Test  22 (5.b) /
             # Max row group size as freqstr.
-            # df at the very start.
+            # df at the start of pf data.
             # df is overlapping with existing row groups.
             # rg:            0            1        2
             # pf:           [8h10,9h10], [12h10], [13h10]
             # df:           [8h00]
-            "drop_duplicates_insert_at_start_no_new_rg_timestamp_on_boundary",
+            "no_duplicates_insert_at_start_no_new_rg_timestamp_on_boundary",
             [Timestamp(f"{REF_D}8:00")],
             [
                 Timestamp(f"{REF_D}08:10"),
@@ -225,21 +268,19 @@ REF_D = "2020/01/01 "
                 Timestamp(f"{REF_D}14:10"),
             ],
             [0, 2, 3],  # row_group_offsets
-            "2h",  # row_group_size_target
-            True,  # drop_duplicates
+            "2h",  # row_group_size_target | should merge with rg in same period
+            True,  # no duplicates to drop
             2,  # max_n_irgs | should rewrite tail
             {
                 "chunk_counter": [0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
-        # 3/ Adding data at complete tail, testing 'max_n_irgs'.
+        # 3/ Adding data at complete end, testing 'max_n_irgs'.
         (
-            # Test  5 (1.a) /
             # Max row group size as int
             # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at
-            # the end of pf data.
+            # Writing at end of pf data, with incomplete row groups.
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
             # df:                                   [12]
@@ -247,37 +288,34 @@ REF_D = "2020/01/01 "
             [12],
             [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
             [0, 4, 8, 9],  # row_group_offsets
-            4,  # row_group_size_target
-            False,  # drop_duplicates
-            3,  # max_n_irgs
+            4,  # row_group_size_target | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_irgs | should not rewrite tail
             {
                 "chunk_counter": [1],
                 "sort_rgs_after_write": False,
             },
         ),
         (
-            # Test  5 (1.a) /
             # Max row group size as int
             # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at
-            # the end of pf data.
+            # Writing at end of pf data, with incomplete row groups.
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
             # df:                                   [12]
-            "max_n_irgs_reached_rewrite_tail_int",
+            "max_n_irgs_reached_tail_rewrite_int",
             [12],
             [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
             [0, 4, 8, 9],  # row_group_offsets
-            4,  # row_group_size_target
-            False,  # drop_duplicates
-            2,  # max_n_irgs
+            4,  # row_group_size_target | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            2,  # max_n_irgs | should rewrite tail
             {
                 "chunk_counter": [0, 0, 0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
         (
-            # Test  6 (1.b) /
             # Max row group size as freqstr.
             # df connected to incomplete rgs.
             # Values on boundary.
@@ -289,16 +327,15 @@ REF_D = "2020/01/01 "
             [Timestamp(f"{REF_D}11:00")],
             date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
             [0, 2, 3],  # row_group_offsets
-            "2h",  # row_group_size_target
-            False,  # drop_duplicates
-            3,  # max_n_irgs
+            "2h",  # row_group_size_target | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_irgs | should not rewrite tail
             {
                 "chunk_counter": [1],
                 "sort_rgs_after_write": False,
             },
         ),
         (
-            # Test  6 (1.b) /
             # Max row group size as freqstr.
             # df connected to incomplete rgs.
             # Values on boundary.
@@ -306,25 +343,22 @@ REF_D = "2020/01/01 "
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
             # df:                               [11h00]
-            "max_n_irgs_reached_rewrite_tail_timestamp",
+            "max_n_irgs_reached_tail_rewrite_timestamp",
             [Timestamp(f"{REF_D}11:00")],
             date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
             [0, 2, 3],  # row_group_offsets
-            "2h",  # row_group_size_target
-            False,  # drop_duplicates
-            2,  # max_n_irgs
+            "2h",  # row_group_size_target | should not merge with irg.
+            False,  # drop_duplicates | should not merge with preceding rg
+            2,  # max_n_irgs | should rewrite tail
             {
                 "chunk_counter": [0, 0, 0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
-        # 3/ Adding data at complete tail, testing 'max_n_irgs=None'.
         (
-            # Test  7 (2.a) /
             # Max row group size as int.
             # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at
-            # the end of pf data.
+            # Writing at end of pf data, with incomplete row groups.
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
             # df:                                   [12]
@@ -332,16 +366,15 @@ REF_D = "2020/01/01 "
             [12],
             [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
             [0, 4, 8, 9],
-            4,  # row_group_size_target
-            False,  # drop_duplicates
-            None,  # max_n_irgs
+            4,  # row_group_size_target | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            None,  # max_n_irgs | should not rewrite tail
             {
                 "chunk_counter": [1],
                 "sort_rgs_after_write": False,
             },
         ),
         (
-            # Test  8 (2.b) /
             # Max row group size as freqstr
             # df connected to incomplete rgs.
             # Values on boundary.
@@ -363,12 +396,9 @@ REF_D = "2020/01/01 "
         ),
         # 4/ Adding data just before last incomplete row groups.
         (
-            # Test  9 (3.a) /
             # Max row group size as int.
             # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at
-            # the end of pf data.
-            # Enough rows to rewrite all tail.
+            # Writing at end of pf data, with incomplete row groups.
             # rg:  0        1                    2
             # pf: [0,1,2], [6,7,8],             [11]
             # df:                   [8, 9, 10]
@@ -376,8 +406,8 @@ REF_D = "2020/01/01 "
             [8, 9, 10],
             [0, 1, 2, 6, 7, 8, 11],
             [0, 3, 6],
-            3,  # row_group_size_target | should not rewrite tail
-            False,  # drop_duplicates
+            3,  # row_group_size_target | no df remainder to merge with next rg
+            False,  # drop_duplicates | should not merge with preceding rg
             3,  # max_n_irgs | should not rewrite tail
             {
                 "chunk_counter": [3],
@@ -385,21 +415,18 @@ REF_D = "2020/01/01 "
             },
         ),
         (
-            # Test  9 (3.a) /
             # Max row group size as int.
             # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at
-            # the end of pf data.
-            # Enough rows to rewrite all tail.
+            # Writing at end of pf data, with incomplete row groups
             # rg:  0        1                2
             # pf: [0,1,2], [6,7,8],         [11]
             # df:                   [8, 9]
-            "insert_before_irgs_rewrite_tail_int",
+            "insert_before_irgs_tail_rewrite_int",
             [8, 9],
             [0, 1, 2, 6, 7, 8, 11],
             [0, 3, 6],
-            3,  # row_group_size_target | should rewrite tail
-            False,  # drop_duplicates
+            3,  # row_group_size_target | df remainder to merge with next rg
+            False,  # drop_duplicates | should not merge with preceding rg
             3,  # max_n_irgs | should not rewrite tail
             {
                 "chunk_counter": [0, 2],
@@ -407,24 +434,24 @@ REF_D = "2020/01/01 "
             },
         ),
         (
-            # Test  10 (3.b) /
             # Max row group size as int.
             # df connected to incomplete rgs.
             # Incomplete row groups at the end of pf data.
             # rg:  0        1           2
             # pf: [0,1,2], [6,7,8],    [10]
             # df:              [8, 9]
-            "insert_before_irgs_drop_duplicates_rewrite_tail_int",
+            "insert_before_irgs_drop_duplicates_no_tail_rewrite_int",
             [8, 9],
             [0, 1, 2, 6, 7, 8, 10],
             [0, 3, 6],
-            3,  # row_group_size_target | should rewrite tail
+            3,  # row_group_size_target | because df merge with previous df,
+            # df remainder should not merge with next rg
             True,  # drop_duplicates | merge with preceding rg
             3,  # max_n_irgs | should not rewrite tail
             {
                 # Other acceptable solution:
                 # [0, 1, 1, 2]
-                "chunk_counter": [0, 1, 2, 2],
+                "chunk_counter": [0, 2],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -438,7 +465,7 @@ REF_D = "2020/01/01 "
             # rg:  0        1        2
             # pf: [0,1,2], [6,7,8], [10]
             # df:              [8]
-            "insert_before_irgs_drop_duplicates_rewrite_tail_int",
+            "insert_before_irgs_drop_duplicates_tail_rewrite_int",
             [8],
             [0, 1, 2, 6, 7, 8, 10],
             [0, 3, 6],
@@ -458,7 +485,7 @@ REF_D = "2020/01/01 "
             # rg:  0         1                  2
             # pf: [0,1,2,3],[6,7,8,8],         [10]
             # df:                      [8, 9]
-            "insert_before_irgs_rewrite_tail_int",
+            "insert_before_irgs_tail_rewrite_int",
             [8, 9],
             [0, 1, 2, 3, 6, 7, 8, 8, 10],
             [0, 4, 8],
@@ -479,7 +506,7 @@ REF_D = "2020/01/01 "
             # row grps:  0            1                 2
             # pf: [8h00,9h00], [10h00],          [13h00]
             # df:                       [12h00]
-            "insert_timestamp_max_n_irgs_rewrite_tail",
+            "insert_timestamp_max_n_irgs_tail_rewrite",
             DataFrame({"ordered_on": [Timestamp(f"{REF_D}12:00")]}),
             DataFrame(
                 {
