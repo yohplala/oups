@@ -677,6 +677,8 @@ def write_ordered(
             # New data has been inserted in the middle of existing row groups.
             # Sorting row groups based on 'max' in 'ordered_on'.
             # TODO: why using 'ordered_on' index?
+            # TODO: should sort if row groups are removed, or if df is inserted
+            # in the middle of existing data.
             ordered_on_idx = pf.columns.index(ordered_on)
             pf.fmd.row_groups = sorted(
                 pf.fmd.row_groups,

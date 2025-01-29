@@ -255,9 +255,10 @@ def iter_merged_pf_df(
     # If intent is to drop duplicates, 'analyze_chunks_to_merge' has to be
     # applied on a DataFrame without duplicates, so that returned indices stay
     # consistent (versus a scenario duplicates are dropped afterwards).
+    # /!\ drop duplicates before calling 'analyze_chunks_to_merge' /!\
     if duplicates_on:
         df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
-    chunk_counter, sort_rgs_after_write = analyze_chunks_to_merge(
+    df_idx_ends, rg_idx_ends, sort_rgs_after_write = analyze_chunks_to_merge(
         df=df,
         pf=pf,
         ordered_on=ordered_on,
@@ -270,65 +271,118 @@ def iter_merged_pf_df(
     has_df = 0
     rg_idx_start = rg_idx = 0
     df_idx_start = _df_idx_start = 0
-    if isinstance(row_group_size_target, str):
-        next_period_start = df.loc[:, ordered_on].iloc[0].ceil(row_group_size_target)
-    is_mixed_chunk = False
-    chunk_n_rows = 0
+    # if isinstance(row_group_size_target, str):
+    #    next_period_start = df.loc[:, ordered_on].iloc[0].ceil(row_group_size_target)
+    # is_mixed_chunk = False
+    # chunk_n_rows = 0
     remainder = None
-
-    for chunk_idx, df_idx_end_excl in enumerate(chunk_counter, start=-len(chunk_counter)):
-        # 'chunk_idx' will be 0 when loop is over.
+    for chunk_countdown, df_idx_end_excl, rg_idx_end_excl in enumerate(
+        zip(df_idx_ends, rg_idx_ends),
+        start=-len(df_idx_ends),
+    ):
+        # Each step is a write step.
         if df_idx_end_excl > _df_idx_start:
             # Possible DataFrame contribution to chunk.
-            chunk_n_rows += df_idx_end_excl - 1 - _df_idx_start
-            has_df += 1
-        if is_mixed_chunk:
-            # Add ParquetFile contribution to chunk.
-            chunk_n_rows += pf[rg_idx].num_rows
-            has_pf += 1
-            rg_idx += 1
-
-        _df_idx_start = df_idx_end_excl
-        is_mixed_chunk = not is_mixed_chunk
-
-        if (
-            chunk_n_rows >= row_group_size_target
-            if isinstance(row_group_size_target, int)
-            else (_chunk_last_ts := df.loc[:, ordered_on].iloc[df_idx_end_excl - 1])
-            >= next_period_start
-        ) or not chunk_idx:
-            if not has_pf:
-                chunk = (
-                    [remainder, df.iloc[df_idx_start:df_idx_end_excl]]
-                    if remainder is not None
-                    else df.iloc[df_idx_start:df_idx_end_excl]
-                )
-            elif not has_df:
-                chunk = (
-                    [remainder, pf[rg_idx_start:rg_idx].to_pandas()]
-                    if remainder is not None
-                    else pf[rg_idx_start:rg_idx].to_pandas()
-                )
-            else:
-                # Both pandas DataFrame and ParquetFile chunks.
-                # If 'remainder' is None, it does not raise trouble for concat
-                # step.
-                chunk = [
-                    remainder,
-                    pf[rg_idx_start:rg_idx].to_pandas(),
-                    df.iloc[df_idx_start:df_idx_end_excl],
-                ]
-            remainder = yield from _iter_df(
-                df=chunk,
-                ordered_on=ordered_on,
-                row_group_size_target=row_group_size_target,
-                distinct_bounds=distinct_bounds,
-                duplicates_on=duplicates_on,
-                yield_remainder=not chunk_idx,
+            has_df = True
+        if rg_idx_end_excl > rg_idx_start:
+            has_pf = True
+        if not has_pf:
+            chunk = (
+                [remainder, df.iloc[df_idx_start:df_idx_end_excl]]
+                if remainder is not None
+                else df.iloc[df_idx_start:df_idx_end_excl]
             )
-            df_idx_start = df_idx_end_excl
-            if isinstance(row_group_size_target, str):
-                next_period_start = _chunk_last_ts.ceil(row_group_size_target)
-            rg_idx_start = rg_idx
-            chunk_n_rows = 0 if remainder is None else len(remainder)
-            has_pf = has_df = 0
+        elif not has_df:
+            chunk = (
+                [remainder, pf[rg_idx_start:rg_idx].to_pandas()]
+                if remainder is not None
+                else pf[rg_idx_start:rg_idx].to_pandas()
+            )
+        else:
+            # Both pandas DataFrame and ParquetFile chunks.
+            # If 'remainder' is None, it does not raise trouble for concat
+            # step.
+            chunk = [
+                remainder,
+                pf[rg_idx_start:rg_idx].to_pandas(),
+                df.iloc[df_idx_start:df_idx_end_excl],
+            ]
+        remainder = yield from _iter_df(
+            df=chunk,
+            ordered_on=ordered_on,
+            # /!\ Here, reuse algo similar to fastparquet when yielding
+            # remaining, calculate actual row_group_size to equilibrate
+            # number of rows in last rg.
+            # Or calculate directly row group offsets?
+            row_group_size_target=list(range(len(chunk), step=row_group_size_target))
+            if max_n_irgs or chunk_countdown
+            else row_group_size_target,
+            distinct_bounds=distinct_bounds,
+            duplicates_on=duplicates_on,
+            yield_remainder=not chunk_countdown,  # yield last chunk
+        )
+        df_idx_start = df_idx_end_excl
+        rg_idx_start = rg_idx_end_excl
+        has_pf = has_df = False
+
+
+#    for chunk_idx, df_idx_end_excl in enumerate(chunk_counter, start=-len(chunk_counter)):
+#        # 'chunk_idx' will be 0 when loop is over.
+#        if df_idx_end_excl > _df_idx_start:
+#            # Possible DataFrame contribution to chunk.
+#            chunk_n_rows += df_idx_end_excl - 1 - _df_idx_start
+#            has_df += 1
+#        if is_mixed_chunk:
+#            # Add ParquetFile contribution to chunk.
+#            chunk_n_rows += pf[rg_idx].num_rows
+#            has_pf += 1
+#            rg_idx += 1
+#
+#        _df_idx_start = df_idx_end_excl
+#        is_mixed_chunk = not is_mixed_chunk
+#
+#        if (
+#            chunk_n_rows >= row_group_size_target
+#            if isinstance(row_group_size_target, int)
+#            else (_chunk_last_ts := df.loc[:, ordered_on].iloc[df_idx_end_excl - 1])
+#            >= next_period_start
+#        ) or not chunk_idx:
+#             if not has_pf:
+#                chunk = (
+#                    [remainder, df.iloc[df_idx_start:df_idx_end_excl]]
+#                    if remainder is not None
+#                    else df.iloc[df_idx_start:df_idx_end_excl]
+#                )
+#            elif not has_df:
+#                chunk = (
+#                    [remainder, pf[rg_idx_start:rg_idx].to_pandas()]
+#                    if remainder is not None
+#                    else pf[rg_idx_start:rg_idx].to_pandas()
+#                )
+#            else:
+#                # Both pandas DataFrame and ParquetFile chunks.
+#                # If 'remainder' is None, it does not raise trouble for concat
+#                # step.
+#                chunk = [
+#                    remainder,
+#                    pf[rg_idx_start:rg_idx].to_pandas(),
+#                    df.iloc[df_idx_start:df_idx_end_excl],
+#                ]
+#            remainder = yield from _iter_df(
+#                # /!\ Here, reuse algo similar to fastparquet when yielding
+#                # remaining, calculate actual row_group_size to equilibrate
+#                # number of rows in last rg.
+#                # Or calculate directly row group offsets?
+#                df=chunk,
+#                ordered_on=ordered_on,
+#                row_group_size_target=row_group_size_target,
+#                distinct_bounds=distinct_bounds,
+#                duplicates_on=duplicates_on,
+#                yield_remainder=not chunk_idx,
+#            )
+#            df_idx_start = df_idx_end_excl
+#            if isinstance(row_group_size_target, str):
+#                next_period_start = _chunk_last_ts.ceil(row_group_size_target)
+#            rg_idx_start = rg_idx
+#            chunk_n_rows = 0 if remainder is None else len(remainder)
+#            has_pf = has_df = 0
