@@ -107,6 +107,7 @@ class NRowsPattern(RGSizePattern):
         self,
         pf: ParquetFile,
         df_ordered_on: Series,
+        df_idx_tmrg_starts: NDArray,
         df_idx_tmrg_ends_excl: NDArray,
         row_group_size_target: int,
         max_n_irgs: Union[int, None] = None,
@@ -120,6 +121,8 @@ class NRowsPattern(RGSizePattern):
             Input ParquetFile.
         df_ordered_on : Series
             Values of ordered column in DataFrame.
+        df_idx_tmrg_starts : NDArray
+            Start indices (inclusive) in DataFrame for each row group overlap.
         df_idx_tmrg_ends_excl : NDArray
             End indices (exclusive) in DataFrame for each row group overlap.
         row_group_size_target : int
@@ -132,6 +135,7 @@ class NRowsPattern(RGSizePattern):
         self.n_rgs = len(self.rg_n_rows)
         self.df_ordered_on = df_ordered_on
         self.df_n_rows = len(self.df_ordered_on)
+        self.df_idx_tmrg_starts = df_idx_tmrg_starts
         self.df_idx_tmrg_ends_excl = df_idx_tmrg_ends_excl
         self.rg_size_target = row_group_size_target
         self.min_size = int(row_group_size_target * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
@@ -148,6 +152,52 @@ class NRowsPattern(RGSizePattern):
 
         """
         return self.rg_n_rows < self.min_size
+
+    def get_fragmentation_risk(
+        self,
+        indices_overlap: NDArray,
+        indices_enlarged: NDArray,
+    ) -> NDArray:
+        """
+        Check which enlarged regions risk fragmentation.
+
+        An overlap region risks fragmentation if the total number of rows (from row
+        groups and DataFrame chunk) is above min_size, potentially creating a complete
+        row group that would split a region of incomplete row groups.
+
+        Parameters
+        ----------
+        indices_overlap : NDArray
+            Array of shape (m, 2) containing start and end indices of overlap regions.
+        indices_enlarged : NDArray
+            Array of shape (n, 2) containing start and end indices of enlarged regions.
+
+        Returns
+        -------
+        NDArray
+            Boolean array of length n indicating which enlarged regions contain
+            overlap regions that risk creating fragmentation when merged.
+
+        """
+        # Step 1: For each overlap region, compute total rows (rg + df chunk)
+        # and compare to min_size for risk of fragmentation.
+        cumsum_rg_rows = cumsum(self.rg_n_rows)
+        rg_rows_region_end = cumsum_rg_rows[indices_overlap[:, 1] - 1]
+        rg_rows_region_start = (
+            cumsum_rg_rows[indices_overlap[:, 0]] - cumsum_rg_rows[indices_overlap[0, 0]]
+        )
+        rg_rows_per_region = rg_rows_region_end - rg_rows_region_start
+        df_rows_per_region = (
+            self.df_idx_tmrg_ends_excl[indices_overlap[:, 1] - 1]
+            - self.df_idx_tmrg_starts[indices_overlap[:, 0]]
+        )
+        overlap_has_risk = rg_rows_per_region + df_rows_per_region >= self.min_size
+
+        # Step 2: Map risks to enlarged regions.
+        cumsum_risks = cumsum(overlap_has_risk)
+        risks_at_end = cumsum_risks[indices_enlarged[:, 1] - 1]
+        risks_at_start = cumsum_risks[indices_enlarged[:, 0]] - cumsum_risks[indices_enlarged[0, 0]]
+        return (risks_at_end - risks_at_start) > 0
 
     def consolidate_merge_plan(
         self,
@@ -323,7 +373,16 @@ def get_merge_regions(
     is_incomplete = rg_size_pattern.is_incomplete()
     indices_enlarged = get_region_indices(is_overlap | is_incomplete)
 
-    # Step 2: Filter out enlarged candidates based on multiple criteria.
+    # Step 2: keep only enlarged regions that overlap with at least one overlap
+    # region.
+    is_overlapping_with_overlap = np_any(
+        (indices_enlarged[:, None, 0] <= indices_overlap[None, :, 1])
+        & (indices_enlarged[:, None, 1] >= indices_overlap[None, :, 0]),
+        axis=1,  # Note: axis=1 to reduce along columns (overlap regions)
+    )
+    indices_enlarged = indices_enlarged[is_overlapping_with_overlap]
+
+    # Step 3: Filter out enlarged candidates based on multiple criteria.
     # Get number of incomplete row groups at region boundaries.
     # Offset starts by first region's start value.
     cumsum_incomplete = cumsum(is_incomplete)
@@ -331,31 +390,28 @@ def get_merge_regions(
     n_irgs_region_start = (
         cumsum_incomplete[indices_enlarged[:, 0]] - cumsum_incomplete[indices_enlarged[0, 0]]
     )
-    # Get which enlarged regions contain overlap regions that risk
-    # fragmentation.
+    # Get which enlarged regions contain overlap regions that risk fragmentation.
     fragmentation_risk = rg_size_pattern.get_fragmentation_risk(
         indices_overlap=indices_overlap,
         indices_enlarged=indices_enlarged,
     )
-    # Keep regions with too many incomplete row groups or with fragmentation
-    # risk.
+    # Keep regions with too many incomplete row groups or with fragmentation risk.
     indices_enlarged = indices_enlarged[
         ((n_irgs_region_end - n_irgs_region_start) >= max_n_irgs) | fragmentation_risk
     ]
 
-    # Step 3: compute the reduced candidate regions
-    indices_reduced = get_region_indices(is_overlap)
-
-    # Step 4: Filter out reduced candidates based on their overlap with the
-    # enlarged regions.
+    # Step 4: Some enlarged sections have been filtered out during previous
+    # step. At this step, overlap regions that do not overlap with retained
+    # enlarged regions are added back in the regions to merge (without their
+    # possibly incomplete neighbor row groups).
     is_overlapping_with_enlarged = np_any(
-        (indices_enlarged[:, None, 0] <= indices_reduced[None, :, 0])
-        & (indices_enlarged[:, None, 1] >= indices_reduced[None, :, 1]),
+        (indices_enlarged[:, None, 0] <= indices_overlap[None, :, 0])
+        & (indices_enlarged[:, None, 1] >= indices_overlap[None, :, 1]),
         axis=0,
     )
-    indices_reduced = indices_reduced[~is_overlapping_with_enlarged]
+    indices_overlap = indices_overlap[~is_overlapping_with_enlarged]
 
-    return vstack((indices_reduced, indices_enlarged))
+    return vstack((indices_overlap, indices_enlarged))
 
 
 def _rgst_as_str__irgs_analysis(
