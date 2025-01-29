@@ -98,9 +98,9 @@ class RGSizePattern(ABC):
         pass
 
 
-class IntScheme(RGSizePattern):
+class NRowsPattern(RGSizePattern):
     """
-    Row group scheme based on integer size target.
+    Row group size pattern based on a target number of rows per row group.
     """
 
     def __init__(
@@ -207,9 +207,9 @@ class IntScheme(RGSizePattern):
         )
 
 
-class StrScheme(RGSizePattern):
+class TimePeriodPattern(RGSizePattern):
     """
-    Row group scheme based on time period target.
+    Row group size pattern based on a time period target per row group.
     """
 
     def __init__(self, row_group_period: str):
