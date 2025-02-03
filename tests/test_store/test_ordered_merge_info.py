@@ -111,9 +111,9 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
                 [
                     [0, 2],  # region 1: indices 0-1
                     [2, 5],  # region 2: indices 2-4
-                    [4, 6],
+                    [4, 6],  # region 3: indices 4-5
                 ],
-            ),  # region 3: indices 4-5
+            ),
             array([3, 12, 11]),  # 3-0=3, 15-3=12, 21-10=11
         ),
         (
@@ -122,9 +122,9 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             array(
                 [
                     [1, 4],  # one region: indices 1-3
-                    [2, 5],
+                    [2, 5],  # one region: indices 2-4
                 ],
-            ),  # one region: indices 2-4
+            ),
             array([2, 2]),  # 2-1=1, 3-1=2
         ),
     ],
@@ -201,15 +201,15 @@ def test_get_region_start_end_delta(
             array(
                 [
                     [0, 2],  # region 1: indices 0-1
-                    [2, 4],
+                    [2, 4],  # region 2: indices 2-3
                 ],
-            ),  # region 2: indices 2-3
+            ),
             array(
                 [
                     [0, 2],  # overlap 1: indices 0-1
-                    [2, 4],
+                    [2, 4],  # overlap 2: indices 2-3
                 ],
-            ),  # overlap 2: indices 2-3
+            ),
             array([True, True]),  # both regions exceed min_size
         ),
         (
@@ -223,16 +223,16 @@ def test_get_region_start_end_delta(
             array(
                 [
                     [0, 3],  # region 1: indices 0-2
-                    [1, 4],
+                    [1, 4],  # region 2: indices 1-3
                 ],
-            ),  # region 2: indices 1-3
+            ),
             array(
                 [
                     [0, 2],  # overlap 1: indices 0-1
                     [1, 3],  # overlap 2: indices 1-2
-                    [2, 4],
+                    [2, 4],  # overlap 3: indices 2-3
                 ],
-            ),  # overlap 3: indices 2-3
+            ),
             array([True, True]),  # both regions have risky overlaps
         ),
     ],
