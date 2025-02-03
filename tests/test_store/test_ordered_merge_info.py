@@ -10,19 +10,284 @@ from typing import List
 import pytest
 from numpy import array
 from numpy import array_equal
+from numpy import cumsum
+from numpy import empty
 from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.store.ordered_merge_info import _rgst_as_int_merge_region_map
+from oups.store.ordered_merge_info import NRowsPattern
 from oups.store.ordered_merge_info import _rgst_as_str__merge_plan
 from oups.store.ordered_merge_info import analyze_chunks_to_merge
+from oups.store.ordered_merge_info import get_merge_regions
+from oups.store.ordered_merge_info import get_region_indices_of_same_values
+from oups.store.ordered_merge_info import get_region_indices_of_true_values
+from oups.store.ordered_merge_info import get_region_start_end_delta
 from tests.test_store.conftest import create_parquet_file
 
 
 REF_D = "2020/01/01 "
+
+
+@pytest.mark.parametrize(
+    "mask, expected",
+    [
+        (  # Case 1: Entire mask is single region.
+            array([True, True, True]),
+            array([[0, 3]]),
+        ),
+        (  # Case 2: A mask with two regions.
+            array([False, True, True, False, True]),
+            array([[1, 3], [4, 5]]),
+        ),
+        (  # Case 3: no region.
+            array([False, False, False]),
+            empty((0, 2), dtype=int),
+        ),
+        (  # Case 4: One region at start, one region at end.
+            array([True, False, True]),
+            array([[0, 1], [2, 3]]),
+        ),
+    ],
+)
+def test_get_region_indices_of_true_values(mask: NDArray, expected: NDArray) -> None:
+    """
+    Test get_region_indices_of_true_values to verify that it correctly returns the start
+    and end indices (as [start, end) pairs) for each region of contiguous True values in
+    a boolean array.
+    """
+    result = get_region_indices_of_true_values(mask)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "ints, expected",
+    [
+        (  # Case 1: 2 regions of same values.
+            array([1, 1, 2]),
+            array([[0, 2], [2, 3]]),
+        ),
+        (  # Case 2: 1 region of same values.
+            array([1, 1, 1]),
+            array([[0, 3]]),
+        ),
+        (  # Case 3: 3 region of one value.
+            array([1, 2, 3]),
+            array([[0, 1], [1, 2], [2, 3]]),
+        ),
+    ],
+)
+def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> None:
+    """
+    Test get_region_indices_of_same_values to verify that it correctly returns the start
+    and end indices (as [start, end) pairs) for each region made of same values in an
+    array of int.
+    """
+    result = get_region_indices_of_same_values(ints)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "test_id, values, indices, expected",
+    [
+        (
+            "single_region_at_first",
+            array([1, 2, 3, 4]),  # values, cumsum = [1,3,6,10]
+            array([[0, 3]]),  # one region: indices 0-2
+            array([6]),  # 1+2+3 = 6-0 = 6
+        ),
+        (
+            "single_region_at_second",
+            array([1, 2, 3, 4, 5]),  # values, cumsum = [1,3,6,10,15]
+            array([[1, 4]]),  # one region: indices 1-3
+            array([9]),  # 2+3+4 = 10-1 = 9
+        ),
+        (
+            "multiple_overlapping_regions",
+            array([1, 2, 3, 4, 5, 6]),  # values, cumsum = [1,3,6,10,15,21]
+            array(
+                [
+                    [0, 2],  # region 1: indices 0-1
+                    [2, 5],  # region 2: indices 2-4
+                    [4, 6],
+                ],
+            ),  # region 3: indices 4-5
+            array([3, 12, 11]),  # 3-0=3, 15-3=12, 21-10=11
+        ),
+        (
+            "boolean_values",
+            array([0, 1, 0, 1, 1, 0]),  # values, cumsum = [0,1,1,2,3,3]
+            array(
+                [
+                    [1, 4],  # one region: indices 1-3
+                    [2, 5],
+                ],
+            ),  # one region: indices 2-4
+            array([2, 2]),  # 2-1=1, 3-1=2
+        ),
+    ],
+)
+def test_get_region_start_end_delta(
+    test_id: str,
+    values: NDArray,
+    indices: NDArray,
+    expected: NDArray,
+) -> None:
+    """
+    Test get_region_start_end_delta function with various inputs.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    values : NDArray
+        Input array of values.
+    indices : NDArray
+        Array of shape (n, 2) containing start and end indices of regions.
+    expected : NDArray
+        Expected output containing sums for each region.
+
+    """
+    m_values = cumsum(values)
+    result = get_region_start_end_delta(m_values, indices)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "test_id, rg_n_rows, df_n_rows, df_idx_tmrg_starts, df_idx_tmrg_ends_excl, "
+    "row_group_size_target, irgs_allowed, indices_enlarged, indices_overlap, "
+    "expected",
+    [
+        (
+            "no_fragmentation_risk",
+            array([50, 50, 50]),  # rg_n_rows
+            100,  # df_n_rows
+            array([0, 10, 20]),  # df_idx_tmrg_starts
+            array([5, 15, 25]),  # df_idx_tmrg_ends_excl
+            200,  # min_size = 0.8*row_group_size_target = 160
+            True,  # irgs_allowed
+            array([[0, 3]]),  # one enlarged region covering all row groups
+            array(
+                [
+                    [0, 2],  # first overlap region: rgs 0-1
+                    [1, 3],
+                ],
+            ),  # second overlap region: rgs 1-2
+            array([False]),  # total rows 1 = 100 (rg) + 10 (df) < min_size
+            # total rows 2 = 50 (rg) + 5 (df) < min_size
+        ),
+        (
+            "single_fragmentation_risk",
+            array([100, 100, 50]),  # rg_n_rows
+            100,  # df_n_rows
+            array([0, 10, 20]),  # df_idx_tmrg_starts
+            array([5, 15, 25]),  # df_idx_tmrg_ends_excl
+            150,  # min_size = 0.8*row_group_size_target = 120
+            True,  # irgs_allowed
+            array([[0, 3]]),  # one enlarged region covering all row groups
+            array([[0, 3]]),  # one overlap region: rgs 0-1
+            array([True]),  # total rows = 250 (rg) + 10 (df) > min_size
+        ),
+        (
+            "multiple_regions_mixed_risks",
+            array([100, 50, 100, 50]),  # rg_n_rows
+            100,  # df_n_rows
+            array([0, 10, 20, 30]),  # df_idx_tmrg_starts
+            array([5, 15, 25, 35]),  # df_idx_tmrg_ends_excl
+            150,  # min_size
+            True,  # irgs_allowed
+            array(
+                [
+                    [0, 2],  # region 1: indices 0-1
+                    [2, 4],
+                ],
+            ),  # region 2: indices 2-3
+            array(
+                [
+                    [0, 2],  # overlap 1: indices 0-1
+                    [2, 4],
+                ],
+            ),  # overlap 2: indices 2-3
+            array([True, True]),  # both regions exceed min_size
+        ),
+        (
+            "overlapping_regions",
+            array([50, 100, 100, 50]),  # rg_n_rows
+            100,  # df_n_rows
+            array([0, 10, 20, 30]),  # df_idx_tmrg_starts
+            array([5, 15, 25, 35]),  # df_idx_tmrg_ends_excl
+            200,  # min_size
+            True,  # irgs_allowed
+            array(
+                [
+                    [0, 3],  # region 1: indices 0-2
+                    [1, 4],
+                ],
+            ),  # region 2: indices 1-3
+            array(
+                [
+                    [0, 2],  # overlap 1: indices 0-1
+                    [1, 3],  # overlap 2: indices 1-2
+                    [2, 4],
+                ],
+            ),  # overlap 3: indices 2-3
+            array([True, True]),  # both regions have risky overlaps
+        ),
+    ],
+)
+def test_NRowsPattern_get_fragmentation_risk(
+    test_id: str,
+    rg_n_rows: NDArray,
+    df_n_rows: int,
+    df_idx_tmrg_starts: NDArray,
+    df_idx_tmrg_ends_excl: NDArray,
+    row_group_size_target: int,
+    irgs_allowed: bool,
+    indices_enlarged: NDArray,
+    indices_overlap: NDArray,
+    expected: NDArray,
+) -> None:
+    """
+    Test get_fragmentation_risk method with various inputs.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    rg_n_rows : NDArray
+        Number of rows in each row group.
+    df_idx_tmrg_starts : NDArray
+        Start indices in DataFrame for each row group overlap.
+    df_idx_tmrg_ends_excl : NDArray
+        End indices (exclusive) in DataFrame for each row group overlap.
+    row_group_size_target : int
+        Target size for row groups.
+    irgs_allowed : bool
+        Whether incomplete row groups are allowed.
+    indices_enlarged : NDArray
+        Array of shape (n, 2) containing start and end indices of enlarged
+        regions.
+    indices_overlap : NDArray
+        Array of shape (m, 2) containing start and end indices of overlap regions.
+    expected : NDArray
+        Expected output indicating which enlarged regions have fragmentation risk.
+
+    """
+    pattern = NRowsPattern(
+        rg_n_rows=rg_n_rows,
+        df_n_rows=df_n_rows,
+        df_idx_tmrg_starts=df_idx_tmrg_starts,
+        df_idx_tmrg_ends_excl=df_idx_tmrg_ends_excl,
+        row_group_size_target=row_group_size_target,
+        irgs_allowed=irgs_allowed,
+    )
+    result = pattern.get_fragmentation_risk(
+        indices_overlap=indices_overlap,
+        indices_enlarged=indices_enlarged,
+    )
+    assert array_equal(result, expected)
 
 
 @pytest.mark.parametrize(
@@ -102,7 +367,7 @@ def test_rgst_as_int_merge_region_map(
 
     """
     # Act
-    splits_starts, splits_ends = _rgst_as_int_merge_region_map(
+    splits_starts, splits_ends = get_merge_regions(
         rg_n_rows=rg_n_rows,
         row_group_size_target=row_group_size_target,
         df_idx_tmrg_starts=df_idx_tmrg_starts,

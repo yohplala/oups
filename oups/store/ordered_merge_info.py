@@ -12,7 +12,7 @@ from typing import List, Optional, Tuple, Union
 from fastparquet import ParquetFile
 from numpy import any as np_any
 from numpy import array
-from numpy import concatenate
+from numpy import column_stack
 from numpy import cumsum
 from numpy import diff
 from numpy import flatnonzero
@@ -20,7 +20,9 @@ from numpy import int8
 from numpy import nonzero
 from numpy import r_
 from numpy import searchsorted
+from numpy import unique
 from numpy import vstack
+from numpy import zeros
 from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import Series
@@ -34,6 +36,74 @@ LEFT = "left"
 RIGHT = "right"
 MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
 MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
+
+
+def get_region_indices_of_true_values(mask: NDArray) -> NDArray:
+    """
+    Compute the start and end indices of each connected components in `mask`.
+
+    Taken from https://stackoverflow.com/questions/68514880/finding-contiguous-regions-in-a-1d-boolean-array.
+
+    Parameters
+    ----------
+    mask : NDArray
+        A 1d numpy array of dtype `bool`.
+
+    Returns
+    -------
+    NDArray
+        A numpy array containing the list of the start and end indices of each
+        connected components in `mask`.
+
+    """
+    return flatnonzero(diff(r_[int8(0), mask.astype(int8), int8(0)])).reshape(-1, 2)
+
+
+def get_region_indices_of_same_values(ints: NDArray) -> NDArray:
+    """
+    Compute the start and end indices of regions made of same values in `ints`.
+
+    Parameters
+    ----------
+    ints : NDArray
+        A 1d numpy array of dtype `int`.
+
+    Returns
+    -------
+    NDArray
+        A numpy array containing the list of the start and end indices of
+        regions made of same values in `ints`.
+
+    """
+    boundaries = r_[0, flatnonzero(diff(ints)) + 1, len(ints)]
+    return column_stack((boundaries[:-1], boundaries[1:]))
+
+
+def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
+    """
+    Get difference between values at end and start of each region.
+
+    Parameters
+    ----------
+    m_values : NDArray
+        Array of monotonic values, such as coming from a cumulative sum.
+    indices : NDArray
+        Array of shape (n, 2) containing start included and end excluded indices
+        of regions.
+
+    Returns
+    -------
+    NDArray
+        Array of length n containing the difference between values at end and
+        start of each region.
+
+    """
+    if indices[0, 0] == 0:
+        start_values = m_values[indices[:, 0] - 1]
+        start_values[0] = 0
+        return m_values[indices[:, 1] - 1] - start_values
+    else:
+        return m_values[indices[:, 1] - 1] - m_values[indices[:, 0] - 1]
 
 
 class RGSizePattern(ABC):
@@ -61,15 +131,21 @@ class RGSizePattern(ABC):
         indices_enlarged: NDArray,
     ) -> NDArray:
         """
-        Check which enlarged regions has overlap regions with fragmentation risk.
+        Check which enlarged regions get fragmentation risk from overlaps.
+
+        Fragmentation in an existing set of row groups is when a set of
+        contiguous incomplete row groups gets split by the addition of complete
+        row groups in the middle of it.
 
         Parameters
         ----------
         indices_overlap : NDArray
-            Array of shape (m, 2) containing start and end indices of overlap regions.
+            Array of shape (m, 2) containing start and end indices of overlap
+            regions.
         indices_enlarged : NDArray
-            Array of shape (n, 2) containing start and end indices of enlarged
-            regions. Enlarged regions contain one or several overlap regions.
+            Array of shape (n, 2) containing start included and end excluded
+            indices of enlarged regions. Enlarged regions contain one or several
+            overlap regions.
 
         Returns
         -------
@@ -90,9 +166,10 @@ class RGSizePattern(ABC):
         Returns
         -------
         Tuple[List[int], List[int]]
-            - First list: indices in ParquetFile describing where ends each set
-              of row groups.
-            - Second list: indices in DataFrame describing where ends each chunk.
+            - First list: indices in ParquetFile describing where ends (excluded)
+              each set of row groups.
+            - Second list: indices in DataFrame describing where ends (excluded)
+              each chunk.
 
         """
         pass
@@ -105,41 +182,40 @@ class NRowsPattern(RGSizePattern):
 
     def __init__(
         self,
-        pf: ParquetFile,
-        df_ordered_on: Series,
+        rg_n_rows: NDArray,
+        df_n_rows: int,
         df_idx_tmrg_starts: NDArray,
         df_idx_tmrg_ends_excl: NDArray,
         row_group_size_target: int,
-        max_n_irgs: Union[int, None] = None,
+        irgs_allowed: bool,
     ):
         """
         Initialize scheme with target size.
 
         Parameters
         ----------
-        pf : ParquetFile
-            Input ParquetFile.
-        df_ordered_on : Series
-            Values of ordered column in DataFrame.
+        rg_n_rows : NDArray
+            Number of rows in each row group.
+        df_n_rows : int
+            Number of rows in DataFrame.
         df_idx_tmrg_starts : NDArray
             Start indices (inclusive) in DataFrame for each row group overlap.
         df_idx_tmrg_ends_excl : NDArray
             End indices (exclusive) in DataFrame for each row group overlap.
         row_group_size_target : int
             Target number of rows for each row group.
-        max_n_irgs : Union[int, None]
-            Maximum number of incomplete row groups allowed.
+        irgs_allowed : boolean
+            Whether incomplete row groups are allowed.
 
         """
-        self.rg_n_rows = array([rg.num_rows for rg in pf.row_groups])
+        self.rg_n_rows = rg_n_rows
         self.n_rgs = len(self.rg_n_rows)
-        self.df_ordered_on = df_ordered_on
-        self.df_n_rows = len(self.df_ordered_on)
+        self.df_n_rows = df_n_rows
         self.df_idx_tmrg_starts = df_idx_tmrg_starts
         self.df_idx_tmrg_ends_excl = df_idx_tmrg_ends_excl
         self.rg_size_target = row_group_size_target
         self.min_size = int(row_group_size_target * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
-        self.max_n_irgs = max_n_irgs
+        self.irgs_allowed = irgs_allowed
 
     def is_incomplete(self) -> NDArray:
         """
@@ -161,16 +237,19 @@ class NRowsPattern(RGSizePattern):
         """
         Check which enlarged regions risk fragmentation.
 
-        An overlap region risks fragmentation if the total number of rows (from row
-        groups and DataFrame chunk) is above min_size, potentially creating a complete
-        row group that would split a region of incomplete row groups.
+        An overlap region risks fragmentation if the total number of rows (from
+        row groups and DataFrame chunk) is above 'min_size', potentially
+        creating a complete row group that would split a region of contiguous
+        incomplete row groups.
 
         Parameters
         ----------
         indices_overlap : NDArray
-            Array of shape (m, 2) containing start and end indices of overlap regions.
+            Array of shape (m, 2) containing start and end indices of overlap
+            regions.
         indices_enlarged : NDArray
-            Array of shape (n, 2) containing start and end indices of enlarged regions.
+            Array of shape (n, 2) containing start and end indices of enlarged
+            regions (n <= m).
 
         Returns
         -------
@@ -181,23 +260,35 @@ class NRowsPattern(RGSizePattern):
         """
         # Step 1: For each overlap region, compute total rows (rg + df chunk)
         # and compare to min_size for risk of fragmentation.
-        cumsum_rg_rows = cumsum(self.rg_n_rows)
-        rg_rows_region_end = cumsum_rg_rows[indices_overlap[:, 1] - 1]
-        rg_rows_region_start = (
-            cumsum_rg_rows[indices_overlap[:, 0]] - cumsum_rg_rows[indices_overlap[0, 0]]
+        rg_rows_per_overlap_regions = get_region_start_end_delta(
+            m_values=cumsum(self.rg_n_rows),
+            indices=indices_overlap,
         )
-        rg_rows_per_region = rg_rows_region_end - rg_rows_region_start
-        df_rows_per_region = (
-            self.df_idx_tmrg_ends_excl[indices_overlap[:, 1] - 1]
-            - self.df_idx_tmrg_starts[indices_overlap[:, 0]]
+        df_rows_per_overlap_regions = get_region_start_end_delta(
+            m_values=self.df_idx_tmrg_ends_excl - self.df_idx_tmrg_starts - 1,
+            indices=indices_overlap,
         )
-        overlap_has_risk = rg_rows_per_region + df_rows_per_region >= self.min_size
+        # 'overlap_has_risk' is an array of length the number of overlap
+        # regions.
+        overlap_has_risk = (
+            rg_rows_per_overlap_regions + df_rows_per_overlap_regions >= self.min_size
+        )
 
         # Step 2: Map risks to enlarged regions.
-        cumsum_risks = cumsum(overlap_has_risk)
-        risks_at_end = cumsum_risks[indices_enlarged[:, 1] - 1]
-        risks_at_start = cumsum_risks[indices_enlarged[:, 0]] - cumsum_risks[indices_enlarged[0, 0]]
-        return (risks_at_end - risks_at_start) > 0
+        # For each retained overlap region with fragmentation risk, find which
+        # enlarged region contains its start.
+        overlap_with_fragmentation_risk = zeros(len(indices_enlarged), dtype=bool)
+        overlap_with_fragmentation_risk[
+            unique(
+                searchsorted(
+                    indices_enlarged[:, 0],
+                    indices_overlap[overlap_has_risk][:, 0],
+                    side="right",
+                ),
+            )
+            - 1
+        ] = True
+        return overlap_with_fragmentation_risk
 
     def consolidate_merge_plan(
         self,
@@ -219,9 +310,9 @@ class NRowsPattern(RGSizePattern):
             return [0], [self.df_n_rows]
 
         min_n_rows = (
-            int(self.min_size * MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS)
-            if self.max_n_irgs == 0
-            else self.min_size
+            self.min_size
+            if self.irgs_allowed
+            else int(self.min_size * MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS)
         )
         # Consolidation loop is processed backward.
         # This makes possible to manage a 'max_n_irgs' set to 0 (meaning no
@@ -307,33 +398,12 @@ class TimePeriodPattern(RGSizePattern):
         # Find where consecutive pairs are different
         is_different = (pairs[:, 1:] != pairs[:, :-1]).any(axis=0)
         # Get indices where changes occur (including first and last)
-        change_indices = concatenate(([0], nonzero(is_different)[0] + 1))
+        change_indices = r_[0, nonzero(is_different)[0] + 1]
 
         return (
             rg_idx_tmrg_ends_excl[change_indices].tolist(),
             df_idx_period_ends_excl[change_indices].tolist(),
         )
-
-
-def get_region_indices(mask: NDArray) -> NDArray:
-    """
-    Compute the start and end indices of each connected components in `mask`.
-
-    Taken from https://stackoverflow.com/questions/68514880/finding-contiguous-regions-in-a-1d-boolean-array.
-
-    Parameters
-    ----------
-    mask : NDArray
-        A 1d numpy array of dtype `bool`.
-
-    Returns
-    -------
-    NDArray
-        A numpy array containing the list of the start and end indices of each
-        connected components in `mask`.
-
-    """
-    return flatnonzero(diff(r_[int8(0), mask.astype(int8), int8(0)])).reshape(-1, 2)
 
 
 def get_merge_regions(
@@ -369,9 +439,9 @@ def get_merge_regions(
     """
     # Step 1: assess start indices (included) and end indices (excluded) of
     # regions.
-    indices_overlap = get_region_indices(is_overlap)
+    indices_overlap = get_region_indices_of_true_values(is_overlap)
     is_incomplete = rg_size_pattern.is_incomplete()
-    indices_enlarged = get_region_indices(is_overlap | is_incomplete)
+    indices_enlarged = get_region_indices_of_true_values(is_overlap | is_incomplete)
 
     # Step 2: keep only enlarged regions that overlap with at least one overlap
     # region.
@@ -648,7 +718,7 @@ def _rgst_as_str__merge_plan(
     # Find where consecutive pairs are different.
     is_different = (pairs[:, 1:] != pairs[:, :-1]).any(axis=0)
     # Get indices where changes occur (including first and last).
-    change_indices = concatenate(([0], nonzero(is_different)[0] + 1))
+    change_indices = r_[0, nonzero(is_different)[0] + 1]
 
     return (
         rg_idx_tmrg_ends_excl[change_indices].tolist(),
