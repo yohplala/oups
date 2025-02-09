@@ -5,7 +5,7 @@ Created on Thu Nov 14 18:00:00 2024.
 @author: yoh
 
 """
-from typing import List
+from typing import List, Tuple
 
 import pytest
 from numpy import array
@@ -19,6 +19,7 @@ from pandas import Timestamp
 from pandas import date_range
 
 from oups.store.ordered_merge_info import NRowsPattern
+from oups.store.ordered_merge_info import _get_atomic_merge_regions
 from oups.store.ordered_merge_info import _rgst_as_str__merge_plan
 from oups.store.ordered_merge_info import analyze_chunks_to_merge
 from oups.store.ordered_merge_info import get_merge_regions
@@ -29,6 +30,149 @@ from tests.test_store.conftest import create_parquet_file
 
 
 REF_D = "2020/01/01 "
+
+
+@pytest.mark.parametrize(
+    "test_id, rg_mins, rg_maxs, df_ordered_on, drop_duplicates, expected",
+    [
+        (
+            "no_gaps_rg_df",
+            [10, 20, 30],  # rg_mins
+            [15, 25, 35],  # rg_maxs
+            Series([12, 22, 32]),  # df_ordered_on
+            True,
+            (
+                array([0, 1, 2]),  # rg_idx_starts
+                array([1, 2, 3]),  # rg_idx_ends_excl
+                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+        (
+            "gap_at_start_df_leading_rg",
+            [20, 30],  # rg_mins
+            [25, 35],  # rg_maxs
+            Series([5, 22, 32]),  # df_ordered_on
+            True,
+            (
+                array([0, 0, 1]),  # rg_idx_starts
+                array([0, 1, 2]),  # rg_idx_ends_excl
+                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+        (
+            "gap_in_middle_df_not_overlapping_rg",
+            [10, 30],  # rg_mins
+            [15, 35],  # rg_maxs
+            Series([12, 22, 32]),  # df_ordered_on
+            True,
+            (
+                array([0, 1, 1]),  # rg_idx_starts
+                array([1, 1, 2]),  # rg_idx_ends_excl
+                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+        (
+            "gap_at_end_df_trailing_rg",
+            [10, 20],  # rg_mins
+            [15, 25],  # rg_maxs
+            Series([12, 22, 32]),  # df_ordered_on
+            True,
+            (
+                array([0, 1, 2]),  # rg_idx_starts
+                array([1, 2, 2]),  # rg_idx_ends_excl
+                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+        (
+            "gap_at_start_rg_leading_df",
+            [0, 20, 30],  # rg_mins
+            [5, 23, 33],  # rg_maxs
+            Series([22, 32]),  # df_ordered_on
+            True,
+            (
+                array([0, 1, 2]),  # rg_idx_starts
+                array([1, 2, 3]),  # rg_idx_ends_excl
+                array([0, 1, 2]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+        (
+            "gap_in_middle_rg_not_overlapping_df",
+            [0, 10, 30],  # rg_mins
+            [5, 15, 35],  # rg_maxs
+            Series([2, 32]),  # df_ordered_on
+            True,
+            (
+                array([0, 1, 2]),  # rg_idx_starts
+                array([1, 2, 3]),  # rg_idx_ends_excl
+                array([1, 1, 2]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+        # TODO: work in progress here
+        (
+            "gap_at_end_rg_trailing_df",
+            [10, 20, 30],  # rg_mins
+            [15, 25, 35],  # rg_maxs
+            Series([12, 22]),  # df_ordered_on
+            True,
+            (
+                array([0, 1, 2]),  # rg_idx_starts
+                array([1, 2, 2]),  # rg_idx_ends_excl
+                array([1, 2, 2]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+        (
+            "multiple_gaps_non_overlapping_rg",
+            [20, 40, 43],  # rg_mins
+            [25, 43, 45],  # rg_maxs
+            Series([5, 22, 32, 42, 46, 52]),  # df_ordered_on
+            True,
+            (
+                array([0, 0, 1, 1, 2, 2, 3]),  # rg_idx_starts
+                array([0, 1, 1, 2, 2, 3, 3]),  # rg_idx_ends_excl
+                array([1, 2, 3, 4, 5, 6, 7]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+        (
+            "no_drop_duplicates",
+            [10, 20],  # rg_mins
+            [15, 25],  # rg_maxs
+            Series([15, 22, 32]),  # df_ordered_on - note 15 is duplicate
+            False,
+            (
+                array([0, 1, 2]),  # rg_idx_starts
+                array([1, 2, 2]),  # rg_idx_ends_excl
+                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+    ],
+)
+def test_get_atomic_merge_regions(
+    test_id: str,
+    rg_mins: List,
+    rg_maxs: List,
+    df_ordered_on: Series,
+    drop_duplicates: bool,
+    expected: Tuple[NDArray, NDArray, NDArray],
+) -> None:
+    """
+    Test _get_atomic_merge_regions with various scenarios.
+
+    Test cases cover:
+    - No gaps between regions
+    - Gap at start of DataFrame
+    - Gap in middle
+    - Gap at end
+    - Multiple gaps
+    - Behavior with drop_duplicates=False
+
+    """
+    result = _get_atomic_merge_regions(rg_mins, rg_maxs, df_ordered_on, drop_duplicates)
+    for res, exp in zip(result, expected):
+        print("res:")
+        print(res)
+        print("exp:")
+        print(exp)
+        assert array_equal(res, exp)
 
 
 @pytest.mark.parametrize(
