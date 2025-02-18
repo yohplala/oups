@@ -107,7 +107,6 @@ REF_D = "2020/01/01 "
                 array([1, 1, 2]),  # df_idx_tmrg_ends_excl
             ),
         ),
-        # TODO: work in progress here
         (
             "gap_at_end_rg_trailing_df",
             [10, 20, 30],  # rg_mins
@@ -116,20 +115,32 @@ REF_D = "2020/01/01 "
             True,
             (
                 array([0, 1, 2]),  # rg_idx_starts
-                array([1, 2, 2]),  # rg_idx_ends_excl
+                array([1, 2, 3]),  # rg_idx_ends_excl
                 array([1, 2, 2]),  # df_idx_tmrg_ends_excl
             ),
         ),
         (
-            "multiple_gaps_non_overlapping_rg",
+            "multiple_gaps_df_not_overlapping_rg",
             [20, 40, 43],  # rg_mins
-            [25, 43, 45],  # rg_maxs
+            [25, 42, 45],  # rg_maxs
             Series([5, 22, 32, 42, 46, 52]),  # df_ordered_on
             True,
             (
-                array([0, 0, 1, 1, 2, 2, 3]),  # rg_idx_starts
-                array([0, 1, 1, 2, 2, 3, 3]),  # rg_idx_ends_excl
-                array([1, 2, 3, 4, 5, 6, 7]),  # df_idx_tmrg_ends_excl
+                array([0, 0, 1, 1, 2, 3]),  # rg_idx_starts
+                array([0, 1, 1, 2, 3, 3]),  # rg_idx_ends_excl
+                array([1, 2, 3, 4, 4, 6]),  # df_idx_tmrg_ends_excl
+            ),
+        ),
+        (
+            "no_drop_duplicates_with_gap_and_overlapping_rg",
+            [20, 40, 43],  # rg_mins, 43 overlaps with previous rg max
+            [25, 43, 45],  # rg_maxs
+            Series([5, 22, 32, 43, 46, 52]),  # df_ordered_on - 43 is duplicate
+            False,  # don't drop duplicates - 43 expected to fall in last rg
+            (
+                array([0, 0, 1, 1, 2, 3]),  # rg_idx_starts
+                array([0, 1, 1, 2, 3, 3]),  # rg_idx_ends_excl
+                array([1, 2, 3, 3, 4, 6]),  # df_idx_tmrg_ends_excl
             ),
         ),
         (
@@ -139,11 +150,13 @@ REF_D = "2020/01/01 "
             Series([15, 22, 32]),  # df_ordered_on - note 15 is duplicate
             False,
             (
-                array([0, 1, 2]),  # rg_idx_starts
-                array([1, 2, 2]),  # rg_idx_ends_excl
-                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
+                array([0, 1, 1, 2]),  # rg_idx_starts
+                array([1, 1, 2, 2]),  # rg_idx_ends_excl
+                array([0, 1, 2, 3]),  # df_idx_tmrg_ends_excl
             ),
         ),
+        # work in progress
+        # test with several values in df for a given row group.
     ],
 )
 def test_get_atomic_merge_regions(

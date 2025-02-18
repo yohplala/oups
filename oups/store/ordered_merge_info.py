@@ -583,35 +583,43 @@ def _get_atomic_merge_regions(
     print(f"df_idx_tmrg_ends_excl: {df_idx_tmrg_ends_excl}")
     # Find regions in DataFrame not overlapping with any row group.
     # `amr` for atomic merge region.
-    df_idxs_enlarged = r_[
+    df_interlaces_wo_overlap = r_[
         df_idx_tmrg_starts[0],  # gap at start (0 to first start)
-        df_idx_tmrg_starts[1:] - df_idx_tmrg_ends_excl[:-1],
+        df_idx_tmrg_ends_excl[:-1] - df_idx_tmrg_starts[1:],
         len(df_ordered_on) - df_idx_tmrg_ends_excl[-1],  # gap at end
     ]
-    print(f"df_idxs_enlarged: {df_idxs_enlarged}")
-    amr_idx_non_overlapping = flatnonzero(df_idxs_enlarged)
-    print(f"amr_idx_non_overlapping: {amr_idx_non_overlapping}")
-    rg_idxs = arange(len(rg_mins) + 1)
-    print(f"rg_idxs: {rg_idxs}")
-    if len(amr_idx_non_overlapping) == 0:
+    print(f"df_interlaces_wo_overlap: {df_interlaces_wo_overlap}")
+    rg_idx_df_interlaces_wo_overlap = flatnonzero(df_interlaces_wo_overlap)
+    print(f"rg_idx_df_interlaces_wo_overlap: {rg_idx_df_interlaces_wo_overlap}")
+    rg_idxs_template = arange(len(rg_mins) + 1)
+    # print(f"rg_idxs: {rg_idxs}")
+    if len(rg_idx_df_interlaces_wo_overlap) == 0:
         # No non-overlapping regions in DataFrame
-        return rg_idxs[:-1], rg_idxs[1:], df_idx_tmrg_ends_excl
+        print("No non-overlapping regions in DataFrame")
+        return rg_idxs_template[:-1], rg_idxs_template[1:], df_idx_tmrg_ends_excl
     else:
         # Get insert accounting for previous insertions
         #        insert_positions = amr_idx_non_overlapping + arange(len(amr_idx_non_overlapping))
         #        print(f"insert_positions: {insert_positions}")
         # Fill arrays
-        rg_idx_to_insert = rg_idxs[amr_idx_non_overlapping]
+        print("Non-overlapping regions in DataFrame")
+        rg_idx_to_insert = rg_idxs_template[rg_idx_df_interlaces_wo_overlap]
         print(f"rg_idx_to_insert: {rg_idx_to_insert}")
-        rg_idxs_with_inserts = insert(rg_idxs, amr_idx_non_overlapping, rg_idx_to_insert)
+        rg_idxs_with_inserts = insert(
+            rg_idxs_template,
+            rg_idx_df_interlaces_wo_overlap,
+            rg_idx_to_insert,
+        )
         print(f"rg_idxs_with_inserts: {rg_idxs_with_inserts}")
-        if amr_idx_non_overlapping[-1] == len(df_ordered_on):
-            df_idx_to_insert = df_idx_tmrg_starts[amr_idx_non_overlapping]
+        if rg_idx_df_interlaces_wo_overlap[-1] == len(df_ordered_on):
+            df_idx_to_insert = df_idx_tmrg_starts[rg_idx_df_interlaces_wo_overlap]
         else:
-            df_idx_to_insert = r_[df_idx_tmrg_starts, len(df_ordered_on)][amr_idx_non_overlapping]
+            df_idx_to_insert = r_[df_idx_tmrg_starts, len(df_ordered_on)][
+                rg_idx_df_interlaces_wo_overlap
+            ]
         df_idx_with_inserts = insert(
             df_idx_tmrg_ends_excl,
-            amr_idx_non_overlapping,
+            rg_idx_df_interlaces_wo_overlap,
             df_idx_to_insert,
         )
         print(f"df_idx_with_inserts: {df_idx_with_inserts}")
