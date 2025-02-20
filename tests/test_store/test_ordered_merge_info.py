@@ -123,16 +123,16 @@ REF_D = "2020/01/01 "
             "multiple_gaps_df_not_overlapping_rg",
             [20, 40, 43],  # rg_mins
             [25, 42, 45],  # rg_maxs
-            Series([5, 22, 32, 42, 46, 52]),  # df_ordered_on
+            Series([5, 22, 32, 41, 42, 46, 52]),  # df_ordered_on
             True,
             (
                 array([0, 0, 1, 1, 2, 3]),  # rg_idx_starts
                 array([0, 1, 1, 2, 3, 3]),  # rg_idx_ends_excl
-                array([1, 2, 3, 4, 4, 6]),  # df_idx_tmrg_ends_excl
+                array([1, 2, 3, 5, 5, 7]),  # df_idx_tmrg_ends_excl
             ),
         ),
         (
-            "no_drop_duplicates_with_gap_and_overlapping_rg",
+            "no_drop_duplicates_with_gap_with_overlapping_rg",
             [20, 40, 43],  # rg_mins, 43 overlaps with previous rg max
             [25, 43, 45],  # rg_maxs
             Series([5, 22, 32, 43, 46, 52]),  # df_ordered_on - 43 is duplicate
@@ -144,19 +144,17 @@ REF_D = "2020/01/01 "
             ),
         ),
         (
-            "no_drop_duplicates",
+            "no_drop_duplicates_with_gap_wo_overlapping_rg",
             [10, 20],  # rg_mins
             [15, 25],  # rg_maxs
-            Series([15, 22, 32]),  # df_ordered_on - note 15 is duplicate
+            Series([15, 16, 22, 32]),  # df_ordered_on - note 15 is duplicate
             False,
             (
                 array([0, 1, 1, 2]),  # rg_idx_starts
                 array([1, 1, 2, 2]),  # rg_idx_ends_excl
-                array([0, 1, 2, 3]),  # df_idx_tmrg_ends_excl
+                array([0, 2, 3, 4]),  # df_idx_tmrg_ends_excl
             ),
         ),
-        # work in progress
-        # test with several values in df for a given row group.
     ],
 )
 def test_get_atomic_merge_regions(
@@ -169,22 +167,9 @@ def test_get_atomic_merge_regions(
 ) -> None:
     """
     Test _get_atomic_merge_regions with various scenarios.
-
-    Test cases cover:
-    - No gaps between regions
-    - Gap at start of DataFrame
-    - Gap in middle
-    - Gap at end
-    - Multiple gaps
-    - Behavior with drop_duplicates=False
-
     """
     result = _get_atomic_merge_regions(rg_mins, rg_maxs, df_ordered_on, drop_duplicates)
     for res, exp in zip(result, expected):
-        print("res:")
-        print(res)
-        print("exp:")
-        print(exp)
         assert array_equal(res, exp)
 
 

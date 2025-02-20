@@ -19,6 +19,7 @@ from numpy import diff
 from numpy import flatnonzero
 from numpy import insert
 from numpy import int8
+from numpy import int_ as np_int_
 from numpy import nonzero
 from numpy import r_
 from numpy import searchsorted
@@ -517,15 +518,15 @@ def get_merge_regions(
 
 
 def _get_atomic_merge_regions(
-    rg_mins: List,
-    rg_maxs: List,
+    rg_mins: List[Union[int, float, Timestamp]],
+    rg_maxs: List[Union[int, float, Timestamp]],
     df_ordered_on: Series,
     drop_duplicates: bool,
-) -> Tuple[NDArray, NDArray, NDArray]:
+) -> Tuple[NDArray[np_int_], NDArray[np_int_], NDArray[np_int_]]:
     """
     Get atomic merge regions.
 
-    An atomic merge region is
+    An atomic merge region ('amr') is
       - either defined by an existing row group in
     ParquetFile and if existing, its corresponding overlapping DataFrame chunk,
       - or a DataFrame chunk that is not overlapping with any row group in
@@ -533,11 +534,8 @@ def _get_atomic_merge_regions(
 
     Returned arrays provide the start and end (excluded) indices in row groups
     and end (excluded) indices in DataFrame for each of these atomic merge
-    regions.
-    These arrays are of same size.
-    There is no need to provide the start indices in DataFrame, as they can be
-    inferred from the end (excluded) indices in DataFrame of the previous atomic
-    merge region (no part of the DataFrame is omitted for the write).
+    regions. All these arrays are of same size and describe how are composed the
+    atomic merge regions.
 
     Parameters
     ----------
@@ -565,65 +563,65 @@ def _get_atomic_merge_regions(
         - Third NDArray: indices in DataFrame containing the ends (excluded)
           of each DataFrame chunk to merge with corresponding row group.
 
+    Notes
+    -----
+    Start indices in DataFrame are not provided, as they can be inferred from
+    the end (excluded) indices in DataFrame of the previous atomic merge region
+    (no part of the DataFrame is omitted for the write).
+
+    In case 'drop_duplicates' is False, and there are duplicate values between
+    row group max values and DataFrame 'ordered_on' values, then DataFrame
+    'ordered_on' values are considered to be the last occurrences of the
+    duplicates in 'ordered_on'. Leading row groups (with duplicate max values)
+    will not be in the same atomic merge region as the DataFrame chunk starting
+    at the duplicate 'ordered_on' value. This is an optimization to prevent
+    rewriting these leading row groups.
+
     """
     # Find regions in DataFrame overlapping with row groups.
     if drop_duplicates:
-        print("drop_duplicates")
         # Determine overlap start/end indices in row groups
-        df_idx_tmrg_starts = searchsorted(df_ordered_on, rg_mins, side=LEFT)
-        df_idx_tmrg_ends_excl = searchsorted(df_ordered_on, rg_maxs, side=RIGHT)
+        df_idx_amr_starts = searchsorted(df_ordered_on, rg_mins, side=LEFT)
+        df_idx_amr_ends_excl = searchsorted(df_ordered_on, rg_maxs, side=RIGHT)
     else:
-        print("no drop_duplicates")
-        df_idx_tmrg_starts, df_idx_tmrg_ends_excl = searchsorted(
+        df_idx_amr_starts, df_idx_amr_ends_excl = searchsorted(
             df_ordered_on,
             vstack((rg_mins, rg_maxs)),
             side=LEFT,
         )
-    print(f"df_idx_tmrg_starts: {df_idx_tmrg_starts}")
-    print(f"df_idx_tmrg_ends_excl: {df_idx_tmrg_ends_excl}")
     # Find regions in DataFrame not overlapping with any row group.
-    # `amr` for atomic merge region.
     df_interlaces_wo_overlap = r_[
-        df_idx_tmrg_starts[0],  # gap at start (0 to first start)
-        df_idx_tmrg_ends_excl[:-1] - df_idx_tmrg_starts[1:],
-        len(df_ordered_on) - df_idx_tmrg_ends_excl[-1],  # gap at end
+        df_idx_amr_starts[0],  # gap at start (0 to first start)
+        df_idx_amr_ends_excl[:-1] - df_idx_amr_starts[1:],
+        len(df_ordered_on) - df_idx_amr_ends_excl[-1],  # gap at end
     ]
-    print(f"df_interlaces_wo_overlap: {df_interlaces_wo_overlap}")
     rg_idx_df_interlaces_wo_overlap = flatnonzero(df_interlaces_wo_overlap)
-    print(f"rg_idx_df_interlaces_wo_overlap: {rg_idx_df_interlaces_wo_overlap}")
     rg_idxs_template = arange(len(rg_mins) + 1)
-    # print(f"rg_idxs: {rg_idxs}")
-    if len(rg_idx_df_interlaces_wo_overlap) == 0:
-        # No non-overlapping regions in DataFrame
-        print("No non-overlapping regions in DataFrame")
-        return rg_idxs_template[:-1], rg_idxs_template[1:], df_idx_tmrg_ends_excl
-    else:
-        # Get insert accounting for previous insertions
-        #        insert_positions = amr_idx_non_overlapping + arange(len(amr_idx_non_overlapping))
-        #        print(f"insert_positions: {insert_positions}")
-        # Fill arrays
-        print("Non-overlapping regions in DataFrame")
-        rg_idx_to_insert = rg_idxs_template[rg_idx_df_interlaces_wo_overlap]
-        print(f"rg_idx_to_insert: {rg_idx_to_insert}")
-        rg_idxs_with_inserts = insert(
+    if len(rg_idx_df_interlaces_wo_overlap) != 0:
+        # Case of non-overlapping regions in DataFrame.
+        # Resize 'rg_idxs', and duplicate values where there are non-overlapping
+        # regions in DataFrame.
+        rg_idx_where_to_insert = rg_idxs_template[rg_idx_df_interlaces_wo_overlap]
+        rg_idxs_template = insert(
             rg_idxs_template,
             rg_idx_df_interlaces_wo_overlap,
-            rg_idx_to_insert,
+            rg_idx_where_to_insert,
         )
-        print(f"rg_idxs_with_inserts: {rg_idxs_with_inserts}")
+        # 'Resize 'df_idx_amr_ends_excl', and duplicate values where there are
+        # non-overlapping regions in DataFrame.
         if rg_idx_df_interlaces_wo_overlap[-1] == len(df_ordered_on):
-            df_idx_to_insert = df_idx_tmrg_starts[rg_idx_df_interlaces_wo_overlap]
+            df_idx_where_to_insert = df_idx_amr_starts[rg_idx_df_interlaces_wo_overlap]
         else:
-            df_idx_to_insert = r_[df_idx_tmrg_starts, len(df_ordered_on)][
+            df_idx_where_to_insert = r_[df_idx_amr_starts, len(df_ordered_on)][
                 rg_idx_df_interlaces_wo_overlap
             ]
-        df_idx_with_inserts = insert(
-            df_idx_tmrg_ends_excl,
+        df_idx_amr_ends_excl = insert(
+            df_idx_amr_ends_excl,
             rg_idx_df_interlaces_wo_overlap,
-            df_idx_to_insert,
+            df_idx_where_to_insert,
         )
-        print(f"df_idx_with_inserts: {df_idx_with_inserts}")
-        return rg_idxs_with_inserts[:-1], rg_idxs_with_inserts[1:], df_idx_with_inserts
+
+    return rg_idxs_template[:-1], rg_idxs_template[1:], df_idx_amr_ends_excl
 
 
 def _rgst_as_str__irgs_analysis(
