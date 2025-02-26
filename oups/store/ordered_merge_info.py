@@ -431,27 +431,24 @@ def get_ordered_merge_plan(
         max_n_irgs=max_n_irgs,
         is_overlap=amr_is_overlap,
     )
-    # Filter arrays describing atomic merge regions.
-    rg_idx_starts = [
-        rg_idx_starts[start:end_excl] for start, end_excl in amr_idx_emrs_starts_ends_excl
-    ]
-    rg_idx_ends_excl = [
-        rg_idx_ends_excl[start:end_excl] for start, end_excl in amr_idx_emrs_starts_ends_excl
-    ]
-    df_idx_ends_excl = [
-        df_idx_ends_excl[start:end_excl] for start, end_excl in amr_idx_emrs_starts_ends_excl
-    ]
+    # Filter and reshape arrays describing atomic merge regions into enlarged
+    # merge regions.
     # For each enlarged merge regions, aggregate atomic merge regions depending
     # on the split strategy.
-    (
-        rg_idx_starts,
-        rg_idx_ends_excl,
-        df_idx_ends_excl,
-    ) = rg_split_strategy.consolidate_enlarged_merge_regions(
-        rg_idx_starts=rg_idx_starts,
-        rg_idx_ends_excl=rg_idx_ends_excl,
-        df_idx_ends_excl=df_idx_ends_excl,
+    emrs_rg_idx_starts, emrs_rg_idx_ends_excl, emrs_df_idx_ends_excl = map(
+        list,
+        zip(
+            *[
+                rg_split_strategy.consolidate_enlarged_merge_regions(
+                    rg_idx_starts=rg_idx_starts[start:end_excl],
+                    rg_idx_ends_excl=rg_idx_ends_excl[start:end_excl],
+                    df_idx_ends_excl=df_idx_ends_excl[start:end_excl],
+                )
+                for start, end_excl in amr_idx_emrs_starts_ends_excl
+            ],
+        ),
     )
+
     # Assess if row groups have to be sorted after write step
     #  - either if there is a merge region (new row groups are written first,
     #    then old row groups are removed).
@@ -461,9 +458,9 @@ def get_ordered_merge_plan(
         rg_idx_starts == rg_idx_ends_excl and rg_idx_ends_excl != len(pf)
     )
     return OrderedMergePlan(
-        rg_idx_starts=rg_idx_starts,
-        rg_idx_ends_excl=rg_idx_ends_excl,
-        df_idx_ends_excl=df_idx_ends_excl,
+        rg_idx_starts=emrs_rg_idx_starts,
+        rg_idx_ends_excl=emrs_rg_idx_ends_excl,
+        df_idx_ends_excl=emrs_df_idx_ends_excl,
         rg_sizer=rg_split_strategy.rg_sizer,
         sort_rgs_after_write=sort_rgs_after_write,
     )
