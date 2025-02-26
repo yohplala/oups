@@ -33,6 +33,64 @@ REF_D = "2020/01/01 "
 
 
 @pytest.mark.parametrize(
+    "mask, expected",
+    [
+        (  # Case 1: Entire mask is single region.
+            array([True, True, True]),
+            array([[0, 3]]),
+        ),
+        (  # Case 2: A mask with two regions.
+            array([False, True, True, False, True]),
+            array([[1, 3], [4, 5]]),
+        ),
+        (  # Case 3: no region.
+            array([False, False, False]),
+            empty((0, 2), dtype=int),
+        ),
+        (  # Case 4: One region at start, one region at end.
+            array([True, False, True]),
+            array([[0, 1], [2, 3]]),
+        ),
+    ],
+)
+def test_get_region_indices_of_true_values(mask: NDArray, expected: NDArray) -> None:
+    """
+    Test get_region_indices_of_true_values to verify that it correctly returns the start
+    and end indices (as [start, end) pairs) for each region of contiguous True values in
+    a boolean array.
+    """
+    result = get_region_indices_of_true_values(mask)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "ints, expected",
+    [
+        (  # Case 1: 2 regions of same values.
+            array([1, 1, 2]),
+            array([[0, 2], [2, 3]]),
+        ),
+        (  # Case 2: 1 region of same values.
+            array([1, 1, 1]),
+            array([[0, 3]]),
+        ),
+        (  # Case 3: 3 region of one value.
+            array([1, 2, 3]),
+            array([[0, 1], [1, 2], [2, 3]]),
+        ),
+    ],
+)
+def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> None:
+    """
+    Test get_region_indices_of_same_values to verify that it correctly returns the start
+    and end indices (as [start, end) pairs) for each region made of same values in an
+    array of int.
+    """
+    result = get_region_indices_of_same_values(ints)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
     "test_id, rg_mins, rg_maxs, df_ordered_on, drop_duplicates, expected",
     [
         (
@@ -171,64 +229,6 @@ def test_get_atomic_merge_regions(
     result = _get_atomic_merge_regions(rg_mins, rg_maxs, df_ordered_on, drop_duplicates)
     for res, exp in zip(result, expected):
         assert array_equal(res, exp)
-
-
-@pytest.mark.parametrize(
-    "mask, expected",
-    [
-        (  # Case 1: Entire mask is single region.
-            array([True, True, True]),
-            array([[0, 3]]),
-        ),
-        (  # Case 2: A mask with two regions.
-            array([False, True, True, False, True]),
-            array([[1, 3], [4, 5]]),
-        ),
-        (  # Case 3: no region.
-            array([False, False, False]),
-            empty((0, 2), dtype=int),
-        ),
-        (  # Case 4: One region at start, one region at end.
-            array([True, False, True]),
-            array([[0, 1], [2, 3]]),
-        ),
-    ],
-)
-def test_get_region_indices_of_true_values(mask: NDArray, expected: NDArray) -> None:
-    """
-    Test get_region_indices_of_true_values to verify that it correctly returns the start
-    and end indices (as [start, end) pairs) for each region of contiguous True values in
-    a boolean array.
-    """
-    result = get_region_indices_of_true_values(mask)
-    assert array_equal(result, expected)
-
-
-@pytest.mark.parametrize(
-    "ints, expected",
-    [
-        (  # Case 1: 2 regions of same values.
-            array([1, 1, 2]),
-            array([[0, 2], [2, 3]]),
-        ),
-        (  # Case 2: 1 region of same values.
-            array([1, 1, 1]),
-            array([[0, 3]]),
-        ),
-        (  # Case 3: 3 region of one value.
-            array([1, 2, 3]),
-            array([[0, 1], [1, 2], [2, 3]]),
-        ),
-    ],
-)
-def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> None:
-    """
-    Test get_region_indices_of_same_values to verify that it correctly returns the start
-    and end indices (as [start, end) pairs) for each region made of same values in an
-    array of int.
-    """
-    result = get_region_indices_of_same_values(ints)
-    assert array_equal(result, expected)
 
 
 @pytest.mark.parametrize(

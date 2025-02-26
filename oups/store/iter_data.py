@@ -12,7 +12,7 @@ from numpy import searchsorted
 from pandas import DataFrame
 from pandas import concat
 
-from oups.store.ordered_merge_info import analyze_chunks_to_merge
+from oups.store.ordered_merge_info import get_pf_df_merge_plan
 
 
 def _validate_duplicate_on_param(
@@ -258,7 +258,13 @@ def iter_merged_pf_df(
     # /!\ drop duplicates before calling 'analyze_chunks_to_merge' /!\
     if duplicates_on:
         df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
-    df_idx_ends, rg_idx_ends, sort_rgs_after_write = analyze_chunks_to_merge(
+    (
+        rg_idx_starts,
+        rg_idx_ends_excl,
+        df_idx_ends_excl,
+        row_group_sizer,
+        sort_rgs_after_write,
+    ) = get_pf_df_merge_plan(
         df=df,
         pf=pf,
         ordered_on=ordered_on,
@@ -276,9 +282,9 @@ def iter_merged_pf_df(
     # is_mixed_chunk = False
     # chunk_n_rows = 0
     remainder = None
-    for chunk_countdown, df_idx_end_excl, rg_idx_end_excl in enumerate(
-        zip(df_idx_ends, rg_idx_ends),
-        start=-len(df_idx_ends),
+    for chunk_countdown, rg_idx_start, rg_idx_end_excl, df_idx_end_excl in enumerate(
+        zip(rg_idx_starts, rg_idx_ends_excl, df_idx_ends_excl),
+        start=-len(df_idx_ends_excl),
     ):
         # Each step is a write step.
         if df_idx_end_excl > _df_idx_start:
@@ -314,9 +320,10 @@ def iter_merged_pf_df(
             # remaining, calculate actual row_group_size to equilibrate
             # number of rows in last rg.
             # Or calculate directly row group offsets?
-            row_group_size_target=list(range(len(chunk), step=row_group_size_target))
-            if max_n_irgs or chunk_countdown
-            else row_group_size_target,
+            # row_group_size_target=list(range(len(chunk), step=row_group_size_target))
+            # if max_n_irgs or chunk_countdown
+            # else row_group_size_target,
+            row_group_size_target=row_group_sizer(len(chunk), chunk_countdown),
             distinct_bounds=distinct_bounds,
             duplicates_on=duplicates_on,
             yield_remainder=not chunk_countdown,  # yield last chunk
