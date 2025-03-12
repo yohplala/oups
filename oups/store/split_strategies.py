@@ -78,7 +78,8 @@ class RowGroupSplitStrategy(ABC):
         Returns
         -------
         NDArray
-            Boolean array where True indicates incomplete row groups.
+            Boolean array of length the number of row groups where True
+            indicates incomplete row groups.
 
         """
         raise NotImplementedError("Subclasses must implement this method")
@@ -188,7 +189,7 @@ class NRowsSplitStrategy(RowGroupSplitStrategy):
             Maximum number of incomplete row groups allowed in a merge region.
 
         """
-        self.rg_n_rows = [rg.num_rows for rg in pf.row_groups]
+        self.rg_n_rows = array([rg.num_rows for rg in pf.row_groups], dtype=int)
         self.n_rgs = len(self.rg_n_rows)
         self.df_n_rows = df_n_rows
         self.df_idx_amr_ends_excl = df_idx_amr_ends_excl
@@ -198,12 +199,13 @@ class NRowsSplitStrategy(RowGroupSplitStrategy):
 
     def is_incomplete(self) -> NDArray:
         """
-        Check if row groups are incomplete based on size.
+        Check if row groups are incomplete based on their number of rows.
 
         Returns
         -------
         NDArray
-            Boolean array where True indicates incomplete row groups.
+            Boolean array of length the number of row groups where True
+            indicates incomplete row groups.
 
         """
         return self.rg_n_rows < self.min_size
@@ -509,13 +511,21 @@ class TimePeriodSplitStrategy(RowGroupSplitStrategy):
 
     def is_incomplete(self, rg_maxs: NDArray) -> NDArray:
         """
-        Check if row groups are incomplete based on period coverage.
+        Check if row groups are incomplete based on a time period.
+
+        Returns
+        -------
+        NDArray
+            Boolean array of length the number of row groups where True
+            indicates incomplete row groups.
+
         """
         # Convert maxs to period bounds
         period_bounds = [Timestamp(ts).floor(self.period) for ts in rg_maxs]
         # A row group is incomplete if it doesn't span its full period
         return array(
             [max < bound.ceil(self.period) for max, bound in zip(rg_maxs, period_bounds)],
+            dtype=bool,
         )
 
     def consolidate_merge_plan(
