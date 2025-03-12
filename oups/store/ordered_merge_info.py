@@ -26,6 +26,7 @@ from numpy import flatnonzero
 from numpy import insert
 from numpy import int8
 from numpy import int_ as np_int
+from numpy import ones
 from numpy import r_
 from numpy import searchsorted
 from numpy import vstack
@@ -34,9 +35,9 @@ from pandas import DataFrame
 from pandas import Series
 from pandas import Timestamp
 
-from oups.store.rg_split_strategy import NRowsSplitStrategy
-from oups.store.rg_split_strategy import RowGroupSplitStrategy
-from oups.store.rg_split_strategy import TimePeriodSplitStrategy
+from oups.store.split_strategies import NRowsSplitStrategy
+from oups.store.split_strategies import RowGroupSplitStrategy
+from oups.store.split_strategies import TimePeriodSplitStrategy
 
 
 MIN = "min"
@@ -184,7 +185,7 @@ def _compute_atomic_merge_regions(
     rg_maxs: List[Union[int, float, Timestamp]],
     df_ordered_on: Series,
     drop_duplicates: bool,
-) -> Tuple[NDArray[np_int], NDArray[np_int], NDArray[np_int], NDArray[np_int]]:
+) -> Tuple[NDArray, NDArray[np_int]]:
     """
     Get atomic merge regions.
 
@@ -217,14 +218,23 @@ def _compute_atomic_merge_regions(
 
     Returns
     -------
-    Tuple[NDArray[np_int], NDArray[np_int], NDArray[np_int], NDArray[np_int]]
-        - First NDArray: indices in ParquetFile containing the starts of each
-          row group to merge with corresponding DataFrame chunk.
-        - Second NDArray: indices in ParquetFile containing the ends (excluded)
-          of each row group to merge with corresponding DataFrame chunk.
-        - Third NDArray: indices in row group array where lies a DataFrame chunk
-          not overlapping with any row group.
-        - Fourth NDArray: indices in DataFrame containing the ends (excluded)
+    Tuple[NDArray, NDArray[np_int]]
+        - First NDArray: Atomic merge regions properties contained in a
+          structured array with fields:
+          - 'rg_idx_start': indices in ParquetFile containing the starts of each
+            row group to merge with corresponding DataFrame chunk.
+          - 'rg_idx_end_excl': indices in ParquetFile containing the ends
+            (excluded) of each row group to merge with corresponding DataFrame
+            chunk.
+          - 'df_idx_end_excl': indices in DataFrame containing the ends
+            (excluded) of each DataFrame chunk to merge with corresponding
+            row group.
+          - 'is_row_group': boolean indicating if this region contains a
+            row group.
+          - 'is_overlap': boolean indicating if this region contains an
+            overlap between a row group and DataFrame chunk.
+
+        - Second NDArray: indices in DataFrame containing the ends (excluded)
           of each DataFrame chunk to merge with corresponding row group.
 
     Notes
@@ -259,37 +269,56 @@ def _compute_atomic_merge_regions(
         df_idx_amr_ends_excl[:-1] - df_idx_amr_starts[1:],
         len(df_ordered_on) - df_idx_amr_ends_excl[-1],  # gap at end
     ]
-    rg_idx_df_interlaces_wo_overlap = flatnonzero(df_interlaces_wo_overlap)
-    rg_idxs_template = arange(len(rg_mins) + 1)
-    if len(rg_idx_df_interlaces_wo_overlap) != 0:
+    rg_idx_df_orphans = flatnonzero(df_interlaces_wo_overlap)
+    n_rgs = len(rg_mins)
+    rg_idxs_template = arange(n_rgs + 1)
+    # Create a structured array to hold all related indices
+    # DataFrame orphans are regions in DataFrame that do not overlap with any
+    # row group.
+    n_df_orphans = len(rg_idx_df_orphans)
+    amrs_prop = ones(
+        n_rgs + n_df_orphans,
+        dtype=[
+            ("rg_idx_start", np_int),
+            ("rg_idx_end_excl", np_int),
+            ("df_idx_end_excl", np_int),
+            ("is_row_group", np_bool),
+            ("is_overlap", np_bool),
+        ],
+    )
+    if n_df_orphans != 0:
         # Case of non-overlapping regions in DataFrame.
         # Resize 'rg_idxs', and duplicate values where there are non-overlapping
         # regions in DataFrame.
-        rg_idx_where_to_insert = rg_idxs_template[rg_idx_df_interlaces_wo_overlap]
+        rg_idx_to_insert = rg_idxs_template[rg_idx_df_orphans]
         rg_idxs_template = insert(
             rg_idxs_template,
-            rg_idx_df_interlaces_wo_overlap,
-            rg_idx_where_to_insert,
+            rg_idx_df_orphans,
+            rg_idx_to_insert,
         )
         # 'Resize 'df_idx_amr_ends_excl', and duplicate values where there are
         # non-overlapping regions in DataFrame.
-        if rg_idx_df_interlaces_wo_overlap[-1] == len(df_ordered_on):
-            df_idx_where_to_insert = df_idx_amr_starts[rg_idx_df_interlaces_wo_overlap]
+        if rg_idx_df_orphans[-1] == len(df_ordered_on):
+            df_idx_to_insert = df_idx_amr_starts[rg_idx_df_orphans]
         else:
-            df_idx_where_to_insert = r_[df_idx_amr_starts, len(df_ordered_on)][
-                rg_idx_df_interlaces_wo_overlap
-            ]
+            df_idx_to_insert = r_[df_idx_amr_starts, len(df_ordered_on)][rg_idx_df_orphans]
         df_idx_amr_ends_excl = insert(
             df_idx_amr_ends_excl,
-            rg_idx_df_interlaces_wo_overlap,
-            df_idx_where_to_insert,
+            rg_idx_df_orphans,
+            df_idx_to_insert,
         )
+        # No overlap where no row group.
+        amrs_prop["is_overlap"][rg_idx_df_orphans + arange(n_df_orphans)] = False
 
+    amrs_prop["rg_idx_start"] = rg_idxs_template[:-1]
+    amrs_prop["rg_idx_end_excl"] = rg_idxs_template[1:]
+    amrs_prop["df_idx_end_excl"] = df_idx_amr_ends_excl
+    amrs_prop["is_row_group"] = amrs_prop["rg_idx_start"] != amrs_prop["rg_idx_end_excl"]
+    # No overlap where no DataFrame chunk.
+    amrs_prop["is_overlap"][diff(amrs_prop["df_idx_end_excl"], prepend=0) == 0] = False
     return (
-        rg_idxs_template[:-1],
-        rg_idxs_template[1:],
-        rg_idx_df_interlaces_wo_overlap,
-        df_idx_amr_ends_excl,
+        amrs_prop,
+        rg_idx_df_orphans,
     )
 
 
@@ -322,7 +351,7 @@ class OrderedMergePlan:
     sort_rgs_after_write: bool
 
 
-def get_ordered_merge_plan(
+def compute_ordered_merge_plan(
     pf: ParquetFile,
     df: DataFrame,
     ordered_on: str,
@@ -392,27 +421,19 @@ def get_ordered_merge_plan(
     #   DataFrame chunk),
     # - or as a DataFrame chunk not overlapping with any existing row groups.
     pf_statistics = pf.statistics
-    (
-        rg_idx_starts,
-        rg_idx_ends_excl,
-        rg_idx_df_interlaces_wo_overlap,
-        df_idx_ends_excl,
-    ) = _compute_atomic_merge_regions(
+    amrs_prop, rg_idx_df_interlaces_wo_overlap = _compute_atomic_merge_regions(
         rg_mins=pf_statistics[MIN][ordered_on],
         rg_maxs=pf_statistics[MAX][ordered_on],
         df_ordered_on=df.loc[:, ordered_on],
         drop_duplicates=drop_duplicates,
     )
-    # Get overlap status per atomic merge region.
-    # True where an existing row group and a DataFrame chunk overlap together.
-    amr_is_overlap = df_idx_ends_excl.diff(prepend=0)
     # Initialize row group split strategy.
     rg_split_strategy = (
         NRowsSplitStrategy(
             pf=pf,
             rg_idx_df_interlaces_wo_overlap=rg_idx_df_interlaces_wo_overlap,
             df_n_rows=len(df),
-            df_idx_amr_ends_excl=df_idx_ends_excl,
+            amrs_properties=amrs_prop,
             row_group_size_target=row_group_size_target,
             max_n_irgs=max_n_irgs,
         )
@@ -429,38 +450,27 @@ def get_ordered_merge_plan(
     amr_idx_emrs_starts_ends_excl = _compute_enlarged_merge_region(
         rg_split_strategy=rg_split_strategy,
         max_n_irgs=max_n_irgs,
-        is_overlap=amr_is_overlap,
+        amrs_properties=amrs_prop,
     )
     # Filter and reshape arrays describing atomic merge regions into enlarged
     # merge regions.
     # For each enlarged merge regions, aggregate atomic merge regions depending
     # on the split strategy.
-    emrs_rg_idx_starts, emrs_rg_idx_ends_excl, emrs_df_idx_ends_excl = map(
-        list,
-        zip(
-            *[
-                rg_split_strategy.consolidate_enlarged_merge_regions(
-                    rg_idx_starts=rg_idx_starts[start:end_excl],
-                    rg_idx_ends_excl=rg_idx_ends_excl[start:end_excl],
-                    df_idx_ends_excl=df_idx_ends_excl[start:end_excl],
-                )
-                for start, end_excl in amr_idx_emrs_starts_ends_excl
-            ],
-        ),
-    )
+    emrs_idxs = [
+        rg_split_strategy.consolidate_enlarged_merge_regions(
+            amrs_properties=amrs_prop[start:end_excl],
+        )
+        for start, end_excl in amr_idx_emrs_starts_ends_excl
+    ]
 
     # Assess if row groups have to be sorted after write step
     #  - either if there is a merge region (new row groups are written first,
     #    then old row groups are removed).
     #  - or there is no merge region but df is not appended at the tail of
     #    existing data.
-    sort_rgs_after_write = rg_idx_starts != rg_idx_ends_excl or (
-        rg_idx_starts == rg_idx_ends_excl and rg_idx_ends_excl != len(pf)
-    )
+    sort_rgs_after_write = True
     return OrderedMergePlan(
-        rg_idx_starts=emrs_rg_idx_starts,
-        rg_idx_ends_excl=emrs_rg_idx_ends_excl,
-        df_idx_ends_excl=emrs_df_idx_ends_excl,
+        emrs_idxs=emrs_idxs,
         rg_sizer=rg_split_strategy.rg_sizer,
         sort_rgs_after_write=sort_rgs_after_write,
     )

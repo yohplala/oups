@@ -18,14 +18,13 @@ from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.store.ordered_merge_info import NRowsPattern
-from oups.store.ordered_merge_info import _get_atomic_merge_regions
-from oups.store.ordered_merge_info import _rgst_as_str__merge_plan
-from oups.store.ordered_merge_info import analyze_chunks_to_merge
-from oups.store.ordered_merge_info import get_merge_regions
+from oups.store.ordered_merge_info import _compute_atomic_merge_regions
+from oups.store.ordered_merge_info import compute_ordered_merge_plan
 from oups.store.ordered_merge_info import get_region_indices_of_same_values
 from oups.store.ordered_merge_info import get_region_indices_of_true_values
-from oups.store.ordered_merge_info import get_region_start_end_delta
+from oups.store.split_strategies import NRowsSplitStrategy
+from oups.store.split_strategies import TimePeriodSplitStrategy
+from oups.store.split_strategies import get_region_start_end_delta
 from tests.test_store.conftest import create_parquet_file
 
 
@@ -99,11 +98,16 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             [15, 25, 35],  # rg_maxs
             Series([12, 22, 32]),  # df_ordered_on
             True,
-            (
-                array([0, 1, 2]),  # rg_idx_starts
-                array([1, 2, 3]),  # rg_idx_ends_excl
-                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 1, 2]),
+                    "rg_idx_end_excl": array([1, 2, 3]),
+                    "df_idx_end_excl": array([1, 2, 3]),
+                    "is_row_group": array([True, True, True]),
+                    "is_overlap": array([True, True, True]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([], dtype=int),
+            },
         ),
         (
             "gap_at_start_df_leading_rg",
@@ -111,11 +115,16 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             [25, 35],  # rg_maxs
             Series([5, 22, 32]),  # df_ordered_on
             True,
-            (
-                array([0, 0, 1]),  # rg_idx_starts
-                array([0, 1, 2]),  # rg_idx_ends_excl
-                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 0, 1]),
+                    "rg_idx_end_excl": array([0, 1, 2]),
+                    "df_idx_end_excl": array([1, 2, 3]),
+                    "is_row_group": array([False, True, True]),
+                    "is_overlap": array([False, True, True]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([0]),
+            },
         ),
         (
             "gap_in_middle_df_not_overlapping_rg",
@@ -123,11 +132,16 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             [15, 35],  # rg_maxs
             Series([12, 22, 32]),  # df_ordered_on
             True,
-            (
-                array([0, 1, 1]),  # rg_idx_starts
-                array([1, 1, 2]),  # rg_idx_ends_excl
-                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 1, 1]),
+                    "rg_idx_end_excl": array([1, 1, 2]),
+                    "df_idx_end_excl": array([1, 2, 3]),
+                    "is_row_group": array([True, False, True]),
+                    "is_overlap": array([True, False, True]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([1]),
+            },
         ),
         (
             "gap_at_end_df_trailing_rg",
@@ -135,11 +149,16 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             [15, 25],  # rg_maxs
             Series([12, 22, 32]),  # df_ordered_on
             True,
-            (
-                array([0, 1, 2]),  # rg_idx_starts
-                array([1, 2, 2]),  # rg_idx_ends_excl
-                array([1, 2, 3]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 1, 2]),
+                    "rg_idx_end_excl": array([1, 2, 2]),
+                    "df_idx_end_excl": array([1, 2, 3]),
+                    "is_row_group": array([True, True, False]),
+                    "is_overlap": array([True, True, False]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([2]),
+            },
         ),
         (
             "gap_at_start_rg_leading_df",
@@ -147,11 +166,16 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             [5, 23, 33],  # rg_maxs
             Series([22, 32]),  # df_ordered_on
             True,
-            (
-                array([0, 1, 2]),  # rg_idx_starts
-                array([1, 2, 3]),  # rg_idx_ends_excl
-                array([0, 1, 2]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 1, 2]),
+                    "rg_idx_end_excl": array([1, 2, 3]),
+                    "df_idx_end_excl": array([0, 1, 2]),
+                    "is_row_group": array([True, True, True]),
+                    "is_overlap": array([False, True, True]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([]),
+            },
         ),
         (
             "gap_in_middle_rg_not_overlapping_df",
@@ -159,11 +183,16 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             [5, 15, 35],  # rg_maxs
             Series([2, 32]),  # df_ordered_on
             True,
-            (
-                array([0, 1, 2]),  # rg_idx_starts
-                array([1, 2, 3]),  # rg_idx_ends_excl
-                array([1, 1, 2]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 1, 2]),
+                    "rg_idx_end_excl": array([1, 2, 3]),
+                    "df_idx_end_excl": array([1, 1, 2]),
+                    "is_row_group": array([True, True, True]),
+                    "is_overlap": array([True, False, True]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([]),
+            },
         ),
         (
             "gap_at_end_rg_trailing_df",
@@ -171,11 +200,16 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             [15, 25, 35],  # rg_maxs
             Series([12, 22]),  # df_ordered_on
             True,
-            (
-                array([0, 1, 2]),  # rg_idx_starts
-                array([1, 2, 3]),  # rg_idx_ends_excl
-                array([1, 2, 2]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 1, 2]),
+                    "rg_idx_end_excl": array([1, 2, 3]),
+                    "df_idx_end_excl": array([1, 2, 2]),
+                    "is_row_group": array([True, True, True]),
+                    "is_overlap": array([True, True, False]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([]),
+            },
         ),
         (
             "multiple_gaps_df_not_overlapping_rg",
@@ -183,11 +217,16 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             [25, 42, 45],  # rg_maxs
             Series([5, 22, 32, 41, 42, 46, 52]),  # df_ordered_on
             True,
-            (
-                array([0, 0, 1, 1, 2, 3]),  # rg_idx_starts
-                array([0, 1, 1, 2, 3, 3]),  # rg_idx_ends_excl
-                array([1, 2, 3, 5, 5, 7]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 0, 1, 1, 2, 3]),
+                    "rg_idx_end_excl": array([0, 1, 1, 2, 3, 3]),
+                    "df_idx_end_excl": array([1, 2, 3, 5, 5, 7]),
+                    "is_row_group": array([False, True, False, True, True, False]),
+                    "is_overlap": array([False, True, False, True, False, False]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([0, 1, 3]),
+            },
         ),
         (
             "no_drop_duplicates_with_gap_with_overlapping_rg",
@@ -195,40 +234,61 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
             [25, 43, 45],  # rg_maxs
             Series([5, 22, 32, 43, 46, 52]),  # df_ordered_on - 43 is duplicate
             False,  # don't drop duplicates - 43 expected to fall in last rg
-            (
-                array([0, 0, 1, 1, 2, 3]),  # rg_idx_starts
-                array([0, 1, 1, 2, 3, 3]),  # rg_idx_ends_excl
-                array([1, 2, 3, 3, 4, 6]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 0, 1, 1, 2, 3]),
+                    "rg_idx_end_excl": array([0, 1, 1, 2, 3, 3]),
+                    "df_idx_end_excl": array([1, 2, 3, 3, 4, 6]),
+                    "is_row_group": array([False, True, False, True, True, False]),
+                    "is_overlap": array([False, True, False, False, True, False]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([0, 1, 3]),
+            },
         ),
         (
             "no_drop_duplicates_with_gap_wo_overlapping_rg",
             [10, 20],  # rg_mins
             [15, 25],  # rg_maxs
-            Series([15, 16, 22, 32]),  # df_ordered_on - note 15 is duplicate
+            Series([15, 16, 17, 22, 32]),  # df_ordered_on - note 15 is duplicate
             False,
-            (
-                array([0, 1, 1, 2]),  # rg_idx_starts
-                array([1, 1, 2, 2]),  # rg_idx_ends_excl
-                array([0, 2, 3, 4]),  # df_idx_tmrg_ends_excl
-            ),
+            {
+                "amrs_prop": {
+                    "rg_idx_start": array([0, 1, 1, 2]),
+                    "rg_idx_end_excl": array([1, 1, 2, 2]),
+                    "df_idx_end_excl": array([0, 3, 4, 5]),
+                    "is_row_group": array([True, False, True, False]),
+                    "is_overlap": array([False, False, True, False]),
+                },
+                "rg_idx_df_interlaces_wo_overlap": array([1, 2]),
+            },
         ),
     ],
 )
-def test_get_atomic_merge_regions(
+def test_compute_atomic_merge_regions(
     test_id: str,
     rg_mins: List,
     rg_maxs: List,
     df_ordered_on: Series,
     drop_duplicates: bool,
-    expected: Tuple[NDArray, NDArray, NDArray],
+    expected: Tuple[NDArray, NDArray],
 ) -> None:
     """
     Test _get_atomic_merge_regions with various scenarios.
     """
-    result = _get_atomic_merge_regions(rg_mins, rg_maxs, df_ordered_on, drop_duplicates)
-    for res, exp in zip(result, expected):
-        assert array_equal(res, exp)
+    amrs_prop, rg_idx_df_interlaces_wo_overlap = _compute_atomic_merge_regions(
+        rg_mins,
+        rg_maxs,
+        df_ordered_on,
+        drop_duplicates,
+    )
+    # Check structured array fields
+    assert array_equal(amrs_prop["rg_idx_start"], expected["amrs_prop"]["rg_idx_start"])
+    assert array_equal(amrs_prop["rg_idx_end_excl"], expected["amrs_prop"]["rg_idx_end_excl"])
+    assert array_equal(amrs_prop["df_idx_end_excl"], expected["amrs_prop"]["df_idx_end_excl"])
+    assert array_equal(amrs_prop["is_row_group"], expected["amrs_prop"]["is_row_group"])
+    assert array_equal(amrs_prop["is_overlap"], expected["amrs_prop"]["is_overlap"])
+    # Check interlaces array
+    assert array_equal(rg_idx_df_interlaces_wo_overlap, expected["rg_idx_df_interlaces_wo_overlap"])
 
 
 @pytest.mark.parametrize(
@@ -417,7 +477,7 @@ def test_NRowsPattern_get_fragmentation_risk(
         Expected output indicating which enlarged regions have fragmentation risk.
 
     """
-    pattern = NRowsPattern(
+    pattern = NRowsSplitStrategy(
         rg_n_rows=rg_n_rows,
         df_n_rows=df_n_rows,
         df_idx_tmrg_starts=df_idx_tmrg_starts,
@@ -481,7 +541,7 @@ def test_NRowsPattern_get_fragmentation_risk(
         ),
     ],
 )
-def test_rgst_as_int_merge_region_map(
+def test_consolidate_merge_plan(
     test_id: str,
     rg_n_rows: List[int],
     row_group_size_target: int,
@@ -509,7 +569,7 @@ def test_rgst_as_int_merge_region_map(
 
     """
     # Act
-    splits_starts, splits_ends = get_merge_regions(
+    splits_starts, splits_ends = NRowsSplitStrategy.consolidate_merge_plan(
         rg_n_rows=rg_n_rows,
         row_group_size_target=row_group_size_target,
         df_idx_tmrg_starts=df_idx_tmrg_starts,
@@ -657,7 +717,7 @@ def test_rgst_as_str__merge_plan(
 
     """
     # Act
-    rg_idx_ends, df_idx_ends = _rgst_as_str__merge_plan(
+    rg_idx_ends, df_idx_ends = TimePeriodSplitStrategy._rgst_as_str__merge_plan(
         rg_maxs=array(rg_maxs),
         row_group_period=row_group_period,
         df_ordered_on=df_ordered_on,
@@ -1348,7 +1408,7 @@ def test_rgst_as_str__merge_plan(
         #  in "consolidate_merge_plan")
     ],
 )
-def test_analyze_chunks_to_merge(
+def test_compute_ordered_merge_plan(
     test_id,
     df_data,
     pf_data,
@@ -1362,7 +1422,7 @@ def test_analyze_chunks_to_merge(
     df = DataFrame({"ordered": df_data})
     pf_data = DataFrame({"ordered": pf_data})
     pf = create_parquet_file(tmp_path, pf_data, row_group_offsets=row_group_offsets)
-    chunk_counter, sort_rgs_after_write = analyze_chunks_to_merge(
+    chunk_counter, sort_rgs_after_write = compute_ordered_merge_plan(
         df=df,
         pf=pf,
         ordered_on="ordered",

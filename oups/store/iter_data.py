@@ -12,7 +12,7 @@ from numpy import searchsorted
 from pandas import DataFrame
 from pandas import concat
 
-from oups.store.ordered_merge_info import get_pf_df_merge_plan
+from oups.store.ordered_merge_info import compute_ordered_merge_plan
 
 
 def _validate_duplicate_on_param(
@@ -264,7 +264,7 @@ def iter_merged_pf_df(
         df_idx_ends_excl,
         row_group_sizer,
         sort_rgs_after_write,
-    ) = get_pf_df_merge_plan(
+    ) = compute_ordered_merge_plan(
         df=df,
         pf=pf,
         ordered_on=ordered_on,
