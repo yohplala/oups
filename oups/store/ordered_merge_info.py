@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
 from fastparquet import ParquetFile
-from numpy import any as np_any
 from numpy import arange
 from numpy import bool_ as np_bool
 from numpy import column_stack
@@ -30,14 +29,16 @@ from numpy import ones
 from numpy import r_
 from numpy import searchsorted
 from numpy import vstack
+from numpy import zeros
 from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import Series
 from pandas import Timestamp
 
+from oups.store.split_strategies import MergeRegionSplitStrategy
 from oups.store.split_strategies import NRowsSplitStrategy
-from oups.store.split_strategies import RowGroupSplitStrategy
 from oups.store.split_strategies import TimePeriodSplitStrategy
+from oups.store.utils import get_region_start_end_delta
 
 
 MIN = "min"
@@ -61,7 +62,7 @@ def _compute_atomic_merge_regions(
       - either defined by an existing row group in
         ParquetFile and if existing, its corresponding overlapping DataFrame
         chunk,
-      - or a DataFrame chunk that is not overlapping with any row group in
+      - or an orphan DataFrame chunk, i.e. not overlapping with any row group in
         ParquetFile.
 
     Returned arrays provide the start and end (excluded) indices in row groups
@@ -231,37 +232,57 @@ def get_region_indices_of_same_values(ints: NDArray[np_int]) -> NDArray[np_int]:
     return column_stack((boundaries[:-1], boundaries[1:]))
 
 
+def set_true_in_regions(length: int, regions: NDArray[np_int]) -> NDArray[np_bool]:
+    """
+    Set regions in a boolean array to True based on start-end index pairs.
+
+    Regions have to be non overlapping.
+
+    Parameters
+    ----------
+    length : int
+        Length of the output array.
+    regions : NDArray[np_int]
+        2D array of shape (n, 2) where each row contains [start, end) indices.
+        Start indices are inclusive, end indices are exclusive.
+        Regions are assumed to be non-overlapping.
+
+    Returns
+    -------
+    NDArray[np_bool]
+        Boolean array of length 'length' with True values in specified regions.
+
+    """
+    # Array of changes with +1 at starts, and -1 at ends of regions.
+    changes = zeros(length + 1, dtype=int8)
+    changes[regions[:, 0]] = 1
+    changes[regions[:, 1]] = -1
+    # Positive cumulative sum provides which positions are inside regions
+    return cumsum(changes[:-1]).astype(np_bool)
+
+
 def _compute_enlarged_merge_regions(
     max_n_irgs: int,
-    is_overlap: NDArray[np_bool],
-    rg_idx_df_orphans: NDArray[np_int],
-    rg_split_strategy: RowGroupSplitStrategy,
+    amr_split_strategy: MergeRegionSplitStrategy,
 ) -> NDArray[np_int]:
     """
     Aggregate atomic merge regions into enlarged merge regions.
 
-    Sets of contiguous overlap atomic merge regions are extended with
-    neighbor incomplete row groups depending on two conditions,
-      - if the overlap atomic merge region (resulting from the merge of the
-        Dataframe chunks and corresponding overlapping row groups) is found to
-        be a potentially complete row group.
-      - if the total number of existing incomplete row groups in the enlarged
-        merge region is greater than `max_n_irgs`.
-
-    Each set of contiguous overlap atomic merge regions results finally into an
-    enlarged merge region ('emr').
+    Sets of contiguous atomic merge regions with DataFrame chunks are extended
+    with neighbor incomplete regions depending on two conditions,
+      - if the atomic merge region with DataFrame chunks is found to result in a
+       potentially complete row group.
+      - if the total number of incomplete atomic merge regions in a given
+        enlarged merge region is greater than `max_n_irgs`.
 
     Parameters
     ----------
     max_n_irgs : int
-        Maximum number of incomplete row groups allowed in a merge region.
-    is_overlap : NDArray[np_bool]
-        Boolean array indicating overlap regions between DataFrame and row
-        groups.
-    rg_idx_df_orphans : NDArray[np_int]
-    rg_split_strategy : RowGroupSplitStrategy
-        Strategy object that determines how row groups should be split and
-        provides methods to analyze completeness and fragmentation risk.
+        Maximum number of resulting incomplete contiguous row groups allowed in
+        a merge region.
+    amr_split_strategy : MergeRegionSplitStrategy
+        MergeRegionSplitStrategy providing methods to analyze completeness and
+        likelihood of creating complete row groups.
 
     Returns
     -------
@@ -272,60 +293,44 @@ def _compute_enlarged_merge_regions(
     """
     # Step 1: assess start indices (included) and end indices (excluded) of
     # enlarged merge regions.
-    indices_overlap = get_region_indices_of_true_values(is_overlap)
-    # Length of 'is_incomplete' is increased to the total number of atomic merge
-    # regions.
-    is_incomplete = insert(rg_split_strategy.is_incomplete(), rg_idx_df_orphans, True)
-    is_enlarged = is_overlap | is_incomplete
-    indices_enlarged = get_region_indices_of_true_values(is_enlarged)
-    # Split regions are regions of complete row group, not overlapping with any
-    # DataFrame chunks.
-    # indices_split = get_region_indices_of_true_values(~is_enlarged)
+    likely_incomplete = ~amr_split_strategy.likely_complete
+    enlarged_mrs = amr_split_strategy.has_df_chunk | likely_incomplete
+    indices_emrs = get_region_indices_of_true_values(enlarged_mrs)
 
-    # Step 2: keep only enlarged regions that overlap with at least one overlap
-
-    # Step 2: keep only enlarged regions that overlap with at least one overlap
-    # region.
-    # Should not do that, to keep incomplete row groups that are neighbors to a
-    # a large df chunk to be written together, even if they are not overlapping.
-
-    # is_overlapping_with_overlap = np_any(
-    #    (indices_enlarged[:, None, 0] <= indices_overlap[None, :, 1])
-    #    & (indices_enlarged[:, None, 1] >= indices_overlap[None, :, 0]),
-    #    axis=1,  # Note: axis=1 to reduce along columns (overlap regions)
-    # )
-    # indices_enlarged = indices_enlarged[is_overlapping_with_overlap]
-
-    # Step 3: Filter out enlarged candidates based on multiple criteria.
-    # Get number of incomplete row groups at region boundaries.
-    # Offset starts by first region's start value.
-    cumsum_incomplete = cumsum(is_incomplete)
-    n_irgs_region_end = cumsum_incomplete[indices_enlarged[:, 1] - 1]
-    n_irgs_region_start = (
-        cumsum_incomplete[indices_enlarged[:, 0]] - cumsum_incomplete[indices_enlarged[0, 0]]
+    # Step 2: Filter out enlarged candidates based on multiple criteria.
+    # 2.a - Get number of incomplete merge regions per enlarged merged region.
+    # Those where 'max_n_irgs' is not reached will be filtered out
+    n_irgs_in_emrs = get_region_start_end_delta(
+        m_values=cumsum(amr_split_strategy.is_incomplete),
+        indices=indices_emrs,
     )
-    # Get which enlarged regions contain overlap regions that risk fragmentation.
-    fragmentation_risk = rg_split_strategy.get_risk_of_exceeding_rgst(
-        indices_overlap=indices_overlap,
-        indices_enlarged=indices_enlarged,
-    )
-    # Keep regions with too many incomplete row groups or with fragmentation risk.
-    indices_enlarged = indices_enlarged[
-        ((n_irgs_region_end - n_irgs_region_start) >= max_n_irgs) | fragmentation_risk
-    ]
+    # 2.b Get which enlarged regions into which the merge will likely create
+    # complete row groups.
+    creates_likely_complete_in_emrs = get_region_start_end_delta(
+        m_values=cumsum(amr_split_strategy.has_df_chunk | amr_split_strategy.likely_complete),
+        indices=indices_emrs,
+    ).astype(np_bool)
+    # Keep enlarged merge regions with too many incomplete atomic merge regions
+    # or with likely creation of complete row groups.
+    indices_emrs = indices_emrs[(n_irgs_in_emrs >= max_n_irgs) | creates_likely_complete_in_emrs]
 
-    # Step 4: Some enlarged sections have been filtered out during previous
-    # step. At this step, overlap regions that do not overlap with retained
-    # enlarged regions are added back in the regions to merge (without their
-    # possibly incomplete neighbor row groups).
-    is_overlapping_with_enlarged = np_any(
-        (indices_enlarged[:, None, 0] <= indices_overlap[None, :, 0])
-        & (indices_enlarged[:, None, 1] >= indices_overlap[None, :, 1]),
-        axis=0,
+    # Step 3: Retrieve indices of merge regions which have DataFrame chunks but
+    # are not in retained enlarged merge regions.
+    # Create an array of length the number of atomic merge regions, with value
+    # 1 if the atomic merge region is within an enlarged merge regions.
+    # Create an array of changes: +1 at starts, -1 at ends
+    indices_amrs = get_region_indices_of_true_values(amr_split_strategy.has_df_chunk)
+    enlarged_mrs = set_true_in_regions(
+        length=len(amr_split_strategy),
+        regions=indices_emrs,
     )
-    indices_overlap = indices_overlap[~is_overlapping_with_enlarged]
+    overlaps_with_emrs = get_region_start_end_delta(
+        m_values=cumsum(enlarged_mrs),
+        indices=indices_amrs,
+    ).astype(np_bool)
+    indices_amrs = indices_amrs[~overlaps_with_emrs]
 
-    return vstack((indices_overlap, indices_enlarged))
+    return vstack((indices_amrs, indices_emrs))
 
 
 @dataclass

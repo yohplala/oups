@@ -10,7 +10,6 @@ from typing import List, Tuple
 import pytest
 from numpy import array
 from numpy import array_equal
-from numpy import cumsum
 from numpy import empty
 from numpy.typing import NDArray
 from pandas import DataFrame
@@ -24,7 +23,6 @@ from oups.store.ordered_merge_info import get_region_indices_of_same_values
 from oups.store.ordered_merge_info import get_region_indices_of_true_values
 from oups.store.split_strategies import NRowsSplitStrategy
 from oups.store.split_strategies import TimePeriodSplitStrategy
-from oups.store.split_strategies import get_region_start_end_delta
 from tests.test_store.conftest import create_parquet_file
 
 
@@ -289,72 +287,6 @@ def test_compute_atomic_merge_regions(
     assert array_equal(amrs_prop["is_overlap"], expected["amrs_prop"]["is_overlap"])
     # Check interlaces array
     assert array_equal(rg_idx_df_interlaces_wo_overlap, expected["rg_idx_df_interlaces_wo_overlap"])
-
-
-@pytest.mark.parametrize(
-    "test_id, values, indices, expected",
-    [
-        (
-            "single_region_at_first",
-            array([1, 2, 3, 4]),  # values, cumsum = [1,3,6,10]
-            array([[0, 3]]),  # one region: indices 0-2
-            array([6]),  # 1+2+3 = 6-0 = 6
-        ),
-        (
-            "single_region_at_second",
-            array([1, 2, 3, 4, 5]),  # values, cumsum = [1,3,6,10,15]
-            array([[1, 4]]),  # one region: indices 1-3
-            array([9]),  # 2+3+4 = 10-1 = 9
-        ),
-        (
-            "multiple_overlapping_regions",
-            array([1, 2, 3, 4, 5, 6]),  # values, cumsum = [1,3,6,10,15,21]
-            array(
-                [
-                    [0, 2],  # region 1: indices 0-1
-                    [2, 5],  # region 2: indices 2-4
-                    [4, 6],  # region 3: indices 4-5
-                ],
-            ),
-            array([3, 12, 11]),  # 3-0=3, 15-3=12, 21-10=11
-        ),
-        (
-            "boolean_values",
-            array([0, 1, 0, 1, 1, 0]),  # values, cumsum = [0,1,1,2,3,3]
-            array(
-                [
-                    [1, 4],  # one region: indices 1-3
-                    [2, 5],  # one region: indices 2-4
-                ],
-            ),
-            array([2, 2]),  # 2-1=1, 3-1=2
-        ),
-    ],
-)
-def test_get_region_start_end_delta(
-    test_id: str,
-    values: NDArray,
-    indices: NDArray,
-    expected: NDArray,
-) -> None:
-    """
-    Test get_region_start_end_delta function with various inputs.
-
-    Parameters
-    ----------
-    test_id : str
-        Identifier for the test case.
-    values : NDArray
-        Input array of values.
-    indices : NDArray
-        Array of shape (n, 2) containing start and end indices of regions.
-    expected : NDArray
-        Expected output containing sums for each region.
-
-    """
-    m_values = cumsum(values)
-    result = get_region_start_end_delta(m_values, indices)
-    assert array_equal(result, expected)
 
 
 @pytest.mark.parametrize(

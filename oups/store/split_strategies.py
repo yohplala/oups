@@ -24,6 +24,8 @@ from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
+from oups.store.utils import get_region_start_end_delta
+
 
 LEFT = "left"
 RIGHT = "right"
@@ -31,90 +33,50 @@ MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
 MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
 
 
-def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
+class MergeRegionSplitStrategy(ABC):
     """
-    Get difference between values at end and start of each region.
-
-    Parameters
-    ----------
-    m_values : NDArray
-        Array of monotonic values, such as coming from a cumulative sum.
-    indices : NDArray
-        Array of shape (n, 2) containing start included and end excluded indices
-        of regions.
-
-    Returns
-    -------
-    NDArray
-        Array of length n containing the difference between values at end and
-        start of each region.
-
-    """
-    if indices[0, 0] == 0:
-        start_values = m_values[indices[:, 0] - 1]
-        start_values[0] = 0
-        return m_values[indices[:, 1] - 1] - start_values
-    else:
-        return m_values[indices[:, 1] - 1] - m_values[indices[:, 0] - 1]
-
-
-class RowGroupSplitStrategy(ABC):
-    """
-    Abstract base class for row group split strategies.
+    Abstract base class for merge region split strategies.
 
     This class defines strategies for:
-    - Evaluating completeness of existing row groups
-    - Assessing fragmentation risks during merges
-    - Determining appropriate sizes for new row groups
-    - Consolidating merge plans for efficient operations
+    - evaluating likelihood of region completeness after merge,
+    - determining appropriate sizes for new row groups,
+    - consolidating merge plans for efficient write operations.
 
     """
 
+    @property
     @abstractmethod
-    def is_incomplete(self) -> NDArray:
+    def has_df_chunk(self) -> NDArray:
         """
-        Check if row groups are incomplete based on strategy criteria.
+        Return boolean array indicating which merge regions have DataFrame chunks.
 
         Returns
         -------
         NDArray
-            Boolean array of length the number of row groups where True
-            indicates incomplete row groups.
+            Boolean array of length the number of atomic merge regions.
 
         """
-        raise NotImplementedError("Subclasses must implement this method")
+        raise NotImplementedError("Subclasses must implement this property")
 
+    @property
     @abstractmethod
-    def get_fragmentation_risk(
-        self,
-        indices_overlap: NDArray,
-        indices_enlarged: NDArray,
-    ) -> NDArray:
+    def likely_complete(self) -> NDArray:
         """
-        Check which enlarged regions get fragmentation risk from overlaps.
+        Return boolean array indicating which atomic merge regions is likely complete.
 
-        Fragmentation in an existing set of row groups is when a set of
-        contiguous incomplete row groups gets split by the addition of complete
-        row groups in the middle of it.
-
-        Parameters
-        ----------
-        indices_overlap : NDArray
-            Array of shape (m, 2) containing start and end indices of overlap
-            regions.
-        indices_enlarged : NDArray
-            Array of shape (n, 2) containing start included and end excluded
-            indices of enlarged regions. Enlarged regions contain one or several
-            overlap regions.
+        This can be the result of 2 conditions:
+        - either a DataFrame chunk and a row group are merged together, and the
+          result is likely complete.
+        - or if there is only a DatAframe chunk or only a row group, they are
+          complete by themselves.
 
         Returns
         -------
         NDArray
-            Boolean array of length n indicating which enlarged regions contain
-            overlap regions that risk creating fragmentation when merged.
+            Boolean array of length the number of atomic merge regions.
 
         """
-        raise NotImplementedError("Subclasses must implement this method")
+        raise NotImplementedError("Subclasses must implement this property")
 
     @abstractmethod
     def consolidate_merge_plan(
@@ -159,7 +121,7 @@ class RowGroupSplitStrategy(ABC):
         raise NotImplementedError("Subclasses must implement this method")
 
 
-class NRowsSplitStrategy(RowGroupSplitStrategy):
+class NRowsSplitStrategy(MergeRegionSplitStrategy):
     """
     Row group split strategy based on a target number of rows per row group.
     """
@@ -492,7 +454,7 @@ class NRowsSplitStrategy(RowGroupSplitStrategy):
         )
 
 
-class TimePeriodSplitStrategy(RowGroupSplitStrategy):
+class TimePeriodSplitStrategy(MergeRegionSplitStrategy):
     """
     Row group split strategy based on a time period target per row group.
     """
