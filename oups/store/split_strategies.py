@@ -10,9 +10,9 @@ from abc import ABC
 from abc import abstractmethod
 from typing import List, Tuple, Union
 
-from fastparquet import ParquetFile
 from numpy import array
 from numpy import cumsum
+from numpy import diff
 from numpy import nonzero
 from numpy import r_
 from numpy import searchsorted
@@ -24,6 +24,8 @@ from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
+from oups.store.atomic_merge_regions import HAS_DF_CHUNK
+from oups.store.atomic_merge_regions import HAS_ROW_GROUP
 from oups.store.utils import get_region_start_end_delta
 
 
@@ -128,9 +130,9 @@ class NRowsSplitStrategy(MergeRegionSplitStrategy):
 
     def __init__(
         self,
-        pf: ParquetFile,
+        amrs_info: NDArray,
+        n_rows_in_rgs: NDArray,
         df_n_rows: int,
-        df_idx_amr_ends_excl: NDArray,
         row_group_size_target: int,
         max_n_irgs: int,
     ):
@@ -139,22 +141,30 @@ class NRowsSplitStrategy(MergeRegionSplitStrategy):
 
         Parameters
         ----------
-        pf : ParquetFile
-            Parquet file.
+        amrs_info : NDArray
+            Array of shape (e, 5) containing the information about each atomic
+            merge regions.
+        n_rows_in_rgs : NDArray
+            Array of shape (r) containing the number of rows in each row group
+            in existing ParquetFile.
         df_n_rows : int
             Number of rows in DataFrame.
-        df_idx_amr_ends_excl : NDArray
-            End indices (exclusive) in DataFrame for each atomic merge region.
         row_group_size_target : int
-            Target number of rows for each row group.
+            Target number of rows above which a new row group should be created.
         max_n_irgs : int
             Maximum number of incomplete row groups allowed in a merge region.
 
         """
-        self.rg_n_rows = array([rg.num_rows for rg in pf.row_groups], dtype=int)
-        self.n_rgs = len(self.rg_n_rows)
+        # Max number of rows in each atomic merge region. This is a max in case
+        # there are duplicates between row groups and DataFrame that will be
+        # dropped.
+        self.max_n_rows_in_amrs = zeros(len(amrs_info), dtype=int)
+        self.max_n_rows_in_amrs[amrs_info[HAS_ROW_GROUP]] = n_rows_in_rgs
+        self.max_n_rows_in_amrs[amrs_info[HAS_DF_CHUNK]] += diff(
+            amrs_info["df_idx_end_excl"],
+            prepend=0,
+        )
         self.df_n_rows = df_n_rows
-        self.df_idx_amr_ends_excl = df_idx_amr_ends_excl
         self.rg_size_target = row_group_size_target
         self.min_size = int(row_group_size_target * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
         self.max_n_irgs = max_n_irgs
