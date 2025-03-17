@@ -15,7 +15,7 @@ is either:
 @author: yoh
 
 """
-from typing import List, Tuple, Union
+from typing import List, Union
 
 from numpy import arange
 from numpy import bool_ as np_bool
@@ -23,11 +23,11 @@ from numpy import diff
 from numpy import flatnonzero
 from numpy import insert
 from numpy import int_ as np_int
-from numpy import ndarray as NDArray
 from numpy import ones
 from numpy import r_
 from numpy import searchsorted
 from numpy import vstack
+from numpy.typing import NDArray
 from pandas import Series
 from pandas import Timestamp
 
@@ -43,14 +43,13 @@ def compute_atomic_merge_regions(
     rg_maxs: List[Union[int, float, Timestamp]],
     df_ordered_on: Series,
     drop_duplicates: bool,
-) -> Tuple[NDArray, NDArray[np_int]]:
+) -> NDArray:
     """
     Compute atomic merge regions.
 
     An atomic merge region ('amr') is
-      - either defined by an existing row group in
-        ParquetFile and if existing, its corresponding overlapping DataFrame
-        chunk,
+      - either defined by an existing row group in ParquetFile and its
+        corresponding overlapping DataFrame chunk if any,
       - or an orphan DataFrame chunk, i.e. not overlapping with any row group in
         ParquetFile.
 
@@ -90,7 +89,7 @@ def compute_atomic_merge_regions(
           row group.
         - 'has_row_group': boolean indicating if this region contains a
           row group.
-        - 'has_df_chunkp': boolean indicating if this region contains a
+        - 'has_df_chunk': boolean indicating if this region contains a
           DataFrame chunk.
 
     Notes
