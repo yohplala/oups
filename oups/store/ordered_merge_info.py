@@ -30,10 +30,11 @@ from numpy import zeros
 from numpy.typing import NDArray
 from pandas import DataFrame
 
+from oups.store.atomic_merge_regions import HAS_DF_CHUNK
+from oups.store.atomic_merge_regions import AMRSplitStrategy
+from oups.store.atomic_merge_regions import NRowsSplitStrategy
+from oups.store.atomic_merge_regions import TimePeriodSplitStrategy
 from oups.store.atomic_merge_regions import compute_atomic_merge_regions
-from oups.store.split_strategies import MergeRegionSplitStrategy
-from oups.store.split_strategies import NRowsSplitStrategy
-from oups.store.split_strategies import TimePeriodSplitStrategy
 from oups.store.utils import get_region_start_end_delta
 
 
@@ -112,27 +113,31 @@ def set_true_in_regions(length: int, regions: NDArray[np_int]) -> NDArray[np_boo
 
 
 def _compute_enlarged_merge_regions(
+    amrs_info: NDArray,
+    amr_split_strategy: AMRSplitStrategy,
     max_n_irgs: int,
-    amr_split_strategy: MergeRegionSplitStrategy,
 ) -> NDArray[np_int]:
     """
     Aggregate atomic merge regions into enlarged merge regions.
 
     Sets of contiguous atomic merge regions with DataFrame chunks are extended
-    with neighbor incomplete regions depending on two conditions,
+    with neighbor regions outside target size depending on two conditions,
       - if the atomic merge region with DataFrame chunks is found to result in a
-       potentially complete row group.
-      - if the total number of incomplete atomic merge regions in a given
-        enlarged merge region is greater than `max_n_irgs`.
+        row group potentially meeting target size.
+      - if the total number of atomic merge regions outside target size in a
+        given enlarged merge region is greater than `max_n_irgs`.
 
     Parameters
     ----------
-    max_n_irgs : int
-        Maximum number of resulting incomplete contiguous row groups allowed in
-        a merge region.
-    amr_split_strategy : MergeRegionSplitStrategy
-        MergeRegionSplitStrategy providing methods to analyze completeness and
+    amrs_info : NDArray
+        Array of shape (n, 5) containing the information about each atomic
+        merge region.
+    amr_split_strategy : AMRSplitStrategy
+        AMRSplitStrategy providing methods to analyze completeness and
         likelihood of creating complete row groups.
+    max_n_irgs : int
+        Maximum number of resulting contiguous row groups outside target size
+        (incomplete) allowed in a merge region.
 
     Returns
     -------
@@ -143,33 +148,35 @@ def _compute_enlarged_merge_regions(
     """
     # Step 1: assess start indices (included) and end indices (excluded) of
     # enlarged merge regions.
-    likely_incomplete = ~amr_split_strategy.likely_complete
-    enlarged_mrs = amr_split_strategy.has_df_chunk | likely_incomplete
+    likely_outside_target_size = ~amr_split_strategy.likely_meets_target_size
+    enlarged_mrs = amrs_info[HAS_DF_CHUNK] | likely_outside_target_size
     indices_emrs = get_region_indices_of_true_values(enlarged_mrs)
 
     # Step 2: Filter out enlarged candidates based on multiple criteria.
     # 2.a - Get number of incomplete merge regions per enlarged merged region.
     # Those where 'max_n_irgs' is not reached will be filtered out
     n_amrs_in_emrs = get_region_start_end_delta(
-        m_values=cumsum(likely_incomplete),
+        m_values=cumsum(likely_outside_target_size),
         indices=indices_emrs,
     )
     # 2.b Get which enlarged regions into which the merge will likely create
-    # complete row groups.
-    creates_likely_complete_in_emrs = get_region_start_end_delta(
-        m_values=cumsum(amr_split_strategy.has_df_chunk | amr_split_strategy.likely_complete),
+    # right sized row groups.
+    creates_likely_right_sized_in_emrs = get_region_start_end_delta(
+        m_values=cumsum(
+            amr_split_strategy.has_df_chunk | amr_split_strategy.likely_meets_target_size,
+        ),
         indices=indices_emrs,
     ).astype(np_bool)
     # Keep enlarged merge regions with too many incomplete atomic merge regions
     # or with likely creation of complete row groups.
-    indices_emrs = indices_emrs[(n_amrs_in_emrs >= max_n_irgs) | creates_likely_complete_in_emrs]
+    indices_emrs = indices_emrs[(n_amrs_in_emrs >= max_n_irgs) | creates_likely_right_sized_in_emrs]
 
     # Step 3: Retrieve indices of merge regions which have DataFrame chunks but
     # are not in retained enlarged merge regions.
     # Create an array of length the number of atomic merge regions, with value
     # 1 if the atomic merge region is within an enlarged merge regions.
     # Create an array of changes: +1 at starts, -1 at ends
-    indices_amrs = get_region_indices_of_true_values(amr_split_strategy.has_df_chunk)
+    indices_amrs = get_region_indices_of_true_values(amrs_info[HAS_DF_CHUNK])
     enlarged_mrs = set_true_in_regions(
         length=len(amr_split_strategy),
         regions=indices_emrs,
@@ -218,7 +225,7 @@ def compute_ordered_merge_plan(
     pf: ParquetFile,
     df: DataFrame,
     ordered_on: str,
-    row_group_size_target: Union[int, str],
+    row_group_target_size: Union[int, str],
     drop_duplicates: bool,
     max_n_irgs: Optional[int] = None,
 ) -> OrderedMergePlan:
@@ -235,7 +242,7 @@ def compute_ordered_merge_plan(
     ordered_on : str
         Column name by which data is ordered. Must exist in both DataFrame
         and ParquetFile.
-    row_group_size_target : Union[int, str]
+    row_group_target_size : Union[int, str]
         Target row group size.
     drop_duplicates : bool
         Flag impacting how overlap boundaries have to be managed.
@@ -291,17 +298,17 @@ def compute_ordered_merge_plan(
         drop_duplicates=drop_duplicates,
     )
     # Initialize row group split strategy.
-    rg_split_strategy = (
+    amr_split_strategy = (
         NRowsSplitStrategy(
             amrs_info=amrs_info,
-            n_rows_in_rgs=array([rg.num_rows for rg in pf], dtype=int),
+            rgs_n_rows=array([rg.num_rows for rg in pf], dtype=int),
             df_n_rows=len(df),
-            row_group_size_target=row_group_size_target,
+            row_group_target_size=row_group_target_size,
             max_n_irgs=max_n_irgs,
         )
-        if isinstance(row_group_size_target, int)
+        if isinstance(row_group_target_size, int)
         else TimePeriodSplitStrategy(
-            row_group_size_target,
+            row_group_target_size,
         )
     )
     # Compute enlarged merge regions start and end indices.
@@ -311,7 +318,7 @@ def compute_ordered_merge_plan(
     # It also restricts to the set of atomic merge regions to be yielded.
     amr_idx_emrs_starts_ends_excl = _compute_enlarged_merge_regions(
         amrs_info=amrs_info,
-        rg_split_strategy=rg_split_strategy,
+        amr_split_strategy=amr_split_strategy,
         max_n_irgs=max_n_irgs,
     )
     # Filter and reshape arrays describing atomic merge regions into enlarged
@@ -319,7 +326,7 @@ def compute_ordered_merge_plan(
     # For each enlarged merge regions, aggregate atomic merge regions depending
     # on the split strategy.
     emrs_info = [
-        rg_split_strategy.consolidate_enlarged_merge_regions(
+        amr_split_strategy.consolidate_enlarged_merge_regions(
             amrs_info=amrs_info[start:end_excl],
         )
         for start, end_excl in amr_idx_emrs_starts_ends_excl
@@ -333,6 +340,6 @@ def compute_ordered_merge_plan(
     sort_rgs_after_write = True
     return OrderedMergePlan(
         emrs_info=emrs_info,
-        rg_sizer=rg_split_strategy.rg_sizer,
+        rg_sizer=amr_split_strategy.rg_sizer,
         sort_rgs_after_write=sort_rgs_after_write,
     )

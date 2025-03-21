@@ -22,9 +22,9 @@ from pandas import DataFrame
 from pandas import MultiIndex
 
 from oups.store.defines import DIR_SEP
-from oups.store.split_strategies import get_region_start_end_delta
 from oups.store.utils import conform_cmidx
 from oups.store.utils import files_at_depth
+from oups.store.utils import get_region_start_end_delta
 
 from .. import TEST_DATA
 

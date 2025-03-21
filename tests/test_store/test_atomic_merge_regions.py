@@ -10,12 +10,16 @@ from typing import List
 
 import pytest
 from numpy import array
-from numpy import array_equal
+from numpy import bool_
+from numpy import int_
+from numpy import ones
+from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
 from pandas import Series
 
 from oups.store.atomic_merge_regions import HAS_DF_CHUNK
 from oups.store.atomic_merge_regions import HAS_ROW_GROUP
+from oups.store.atomic_merge_regions import NRowsSplitStrategy
 from oups.store.atomic_merge_regions import compute_atomic_merge_regions
 
 
@@ -182,8 +186,66 @@ def test_compute_atomic_merge_regions(
         drop_duplicates,
     )
     # Check structured array fields
-    assert array_equal(amrs_prop["rg_idx_start"], expected["rg_idx_start"])
-    assert array_equal(amrs_prop["rg_idx_end_excl"], expected["rg_idx_end_excl"])
-    assert array_equal(amrs_prop["df_idx_end_excl"], expected["df_idx_end_excl"])
-    assert array_equal(amrs_prop[HAS_ROW_GROUP], expected[HAS_ROW_GROUP])
-    assert array_equal(amrs_prop[HAS_DF_CHUNK], expected[HAS_DF_CHUNK])
+    assert_array_equal(amrs_prop["rg_idx_start"], expected["rg_idx_start"])
+    assert_array_equal(amrs_prop["rg_idx_end_excl"], expected["rg_idx_end_excl"])
+    assert_array_equal(amrs_prop["df_idx_end_excl"], expected["df_idx_end_excl"])
+    assert_array_equal(amrs_prop[HAS_ROW_GROUP], expected[HAS_ROW_GROUP])
+    assert_array_equal(amrs_prop[HAS_DF_CHUNK], expected[HAS_DF_CHUNK])
+
+
+def test_nrows_split_strategy_likely_meets_target_size():
+    """
+    Test NRowsSplitStrategy.likely_meets_target_size property.
+
+    Tests various scenarios:
+    1. AMR with only row group
+    2. AMR with only DataFrame chunk
+    3. AMR with both row group and DataFrame chunk
+    4. AMR that's too small
+    5. AMR that's too large
+
+    """
+    target_size = 100  # min size: 80
+    # Create mock amrs_info with 5 regions:
+    # 1. RG only (90 rows) - meets target
+    # 2. DF only (85 rows) - meets target
+    # 3. Both RG (50) and DF (40) - meets target due to potential duplicates
+    # 4. Both RG (30) and DF (30) - too small
+    # 5. Both RG (120) and DF (0) - too large
+    # 6. Both RG (30) and DF (80) - too large
+    amrs_info = ones(
+        6,
+        dtype=[
+            ("rg_idx_start", int_),
+            ("rg_idx_end_excl", int_),
+            ("df_idx_end_excl", int_),
+            (HAS_ROW_GROUP, bool_),
+            (HAS_DF_CHUNK, bool_),
+        ],
+    )
+    # Set which regions have row groups and DataFrame chunks
+    amrs_info[HAS_ROW_GROUP] = array([True, False, True, True, True, True])
+    amrs_info[HAS_DF_CHUNK] = array([False, True, True, True, False, True])
+    # Set up DataFrame chunk sizes through df_idx_end_excl
+    amrs_info["df_idx_end_excl"] = array([0, 85, 125, 155, 155, 235])
+    # Create row group sizes array
+    rgs_n_rows = array([90, 50, 30, 120, 30])
+    # Initialize strategy
+    strategy = NRowsSplitStrategy(
+        amrs_info=amrs_info,
+        rgs_n_rows=rgs_n_rows,
+        df_n_rows=sum(amrs_info["df_idx_end_excl"]),
+        row_group_target_size=target_size,
+        max_n_irgs=1,
+    )
+    # Get result
+    result = strategy.likely_meets_target_size
+    # Expected results:
+    # 1. True  - RG only with 90 rows (between min_size and target_size)
+    # 2. True  - DF only with 85 rows (between min_size and target_size)
+    # 3. True  - Combined RG(50) + DF(40) could meet target after deduplication
+    # 4. False - Combined RG(30) + DF(30) too small even without deduplication
+    # 5. False - RG only with 120 rows (above target_size)
+    # 6. False - Combined RG(30) + DF(80) could be too large
+    expected = array([True, True, True, False, False, False])
+    assert_array_equal(result, expected)
