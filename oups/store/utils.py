@@ -152,7 +152,7 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
 
 def floor_ts(ts: Timestamp, freq: str) -> Timestamp:
     """
-    Floor a timestamp even with non-fixed frequency.
+    Floor a timestamp even if using non-fixed frequency.
 
     Parameters
     ----------
@@ -160,6 +160,7 @@ def floor_ts(ts: Timestamp, freq: str) -> Timestamp:
         Timestamp to floor.
     freq : str
         Frequency string.
+        https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
 
     """
     try:
@@ -170,7 +171,7 @@ def floor_ts(ts: Timestamp, freq: str) -> Timestamp:
 
 def ceil_ts(ts: Timestamp, freq: str) -> Timestamp:
     """
-    Ceil a timestamp even with non-fixed frequency.
+    Ceil a timestamp even if using non-fixed frequency.
 
     Parameters
     ----------
@@ -178,6 +179,7 @@ def ceil_ts(ts: Timestamp, freq: str) -> Timestamp:
         Timestamp to ceil.
     freq : str
         Frequency string.
+        https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
 
     """
     try:

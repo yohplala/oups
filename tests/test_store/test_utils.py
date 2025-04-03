@@ -205,8 +205,8 @@ def test_get_region_start_end_delta(
         (
             "semi_month_end",
             Timestamp("2024-03-17 14:30:00"),  # mid-month timestamp
-            "SME",  # semi-month end (14th and last day)
-            Timestamp("2024-03-14 00:00:00"),  # floor to 14th
+            "SME",  # semi-month end (15th and last day)
+            Timestamp("2024-03-15 00:00:00"),  # floor to 15th
             Timestamp("2024-03-31 00:00:00"),  # ceil to month end
         ),
         (
@@ -214,12 +214,12 @@ def test_get_region_start_end_delta(
             Timestamp("2024-03-07 14:30:00"),  # early month timestamp
             "SME",  # semi-month end (14th and last day)
             Timestamp("2024-02-29 00:00:00"),  # floor to previous month end
-            Timestamp("2024-03-14 00:00:00"),  # ceil to 14th
+            Timestamp("2024-03-15 00:00:00"),  # ceil to 15th
         ),
         (
             "hourly",
             Timestamp("2024-03-15 14:37:23"),  # timestamp with minutes and seconds
-            "H",  # hourly
+            "h",  # hourly
             Timestamp("2024-03-15 14:00:00"),  # floor to hour
             Timestamp("2024-03-15 15:00:00"),  # ceil to next hour
         ),
@@ -242,6 +242,9 @@ def test_floor_ceil_timestamp(
     """
     Test floor and ceil functions with various frequency strings.
 
+    Frequency aliases:
+    https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
+
     Parameters
     ----------
     test_id : str
@@ -256,7 +259,5 @@ def test_floor_ceil_timestamp(
         Expected result of ceil operation.
 
     """
-    print("floor ", floor_ts(ts, freq))
-    print("ceil ", ceil_ts(ts, freq))
     assert floor_ts(ts, freq) == expected_floor
     assert ceil_ts(ts, freq) == expected_ceil
