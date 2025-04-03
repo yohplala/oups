@@ -162,7 +162,10 @@ def floor_ts(ts: Timestamp, freq: str) -> Timestamp:
         Frequency string.
 
     """
-    return date_range(start=ts, periods=1, freq=freq)[0]
+    try:
+        return ts.floor(freq)
+    except ValueError:
+        return date_range(end=ts.normalize(), periods=1, freq=freq)[0]
 
 
 def ceil_ts(ts: Timestamp, freq: str) -> Timestamp:
@@ -177,4 +180,7 @@ def ceil_ts(ts: Timestamp, freq: str) -> Timestamp:
         Frequency string.
 
     """
-    return date_range(start=floor_ts(ts, freq), periods=2, freq=freq)[1]
+    try:
+        return ts.ceil(freq)
+    except ValueError:
+        return date_range(start=floor_ts(ts, freq), periods=2, freq=freq)[1]

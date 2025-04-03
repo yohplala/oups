@@ -168,6 +168,13 @@ def test_get_region_start_end_delta(
     "test_id, ts, freq, expected_floor, expected_ceil",
     [
         (
+            "month_start_exact",
+            Timestamp("2024-03-01"),  # month start already
+            "MS",  # month start
+            Timestamp("2024-03-01 00:00:00"),  # floor to month start
+            Timestamp("2024-04-01 00:00:00"),  # ceil to next month start
+        ),
+        (
             "month_start",
             Timestamp("2024-03-15 14:30:00"),  # mid-month timestamp
             "MS",  # month start
@@ -178,8 +185,8 @@ def test_get_region_start_end_delta(
             "month_end",
             Timestamp("2024-03-15 14:30:00"),  # mid-month timestamp
             "ME",  # month end
-            Timestamp("2024-03-31 00:00:00"),  # floor to month end
-            Timestamp("2024-04-30 00:00:00"),  # ceil to next month end
+            Timestamp("2024-02-29 00:00:00"),  # floor to month end
+            Timestamp("2024-03-31 00:00:00"),  # ceil to next month end
         ),
         (
             "semi_month_start",
@@ -249,5 +256,7 @@ def test_floor_ceil_timestamp(
         Expected result of ceil operation.
 
     """
+    print("floor ", floor_ts(ts, freq))
+    print("ceil ", ceil_ts(ts, freq))
     assert floor_ts(ts, freq) == expected_floor
     assert ceil_ts(ts, freq) == expected_ceil
