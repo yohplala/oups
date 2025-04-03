@@ -341,8 +341,6 @@ def test_time_period_split_strategy():
         end=Timestamp("2024-06-01"),  # Ceil of latest timestamp
         freq="MS",
     )
-    print("expected bounds:")
-    print(expected_bounds)
     assert_array_equal(strategy.period_bounds, expected_bounds)
     # Test df_chunk_starts
     expected_df_chunk_starts = Series(
