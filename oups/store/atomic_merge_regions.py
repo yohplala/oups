@@ -41,6 +41,8 @@ from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
+from oups.store.utils import ceil_ts
+from oups.store.utils import floor_ts
 from oups.store.utils import get_region_start_end_delta
 
 
@@ -399,8 +401,6 @@ class NRowsSplitStrategy(AMRSplitStrategy):
             m_values=cumsum(self.rg_n_rows),
             indices=indices_overlap,
         )
-        print("rg_rows_per_overlap_regions")
-        print(rg_rows_per_overlap_regions)
         # TODO:
         # should include all rows of df that are over the overlap regions
         # as well as df chunk neighbor to these regions and incomplete row
@@ -410,8 +410,6 @@ class NRowsSplitStrategy(AMRSplitStrategy):
             m_values=self.df_idx_tmrg_ends_excl - self.df_idx_tmrg_starts - 1,
             indices=indices_overlap,
         )
-        print("df_rows_per_overlap_regions")
-        print(df_rows_per_overlap_regions)
         # 'overlap_has_risk' is an array of length the number of overlap
         # regions.
         overlap_has_risk = (
@@ -568,13 +566,18 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
         arm_idx_df_chunk = flatnonzero(amrs_info[HAS_DF_CHUNK])
         df_idx_chunk_starts = zeros(len(arm_idx_df_chunk), dtype=int)
         df_idx_chunk_starts[1:] = amrs_info[DF_IDX_END_EXCL][arm_idx_df_chunk[:-1]]
-        self.df_chunk_starts = df_ordered_on.iloc[df_idx_chunk_starts]
-        self.df_chunk_ends = df_ordered_on.iloc[amrs_info[DF_IDX_END_EXCL][arm_idx_df_chunk] - 1]
+        self.df_chunk_starts = df_ordered_on.iloc[df_idx_chunk_starts].reset_index(drop=True)
+        self.df_chunk_ends = df_ordered_on.iloc[
+            amrs_info[DF_IDX_END_EXCL][arm_idx_df_chunk] - 1
+        ].reset_index(drop=True)
         self.amrs_info = amrs_info
         self.amr_period = row_group_period
         # Generate period bounds.
-        start_ts = min(self.df_chunk_starts[0], rg_ordered_on_mins[0]).floor(row_group_period)
-        end_ts = max(self.df_chunk_ends[-1], rg_ordered_on_maxs[-1]).ceil(row_group_period)
+        start_ts = floor_ts(
+            min(self.df_chunk_starts.iloc[0], rg_ordered_on_mins[0]),
+            row_group_period,
+        )
+        end_ts = ceil_ts(max(self.df_chunk_ends.iloc[-1], rg_ordered_on_maxs[-1]), row_group_period)
         self.period_bounds = date_range(start=start_ts, end=end_ts, freq=row_group_period)
 
     @cached_property
@@ -618,7 +621,7 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
         # Process DataFrame chunks
         # Find which period each chunk starts and ends in
         period_idx_df_chunk_starts = searchsorted(self.period_bounds, self.df_chunk_starts)
-        period_idx_df_chunk_ends = searchsorted(self.period_bounds, self.df_chunk_ends_excl)
+        period_idx_df_chunk_ends = searchsorted(self.period_bounds, self.df_chunk_ends)
         # Mark chunks that span multiple periods as not meeting target
         df_chunk_meets_target = period_idx_df_chunk_ends == period_idx_df_chunk_starts
         # Map back to atomic merge regions

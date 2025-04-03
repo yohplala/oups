@@ -18,6 +18,7 @@ from numpy.typing import NDArray
 from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
+from pandas.testing import assert_series_equal
 
 from oups.store.atomic_merge_regions import DF_IDX_END_EXCL
 from oups.store.atomic_merge_regions import HAS_DF_CHUNK
@@ -290,7 +291,6 @@ def test_time_period_split_strategy():
             Timestamp("2024-04-10"),  # RG5: within Apr
         ],
     )
-
     rg_ordered_on_maxs = array(
         [
             Timestamp("2023-12-19"),  # RG1: within Dec
@@ -308,7 +308,7 @@ def test_time_period_split_strategy():
             Timestamp("2024-04-03"),  # DF2: spans Mar-Apr
             Timestamp("2024-04-11"),
             Timestamp("2024-04-15"),
-            Timestamp("2024-04-22"),
+            Timestamp("2024-04-16"),
             Timestamp("2024-05-22"),
         ],
     )
@@ -336,8 +336,6 @@ def test_time_period_split_strategy():
         row_group_period=time_period,
     )
     # Test period_bounds
-    print("ceil of latest timestamp:")
-    print(Timestamp("2024-05-22").ceil(time_period))
     expected_bounds = date_range(
         start=Timestamp("2023-12-01"),  # Floor of earliest timestamp
         end=Timestamp("2024-06-01"),  # Ceil of latest timestamp
@@ -347,7 +345,7 @@ def test_time_period_split_strategy():
     print(expected_bounds)
     assert_array_equal(strategy.period_bounds, expected_bounds)
     # Test df_chunk_starts
-    expected_df_chunk_starts = array(
+    expected_df_chunk_starts = Series(
         [
             Timestamp("2024-03-15"),  # First timestamp
             Timestamp("2024-03-17"),  # End of df chunk 1
@@ -355,25 +353,26 @@ def test_time_period_split_strategy():
             Timestamp("2024-04-16"),  # End of df chunk 3
         ],
     )
-    assert_array_equal(strategy.df_chunk_starts, expected_df_chunk_starts)
+    assert_series_equal(strategy.df_chunk_starts, expected_df_chunk_starts)
     # Test df_chunk_ends
-    expected_df_chunk_ends = array(
+    expected_df_chunk_ends = Series(
         [
             Timestamp("2024-03-15"),  # First timestamp
-            Timestamp("2024-03-17"),  # End of df chunk 1
-            Timestamp("2024-04-11"),  # End of df chunk 2
-            Timestamp("2024-04-16"),  # End of df chunk 3
+            Timestamp("2024-04-03"),  # End of df chunk 1
+            Timestamp("2024-04-15"),  # End of df chunk 2
+            Timestamp("2024-05-22"),  # End of df chunk 3
         ],
     )
-    assert_array_equal(strategy.df_chunk_ends, expected_df_chunk_ends)
+    assert_series_equal(strategy.df_chunk_ends, expected_df_chunk_ends)
     # Test likely_meets_target_size
     result = strategy.likely_meets_target_size
     # Expected results:
-    # 1. False - Has both RG and DF chunk
+    # 1. False - Multiple RGs in same period (December)
     # 2. False - Multiple RGs in same period (December)
     # 3. False - RG spans multiple periods (Jan-Feb)
     # 4. False - Has both RG and DF chunk
-    # 5. True  - DF chunk within single period
+    # 5. False - DF chunk spanning multiple periods
     # 6. False - Has both RG and DF chunk
-    expected = array([False, False, False, False, True, False])
+    # 6. False - DF chunk spanning multiple periods
+    expected = array([False, False, False, False, False, False, False])
     assert_array_equal(result, expected)
