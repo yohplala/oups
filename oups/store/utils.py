@@ -152,7 +152,7 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
 
 def floor_ts(ts: Timestamp, freq: str) -> Timestamp:
     """
-    Floor a timestamp.
+    Floor a timestamp even with non-fixed frequency.
 
     Parameters
     ----------
@@ -167,7 +167,7 @@ def floor_ts(ts: Timestamp, freq: str) -> Timestamp:
 
 def ceil_ts(ts: Timestamp, freq: str) -> Timestamp:
     """
-    Ceil a timestamp.
+    Ceil a timestamp even with non-fixed frequency.
 
     Parameters
     ----------
