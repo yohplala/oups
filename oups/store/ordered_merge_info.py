@@ -291,24 +291,29 @@ def compute_ordered_merge_plan(
     #   DataFrame chunk),
     # - or as a DataFrame chunk not overlapping with any existing row groups.
     pf_statistics = pf.statistics
+    df_ordered_on = df.loc[:, ordered_on]
     amrs_info = compute_atomic_merge_regions(
         rg_mins=pf_statistics[MIN][ordered_on],
         rg_maxs=pf_statistics[MAX][ordered_on],
-        df_ordered_on=df.loc[:, ordered_on],
+        df_ordered_on=df_ordered_on,
         drop_duplicates=drop_duplicates,
     )
     # Initialize row group split strategy.
     amr_split_strategy = (
         NRowsSplitStrategy(
-            amrs_info=amrs_info,
             rgs_n_rows=array([rg.num_rows for rg in pf], dtype=int),
             df_n_rows=len(df),
+            amrs_info=amrs_info,
             row_group_target_size=row_group_target_size,
             max_n_irgs=max_n_irgs,
         )
         if isinstance(row_group_target_size, int)
         else TimePeriodSplitStrategy(
-            row_group_target_size,
+            rg_ordered_on_mins=pf_statistics[MIN][ordered_on],
+            rg_ordered_on_maxs=pf_statistics[MAX][ordered_on],
+            df_ordered_on=df_ordered_on,
+            amrs_info=amrs_info,
+            row_group_period=row_group_target_size,
         )
     )
     # Compute enlarged merge regions start and end indices.

@@ -10,6 +10,8 @@ from typing import Iterator, List, Tuple
 
 from numpy.typing import NDArray
 from pandas import DataFrame
+from pandas import Timestamp
+from pandas import date_range
 
 from oups.store.defines import DIR_SEP
 
@@ -146,3 +148,33 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
         return m_values[indices[:, 1] - 1] - start_values
     else:
         return m_values[indices[:, 1] - 1] - m_values[indices[:, 0] - 1]
+
+
+def floor_ts(ts: Timestamp, freq: str) -> Timestamp:
+    """
+    Floor a timestamp.
+
+    Parameters
+    ----------
+    ts : Timestamp
+        Timestamp to floor.
+    freq : str
+        Frequency string.
+
+    """
+    return date_range(start=ts, periods=1, freq=freq)[0]
+
+
+def ceil_ts(ts: Timestamp, freq: str) -> Timestamp:
+    """
+    Ceil a timestamp.
+
+    Parameters
+    ----------
+    ts : Timestamp
+        Timestamp to ceil.
+    freq : str
+        Frequency string.
+
+    """
+    return date_range(start=floor_ts(ts, freq), periods=2, freq=freq)[1]

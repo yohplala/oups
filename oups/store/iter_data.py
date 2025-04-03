@@ -323,7 +323,7 @@ def iter_merged_pf_df(
             # row_group_size_target=list(range(len(chunk), step=row_group_size_target))
             # if max_n_irgs or chunk_countdown
             # else row_group_size_target,
-            row_group_size_target=row_group_sizer(len(chunk), chunk_countdown),
+            row_group_size_target=row_group_sizer(chunk, chunk_countdown),
             distinct_bounds=distinct_bounds,
             duplicates_on=duplicates_on,
             yield_remainder=not chunk_countdown,  # yield last chunk

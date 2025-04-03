@@ -20,10 +20,13 @@ from numpy import cumsum
 from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import MultiIndex
+from pandas import Timestamp
 
 from oups.store.defines import DIR_SEP
+from oups.store.utils import ceil_ts
 from oups.store.utils import conform_cmidx
 from oups.store.utils import files_at_depth
+from oups.store.utils import floor_ts
 from oups.store.utils import get_region_start_end_delta
 
 from .. import TEST_DATA
@@ -159,3 +162,92 @@ def test_get_region_start_end_delta(
     m_values = cumsum(values)
     result = get_region_start_end_delta(m_values, indices)
     assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "test_id, ts, freq, expected_floor, expected_ceil",
+    [
+        (
+            "month_start",
+            Timestamp("2024-03-15 14:30:00"),  # mid-month timestamp
+            "MS",  # month start
+            Timestamp("2024-03-01 00:00:00"),  # floor to month start
+            Timestamp("2024-04-01 00:00:00"),  # ceil to next month start
+        ),
+        (
+            "month_end",
+            Timestamp("2024-03-15 14:30:00"),  # mid-month timestamp
+            "ME",  # month end
+            Timestamp("2024-03-31 00:00:00"),  # floor to month end
+            Timestamp("2024-04-30 00:00:00"),  # ceil to next month end
+        ),
+        (
+            "semi_month_start",
+            Timestamp("2024-03-17 14:30:00"),  # mid-month timestamp
+            "SMS",  # semi-month start (1st and 15th)
+            Timestamp("2024-03-15 00:00:00"),  # floor to 15th
+            Timestamp("2024-04-01 00:00:00"),  # ceil to next month start
+        ),
+        (
+            "semi_month_start_early",
+            Timestamp("2024-03-07 14:30:00"),  # early month timestamp
+            "SMS",  # semi-month start (1st and 15th)
+            Timestamp("2024-03-01 00:00:00"),  # floor to month start
+            Timestamp("2024-03-15 00:00:00"),  # ceil to 15th
+        ),
+        (
+            "semi_month_end",
+            Timestamp("2024-03-17 14:30:00"),  # mid-month timestamp
+            "SME",  # semi-month end (14th and last day)
+            Timestamp("2024-03-14 00:00:00"),  # floor to 14th
+            Timestamp("2024-03-31 00:00:00"),  # ceil to month end
+        ),
+        (
+            "semi_month_end_early",
+            Timestamp("2024-03-07 14:30:00"),  # early month timestamp
+            "SME",  # semi-month end (14th and last day)
+            Timestamp("2024-02-29 00:00:00"),  # floor to previous month end
+            Timestamp("2024-03-14 00:00:00"),  # ceil to 14th
+        ),
+        (
+            "hourly",
+            Timestamp("2024-03-15 14:37:23"),  # timestamp with minutes and seconds
+            "H",  # hourly
+            Timestamp("2024-03-15 14:00:00"),  # floor to hour
+            Timestamp("2024-03-15 15:00:00"),  # ceil to next hour
+        ),
+        (
+            "daily",
+            Timestamp("2024-03-15 14:37:23"),  # timestamp with time
+            "D",  # daily
+            Timestamp("2024-03-15 00:00:00"),  # floor to day
+            Timestamp("2024-03-16 00:00:00"),  # ceil to next day
+        ),
+    ],
+)
+def test_floor_ceil_timestamp(
+    test_id: str,
+    ts: Timestamp,
+    freq: str,
+    expected_floor: Timestamp,
+    expected_ceil: Timestamp,
+) -> None:
+    """
+    Test floor and ceil functions with various frequency strings.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    ts : Timestamp
+        Input timestamp to floor/ceil.
+    freq : str
+        Frequency string ('MS', 'ME', 'SMS', 'SME', 'H', 'D').
+    expected_floor : Timestamp
+        Expected result of floor operation.
+    expected_ceil : Timestamp
+        Expected result of ceil operation.
+
+    """
+    assert floor_ts(ts, freq) == expected_floor
+    assert ceil_ts(ts, freq) == expected_ceil

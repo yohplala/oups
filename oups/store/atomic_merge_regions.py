@@ -21,7 +21,7 @@ from functools import cached_property
 from typing import List, Tuple, Union
 
 from numpy import arange
-from numpy import array
+from numpy import bincount
 from numpy import bool_
 from numpy import cumsum
 from numpy import diff
@@ -36,6 +36,7 @@ from numpy import unique
 from numpy import vstack
 from numpy import zeros
 from numpy.typing import NDArray
+from pandas import DataFrame
 from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
@@ -45,6 +46,7 @@ from oups.store.utils import get_region_start_end_delta
 
 LEFT = "left"
 RIGHT = "right"
+DF_IDX_END_EXCL = "df_idx_end_excl"
 HAS_ROW_GROUP = "has_row_group"
 HAS_DF_CHUNK = "has_df_chunk"
 MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
@@ -151,7 +153,7 @@ def compute_atomic_merge_regions(
         dtype=[
             ("rg_idx_start", int_),
             ("rg_idx_end_excl", int_),
-            ("df_idx_end_excl", int_),
+            (DF_IDX_END_EXCL, int_),
             (HAS_ROW_GROUP, bool_),
             (HAS_DF_CHUNK, bool_),
         ],
@@ -180,9 +182,9 @@ def compute_atomic_merge_regions(
 
     amrs_info["rg_idx_start"] = rg_idxs_template[:-1]
     amrs_info["rg_idx_end_excl"] = rg_idxs_template[1:]
-    amrs_info["df_idx_end_excl"] = df_idx_amr_ends_excl
+    amrs_info[DF_IDX_END_EXCL] = df_idx_amr_ends_excl
     amrs_info[HAS_ROW_GROUP] = amrs_info["rg_idx_start"] != amrs_info["rg_idx_end_excl"]
-    amrs_info[HAS_DF_CHUNK] = diff(amrs_info["df_idx_end_excl"], prepend=0) != 0
+    amrs_info[HAS_DF_CHUNK] = diff(amrs_info[DF_IDX_END_EXCL], prepend=0) != 0
     return amrs_info
 
 
@@ -269,13 +271,28 @@ class AMRSplitStrategy(ABC):
 class NRowsSplitStrategy(AMRSplitStrategy):
     """
     Row group split strategy based on a target number of rows per row group.
+
+    Attributes
+    ----------
+    amr_target_size : int
+        Target number of rows above which a new row group should be created.
+    amr_min_size : int
+        Minimum number of rows in an atomic merge region, computed as
+        ``MAX_ROW_GROUP_SIZE_SCALE_FACTOR * row_group_target_size``.
+    max_n_irgs : int
+        Maximum number of incomplete row groups allowed in a merge region.
+    amrs_max_n_rows : NDArray
+        Array of shape (e) containing the maximum number of rows in each atomic
+        merge region.
+    df_n_rows : int
+        Number of rows in DataFrame.
+
     """
 
     def __init__(
         self,
-        amrs_info: NDArray,
         rgs_n_rows: NDArray,
-        df_n_rows: int,
+        amrs_info: NDArray,
         row_group_target_size: int,
         max_n_irgs: int,
     ):
@@ -284,43 +301,45 @@ class NRowsSplitStrategy(AMRSplitStrategy):
 
         Parameters
         ----------
-        amrs_info : NDArray
-            Array of shape (e, 5) containing the information about each atomic
-            merge regions.
         rgs_n_rows : NDArray
             Array of shape (r) containing the number of rows in each row group
             in existing ParquetFile.
-        df_n_rows : int
-            Number of rows in DataFrame.
+        amrs_info : NDArray
+            Array of shape (e, 5) containing the information about each atomic
+            merge regions
         row_group_target_size : int
             Target number of rows above which a new row group should be created.
         max_n_irgs : int
             Maximum number of incomplete row groups allowed in a merge region.
 
         """
+        self.amr_target_size = row_group_target_size
+        self.amr_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
+        self.max_n_irgs = max_n_irgs
         # Max number of rows in each atomic merge region. This is a max in case
         # there are duplicates between row groups and DataFrame that will be
         # dropped.
         self.amrs_max_n_rows = zeros(len(amrs_info), dtype=int)
         self.amrs_max_n_rows[amrs_info[HAS_ROW_GROUP]] = rgs_n_rows
-        self.amrs_max_n_rows += diff(amrs_info["df_idx_end_excl"], prepend=0)
-        self.df_n_rows = df_n_rows
-        self.amr_target_size = row_group_target_size
-        self.amr_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
-        self.max_n_irgs = max_n_irgs
+        self.amrs_max_n_rows += diff(amrs_info[DF_IDX_END_EXCL], prepend=0)
+        self.df_n_rows = amrs_info[DF_IDX_END_EXCL][-1]
 
     @cached_property
     def likely_meets_target_size(self) -> NDArray:
         """
         Return boolean array indicating which AMRs are likely to meet target size.
 
-        The likelihood aspect comes from the fact that at analysis time, we don't
-        know the exact final size of an AMR. When a row group and DataFrame chunk
-        overlap are both present in an AMR, there might be duplicate rows that
-        will be removed during the merge operation.
-        We know the maximum size (sum of row group and DataFrame chunk sizes)
-        We know the minimum size (max of row group size and DataFrame chunk size)
-        But we don't know the exact final size until after deduplication
+        The likelihood aspect comes from the fact that at analysis time, the
+        exact final size of an AMR is not known. When a row group and DataFrame
+        chunk overlap are both present in an AMR, there might be duplicate rows
+        that will be removed during the merge operation. What is known are:
+        - the maximum size (sum of row group and DataFrame chunk sizes)
+        - the minimum size (max of row group size and DataFrame chunk size)
+        The exact final size is only known after deduplication.
+
+        The method returns ``True`` for an atomic merge region where the sum of
+        the row group and DataFrame chunk sizes is between the minimum and
+        target size.
 
         Returns
         -------
@@ -472,7 +491,7 @@ class NRowsSplitStrategy(AMRSplitStrategy):
             list(reversed(consolidated_df_idx_tmrg_ends_excl)),
         )
 
-    def get_row_group_size(self, chunk_len: int, is_last_chunk: bool) -> Union[int, List[int]]:
+    def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
         """
         Define the appropriate row group size or split points for a chunk.
 
@@ -483,172 +502,134 @@ class NRowsSplitStrategy(AMRSplitStrategy):
         chunk.
 
         """
-        if self.max_n_irgs == 0 or chunk_len <= self.row_group_target_size:
+        if self.max_n_irgs == 0 or len(chunk) <= self.row_group_target_size:
             # Always uniform splitting for max_n_irgs = 0
             return self.row_group_target_size
         else:
             # When a max_n_irgs is set larger than 0, then
             # calculate split points to create chunks of target size
             # and potentially a smaller final piece.
-            return list(range(chunk_len, step=self.row_group_target_size))
-
-    def _rgst_as_int__ensure_complete_rgs_by_including_neighbor_rgs(
-        self,
-        rg_n_rows: list[int],
-        rg_idx_merge_start: int,
-        rg_idx_merge_end_excl: int,
-        n_missing_rows: int,
-    ) -> Tuple[int, int]:
-        """
-        Walk neighbor row groups to ensure enough rows for complete row groups.
-
-        This function attempts to reach the required number of rows by including
-        additional row groups to the right, then to the left if needed.
-        If insufficient, it returns indices to include all available row groups.
-
-        Parameters
-        ----------
-        rg_n_rows : list[int]
-            Number of rows in each row group.
-        rg_idx_merge_start : int
-            Starting index of the current merge region in row groups.
-        rg_idx_merge_end_excl : int
-            Ending index (exclusive) of the current merge region in row groups.
-        n_missing_rows : int
-            Number of additional rows needed to ensure complete row groups.
-
-        Returns
-        -------
-        Tuple[int, int]
-            New start and end indices (start, end_excl) for the expanded merge
-            region. If insufficient rows are available, returns (0, len(rg_n_rows))
-            to include all row groups.
-
-        """
-        # Try to include row groups to the right.
-        for right_counter, n_rows in enumerate(rg_n_rows[rg_idx_merge_end_excl:], start=1):
-            n_missing_rows -= n_rows
-            if n_missing_rows <= 0:
-                return rg_idx_merge_start, rg_idx_merge_end_excl + right_counter
-
-        rg_idx_merge_end_excl += right_counter
-        # Try to include row groups to the left.
-        for left_counter, n_rows in enumerate(rg_n_rows[:rg_idx_merge_start:-1], start=1):
-            n_missing_rows -= n_rows
-            if n_missing_rows <= 0:
-                return rg_idx_merge_start - left_counter, rg_idx_merge_end_excl
-
-        # Include all available row groups if still insufficient.
-        return 0, len(rg_n_rows)
-
-    def _rgst_as_int__merge_plan(
-        self,
-        rg_n_rows: List[int],
-        min_n_rows_in_row_groups: int,
-        df_n_rows: int,
-        df_idx_tmrg_ends_excl: NDArray,
-    ) -> Tuple[List[int], List[int]]:
-        """
-        Sequence row groups and DataFrame chunks to be written together.
-
-        Parameters
-        ----------
-        rg_n_rows : list[int]
-            Number of rows in each row group.
-            This array has been trimmed to the overlapping region.
-        min_n_rows_in_row_groups : int
-            Number of rows in row groups to reach to gather row groups and DataFrame
-            chunks.
-        df_n_rows : int
-            Number of rows in DataFrame.
-        df_idx_tmrg_ends_excl : NDArray[int]
-            Indices in DataFrame describing where ends (excluded) each DataFrame
-            chunk that overlaps with a corresponding row group.
-            This array has been trimmed to the overlapping region.
-
-        Returns
-        -------
-        Tuple[List[int], List[int]]
-            - First list: indices in ParquetFile describing where ends (excluded)
-            each set of row groups to merge with corresponding DataFrame chunk.
-            - Second list: indices in DataFrame describing where ends (excluded)
-            each DataFrame chunk for the corresponding set of row groups.
-
-        """
-        if not df_idx_tmrg_ends_excl.size:
-            # If no row group to merge, then no need to consolidate.
-            return [0], [df_n_rows]
-
-        # Consolidation loop is processed backward.
-        # This makes possible to manage a 'max_n_irgs' set to 0 (meaning no
-        # incomplete row groups is allowed), by forcing the last chunk to
-        # encompass
-        # 'MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS * row_group_target_size' rows.
-        # Then whatever the number of rows in the remainder of df, it will be
-        # possible to yield chunk with a size between 'row_group_target_size' and
-        # 'MAX_ROW_GROUP_SIZE_SCALE_FACTOR * row_group_target_size'.
-        consolidated_df_idx_tmrg_ends_excl = []
-        consolidated_rg_idx_tmrg_ends_excl = []
-        chunk_n_rows = 0
-        for m_rg_idx_end_excl, (_rg_n_rows, df_idx_end_excl) in enumerate(
-            zip(
-                reversed(df_idx_tmrg_ends_excl),
-                reversed(rg_n_rows),
-            ),
-            start=-len(rg_n_rows),
-        ):
-            # To make sure number of rows in chunk to write is larger than
-            # 'row_group_target_size' despite possible duplicates between df and rg,
-            # only account for rows in rg.
-            chunk_n_rows += _rg_n_rows
-            if chunk_n_rows >= min_n_rows_in_row_groups:
-                consolidated_df_idx_tmrg_ends_excl.append(df_idx_end_excl)
-                consolidated_rg_idx_tmrg_ends_excl.append(-m_rg_idx_end_excl)
-                chunk_n_rows = 0
-
-        # Force df_idx_merge_end_excl to include all df rows.
-        consolidated_df_idx_tmrg_ends_excl[-1] = df_n_rows
-
-        return reversed(consolidated_rg_idx_tmrg_ends_excl), reversed(
-            consolidated_df_idx_tmrg_ends_excl,
-        )
+            return list(range(len(chunk), step=self.row_group_target_size))
 
 
 class TimePeriodSplitStrategy(AMRSplitStrategy):
     """
     Row group split strategy based on a time period target per row group.
+
+    Attributes
+    ----------
+    rg_ordered_on_mins : NDArray
+        Minimum value of 'ordered_on' in each row group.
+    rg_ordered_on_maxs : NDArray
+        Maximum value of 'ordered_on' in each row group.
+    df_chunk_starts : NDArray
+        Start values of each DataFrame chunk.
+    df_chunk_ends : NDArray
+        End values (included) of each DataFrame chunk.
+    amrs_info : NDArray
+        Array of shape (e, 5) containing the information about each atomic
+        merge regions
+    amr_period : str
+        Time period for a row group to be complete.
+    period_bounds : DatetimeIndex
+        Period bounds over the total time span of the dataset, considering both
+        row groups and DataFrame.
+
     """
 
-    def __init__(self, row_group_period: str):
+    def __init__(
+        self,
+        rg_ordered_on_mins: NDArray,
+        rg_ordered_on_maxs: NDArray,
+        df_ordered_on: Series,
+        amrs_info: NDArray,
+        row_group_period: str,
+    ):
         """
         Initialize scheme with target period.
 
         Parameters
         ----------
+        rg_ordered_on_mins : NDArray
+            Minimum value of 'ordered_on' in each row group.
+        rg_ordered_on_maxs : NDArray
+            Maximum value of 'ordered_on' in each row group.
+        df_ordered_on : Series
+            Values of 'ordered_on' column in DataFrame.
+        amrs_info : NDArray
+            Array of shape (e, 5) containing the information about each atomic
+            merge regions
         row_group_period : str
             Target period for each row group (pandas freqstr).
 
         """
-        self.period = row_group_period
+        self.rg_ordered_on_mins = rg_ordered_on_mins
+        self.rg_ordered_on_maxs = rg_ordered_on_maxs
+        arm_idx_df_chunk = flatnonzero(amrs_info[HAS_DF_CHUNK])
+        df_idx_chunk_starts = zeros(len(arm_idx_df_chunk), dtype=int)
+        df_idx_chunk_starts[1:] = amrs_info[DF_IDX_END_EXCL][arm_idx_df_chunk[:-1]]
+        self.df_chunk_starts = df_ordered_on.iloc[df_idx_chunk_starts]
+        self.df_chunk_ends = df_ordered_on.iloc[amrs_info[DF_IDX_END_EXCL][arm_idx_df_chunk] - 1]
+        self.amrs_info = amrs_info
+        self.amr_period = row_group_period
+        # Generate period bounds.
+        start_ts = min(self.df_chunk_starts[0], rg_ordered_on_mins[0]).floor(row_group_period)
+        end_ts = max(self.df_chunk_ends[-1], rg_ordered_on_maxs[-1]).ceil(row_group_period)
+        self.period_bounds = date_range(start=start_ts, end=end_ts, freq=row_group_period)
 
-    def is_incomplete(self, rg_maxs: NDArray) -> NDArray:
+    @cached_property
+    def likely_meets_target_size(self) -> NDArray:
         """
-        Check if row groups are incomplete based on a time period.
+        Return boolean array indicating which AMRs are likely to meet target size.
+
+        An AMR meets target size if it contains exactly one row group or one
+        DataFrame chunk within a single period bound. If either a row group or
+        DataFrame chunk spans multiple periods, or if multiple components exist
+        within the same period, the AMR does not meet target size.
+
+        The likelihood aspect comes from the fact that the dataset is mutable,
+        and additional chunks may be added at a next run. However, it does not
+        impact the logic implemented, and the name of the method is to mimic
+        that of NRowsSplitStrategy.
 
         Returns
         -------
         NDArray
-            Boolean array of length the number of row groups where True
-            indicates incomplete row groups.
+            Boolean array of length the number of atomic merge regions.
 
         """
-        # Convert maxs to period bounds
-        period_bounds = [Timestamp(ts).floor(self.period) for ts in rg_maxs]
-        # A row group is incomplete if it doesn't span its full period
-        return array(
-            [max < bound.ceil(self.period) for max, bound in zip(rg_maxs, period_bounds)],
-            dtype=bool,
-        )
+        # Initialize array for all atomic merge regions
+        amrs_meets_target_period = ones(len(self.amrs_info), dtype=bool)
+
+        # Process row groups
+        rg_meets_target = ones(len(self.rg_ordered_on_mins), dtype=bool)
+        # Find which period each row group starts and ends in
+        period_idx_rg_starts = searchsorted(self.period_bounds, self.rg_ordered_on_mins)
+        period_idx_rg_ends = searchsorted(self.period_bounds, self.rg_ordered_on_maxs)
+        # Mark ``False`` for row groups that span multiple periods
+        rg_meets_target &= period_idx_rg_ends == period_idx_rg_starts
+        # Count row groups per period by counting occurrences of each period index
+        period_counts = bincount(period_idx_rg_starts)
+        # Map counts back to row groups (>1 means multiple RGs in same period)
+        rg_meets_target &= period_counts[period_idx_rg_starts] == 1
+        # Map back to atomic merge regions
+        amrs_meets_target_period[self.amrs_info[HAS_ROW_GROUP]] = rg_meets_target
+
+        # Process DataFrame chunks
+        # Find which period each chunk starts and ends in
+        period_idx_df_chunk_starts = searchsorted(self.period_bounds, self.df_chunk_starts)
+        period_idx_df_chunk_ends = searchsorted(self.period_bounds, self.df_chunk_ends_excl)
+        # Mark chunks that span multiple periods as not meeting target
+        df_chunk_meets_target = period_idx_df_chunk_ends == period_idx_df_chunk_starts
+        # Map back to atomic merge regions
+        amrs_meets_target_period[self.amrs_info[HAS_DF_CHUNK]] &= df_chunk_meets_target
+
+        # Any AMR with both row group and DataFrame chunk doesn't meet target
+        amrs_meets_target_period[
+            self.amrs_info[HAS_ROW_GROUP] & self.amrs_info[HAS_DF_CHUNK]
+        ] = False
+
+        return amrs_meets_target_period
 
     def consolidate_merge_plan(
         self,
@@ -801,27 +782,25 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
             df_idx_period_ends_excl[change_indices].tolist(),
         )
 
-    @property
-    def likely_meets_target_size(self) -> NDArray:
+    def get_row_group_size(self, chunk_len: int, is_last_chunk: bool) -> Union[int, List[int]]:
         """
-        Return boolean array indicating which AMRs are likely to meet target size.
+        Define the appropriate row group size or split points for a chunk.
 
-        The likelihood aspect comes from the temporal nature of the data and how
-        it might evolve:
-        - An AMR might currently be the only one in its time period, making it
-          correctly sized.
-        - However, future merges might add new AMRs to the same time period.
-        - When multiple AMRs exist in the same period, they become under-sized
-          and they may eventually be merged together.
+        This size is defined in terms of number of rows. Result is to be used
+        as `row_group_size` parameter in `iter_dataframe` method.
 
-        Therefore, an AMR that appears to meet the target size during one
-        analysis might become under-sized in a future analysis when new data
-        arrives in the same time period.
+        Parameters
+        ----------
+        chunk_len : int
+            Length of the chunk to process.
+        is_last_chunk : bool
+            Whether this is the last chunk in the iteration.
 
         Returns
         -------
-        NDArray
-            Boolean array of length the number of atomic merge regions.
+        Union[int, List[int]]
+            Either a single integer (for uniform splitting) or a list of indices
+            where the chunk should be split
 
         """
-        return ...  # implementation
+        raise NotImplementedError("Subclasses must implement this method")
