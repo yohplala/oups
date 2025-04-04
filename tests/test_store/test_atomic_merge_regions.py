@@ -18,7 +18,6 @@ from numpy.typing import NDArray
 from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
-from pandas.testing import assert_series_equal
 
 from oups.store.atomic_merge_regions import DF_IDX_END_EXCL
 from oups.store.atomic_merge_regions import HAS_DF_CHUNK
@@ -277,44 +276,98 @@ def test_time_period_split_strategy():
     # Create test data
     # Period is monthly start ('MS')
     time_period = "MS"
-    # RGs min          [ 15/12,  20/12,  25/01,  15/03,          10/04 ]
-    # RGs max          [ 19/12,  28/12,  05/02,  16/03,          15/04 ]
-    # DF chunks starts                         [ 15/03,  17/03,  11/04,  16/04 ]
-    # DF chunks ends                           [ 15/03,  03/04,  15/04,  22/05 ]
-    # Row groups spanning Dec 2023 to Feb 2024
+    # AMR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+    #   1,         Dec,   15/12,   19/12,                 , False (2 ARMs in period)
+    #   2,         Dec,   20/12,   28/12,                 , False (2 ARMs in period)
+    #              ---,
+    #   3,         Jan,   25/01,                          , False (RG spans several periods)
+    #              ---,
+    #   3,         Feb,            01/02,                 , value on edge of period
+    #              ---,
+    #   4,         Mar,   15/03,   16/03,   15/03,   15/03, False (both RG & DFc in period)
+    #              ---,
+    #   5,         Apr,                     17/04,        , False (DFc spans several periods)
+    #              ---,
+    #   5,         May,                              03/05,
+    #              ---,
+    #   6,         Jun,   10/06,   15/06,                , False (both RG & DFc in period)
+    #   7,         Jun,                    16/06,   18/06, False (both RG & DFc in period)
+    #              ---,
+    #   8,         Jul,                    15/07,        , False (DFc spans several periods)
+    #              ---,
+    #   8,         Aug,                             10/08,
+    #   9,         Aug,   15/08,   17/08,                , False (both RG & DFc in period)
+    #              ---,
+    #  10,         Sep,   10/09,                         , False (RG spans several periods)
+    #              ---,
+    #  10,         Oct,            15/10,
+    #  11,         Oct,                    16/10,   18/10, False (both RG & DFc in period)
+    #              ---,
+    #  12,         Nov,                    15/11,   17/11, False (both RG & DFc in period)
+    #  13,         Nov,   18/11,                         , False (RG spans several periods)
+    #              ---,
+    #  13,         Dec,            05/12,
+    #              ---,
+    #  14,         Jan,   02/01,   04/01,                , False (both RG & DFc in period)
+    #  15,         Jan,                    16/01,        , False (DFc spans several periods)
+    #              ---,
+    #  15,         Feb,                             05/02,
+    #              ---,
+    #  16,         Mar,   01/03,   02/03,                , True (single RG in period)
+    #              ---,
+    #  17,         Apr,                    05/04,   08/04, True (single DFc in period)
+    #
     rg_ordered_on_mins = array(
         [
-            Timestamp("2023-12-15"),  # RG1: within Dec
-            Timestamp("2023-12-20"),  # RG2: within Dec (multiple RGs in period)
-            Timestamp("2024-01-25"),  # RG3: spans Jan-Feb
-            Timestamp("2024-03-15"),  # RG4: within Mar - shared with DataFrame chunk
-            Timestamp("2024-04-10"),  # RG5: within Apr
+            Timestamp("2023-12-15"),
+            Timestamp("2023-12-20"),
+            Timestamp("2024-01-25"),
+            Timestamp("2024-03-15"),
+            Timestamp("2024-06-10"),
+            Timestamp("2024-08-15"),
+            Timestamp("2024-09-10"),
+            Timestamp("2024-11-18"),
+            Timestamp("2025-01-02"),
+            Timestamp("2025-03-01"),
         ],
     )
     rg_ordered_on_maxs = array(
         [
-            Timestamp("2023-12-19"),  # RG1: within Dec
-            Timestamp("2023-12-28"),  # RG2: within Dec
-            Timestamp("2024-02-05"),  # RG3: spans Jan-Feb
-            Timestamp("2024-03-16"),  # RG4: within Mar - shared with DataFrame chunk
-            Timestamp("2024-04-15"),
+            Timestamp("2023-12-19"),
+            Timestamp("2023-12-28"),
+            Timestamp("2024-02-01"),
+            Timestamp("2024-03-16"),
+            Timestamp("2024-06-15"),
+            Timestamp("2024-08-17"),
+            Timestamp("2024-10-15"),
+            Timestamp("2024-12-05"),
+            Timestamp("2025-01-04"),
+            Timestamp("2025-03-02"),
         ],
     )
     # DataFrame chunks
     df_ordered_on = Series(
         [
             Timestamp("2024-03-15"),
-            Timestamp("2024-03-17"),  # DF1: within Mar - shared with row group
-            Timestamp("2024-04-03"),  # DF2: spans Mar-Apr
-            Timestamp("2024-04-11"),
-            Timestamp("2024-04-15"),
-            Timestamp("2024-04-16"),
-            Timestamp("2024-05-22"),
+            Timestamp("2024-04-17"),
+            Timestamp("2024-05-03"),
+            Timestamp("2024-06-16"),
+            Timestamp("2024-06-18"),
+            Timestamp("2024-07-15"),
+            Timestamp("2024-08-10"),
+            Timestamp("2024-10-16"),
+            Timestamp("2024-10-18"),
+            Timestamp("2024-11-15"),
+            Timestamp("2024-11-17"),
+            Timestamp("2025-01-16"),
+            Timestamp("2025-02-05"),
+            Timestamp("2025-04-05"),
+            Timestamp("2025-04-08"),
         ],
     )
     # Create amrs_info with 6 regions
     amrs_info = ones(
-        7,
+        17,
         dtype=[
             ("rg_idx_start", int_),
             ("rg_idx_end_excl", int_),
@@ -324,9 +377,49 @@ def test_time_period_split_strategy():
         ],
     )
     # Set required ARM infos
-    amrs_info[DF_IDX_END_EXCL] = array([0, 0, 0, 1, 3, 5, 7])
-    amrs_info[HAS_ROW_GROUP] = array([True, True, True, True, False, True, False])
-    amrs_info[HAS_DF_CHUNK] = array([False, False, False, True, True, True, True])
+    amrs_info[DF_IDX_END_EXCL] = array([0, 0, 0, 1, 3, 3, 5, 7, 7, 7, 9, 11, 11, 11, 13, 13, 15])
+    amrs_info[HAS_ROW_GROUP] = array(
+        [
+            True,
+            True,
+            True,
+            True,
+            False,
+            True,
+            False,
+            False,
+            True,
+            True,
+            False,
+            False,
+            True,
+            True,
+            False,
+            True,
+            False,
+        ],
+    )
+    amrs_info[HAS_DF_CHUNK] = array(
+        [
+            False,
+            False,
+            False,
+            True,
+            True,
+            False,
+            True,
+            True,
+            False,
+            False,
+            True,
+            True,
+            False,
+            False,
+            True,
+            False,
+            True,
+        ],
+    )
     # Initialize strategy
     strategy = TimePeriodSplitStrategy(
         rg_ordered_on_mins=rg_ordered_on_mins,
@@ -338,39 +431,77 @@ def test_time_period_split_strategy():
     # Test period_bounds
     expected_bounds = date_range(
         start=Timestamp("2023-12-01"),  # Floor of earliest timestamp
-        end=Timestamp("2024-06-01"),  # Ceil of latest timestamp
-        freq="MS",
+        end=Timestamp("2025-05-01"),  # Ceil of latest timestamp
+        freq=time_period,
     )
     assert_array_equal(strategy.period_bounds, expected_bounds)
-    # Test df_chunk_starts
-    expected_df_chunk_starts = Series(
+    # Test amrs_bounds
+    expected_amrs_mins = Series(
         [
-            Timestamp("2024-03-15"),  # First timestamp
-            Timestamp("2024-03-17"),  # End of df chunk 1
-            Timestamp("2024-04-11"),  # End of df chunk 2
-            Timestamp("2024-04-16"),  # End of df chunk 3
+            Timestamp("2023-12-15"),
+            Timestamp("2023-12-20"),
+            Timestamp("2024-01-25"),
+            Timestamp("2024-03-15"),
+            Timestamp("2024-04-17"),
+            Timestamp("2024-06-10"),
+            Timestamp("2024-06-16"),
+            Timestamp("2024-07-15"),
+            Timestamp("2024-08-15"),
+            Timestamp("2024-09-10"),
+            Timestamp("2024-10-16"),
+            Timestamp("2024-11-15"),
+            Timestamp("2024-11-18"),
+            Timestamp("2025-01-02"),
+            Timestamp("2025-01-16"),
+            Timestamp("2025-03-01"),
+            Timestamp("2025-04-05"),
         ],
     )
-    assert_series_equal(strategy.df_chunk_starts, expected_df_chunk_starts)
+    assert_array_equal(strategy.amrs_bounds[:, 0], expected_amrs_mins.to_numpy())
     # Test df_chunk_ends
-    expected_df_chunk_ends = Series(
+    expected_amrs_maxs = Series(
         [
-            Timestamp("2024-03-15"),  # First timestamp
-            Timestamp("2024-04-03"),  # End of df chunk 1
-            Timestamp("2024-04-15"),  # End of df chunk 2
-            Timestamp("2024-05-22"),  # End of df chunk 3
+            Timestamp("2023-12-19"),
+            Timestamp("2023-12-28"),
+            Timestamp("2024-02-01"),
+            Timestamp("2024-03-16"),
+            Timestamp("2024-05-03"),
+            Timestamp("2024-06-15"),
+            Timestamp("2024-06-18"),
+            Timestamp("2024-08-10"),
+            Timestamp("2024-08-17"),
+            Timestamp("2024-10-15"),
+            Timestamp("2024-10-18"),
+            Timestamp("2024-11-17"),
+            Timestamp("2024-12-05"),
+            Timestamp("2025-01-04"),
+            Timestamp("2025-02-05"),
+            Timestamp("2025-03-02"),
+            Timestamp("2025-04-08"),
         ],
     )
-    assert_series_equal(strategy.df_chunk_ends, expected_df_chunk_ends)
+    assert_array_equal(strategy.amrs_bounds[:, 1], expected_amrs_maxs.to_numpy())
     # Test likely_meets_target_size
     result = strategy.likely_meets_target_size
-    # Expected results:
-    # 1. False - Multiple RGs in same period (December)
-    # 2. False - Multiple RGs in same period (December)
-    # 3. False - RG spans multiple periods (Jan-Feb)
-    # 4. False - Has both RG and DF chunk
-    # 5. False - DF chunk spanning multiple periods
-    # 6. False - Has both RG and DF chunk
-    # 6. False - DF chunk spanning multiple periods
-    expected = array([False, False, False, False, False, False, False])
+    expected = array(
+        [
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            False,
+            True,
+            True,
+        ],
+    )
     assert_array_equal(result, expected)

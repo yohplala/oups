@@ -286,8 +286,6 @@ class NRowsSplitStrategy(AMRSplitStrategy):
     amrs_max_n_rows : NDArray
         Array of shape (e) containing the maximum number of rows in each atomic
         merge region.
-    df_n_rows : int
-        Number of rows in DataFrame.
 
     """
 
@@ -324,7 +322,7 @@ class NRowsSplitStrategy(AMRSplitStrategy):
         self.amrs_max_n_rows = zeros(len(amrs_info), dtype=int)
         self.amrs_max_n_rows[amrs_info[HAS_ROW_GROUP]] = rgs_n_rows
         self.amrs_max_n_rows += diff(amrs_info[DF_IDX_END_EXCL], prepend=0)
-        self.df_n_rows = amrs_info[DF_IDX_END_EXCL][-1]
+        # self.df_n_rows = amrs_info[DF_IDX_END_EXCL][-1]
 
     @cached_property
     def likely_meets_target_size(self) -> NDArray:
@@ -516,19 +514,14 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
 
     Attributes
     ----------
-    rg_ordered_on_mins : NDArray
-        Minimum value of 'ordered_on' in each row group.
-    rg_ordered_on_maxs : NDArray
-        Maximum value of 'ordered_on' in each row group.
-    df_chunk_starts : NDArray
-        Start values of each DataFrame chunk.
-    df_chunk_ends : NDArray
-        End values (included) of each DataFrame chunk.
-    amrs_info : NDArray
-        Array of shape (e, 5) containing the information about each atomic
-        merge regions
     amr_period : str
         Time period for a row group to be complete.
+    amrs_bounds : NDArray
+        Array of shape (e, 2) containing the start and end bounds of each atomic
+        merge region.
+    amr_idx_single_component : NDArray
+        Array of shape (e) containing the indices of atomic merge regions with
+        exactly one component (either RG or DF chunk, not both).
     period_bounds : DatetimeIndex
         Period bounds over the total time span of the dataset, considering both
         row groups and DataFrame.
@@ -561,23 +554,31 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
             Target period for each row group (pandas freqstr).
 
         """
-        self.rg_ordered_on_mins = rg_ordered_on_mins
-        self.rg_ordered_on_maxs = rg_ordered_on_maxs
-        arm_idx_df_chunk = flatnonzero(amrs_info[HAS_DF_CHUNK])
-        df_idx_chunk_starts = zeros(len(arm_idx_df_chunk), dtype=int)
-        df_idx_chunk_starts[1:] = amrs_info[DF_IDX_END_EXCL][arm_idx_df_chunk[:-1]]
-        self.df_chunk_starts = df_ordered_on.iloc[df_idx_chunk_starts].reset_index(drop=True)
-        self.df_chunk_ends = df_ordered_on.iloc[
-            amrs_info[DF_IDX_END_EXCL][arm_idx_df_chunk] - 1
-        ].reset_index(drop=True)
-        self.amrs_info = amrs_info
         self.amr_period = row_group_period
-        # Generate period bounds.
-        start_ts = floor_ts(
-            min(self.df_chunk_starts.iloc[0], rg_ordered_on_mins[0]),
-            row_group_period,
+        df_ordered_on_np = df_ordered_on.to_numpy()
+        self.amrs_bounds = ones((len(amrs_info), 2)).astype(df_ordered_on_np.dtype)
+        # Row groups encompasses Dataframe chunks in an AMR.
+        # Hence, start with Dataframe chunks starts and ends.
+        amr_idx_df_chunk = flatnonzero(amrs_info[HAS_DF_CHUNK])
+        df_idx_chunk_starts = zeros(len(amr_idx_df_chunk), dtype=int)
+        df_idx_chunk_starts[1:] = amrs_info[DF_IDX_END_EXCL][amr_idx_df_chunk[:-1]]
+        self.amrs_bounds[amr_idx_df_chunk, 0] = df_ordered_on_np[df_idx_chunk_starts]
+        self.amrs_bounds[amr_idx_df_chunk, 1] = df_ordered_on_np[
+            amrs_info[DF_IDX_END_EXCL][amr_idx_df_chunk] - 1
+        ]
+        # Only then add row groups starts and ends. They will overwrite where
+        # Dataframe chunks are present.
+        amr_idx_row_groups = flatnonzero(amrs_info[HAS_ROW_GROUP])
+        self.amrs_bounds[amr_idx_row_groups, 0] = rg_ordered_on_mins
+        self.amrs_bounds[amr_idx_row_groups, 1] = rg_ordered_on_maxs
+        # Keep track where there is only one component (either RG or DF chunk,
+        # not both).
+        self.amr_idx_single_component = flatnonzero(
+            amrs_info[HAS_ROW_GROUP] ^ amrs_info[HAS_DF_CHUNK],
         )
-        end_ts = ceil_ts(max(self.df_chunk_ends.iloc[-1], rg_ordered_on_maxs[-1]), row_group_period)
+        # Generate period bounds.
+        start_ts = floor_ts(Timestamp(self.amrs_bounds[0, 0]), row_group_period)
+        end_ts = ceil_ts(Timestamp(self.amrs_bounds[-1, 1]), row_group_period)
         self.period_bounds = date_range(start=start_ts, end=end_ts, freq=row_group_period)
 
     @cached_property
@@ -585,10 +586,10 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
         """
         Return boolean array indicating which AMRs are likely to meet target size.
 
-        An AMR meets target size if it contains exactly one row group or one
-        DataFrame chunk within a single period bound. If either a row group or
-        DataFrame chunk spans multiple periods, or if multiple components exist
-        within the same period, the AMR does not meet target size.
+        An AMR meets target size if and only if:
+        1. It contains exactly one row group OR one DataFrame chunk (not both,
+           even non-overlapping)
+        2. That component fits entirely within a single period bound
 
         The likelihood aspect comes from the fact that the dataset is mutable,
         and additional chunks may be added at a next run. However, it does not
@@ -601,38 +602,32 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
             Boolean array of length the number of atomic merge regions.
 
         """
-        # Initialize array for all atomic merge regions
-        amrs_meets_target_period = ones(len(self.amrs_info), dtype=bool)
+        # Start with all False - most cases will be False
+        meets_target_period = zeros(len(self.amrs_bounds), dtype=bool)
+        if len(self.amr_idx_single_component) == 0:
+            return meets_target_period
 
-        # Process row groups
-        rg_meets_target = ones(len(self.rg_ordered_on_mins), dtype=bool)
-        # Find which period each row group starts and ends in
-        period_idx_rg_starts = searchsorted(self.period_bounds, self.rg_ordered_on_mins)
-        period_idx_rg_ends = searchsorted(self.period_bounds, self.rg_ordered_on_maxs)
-        # Mark ``False`` for row groups that span multiple periods
-        rg_meets_target &= period_idx_rg_ends == period_idx_rg_starts
-        # Count row groups per period by counting occurrences of each period index
-        period_counts = bincount(period_idx_rg_starts)
-        # Map counts back to row groups (>1 means multiple RGs in same period)
-        rg_meets_target &= period_counts[period_idx_rg_starts] == 1
-        # Map back to atomic merge regions
-        amrs_meets_target_period[self.amrs_info[HAS_ROW_GROUP]] = rg_meets_target
+        # Find periods for all bounds.
+        period_indices = searchsorted(
+            self.period_bounds,
+            self.amrs_bounds[self.amr_idx_single_component],
+            side=RIGHT,
+        )
+        # True where component is contained in a single period
+        same_period_mask = period_indices[:, 0] == period_indices[:, 1]
+        # Get indices of AMRs that are in a single period
+        valid_amr_indices = self.amr_idx_single_component[same_period_mask]
+        valid_period_indices = period_indices[same_period_mask]
+        # Count occurrences of start periods and end periods
+        start_counts = bincount(period_indices[:, 0])
+        end_counts = bincount(period_indices[:, 1])
+        # An AMR meets target if it's the only one starting AND ending in its period
+        meets_period = (start_counts[valid_period_indices[:, 0]] == 1) & (
+            end_counts[valid_period_indices[:, 1]] == 1
+        )
+        meets_target_period[valid_amr_indices[meets_period]] = True
 
-        # Process DataFrame chunks
-        # Find which period each chunk starts and ends in
-        period_idx_df_chunk_starts = searchsorted(self.period_bounds, self.df_chunk_starts)
-        period_idx_df_chunk_ends = searchsorted(self.period_bounds, self.df_chunk_ends)
-        # Mark chunks that span multiple periods as not meeting target
-        df_chunk_meets_target = period_idx_df_chunk_ends == period_idx_df_chunk_starts
-        # Map back to atomic merge regions
-        amrs_meets_target_period[self.amrs_info[HAS_DF_CHUNK]] &= df_chunk_meets_target
-
-        # Any AMR with both row group and DataFrame chunk doesn't meet target
-        amrs_meets_target_period[
-            self.amrs_info[HAS_ROW_GROUP] & self.amrs_info[HAS_DF_CHUNK]
-        ] = False
-
-        return amrs_meets_target_period
+        return meets_target_period
 
     def consolidate_merge_plan(
         self,
