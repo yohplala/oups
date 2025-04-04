@@ -608,24 +608,32 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
             return meets_target_period
 
         # Find periods for all bounds.
-        period_indices = searchsorted(
-            self.period_bounds,
-            self.amrs_bounds[self.amr_idx_single_component],
-            side=RIGHT,
+        period_idx_amr_single_cmpt = (
+            searchsorted(
+                self.period_bounds,
+                self.amrs_bounds[self.amr_idx_single_component],
+                side=RIGHT,
+            )
+            - 1
         )
         # True where component is contained in a single period
-        same_period_mask = period_indices[:, 0] == period_indices[:, 1]
+        single_period_mask = period_idx_amr_single_cmpt[:, 0] == period_idx_amr_single_cmpt[:, 1]
         # Get indices of AMRs that are in a single period
-        valid_amr_indices = self.amr_idx_single_component[same_period_mask]
-        valid_period_indices = period_indices[same_period_mask]
-        # Count occurrences of start periods and end periods
-        start_counts = bincount(period_indices[:, 0])
-        end_counts = bincount(period_indices[:, 1])
+        amr_idx_single_cmpt_single_period = self.amr_idx_single_component[single_period_mask]
+        period_idx_single_cmpt_single_period = period_idx_amr_single_cmpt[single_period_mask, 0]
+        # Count occurrences of start periods and end periods.
+        # Notice that counting is on AMR which can span multiple periods.
+        # This is because such an AMR can start or end where another AMR lies,
+        # and this second one within the same period. This will then make this
+        # second AMR not meeting target size.
+        # That has been tricky to think about.
+        start_counts = bincount(period_idx_amr_single_cmpt[:, 0])
+        end_counts = bincount(period_idx_amr_single_cmpt[:, 1])
         # An AMR meets target if it's the only one starting AND ending in its period
-        meets_period = (start_counts[valid_period_indices[:, 0]] == 1) & (
-            end_counts[valid_period_indices[:, 1]] == 1
+        meets_period = (start_counts[period_idx_single_cmpt_single_period] == 1) & (
+            end_counts[period_idx_single_cmpt_single_period] == 1
         )
-        meets_target_period[valid_amr_indices[meets_period]] = True
+        meets_target_period[amr_idx_single_cmpt_single_period[meets_period]] = True
 
         return meets_target_period
 
