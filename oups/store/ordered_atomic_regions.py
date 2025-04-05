@@ -2,11 +2,11 @@
 """
 Created on Mon Mar 17 18:00:00 2025.
 
-Atomic merge regions for Parquet files and DataFrames.
+Ordered atomic regions for Parquet files and DataFrames.
 
-This module defines the base component for analyzing how DataFrame can be merged
+This module defines the base functions for analyzing how DataFrame can be merged
 with existing Parquet files when both are ordered on the same column.
-An atomic merge region ('amr') represents the smallest unit for merging, which
+An ordered atomic region ('oar') represents the smallest unit for merging, which
 is either:
   - A single row group in a ParquetFile and its corresponding overlapping
     DataFrame chunk (if any)
@@ -48,6 +48,8 @@ from oups.store.utils import get_region_start_end_delta
 
 LEFT = "left"
 RIGHT = "right"
+RG_IDX_START = "rg_idx_start"
+RG_IDX_END_EXCL = "rg_idx_end_excl"
 DF_IDX_END_EXCL = "df_idx_end_excl"
 HAS_ROW_GROUP = "has_row_group"
 HAS_DF_CHUNK = "has_df_chunk"
@@ -55,25 +57,25 @@ MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
 MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
 
 
-def compute_atomic_merge_regions(
+def compute_ordered_atomic_regions(
     rg_mins: List[Union[int, float, Timestamp]],
     rg_maxs: List[Union[int, float, Timestamp]],
     df_ordered_on: Series,
     drop_duplicates: bool,
 ) -> NDArray:
     """
-    Compute atomic merge regions.
+    Compute ordered atomic regions.
 
-    An atomic merge region ('amr') is
+    An ordered atomic region ('oar') is
       - either defined by an existing row group in ParquetFile and its
         corresponding overlapping DataFrame chunk if any,
       - or an orphan DataFrame chunk, i.e. not overlapping with any row group in
         ParquetFile.
 
     Returned arrays provide the start and end (excluded) indices in row groups
-    and end (excluded) indices in DataFrame for each of these atomic merge
+    and end (excluded) indices in DataFrame for each of these ordered atomic
     regions. All these arrays are of same size and describe how are composed the
-    atomic merge regions.
+    ordered atomic regions.
 
     Parameters
     ----------
@@ -94,15 +96,15 @@ def compute_atomic_merge_regions(
     Returns
     -------
     NDArray
-        Atomic merge regions properties contained in a structured array with
+        Ordered atomic regions properties contained in a structured array with
         fields:
         - 'rg_idx_start': indices in ParquetFile containing the starts of each
-          row group to merge with corresponding DataFrame chunk.
+          row group overlapping with corresponding DataFrame chunk.
         - 'rg_idx_end_excl': indices in ParquetFile containing the ends
-          (excluded) of each row group to merge with corresponding DataFrame
+          (excluded) of each row group overlapping with corresponding DataFrame
           chunk.
         - 'df_idx_end_excl': indices in DataFrame containing the ends
-          (excluded) of each DataFrame chunk to merge with corresponding
+          (excluded) of each DataFrame chunk overlapping with corresponding
           row group.
         - 'has_row_group': boolean indicating if this region contains a
           row group.
@@ -112,14 +114,14 @@ def compute_atomic_merge_regions(
     Notes
     -----
     Start indices in DataFrame are not provided, as they can be inferred from
-    the end (excluded) indices in DataFrame of the previous atomic merge region
+    the end (excluded) indices in DataFrame of the previous ordered atomic region
     (no part of the DataFrame is omitted for the write).
 
     In case 'drop_duplicates' is False, and there are duplicate values between
     row group max values and DataFrame 'ordered_on' values, then DataFrame
     'ordered_on' values are considered to be the last occurrences of the
     duplicates in 'ordered_on'. Leading row groups (with duplicate max values)
-    will not be in the same atomic merge region as the DataFrame chunk starting
+    will not be in the same ordered atomic region as the DataFrame chunk starting
     at the duplicate 'ordered_on' value. This is an optimization to prevent
     rewriting these leading row groups.
 
@@ -127,19 +129,19 @@ def compute_atomic_merge_regions(
     # Find regions in DataFrame overlapping with row groups.
     if drop_duplicates:
         # Determine overlap start/end indices in row groups
-        df_idx_amr_starts = searchsorted(df_ordered_on, rg_mins, side=LEFT)
-        df_idx_amr_ends_excl = searchsorted(df_ordered_on, rg_maxs, side=RIGHT)
+        df_idx_oar_starts = searchsorted(df_ordered_on, rg_mins, side=LEFT)
+        df_idx_oar_ends_excl = searchsorted(df_ordered_on, rg_maxs, side=RIGHT)
     else:
-        df_idx_amr_starts, df_idx_amr_ends_excl = searchsorted(
+        df_idx_oar_starts, df_idx_oar_ends_excl = searchsorted(
             df_ordered_on,
             vstack((rg_mins, rg_maxs)),
             side=LEFT,
         )
     # Find regions in DataFrame not overlapping with any row group.
     df_interlaces_wo_overlap = r_[
-        df_idx_amr_starts[0],  # gap at start (0 to first start)
-        df_idx_amr_ends_excl[:-1] - df_idx_amr_starts[1:],
-        len(df_ordered_on) - df_idx_amr_ends_excl[-1],  # gap at end
+        df_idx_oar_starts[0],  # gap at start (0 to first start)
+        df_idx_oar_ends_excl[:-1] - df_idx_oar_starts[1:],
+        len(df_ordered_on) - df_idx_oar_ends_excl[-1],  # gap at end
     ]
     # Indices in row groups where a DataFrame chunk is not overlapping with any
     # row group.
@@ -150,11 +152,11 @@ def compute_atomic_merge_regions(
     # DataFrame orphans are regions in DataFrame that do not overlap with any
     # row group.
     n_df_orphans = len(rg_idx_df_orphans)
-    amrs_info = ones(
+    oars_info = ones(
         n_rgs + n_df_orphans,
         dtype=[
-            ("rg_idx_start", int_),
-            ("rg_idx_end_excl", int_),
+            (RG_IDX_START, int_),
+            (RG_IDX_END_EXCL, int_),
             (DF_IDX_END_EXCL, int_),
             (HAS_ROW_GROUP, bool_),
             (HAS_DF_CHUNK, bool_),
@@ -170,29 +172,29 @@ def compute_atomic_merge_regions(
             rg_idx_df_orphans,
             rg_idx_to_insert,
         )
-        # 'Resize 'df_idx_amr_ends_excl', and duplicate values where there are
+        # 'Resize 'df_idx_oar_ends_excl', and duplicate values where there are
         # non-overlapping regions in DataFrame.
         if rg_idx_df_orphans[-1] == len(df_ordered_on):
-            df_idx_to_insert = df_idx_amr_starts[rg_idx_df_orphans]
+            df_idx_to_insert = df_idx_oar_starts[rg_idx_df_orphans]
         else:
-            df_idx_to_insert = r_[df_idx_amr_starts, len(df_ordered_on)][rg_idx_df_orphans]
-        df_idx_amr_ends_excl = insert(
-            df_idx_amr_ends_excl,
+            df_idx_to_insert = r_[df_idx_oar_starts, len(df_ordered_on)][rg_idx_df_orphans]
+        df_idx_oar_ends_excl = insert(
+            df_idx_oar_ends_excl,
             rg_idx_df_orphans,
             df_idx_to_insert,
         )
 
-    amrs_info["rg_idx_start"] = rg_idxs_template[:-1]
-    amrs_info["rg_idx_end_excl"] = rg_idxs_template[1:]
-    amrs_info[DF_IDX_END_EXCL] = df_idx_amr_ends_excl
-    amrs_info[HAS_ROW_GROUP] = amrs_info["rg_idx_start"] != amrs_info["rg_idx_end_excl"]
-    amrs_info[HAS_DF_CHUNK] = diff(amrs_info[DF_IDX_END_EXCL], prepend=0) != 0
-    return amrs_info
+    oars_info[RG_IDX_START] = rg_idxs_template[:-1]
+    oars_info[RG_IDX_END_EXCL] = rg_idxs_template[1:]
+    oars_info[DF_IDX_END_EXCL] = df_idx_oar_ends_excl
+    oars_info[HAS_ROW_GROUP] = oars_info[RG_IDX_START] != oars_info[RG_IDX_END_EXCL]
+    oars_info[HAS_DF_CHUNK] = diff(oars_info[DF_IDX_END_EXCL], prepend=0) != 0
+    return oars_info
 
 
-class AMRSplitStrategy(ABC):
+class OARSplitStrategy(ABC):
     """
-    Abstract base class for atomic merge region split strategies.
+    Abstract base class for ordered atomic region split strategies.
 
     This class defines strategies for:
     - evaluating likelihood of region completeness after merge,
@@ -205,23 +207,23 @@ class AMRSplitStrategy(ABC):
     @abstractmethod
     def likely_meets_target_size(self) -> NDArray:
         """
-        Return boolean array indicating which AMRs are likely to meet target size.
+        Return boolean array indicating which OARs are likely to meet target size.
 
         This can be the result of 2 conditions:
         - either a DataFrame chunk and a row group are merged together, and the
-          result is likely roght sized (not under-sized, nor over-sized).
+          result is likely right sized (not under-sized, nor over-sized).
         - or if there is only a Dataframe chunk or only a row group, they are
-          likely right sized on their own.
+          right sized on their own.
 
         Returns
         -------
         NDArray
-            Boolean array of length the number of atomic merge regions.
+            Boolean array of length the number of ordered atomic regions.
 
         Notes
         -----
         The likelihood aspect results from the fact that the final completeness
-        of an AMR cannot be determined at analysis time for various reasons
+        of an OAR cannot be determined at analysis time for various reasons
         depending on the split strategy.
 
         """
@@ -246,7 +248,7 @@ class AMRSplitStrategy(ABC):
         raise NotImplementedError("Subclasses must implement this method")
 
     @abstractmethod
-    def get_row_group_size(self, chunk_len: int, is_last_chunk: bool) -> Union[int, List[int]]:
+    def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
         """
         Define the appropriate row group size or split points for a chunk.
 
@@ -255,8 +257,8 @@ class AMRSplitStrategy(ABC):
 
         Parameters
         ----------
-        chunk_len : int
-            Length of the chunk to process.
+        chunk : DataFrame
+            DataFrame chunk to process.
         is_last_chunk : bool
             Whether this is the last chunk in the iteration.
 
@@ -270,29 +272,30 @@ class AMRSplitStrategy(ABC):
         raise NotImplementedError("Subclasses must implement this method")
 
 
-class NRowsSplitStrategy(AMRSplitStrategy):
+class NRowsSplitStrategy(OARSplitStrategy):
     """
     Row group split strategy based on a target number of rows per row group.
 
     Attributes
     ----------
-    amr_target_size : int
+    oar_target_size : int
         Target number of rows above which a new row group should be created.
-    amr_min_size : int
-        Minimum number of rows in an atomic merge region, computed as
+    oar_min_size : int
+        Minimum number of rows in an ordered atomic region, computed as
         ``MAX_ROW_GROUP_SIZE_SCALE_FACTOR * row_group_target_size``.
     max_n_irgs : int
-        Maximum number of incomplete row groups allowed in a merge region.
-    amrs_max_n_rows : NDArray
-        Array of shape (e) containing the maximum number of rows in each atomic
-        merge region.
+        Maximum number of incomplete row groups allowed in an ordered atomic
+        region.
+    oars_max_n_rows : NDArray
+        Array of shape (e) containing the maximum number of rows in each ordered
+        atomic region.
 
     """
 
     def __init__(
         self,
         rgs_n_rows: NDArray,
-        amrs_info: NDArray,
+        oars_info: NDArray,
         row_group_target_size: int,
         max_n_irgs: int,
     ):
@@ -304,51 +307,52 @@ class NRowsSplitStrategy(AMRSplitStrategy):
         rgs_n_rows : NDArray
             Array of shape (r) containing the number of rows in each row group
             in existing ParquetFile.
-        amrs_info : NDArray
-            Array of shape (e, 5) containing the information about each atomic
-            merge regions
+        oars_info : NDArray
+            Array of shape (e, 5) containing the information about each ordered
+            atomic region.
         row_group_target_size : int
             Target number of rows above which a new row group should be created.
         max_n_irgs : int
-            Maximum number of incomplete row groups allowed in a merge region.
+            Maximum number of incomplete row groups allowed in an ordered atomic
+            region.
 
         """
-        self.amr_target_size = row_group_target_size
-        self.amr_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
+        self.oar_target_size = row_group_target_size
+        self.oar_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
         self.max_n_irgs = max_n_irgs
-        # Max number of rows in each atomic merge region. This is a max in case
+        # Max number of rows in each ordered atomic region. This is a max in case
         # there are duplicates between row groups and DataFrame that will be
         # dropped.
-        self.amrs_max_n_rows = zeros(len(amrs_info), dtype=int)
-        self.amrs_max_n_rows[amrs_info[HAS_ROW_GROUP]] = rgs_n_rows
-        self.amrs_max_n_rows += diff(amrs_info[DF_IDX_END_EXCL], prepend=0)
-        # self.df_n_rows = amrs_info[DF_IDX_END_EXCL][-1]
+        self.oars_max_n_rows = zeros(len(oars_info), dtype=int)
+        self.oars_max_n_rows[oars_info[HAS_ROW_GROUP]] = rgs_n_rows
+        self.oars_max_n_rows += diff(oars_info[DF_IDX_END_EXCL], prepend=0)
+        # self.df_n_rows = oars_info[DF_IDX_END_EXCL][-1]
 
     @cached_property
     def likely_meets_target_size(self) -> NDArray:
         """
-        Return boolean array indicating which AMRs are likely to meet target size.
+        Return boolean array indicating which OARs are likely to meet target size.
 
         The likelihood aspect comes from the fact that at analysis time, the
-        exact final size of an AMR is not known. When a row group and DataFrame
-        chunk overlap are both present in an AMR, there might be duplicate rows
+        exact final size of an OAR is not known. When a row group and DataFrame
+        chunk overlap are both present in an OAR, there might be duplicate rows
         that will be removed during the merge operation. What is known are:
         - the maximum size (sum of row group and DataFrame chunk sizes)
         - the minimum size (max of row group size and DataFrame chunk size)
         The exact final size is only known after deduplication.
 
-        The method returns ``True`` for an atomic merge region where the sum of
+        The method returns ``True`` for an ordered atomic region where the sum of
         the row group and DataFrame chunk sizes is between the minimum and
         target size.
 
         Returns
         -------
         NDArray
-            Boolean array of length the number of atomic merge regions.
+            Boolean array of length the number of ordered atomic regions.
 
         """
-        return (self.amrs_max_n_rows >= self.amr_min_size) & (
-            self.amrs_max_n_rows <= self.amr_target_size
+        return (self.oars_max_n_rows >= self.oar_min_size) & (
+            self.oars_max_n_rows <= self.oar_target_size
         )
 
     def get_risk_of_exceeding_rgst(
@@ -440,9 +444,10 @@ class NRowsSplitStrategy(AMRSplitStrategy):
         -------
         Tuple[List[int], List[int]]
             - First list: indices in ParquetFile describing where ends (excluded)
-            each set of row groups to merge with corresponding DataFrame chunk.
+              each set of row groups overlapping with corresponding DataFrame
+              chunk.
             - Second list: indices in DataFrame describing where ends (excluded)
-            each DataFrame chunk for the corresponding set of row groups.
+              each DataFrame chunk for the corresponding set of row groups.
 
         """
         if not self.df_idx_tmrg_ends_excl.size:
@@ -508,19 +513,19 @@ class NRowsSplitStrategy(AMRSplitStrategy):
             return list(range(len(chunk), step=self.row_group_target_size))
 
 
-class TimePeriodSplitStrategy(AMRSplitStrategy):
+class TimePeriodSplitStrategy(OARSplitStrategy):
     """
     Row group split strategy based on a time period target per row group.
 
     Attributes
     ----------
-    amr_period : str
+    oar_period : str
         Time period for a row group to be complete.
-    amrs_bounds : NDArray
-        Array of shape (e, 2) containing the start and end bounds of each atomic
-        merge region.
-    amr_idx_single_component : NDArray
-        Array of shape (e) containing the indices of atomic merge regions with
+    oars_mins_maxs : NDArray
+        Array of shape (e, 2) containing the start and end bounds of each
+        ordered atomic region.
+    oar_idx_single_component : NDArray
+        Array of shape (e) containing the indices of ordered atomic regions with
         exactly one component (either RG or DF chunk, not both).
     period_bounds : DatetimeIndex
         Period bounds over the total time span of the dataset, considering both
@@ -533,7 +538,7 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
         rg_ordered_on_mins: NDArray,
         rg_ordered_on_maxs: NDArray,
         df_ordered_on: Series,
-        amrs_info: NDArray,
+        oars_info: NDArray,
         row_group_period: str,
     ):
         """
@@ -547,46 +552,46 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
             Maximum value of 'ordered_on' in each row group.
         df_ordered_on : Series
             Values of 'ordered_on' column in DataFrame.
-        amrs_info : NDArray
-            Array of shape (e, 5) containing the information about each atomic
-            merge regions
+        oars_info : NDArray
+            Array of shape (e, 5) containing the information about each ordered
+            atomic region.
         row_group_period : str
             Target period for each row group (pandas freqstr).
 
         """
-        self.amr_period = row_group_period
+        self.oar_period = row_group_period
         df_ordered_on_np = df_ordered_on.to_numpy()
-        self.amrs_bounds = ones((len(amrs_info), 2)).astype(df_ordered_on_np.dtype)
-        # Row groups encompasses Dataframe chunks in an AMR.
+        self.oars_mins_maxs = ones((len(oars_info), 2)).astype(df_ordered_on_np.dtype)
+        # Row groups encompasses Dataframe chunks in an OAR.
         # Hence, start with Dataframe chunks starts and ends.
-        amr_idx_df_chunk = flatnonzero(amrs_info[HAS_DF_CHUNK])
-        df_idx_chunk_starts = zeros(len(amr_idx_df_chunk), dtype=int)
-        df_idx_chunk_starts[1:] = amrs_info[DF_IDX_END_EXCL][amr_idx_df_chunk[:-1]]
-        self.amrs_bounds[amr_idx_df_chunk, 0] = df_ordered_on_np[df_idx_chunk_starts]
-        self.amrs_bounds[amr_idx_df_chunk, 1] = df_ordered_on_np[
-            amrs_info[DF_IDX_END_EXCL][amr_idx_df_chunk] - 1
+        oar_idx_df_chunk = flatnonzero(oars_info[HAS_DF_CHUNK])
+        df_idx_chunk_starts = zeros(len(oar_idx_df_chunk), dtype=int)
+        df_idx_chunk_starts[1:] = oars_info[DF_IDX_END_EXCL][oar_idx_df_chunk[:-1]]
+        self.oars_mins_maxs[oar_idx_df_chunk, 0] = df_ordered_on_np[df_idx_chunk_starts]
+        self.oars_mins_maxs[oar_idx_df_chunk, 1] = df_ordered_on_np[
+            oars_info[DF_IDX_END_EXCL][oar_idx_df_chunk] - 1
         ]
         # Only then add row groups starts and ends. They will overwrite where
         # Dataframe chunks are present.
-        amr_idx_row_groups = flatnonzero(amrs_info[HAS_ROW_GROUP])
-        self.amrs_bounds[amr_idx_row_groups, 0] = rg_ordered_on_mins
-        self.amrs_bounds[amr_idx_row_groups, 1] = rg_ordered_on_maxs
+        oar_idx_row_groups = flatnonzero(oars_info[HAS_ROW_GROUP])
+        self.oars_mins_maxs[oar_idx_row_groups, 0] = rg_ordered_on_mins
+        self.oars_mins_maxs[oar_idx_row_groups, 1] = rg_ordered_on_maxs
         # Keep track where there is only one component (either RG or DF chunk,
         # not both).
-        self.amr_idx_single_component = flatnonzero(
-            amrs_info[HAS_ROW_GROUP] ^ amrs_info[HAS_DF_CHUNK],
+        self.oar_idx_single_component = flatnonzero(
+            oars_info[HAS_ROW_GROUP] ^ oars_info[HAS_DF_CHUNK],
         )
         # Generate period bounds.
-        start_ts = floor_ts(Timestamp(self.amrs_bounds[0, 0]), row_group_period)
-        end_ts = ceil_ts(Timestamp(self.amrs_bounds[-1, 1]), row_group_period)
+        start_ts = floor_ts(Timestamp(self.oars_mins_maxs[0, 0]), row_group_period)
+        end_ts = ceil_ts(Timestamp(self.oars_mins_maxs[-1, 1]), row_group_period)
         self.period_bounds = date_range(start=start_ts, end=end_ts, freq=row_group_period)
 
     @cached_property
     def likely_meets_target_size(self) -> NDArray:
         """
-        Return boolean array indicating which AMRs are likely to meet target size.
+        Return boolean array indicating which OARs are likely to meet target size.
 
-        An AMR meets target size if and only if:
+        An OAR meets target size if and only if:
         1. It contains exactly one row group OR one DataFrame chunk (not both,
            even non-overlapping)
         2. That component fits entirely within a single period bound
@@ -599,41 +604,38 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
         Returns
         -------
         NDArray
-            Boolean array of length the number of atomic merge regions.
+            Boolean array of length the number of ordered atomic regions.
 
         """
         # Start with all False - most cases will be False
-        meets_target_period = zeros(len(self.amrs_bounds), dtype=bool)
-        if len(self.amr_idx_single_component) == 0:
+        meets_target_period = zeros(len(self.oars_mins_maxs), dtype=bool)
+        if len(self.oar_idx_single_component) == 0:
             return meets_target_period
 
         # Find periods for all bounds.
-        period_idx_amr_single_cmpt = (
-            searchsorted(
-                self.period_bounds,
-                self.amrs_bounds[self.amr_idx_single_component],
-                side=RIGHT,
-            )
-            - 1
+        period_idx_oar_single_cmpt = searchsorted(
+            self.period_bounds,
+            self.oars_mins_maxs[self.oar_idx_single_component],
+            side=RIGHT,
         )
         # True where component is contained in a single period
-        single_period_mask = period_idx_amr_single_cmpt[:, 0] == period_idx_amr_single_cmpt[:, 1]
-        # Get indices of AMRs that are in a single period
-        amr_idx_single_cmpt_single_period = self.amr_idx_single_component[single_period_mask]
-        period_idx_single_cmpt_single_period = period_idx_amr_single_cmpt[single_period_mask, 0]
+        single_period_mask = period_idx_oar_single_cmpt[:, 0] == period_idx_oar_single_cmpt[:, 1]
+        # Get indices of OARs that are in a single period
+        oar_idx_single_cmpt_single_period = self.oar_idx_single_component[single_period_mask]
+        period_idx_single_cmpt_single_period = period_idx_oar_single_cmpt[single_period_mask, 0]
         # Count occurrences of start periods and end periods.
-        # Notice that counting is on AMR which can span multiple periods.
-        # This is because such an AMR can start or end where another AMR lies,
+        # Notice that counting is on OAR which can span multiple periods.
+        # This is because such an OAR can start or end where another OAR lies,
         # and this second one within the same period. This will then make this
-        # second AMR not meeting target size.
+        # second OAR not meeting target size.
         # That has been tricky to think about.
-        start_counts = bincount(period_idx_amr_single_cmpt[:, 0])
-        end_counts = bincount(period_idx_amr_single_cmpt[:, 1])
-        # An AMR meets target if it's the only one starting AND ending in its period
+        start_counts = bincount(period_idx_oar_single_cmpt[:, 0])
+        end_counts = bincount(period_idx_oar_single_cmpt[:, 1])
+        # An OAR meets target if it's the only one starting AND ending in its period
         meets_period = (start_counts[period_idx_single_cmpt_single_period] == 1) & (
             end_counts[period_idx_single_cmpt_single_period] == 1
         )
-        meets_target_period[amr_idx_single_cmpt_single_period[meets_period]] = True
+        meets_target_period[oar_idx_single_cmpt_single_period[meets_period]] = True
 
         return meets_target_period
 
@@ -646,13 +648,13 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
         Consolidate chunks based on time periods.
         """
         # Generate period starts
-        start_ts = min(df_ordered_on.iloc[0], rg_stats[0]).floor(self.period)
-        end_ts = max(df_ordered_on.iloc[-1], rg_stats[-1]).ceil(self.period)
-        period_starts = date_range(start=start_ts, end=end_ts, freq=self.period)[1:]
+        start_ts = min(df_ordered_on.iloc[0], rg_stats[0]).floor(self.oar_period)
+        end_ts = max(df_ordered_on.iloc[-1], rg_stats[-1]).ceil(self.oar_period)
+        period_starts = date_range(start=start_ts, end=end_ts, freq=self.oar_period)[1:]
 
         # Get indices for row groups and DataFrame chunks
-        rg_idx_tmrg_ends_excl = searchsorted(rg_stats, period_starts, side="left")
-        df_idx_period_ends_excl = searchsorted(df_ordered_on, period_starts, side="left")
+        rg_idx_tmrg_ends_excl = searchsorted(rg_stats, period_starts, side=LEFT)
+        df_idx_period_ends_excl = searchsorted(df_ordered_on, period_starts, side=LEFT)
 
         # Stack indices and find unique consecutive pairs
         pairs = vstack((rg_idx_tmrg_ends_excl, df_idx_period_ends_excl))
@@ -788,7 +790,7 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
             df_idx_period_ends_excl[change_indices].tolist(),
         )
 
-    def get_row_group_size(self, chunk_len: int, is_last_chunk: bool) -> Union[int, List[int]]:
+    def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
         """
         Define the appropriate row group size or split points for a chunk.
 
@@ -797,8 +799,8 @@ class TimePeriodSplitStrategy(AMRSplitStrategy):
 
         Parameters
         ----------
-        chunk_len : int
-            Length of the chunk to process.
+        chunk : DataFrame
+            DataFrame chunk to process.
         is_last_chunk : bool
             Whether this is the last chunk in the iteration.
 

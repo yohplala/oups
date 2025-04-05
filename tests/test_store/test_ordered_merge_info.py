@@ -17,8 +17,8 @@ from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.store.atomic_merge_regions import NRowsSplitStrategy
-from oups.store.atomic_merge_regions import TimePeriodSplitStrategy
+from oups.store.ordered_atomic_regions import NRowsSplitStrategy
+from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
 from oups.store.ordered_merge_info import compute_ordered_merge_plan
 from oups.store.ordered_merge_info import get_region_indices_of_same_values
 from oups.store.ordered_merge_info import get_region_indices_of_true_values
