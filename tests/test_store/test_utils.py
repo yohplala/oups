@@ -175,6 +175,13 @@ def test_get_region_start_end_delta(
             Timestamp("2024-04-01 00:00:00"),  # ceil to next month start
         ),
         (
+            "month_end_exact",
+            Timestamp("2024-03-31"),  # month end already
+            "MS",  # month start
+            Timestamp("2024-03-01 00:00:00"),  # floor to month start
+            Timestamp("2024-04-01 00:00:00"),  # ceil to next month start
+        ),
+        (
             "month_start",
             Timestamp("2024-03-15 14:30:00"),  # mid-month timestamp
             "MS",  # month start

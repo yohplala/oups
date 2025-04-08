@@ -15,6 +15,7 @@ from numpy import int_
 from numpy import ones
 from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
+from pandas import DataFrame
 from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
@@ -260,6 +261,113 @@ def test_nrows_split_strategy_likely_meets_target_size():
     assert_array_equal(result, expected)
 
 
+@pytest.mark.parametrize(
+    "test_id, rg_mins, rg_maxs, df_ordered_on, oars, expected",
+    [
+        (
+            "2_rgs_in_period",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Dec,   15/12,   19/12,                 , False (2 ARMs in period)
+            #   2,         Dec,   20/12,   28/12,                 , False (2 ARMs in period)
+            #   3,         Mar,                     15/03,   15/03, True (one DFc in period)
+            array([Timestamp("2023-12-15"), Timestamp("2023-12-20")]),  # rg_mins
+            array([Timestamp("2023-12-19"), Timestamp("2023-12-28")]),  # rg_maxs
+            Series([Timestamp("2024-03-15")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([0, 0, 1]),
+                HAS_ROW_GROUP: array([True, True, False]),
+                HAS_DF_CHUNK: array([False, False, True]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2023-12-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-04-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [
+                            Timestamp("2023-12-15"),
+                            Timestamp("2023-12-20"),
+                            Timestamp("2024-03-15"),
+                        ],
+                        "maxs": [
+                            Timestamp("2023-12-19"),
+                            Timestamp("2023-12-28"),
+                            Timestamp("2024-03-15"),
+                        ],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, False, True]),
+            },
+        ),
+        (
+            "rg_spans_multiple_periods",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Jan,   01/01,                          , False (RG spans several periods)
+            #   1,         Feb,            01/02,                 , same OAR as above
+            #   2,         Mar,                     15/03,   15/03, True (one DFc in period)
+            array([Timestamp("2024-01-01")]),  # rg_mins, value on edge
+            array([Timestamp("2024-02-01")]),  # rg_maxs, value on edge
+            Series([Timestamp("2024-03-15")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([0, 1]),
+                HAS_ROW_GROUP: array([True, False]),
+                HAS_DF_CHUNK: array([False, True]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-01-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-04-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-01-01"), Timestamp("2024-03-15")],
+                        "maxs": [Timestamp("2024-02-01"), Timestamp("2024-03-15")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, True]),
+            },
+        ),
+    ],
+)
+def test_time_period_split_strategy2(test_id, rg_mins, rg_maxs, df_ordered_on, oars, expected):
+    """
+    Test TimePeriodSplitStrategy initialization and likely_meets_target_size.
+    """
+    time_period = "MS"
+    # Create oars_info with 6 regions
+    oars_info = ones(
+        len(expected["likely_meets_target"]),
+        dtype=[
+            (RG_IDX_START, int_),
+            (RG_IDX_END_EXCL, int_),
+            (DF_IDX_END_EXCL, int_),
+            (HAS_ROW_GROUP, bool_),
+            (HAS_DF_CHUNK, bool_),
+        ],
+    )
+    # Set required OAR infos
+    oars_info[DF_IDX_END_EXCL] = oars[DF_IDX_END_EXCL]
+    oars_info[HAS_ROW_GROUP] = oars[HAS_ROW_GROUP]
+    oars_info[HAS_DF_CHUNK] = oars[HAS_DF_CHUNK]
+    # Initialize strategy
+    strategy = TimePeriodSplitStrategy(
+        rg_ordered_on_mins=rg_mins,
+        rg_ordered_on_maxs=rg_maxs,
+        df_ordered_on=df_ordered_on,
+        oars_info=oars_info,
+        row_group_period=time_period,
+    )
+    # Test period_bounds
+    assert_array_equal(strategy.period_bounds, expected["period_bounds"])
+    # Test oars_mins_maxs
+    assert_array_equal(strategy.oars_mins_maxs, expected["oars_mins_maxs"])
+    # Test likely_meets_target_size
+    assert_array_equal(strategy.likely_meets_target_size, expected["likely_meets_target"])
+
+
 def test_time_period_split_strategy():
     """
     Test TimePeriodSplitStrategy initialization and likely_meets_target_size.
@@ -319,8 +427,6 @@ def test_time_period_split_strategy():
     #
     rg_ordered_on_mins = array(
         [
-            Timestamp("2023-12-15"),
-            Timestamp("2023-12-20"),
             Timestamp("2024-01-25"),
             Timestamp("2024-03-15"),
             Timestamp("2024-06-10"),
@@ -333,8 +439,6 @@ def test_time_period_split_strategy():
     )
     rg_ordered_on_maxs = array(
         [
-            Timestamp("2023-12-19"),
-            Timestamp("2023-12-28"),
             Timestamp("2024-02-01"),
             Timestamp("2024-03-16"),
             Timestamp("2024-06-15"),
@@ -377,11 +481,9 @@ def test_time_period_split_strategy():
         ],
     )
     # Set required ARM infos
-    oars_info[DF_IDX_END_EXCL] = array([0, 0, 0, 1, 3, 3, 5, 7, 7, 7, 9, 11, 11, 11, 13, 13, 15])
+    oars_info[DF_IDX_END_EXCL] = array([0, 1, 3, 3, 5, 7, 7, 7, 9, 11, 11, 11, 13, 13, 15])
     oars_info[HAS_ROW_GROUP] = array(
         [
-            True,
-            True,
             True,
             True,
             False,
@@ -401,8 +503,6 @@ def test_time_period_split_strategy():
     )
     oars_info[HAS_DF_CHUNK] = array(
         [
-            False,
-            False,
             False,
             True,
             True,
@@ -438,8 +538,6 @@ def test_time_period_split_strategy():
     # Test oars_mins_maxs
     expected_oars_mins = Series(
         [
-            Timestamp("2023-12-15"),
-            Timestamp("2023-12-20"),
             Timestamp("2024-01-25"),
             Timestamp("2024-03-15"),
             Timestamp("2024-04-17"),
@@ -461,8 +559,6 @@ def test_time_period_split_strategy():
     # Test df_chunk_ends
     expected_oars_maxs = Series(
         [
-            Timestamp("2023-12-19"),
-            Timestamp("2023-12-28"),
             Timestamp("2024-02-01"),
             Timestamp("2024-03-16"),
             Timestamp("2024-05-03"),
@@ -485,8 +581,6 @@ def test_time_period_split_strategy():
     result = strategy.likely_meets_target_size
     expected = array(
         [
-            False,
-            False,
             False,
             False,
             False,
