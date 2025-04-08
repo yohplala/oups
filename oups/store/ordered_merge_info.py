@@ -299,6 +299,7 @@ def compute_ordered_merge_plan(
         drop_duplicates=drop_duplicates,
     )
     # Initialize row group split strategy.
+    # TODO: implement ordered_on check at OAR creation.
     oar_split_strategy = (
         NRowsSplitStrategy(
             rgs_n_rows=array([rg.num_rows for rg in pf], dtype=int),

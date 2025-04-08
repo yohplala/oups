@@ -126,6 +126,7 @@ def compute_ordered_atomic_regions(
     rewriting these leading row groups.
 
     """
+    # TODO: check rg_mins is interlaced with rg_maxs +/- 1 and df is ordered.
     # Find regions in DataFrame overlapping with row groups.
     if drop_duplicates:
         # Determine overlap start/end indices in row groups

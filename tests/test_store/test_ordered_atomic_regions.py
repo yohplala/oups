@@ -265,7 +265,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
     "test_id, rg_mins, rg_maxs, df_ordered_on, oars, expected",
     [
         (
-            "2_rgs_in_period",
+            "two_rgs_in_period",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
             #   1,         Dec,   15/12,   19/12,                 , False (2 ARMs in period)
             #   2,         Dec,   20/12,   28/12,                 , False (2 ARMs in period)
@@ -330,9 +330,237 @@ def test_nrows_split_strategy_likely_meets_target_size():
                 "likely_meets_target": array([False, True]),
             },
         ),
+        (
+            "rg_and_dfc_in_same_oar",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Mar,   15/03,   16/03,   15/03,   15/03, False (both RG & DFc in period)
+            array([Timestamp("2024-03-15")]),  # rg_mins
+            array([Timestamp("2024-03-16")]),  # rg_maxs
+            Series([Timestamp("2024-03-15")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([1]),
+                HAS_ROW_GROUP: array([True]),
+                HAS_DF_CHUNK: array([True]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-03-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-04-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-03-15")],
+                        "maxs": [Timestamp("2024-03-16")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False]),
+            },
+        ),
+        (
+            "dfc_spans_multiple_periods",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Apr,                     17/04,        , False (DFc spans several periods)
+            #   1,         May,                              03/05,
+            #   2,         Jun,   10/06,   15/06,                 , True
+            array([Timestamp("2024-06-10")]),  # rg_mins
+            array([Timestamp("2024-06-15")]),  # rg_maxs
+            Series([Timestamp("2024-04-17"), Timestamp("2024-05-03")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([2, 2]),
+                HAS_ROW_GROUP: array([False, True]),
+                HAS_DF_CHUNK: array([True, False]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-04-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-07-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-04-17"), Timestamp("2024-06-10")],
+                        "maxs": [Timestamp("2024-05-03"), Timestamp("2024-06-15")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, True]),
+            },
+        ),
+        (
+            "rg_and_dfc_in_same_period",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Jun,   10/06,   15/06,                , False (both RG & DFc in period)
+            #   2,         Jun,                    16/06,   18/06, False (both RG & DFc in period)
+            array([Timestamp("2024-06-10")]),  # rg_mins
+            array([Timestamp("2024-06-15")]),  # rg_maxs
+            Series([Timestamp("2024-06-16"), Timestamp("2024-06-18")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([0, 2]),
+                HAS_ROW_GROUP: array([True, False]),
+                HAS_DF_CHUNK: array([False, True]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-06-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-07-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-06-10"), Timestamp("2024-06-16")],
+                        "maxs": [Timestamp("2024-06-15"), Timestamp("2024-06-18")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, False]),
+            },
+        ),
+        (
+            "dfc_ends_in period_with_a_rg",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Jul,                    15/07,        , False (DFc spans several periods)
+            #   1,         Aug,                             10/08,
+            #   2,         Aug,   15/08,   17/08,                , False (both RG & DFc in period)
+            array([Timestamp("2024-08-15")]),  # rg_mins
+            array([Timestamp("2024-08-17")]),  # rg_maxs
+            Series([Timestamp("2024-07-15"), Timestamp("2024-08-10")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([2, 2]),
+                HAS_ROW_GROUP: array([False, True]),
+                HAS_DF_CHUNK: array([True, False]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-07-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-09-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-07-15"), Timestamp("2024-08-15")],
+                        "maxs": [Timestamp("2024-08-10"), Timestamp("2024-08-17")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, False]),
+            },
+        ),
+        (
+            "rg_ends_in_period_with_a_dfc",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Sep,   11/09,                         , False (RG spans several periods)
+            #   1,         Oct,            15/10,
+            #   2,         Oct,                    16/10,   18/10, False (both RG & DFc in period)
+            array([Timestamp("2024-09-11")]),  # rg_mins
+            array([Timestamp("2024-10-15")]),  # rg_maxs
+            Series([Timestamp("2024-10-16"), Timestamp("2024-10-18")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([0, 2]),
+                HAS_ROW_GROUP: array([True, False]),
+                HAS_DF_CHUNK: array([False, True]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-09-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-11-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-09-11"), Timestamp("2024-10-16")],
+                        "maxs": [Timestamp("2024-10-15"), Timestamp("2024-10-18")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, False]),
+            },
+        ),
+        (
+            "rg_starts_in_period_with_a_dfc",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Nov,                    15/11,   17/11, False (both RG & DFc in period)
+            #   2,         Nov,   18/11,                         , False (RG spans several periods)
+            #   2,         Dec,            05/12,
+            array([Timestamp("2024-11-18")]),  # rg_mins
+            array([Timestamp("2024-12-05")]),  # rg_maxs
+            Series([Timestamp("2024-11-15"), Timestamp("2024-11-17")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([2, 2]),
+                HAS_ROW_GROUP: array([False, True]),
+                HAS_DF_CHUNK: array([True, False]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-11-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2025-01-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-11-15"), Timestamp("2024-11-18")],
+                        "maxs": [Timestamp("2024-11-17"), Timestamp("2024-12-05")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, False]),
+            },
+        ),
+        (
+            "dfc_starts_in_period_with_a_rg",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #  14,         Jan,   01/01,   04/01,                , False (both RG & DFc in period)
+            #  15,         Jan,                    16/01,        , False (DFc spans several periods)
+            #  15,         Feb,                             01/02,
+            array([Timestamp("2024-01-01")]),  # rg_mins
+            array([Timestamp("2024-01-04")]),  # rg_maxs
+            Series([Timestamp("2024-01-16"), Timestamp("2024-02-01")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([0, 2]),
+                HAS_ROW_GROUP: array([True, False]),
+                HAS_DF_CHUNK: array([False, True]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-01-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-03-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-01-01"), Timestamp("2024-01-16")],
+                        "maxs": [Timestamp("2024-01-04"), Timestamp("2024-02-01")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, False]),
+            },
+        ),
+        (
+            "rg_and_dfc_ok",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Mar,   01/03,   02/03,                , True (single RG in period)
+            #   2,         Apr,                    01/04,   30/04, True (single DFc in period)
+            array([Timestamp("2024-03-01")]),  # rg_mins
+            array([Timestamp("2024-03-02")]),  # rg_maxs
+            Series([Timestamp("2024-04-01"), Timestamp("2024-04-30")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([0, 2]),
+                HAS_ROW_GROUP: array([True, False]),
+                HAS_DF_CHUNK: array([False, True]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-03-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-05-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-03-01"), Timestamp("2024-04-01")],
+                        "maxs": [Timestamp("2024-03-02"), Timestamp("2024-04-30")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([True, True]),
+            },
+        ),
     ],
 )
-def test_time_period_split_strategy2(test_id, rg_mins, rg_maxs, df_ordered_on, oars, expected):
+def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oars, expected):
     """
     Test TimePeriodSplitStrategy initialization and likely_meets_target_size.
     """
@@ -366,236 +594,3 @@ def test_time_period_split_strategy2(test_id, rg_mins, rg_maxs, df_ordered_on, o
     assert_array_equal(strategy.oars_mins_maxs, expected["oars_mins_maxs"])
     # Test likely_meets_target_size
     assert_array_equal(strategy.likely_meets_target_size, expected["likely_meets_target"])
-
-
-def test_time_period_split_strategy():
-    """
-    Test TimePeriodSplitStrategy initialization and likely_meets_target_size.
-
-    Tests various scenarios:
-    1. Row group contained within a period
-    2. Row group spanning multiple periods
-    3. DataFrame chunk contained within a period
-    4. DataFrame chunk spanning multiple periods
-    5. Multiple row groups in same period
-    6. OAR with both row group and DataFrame chunk
-
-    """
-    # Create test data
-    # Period is monthly start ('MS')
-    time_period = "MS"
-    # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
-    #   1,         Dec,   15/12,   19/12,                 , False (2 ARMs in period)
-    #   2,         Dec,   20/12,   28/12,                 , False (2 ARMs in period)
-    #              ---,
-    #   3,         Jan,   25/01,                          , False (RG spans several periods)
-    #              ---,
-    #   3,         Feb,            01/02,                 , value on edge of period
-    #              ---,
-    #   4,         Mar,   15/03,   16/03,   15/03,   15/03, False (both RG & DFc in period)
-    #              ---,
-    #   5,         Apr,                     17/04,        , False (DFc spans several periods)
-    #              ---,
-    #   5,         May,                              03/05,
-    #              ---,
-    #   6,         Jun,   10/06,   15/06,                , False (both RG & DFc in period)
-    #   7,         Jun,                    16/06,   18/06, False (both RG & DFc in period)
-    #              ---,
-    #   8,         Jul,                    15/07,        , False (DFc spans several periods)
-    #              ---,
-    #   8,         Aug,                             10/08,
-    #   9,         Aug,   15/08,   17/08,                , False (both RG & DFc in period)
-    #              ---,
-    #  10,         Sep,   10/09,                         , False (RG spans several periods)
-    #              ---,
-    #  10,         Oct,            15/10,
-    #  11,         Oct,                    16/10,   18/10, False (both RG & DFc in period)
-    #              ---,
-    #  12,         Nov,                    15/11,   17/11, False (both RG & DFc in period)
-    #  13,         Nov,   18/11,                         , False (RG spans several periods)
-    #              ---,
-    #  13,         Dec,            05/12,
-    #              ---,
-    #  14,         Jan,   02/01,   04/01,                , False (both RG & DFc in period)
-    #  15,         Jan,                    16/01,        , False (DFc spans several periods)
-    #              ---,
-    #  15,         Feb,                             05/02,
-    #              ---,
-    #  16,         Mar,   01/03,   02/03,                , True (single RG in period)
-    #              ---,
-    #  17,         Apr,                    05/04,   08/04, True (single DFc in period)
-    #
-    rg_ordered_on_mins = array(
-        [
-            Timestamp("2024-01-25"),
-            Timestamp("2024-03-15"),
-            Timestamp("2024-06-10"),
-            Timestamp("2024-08-15"),
-            Timestamp("2024-09-10"),
-            Timestamp("2024-11-18"),
-            Timestamp("2025-01-02"),
-            Timestamp("2025-03-01"),
-        ],
-    )
-    rg_ordered_on_maxs = array(
-        [
-            Timestamp("2024-02-01"),
-            Timestamp("2024-03-16"),
-            Timestamp("2024-06-15"),
-            Timestamp("2024-08-17"),
-            Timestamp("2024-10-15"),
-            Timestamp("2024-12-05"),
-            Timestamp("2025-01-04"),
-            Timestamp("2025-03-02"),
-        ],
-    )
-    # DataFrame chunks
-    df_ordered_on = Series(
-        [
-            Timestamp("2024-03-15"),
-            Timestamp("2024-04-17"),
-            Timestamp("2024-05-03"),
-            Timestamp("2024-06-16"),
-            Timestamp("2024-06-18"),
-            Timestamp("2024-07-15"),
-            Timestamp("2024-08-10"),
-            Timestamp("2024-10-16"),
-            Timestamp("2024-10-18"),
-            Timestamp("2024-11-15"),
-            Timestamp("2024-11-17"),
-            Timestamp("2025-01-16"),
-            Timestamp("2025-02-05"),
-            Timestamp("2025-04-05"),
-            Timestamp("2025-04-08"),
-        ],
-    )
-    # Create oars_info with 6 regions
-    oars_info = ones(
-        17,
-        dtype=[
-            (RG_IDX_START, int_),
-            (RG_IDX_END_EXCL, int_),
-            (DF_IDX_END_EXCL, int_),
-            (HAS_ROW_GROUP, bool_),
-            (HAS_DF_CHUNK, bool_),
-        ],
-    )
-    # Set required ARM infos
-    oars_info[DF_IDX_END_EXCL] = array([0, 1, 3, 3, 5, 7, 7, 7, 9, 11, 11, 11, 13, 13, 15])
-    oars_info[HAS_ROW_GROUP] = array(
-        [
-            True,
-            True,
-            False,
-            True,
-            False,
-            False,
-            True,
-            True,
-            False,
-            False,
-            True,
-            True,
-            False,
-            True,
-            False,
-        ],
-    )
-    oars_info[HAS_DF_CHUNK] = array(
-        [
-            False,
-            True,
-            True,
-            False,
-            True,
-            True,
-            False,
-            False,
-            True,
-            True,
-            False,
-            False,
-            True,
-            False,
-            True,
-        ],
-    )
-    # Initialize strategy
-    strategy = TimePeriodSplitStrategy(
-        rg_ordered_on_mins=rg_ordered_on_mins,
-        rg_ordered_on_maxs=rg_ordered_on_maxs,
-        df_ordered_on=df_ordered_on,
-        oars_info=oars_info,
-        row_group_period=time_period,
-    )
-    # Test period_bounds
-    expected_bounds = date_range(
-        start=Timestamp("2023-12-01"),  # Floor of earliest timestamp
-        end=Timestamp("2025-05-01"),  # Ceil of latest timestamp
-        freq=time_period,
-    )
-    assert_array_equal(strategy.period_bounds, expected_bounds)
-    # Test oars_mins_maxs
-    expected_oars_mins = Series(
-        [
-            Timestamp("2024-01-25"),
-            Timestamp("2024-03-15"),
-            Timestamp("2024-04-17"),
-            Timestamp("2024-06-10"),
-            Timestamp("2024-06-16"),
-            Timestamp("2024-07-15"),
-            Timestamp("2024-08-15"),
-            Timestamp("2024-09-10"),
-            Timestamp("2024-10-16"),
-            Timestamp("2024-11-15"),
-            Timestamp("2024-11-18"),
-            Timestamp("2025-01-02"),
-            Timestamp("2025-01-16"),
-            Timestamp("2025-03-01"),
-            Timestamp("2025-04-05"),
-        ],
-    )
-    assert_array_equal(strategy.oars_mins_maxs[:, 0], expected_oars_mins.to_numpy())
-    # Test df_chunk_ends
-    expected_oars_maxs = Series(
-        [
-            Timestamp("2024-02-01"),
-            Timestamp("2024-03-16"),
-            Timestamp("2024-05-03"),
-            Timestamp("2024-06-15"),
-            Timestamp("2024-06-18"),
-            Timestamp("2024-08-10"),
-            Timestamp("2024-08-17"),
-            Timestamp("2024-10-15"),
-            Timestamp("2024-10-18"),
-            Timestamp("2024-11-17"),
-            Timestamp("2024-12-05"),
-            Timestamp("2025-01-04"),
-            Timestamp("2025-02-05"),
-            Timestamp("2025-03-02"),
-            Timestamp("2025-04-08"),
-        ],
-    )
-    assert_array_equal(strategy.oars_mins_maxs[:, 1], expected_oars_maxs.to_numpy())
-    # Test likely_meets_target_size
-    result = strategy.likely_meets_target_size
-    expected = array(
-        [
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,
-            False,
-            True,
-            True,
-        ],
-    )
-    assert_array_equal(result, expected)
