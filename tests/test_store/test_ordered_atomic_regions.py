@@ -558,6 +558,71 @@ def test_nrows_split_strategy_likely_meets_target_size():
                 "likely_meets_target": array([True, True]),
             },
         ),
+        (
+            "rg_and_dfc_end_in_period_with_a_dfc",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         May,   01/05,            01/05,        , False (both RG & DFC)
+            #   1,         Jun,            02/06,            01/06,
+            #   2,         Jun,                     04/06,   30/06, False (past RG & DFC ending in period)
+            array([Timestamp("2024-05-01")]),  # rg_mins
+            array([Timestamp("2024-06-02")]),  # rg_maxs
+            Series(
+                [
+                    Timestamp("2024-05-01"),
+                    Timestamp("2024-06-01"),
+                    Timestamp("2024-06-04"),
+                    Timestamp("2024-06-30"),
+                ],
+            ),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([2, 4]),
+                HAS_ROW_GROUP: array([True, False]),
+                HAS_DF_CHUNK: array([True, True]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-05-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-07-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-05-01"), Timestamp("2024-06-04")],
+                        "maxs": [Timestamp("2024-06-02"), Timestamp("2024-06-30")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, False]),
+            },
+        ),
+        (
+            "rg_and_dfc_start_in_period_with_a_rg",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Apr,   01/04,   28/04,                 , False (next RG & DFC start in period)
+            #   2,         May,   29/04,            01/05,        , False (both RG & DFC)
+            #   2,         Jun,            02/06,            01/06,
+            array([Timestamp("2024-04-01"), Timestamp("2024-04-29")]),  # rg_mins
+            array([Timestamp("2024-04-28"), Timestamp("2024-06-02")]),  # rg_maxs
+            Series([Timestamp("2024-05-01"), Timestamp("2024-06-01")]),  # df_ordered_on
+            {
+                DF_IDX_END_EXCL: array([0, 2]),
+                HAS_ROW_GROUP: array([True, True]),
+                HAS_DF_CHUNK: array([False, True]),
+            },
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-04-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-07-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-04-01"), Timestamp("2024-04-29")],
+                        "maxs": [Timestamp("2024-04-28"), Timestamp("2024-06-02")],
+                    },
+                ).to_numpy(),
+                "likely_meets_target": array([False, False]),
+            },
+        ),
     ],
 )
 def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oars, expected):

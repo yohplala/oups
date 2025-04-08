@@ -525,9 +525,9 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
     oars_mins_maxs : NDArray
         Array of shape (e, 2) containing the start and end bounds of each
         ordered atomic region.
-    oar_idx_single_component : NDArray
-        Array of shape (e) containing the indices of ordered atomic regions with
-        exactly one component (either RG or DF chunk, not both).
+    single_component_oars : NDArray
+        Array of shape (e) containing booleans indicating whether each ordered
+        atomic region has exactly one component (either RG or DF chunk, not both).
     period_bounds : DatetimeIndex
         Period bounds over the total time span of the dataset, considering both
         row groups and DataFrame.
@@ -579,9 +579,7 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         self.oars_mins_maxs[oar_idx_row_groups, 1] = rg_ordered_on_maxs
         # Keep track where there is only one component (either RG or DF chunk,
         # not both).
-        self.oar_idx_single_component = flatnonzero(
-            oars_info[HAS_ROW_GROUP] ^ oars_info[HAS_DF_CHUNK],
-        )
+        self.single_component_oars = oars_info[HAS_ROW_GROUP] ^ oars_info[HAS_DF_CHUNK]
         # Generate period bounds.
         start_ts = floor_ts(Timestamp(self.oars_mins_maxs[0, 0]), row_group_period)
         end_ts = ceil_ts(Timestamp(self.oars_mins_maxs[-1, 1]), row_group_period)
@@ -608,37 +606,26 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
             Boolean array of length the number of ordered atomic regions.
 
         """
-        # Start with all False - most cases will be False
-        meets_target_period = zeros(len(self.oars_mins_maxs), dtype=bool)
-        if len(self.oar_idx_single_component) == 0:
-            return meets_target_period
-
-        # Find periods for all bounds.
-        period_idx_oar_single_cmpt = searchsorted(
+        # Find period indices for each OAR.
+        period_idx_oars = searchsorted(
             self.period_bounds,
-            self.oars_mins_maxs[self.oar_idx_single_component],
+            self.oars_mins_maxs,
             side=RIGHT,
         )
-        # True where component is contained in a single period
-        single_period_mask = period_idx_oar_single_cmpt[:, 0] == period_idx_oar_single_cmpt[:, 1]
-        # Get indices of OARs that are in a single period
-        oar_idx_single_cmpt_single_period = self.oar_idx_single_component[single_period_mask]
-        period_idx_single_cmpt_single_period = period_idx_oar_single_cmpt[single_period_mask, 0]
-        # Count occurrences of start periods and end periods.
-        # Notice that counting is on OAR which can span multiple periods.
-        # This is because such an OAR can start or end where another OAR lies,
-        # and this second one within the same period. This will then make this
-        # second OAR not meeting target size.
-        # That has been tricky to think about.
-        start_counts = bincount(period_idx_oar_single_cmpt[:, 0])
-        end_counts = bincount(period_idx_oar_single_cmpt[:, 1])
-        # An OAR meets target if it's the only one starting AND ending in its period
-        meets_period = (start_counts[period_idx_single_cmpt_single_period] == 1) & (
-            end_counts[period_idx_single_cmpt_single_period] == 1
+        # Get single period mask.
+        single_period_oars = period_idx_oars[:, 0] == period_idx_oars[:, 1]
+        # Get single oar in period mask, i.e. only one start and one end in
+        # period.
+        start_counts = bincount(period_idx_oars[:, 0])
+        end_counts = bincount(period_idx_oars[:, 1])
+        oars_single_in_period = (start_counts[period_idx_oars[:, 0]] == 1) & (
+            end_counts[period_idx_oars[:, 1]] == 1
         )
-        meets_target_period[oar_idx_single_cmpt_single_period[meets_period]] = True
-
-        return meets_target_period
+        return (
+            self.single_component_oars
+            & single_period_oars  # Check for single-component oar
+            & oars_single_in_period  # Check for single-period oar  # Check for single oar in period
+        )
 
     def consolidate_merge_plan(
         self,
