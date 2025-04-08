@@ -64,13 +64,11 @@ def compute_ordered_atomic_regions(
     drop_duplicates: bool,
 ) -> NDArray:
     """
-    Compute ordered atomic regions.
+    Compute ordered atomic regions (OARs) from row groups and DataFrame.
 
-    An ordered atomic region ('oar') is
-      - either defined by an existing row group in ParquetFile and its
-        corresponding overlapping DataFrame chunk if any,
-      - or an orphan DataFrame chunk, i.e. not overlapping with any row group in
-        ParquetFile.
+    An ordered atomic region is either:
+      - A row group and its overlapping DataFrame chunk (if any)
+      - A DataFrame chunk that doesn't overlap with any row group
 
     Returned arrays provide the start and end (excluded) indices in row groups
     and end (excluded) indices in DataFrame for each of these ordered atomic
@@ -87,29 +85,27 @@ def compute_ordered_atomic_regions(
         Values of 'ordered_on' column in DataFrame.
     drop_duplicates : bool
         Flag impacting how overlapping boundaries have to be managed.
-        More exactly, 'pf' is considered as first data, and 'df' as second
-        data, coming after. In case of 'pf' leading 'df', if last value in
-        'pf' is a duplicate of a value in 'df', then
+        More exactly, row groups are considered as first data, and DataFrame as
+        second data, coming after. In case of a row group leading a DataFrame
+        chunk, if the last value in row group is a duplicate of a value in
+        DataFrame chunk, then
         - If True, at this index, overlap starts
         - If False, no overlap at this index
 
     Returns
     -------
     NDArray
-        Ordered atomic regions properties contained in a structured array with
-        fields:
-        - 'rg_idx_start': indices in ParquetFile containing the starts of each
-          row group overlapping with corresponding DataFrame chunk.
-        - 'rg_idx_end_excl': indices in ParquetFile containing the ends
-          (excluded) of each row group overlapping with corresponding DataFrame
-          chunk.
-        - 'df_idx_end_excl': indices in DataFrame containing the ends
-          (excluded) of each DataFrame chunk overlapping with corresponding
-          row group.
-        - 'has_row_group': boolean indicating if this region contains a
-          row group.
-        - 'has_df_chunk': boolean indicating if this region contains a
-          DataFrame chunk.
+        Structured array with fields:
+        - rg_idx_start: Start indices of row groups in each OAR
+        - rg_idx_end_excl: End indices (exclusive) of row groups in each OAR
+        - df_idx_end_excl: End indices (exclusive) of DataFrame chunks in each OAR
+        - has_row_group: Boolean indicating if OAR contains a row group
+        - has_df_chunk: Boolean indicating if OAR contains a DataFrame chunk
+
+    Raises
+    ------
+    ValueError
+        If input arrays have inconsistent lengths or unsorted data.
 
     Notes
     -----
@@ -147,14 +143,14 @@ def compute_ordered_atomic_regions(
             side=LEFT,
         )
     # Find regions in DataFrame not overlapping with any row group.
-    df_interlaces_wo_overlap = r_[
+    df_chunk_wo_overlap = r_[
         df_idx_oar_starts[0],  # gap at start (0 to first start)
         df_idx_oar_ends_excl[:-1] - df_idx_oar_starts[1:],
         len(df_ordered_on) - df_idx_oar_ends_excl[-1],  # gap at end
     ]
     # Indices in row groups where a DataFrame chunk is not overlapping with any
     # row group.
-    rg_idx_df_orphans = flatnonzero(df_interlaces_wo_overlap)
+    rg_idx_df_orphans = flatnonzero(df_chunk_wo_overlap)
     n_rgs = len(rg_ordered_on_mins)
     rg_idxs_template = arange(n_rgs + 1)
     # Create a structured array to hold all related indices
@@ -285,6 +281,10 @@ class NRowsSplitStrategy(OARSplitStrategy):
     """
     Row group split strategy based on a target number of rows per row group.
 
+    This strategy ensures that row groups are split when they exceed a target
+    size, while maintaining a minimum size to prevent too small row groups. It
+    also handles incomplete row groups through the max_n_irgs parameter.
+
     Attributes
     ----------
     oar_target_size : int
@@ -298,6 +298,13 @@ class NRowsSplitStrategy(OARSplitStrategy):
     oars_max_n_rows : NDArray
         Array of shape (e) containing the maximum number of rows in each ordered
         atomic region.
+
+    Notes
+    -----
+    The maximum number of rows in an OAR is calculated as the sum of:
+    - The number of rows in the row group (if present)
+    - The number of rows in the DataFrame chunk (if present)
+    This represents the worst-case scenario where there are no duplicates.
 
     """
 
@@ -342,22 +349,23 @@ class NRowsSplitStrategy(OARSplitStrategy):
         """
         Return boolean array indicating which OARs are likely to meet target size.
 
-        The likelihood aspect comes from the fact that at analysis time, the
-        exact final size of an OAR is not known. When a row group and DataFrame
-        chunk overlap are both present in an OAR, there might be duplicate rows
-        that will be removed during the merge operation. What is known are:
-        - the maximum size (sum of row group and DataFrame chunk sizes)
-        - the minimum size (max of row group size and DataFrame chunk size)
-        The exact final size is only known after deduplication.
-
-        The method returns ``True`` for an ordered atomic region where the sum of
-        the row group and DataFrame chunk sizes is between the minimum and
-        target size.
+        An OAR is considered likely to meet target size if its maximum possible
+        size (sum of row group and DataFrame chunk sizes) is between the minimum
+        and target sizes. This is a conservative estimate since the actual size
+        after deduplication could be smaller.
 
         Returns
         -------
         NDArray
-            Boolean array of length the number of ordered atomic regions.
+            Boolean array of length equal to the number of ordered atomic regions,
+            where True indicates the OAR is likely to meet the target size.
+
+        Notes
+        -----
+        The likelihood aspect comes from the fact that at analysis time, the
+        exact final size of an OAR is not known due to potential duplicates
+        between row groups and DataFrame chunks. The maximum size is used as a
+        conservative estimate.
 
         """
         return (self.oars_max_n_rows >= self.oar_min_size) & (
@@ -526,10 +534,14 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
     """
     Row group split strategy based on a time period target per row group.
 
+    This strategy ensures that row groups are split based on time periods. Each
+    resulting row group will ideally contain data from a single time period
+    (e.g., a month, day, etc.).
+
     Attributes
     ----------
     oar_period : str
-        Time period for a row group to be complete.
+        Time period for a row group to be complete (e.g., 'MS' for month start).
     oars_mins_maxs : NDArray
         Array of shape (e, 2) containing the start and end bounds of each
         ordered atomic region.
@@ -539,6 +551,13 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
     period_bounds : DatetimeIndex
         Period bounds over the total time span of the dataset, considering both
         row groups and DataFrame.
+
+    Notes
+    -----
+    - A row group is considered meeting the target size if it contains data from
+      exactly one time period.
+    - The strategy tries to maintain temporal locality by keeping data from the same
+      time period together.
 
     """
 
@@ -599,19 +618,20 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         Return boolean array indicating which OARs are likely to meet target size.
 
         An OAR meets target size if and only if:
-        1. It contains exactly one row group OR one DataFrame chunk (not both,
-           even non-overlapping)
-        2. That component fits entirely within a single period bound
-
-        The likelihood aspect comes from the fact that the dataset is mutable,
-        and additional chunks may be added at a next run. However, it does not
-        impact the logic implemented, and the name of the method is to mimic
-        that of NRowsSplitStrategy.
+         - It contains exactly one row group OR one DataFrame chunk (not both)
+         - That component fits entirely within a single period bound
 
         Returns
         -------
         NDArray
-            Boolean array of length the number of ordered atomic regions.
+            Boolean array of length equal to the number of ordered atomic regions,
+            where True indicates the OAR is likely to meet the target size.
+
+        Notes
+        -----
+        The likelihood aspect comes from the fact that the dataset is mutable,
+        and additional chunks may be added at a next run. However, this has no
+        impact the logic implemented.
 
         """
         # Find period indices for each OAR.
@@ -620,19 +640,18 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
             self.oars_mins_maxs,
             side=RIGHT,
         )
-        # Get single period mask.
+        # Check if OAR fits in a single period
         single_period_oars = period_idx_oars[:, 0] == period_idx_oars[:, 1]
-        # Get single oar in period mask, i.e. only one start and one end in
-        # period.
+        # Check if OAR is the only one in its period
         start_counts = bincount(period_idx_oars[:, 0])
         end_counts = bincount(period_idx_oars[:, 1])
         oars_single_in_period = (start_counts[period_idx_oars[:, 0]] == 1) & (
             end_counts[period_idx_oars[:, 1]] == 1
         )
         return (
-            self.single_component_oars
-            & single_period_oars  # Check for single-component oar
-            & oars_single_in_period  # Check for single-period oar  # Check for single oar in period
+            self.single_component_oars  # Single component check
+            & single_period_oars  # Single period check
+            & oars_single_in_period  # Single OAR in period check
         )
 
     def consolidate_merge_plan(
