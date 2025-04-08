@@ -5,9 +5,6 @@ Created on Thu Nov 14 18:00:00 2024.
 @author: yoh
 
 """
-
-from typing import List
-
 import pytest
 from numpy import array
 from numpy import bool_
@@ -35,8 +32,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
     [
         (
             "no_gaps_rg_df",
-            [10, 20, 30],  # rg_mins
-            [15, 25, 35],  # rg_maxs
+            array([10, 20, 30]),  # rg_mins
+            array([15, 25, 35]),  # rg_maxs
             Series([12, 22, 32]),  # df_ordered_on
             True,
             {
@@ -49,8 +46,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
         (
             "gap_at_start_df_leading_rg",
-            [20, 30],  # rg_mins
-            [25, 35],  # rg_maxs
+            array([20, 30]),  # rg_mins
+            array([25, 35]),  # rg_maxs
             Series([5, 22, 32]),  # df_ordered_on
             True,
             {
@@ -63,8 +60,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
         (
             "gap_in_middle_df_not_overlapping_rg",
-            [10, 30],  # rg_mins
-            [15, 35],  # rg_maxs
+            array([10, 30]),  # rg_mins
+            array([15, 35]),  # rg_maxs
             Series([12, 22, 32]),  # df_ordered_on
             True,
             {
@@ -77,8 +74,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
         (
             "gap_at_end_df_trailing_rg",
-            [10, 20],  # rg_mins
-            [15, 25],  # rg_maxs
+            array([10, 20]),  # rg_mins
+            array([15, 25]),  # rg_maxs
             Series([12, 22, 32]),  # df_ordered_on
             True,
             {
@@ -91,8 +88,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
         (
             "gap_at_start_rg_leading_df",
-            [0, 20, 30],  # rg_mins
-            [5, 23, 33],  # rg_maxs
+            array([0, 20, 30]),  # rg_mins
+            array([5, 23, 33]),  # rg_maxs
             Series([22, 32]),  # df_ordered_on
             True,
             {
@@ -105,8 +102,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
         (
             "gap_in_middle_rg_not_overlapping_df",
-            [0, 10, 30],  # rg_mins
-            [5, 15, 35],  # rg_maxs
+            array([0, 10, 30]),  # rg_mins
+            array([5, 15, 35]),  # rg_maxs
             Series([2, 32]),  # df_ordered_on
             True,
             {
@@ -119,8 +116,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
         (
             "gap_at_end_rg_trailing_df",
-            [10, 20, 30],  # rg_mins
-            [15, 25, 35],  # rg_maxs
+            array([10, 20, 30]),  # rg_mins
+            array([15, 25, 35]),  # rg_maxs
             Series([12, 22]),  # df_ordered_on
             True,
             {
@@ -133,8 +130,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
         (
             "multiple_gaps_df_not_overlapping_rg",
-            [20, 40, 43],  # rg_mins
-            [25, 42, 45],  # rg_maxs
+            array([20, 40, 43]),  # rg_mins
+            array([25, 42, 45]),  # rg_maxs
             Series([5, 22, 32, 41, 42, 46, 52]),  # df_ordered_on
             True,
             {
@@ -147,8 +144,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
         (
             "no_drop_duplicates_with_gap_with_overlapping_rg",
-            [20, 40, 43],  # rg_mins, 43 overlaps with previous rg max
-            [25, 43, 45],  # rg_maxs
+            array([20, 40, 43]),  # rg_mins, 43 overlaps with previous rg max
+            array([25, 43, 45]),  # rg_maxs
             Series([5, 22, 32, 43, 46, 52]),  # df_ordered_on - 43 is duplicate
             False,  # don't drop duplicates - 43 expected to fall in last rg
             {
@@ -161,8 +158,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
         (
             "no_drop_duplicates_with_gap_wo_overlapping_rg",
-            [10, 20],  # rg_mins
-            [15, 25],  # rg_maxs
+            array([10, 20]),  # rg_mins
+            array([15, 25]),  # rg_maxs
             Series([15, 16, 17, 22, 32]),  # df_ordered_on - note 15 is duplicate
             False,
             {
@@ -177,8 +174,8 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
 )
 def test_compute_ordered_atomic_regions(
     test_id: str,
-    rg_mins: List,
-    rg_maxs: List,
+    rg_mins: NDArray,
+    rg_maxs: NDArray,
     df_ordered_on: Series,
     drop_duplicates: bool,
     expected: NDArray,
@@ -198,6 +195,67 @@ def test_compute_ordered_atomic_regions(
     assert_array_equal(oars_prop[DF_IDX_END_EXCL], expected[DF_IDX_END_EXCL])
     assert_array_equal(oars_prop[HAS_ROW_GROUP], expected[HAS_ROW_GROUP])
     assert_array_equal(oars_prop[HAS_DF_CHUNK], expected[HAS_DF_CHUNK])
+
+
+@pytest.mark.parametrize(
+    "test_id, rg_ordered_on_mins, rg_ordered_on_maxs, df_ordered_on, expected_error",
+    [
+        (
+            "different_lengths",
+            Series([Timestamp("2024-01-01"), Timestamp("2024-01-02")]).to_numpy(),  # rg_mins
+            Series([Timestamp("2024-01-01")]).to_numpy(),  # rg_maxs - different length
+            Series([Timestamp("2024-01-01"), Timestamp("2024-01-02")]),  # df_ordered_on
+            "^rg_ordered_on_mins and rg_ordered_on_maxs",
+        ),
+        (
+            "overlapping_row_groups",
+            Series([Timestamp("2024-01-01"), Timestamp("2024-01-02")]).to_numpy(),  # rg_mins
+            Series(
+                [Timestamp("2024-01-03"), Timestamp("2024-01-04")],
+            ).to_numpy(),  # rg_maxs - overlaps with next rg_min
+            Series([Timestamp("2024-01-01"), Timestamp("2024-01-02")]),  # df_ordered_on
+            "^row groups must not overlap",
+        ),
+        (
+            "unsorted_df",
+            Series([Timestamp("2024-01-01"), Timestamp("2024-01-03")]).to_numpy(),  # rg_mins
+            Series([Timestamp("2024-01-02"), Timestamp("2024-01-04")]).to_numpy(),  # rg_maxs
+            Series([Timestamp("2024-01-02"), Timestamp("2024-01-01")]),  # df_ordered_on - unsorted
+            "^'df_ordered_on' must be sorted in ascending order.",
+        ),
+    ],
+)
+def test_compute_ordered_atomic_regions_validation(
+    test_id: str,
+    rg_ordered_on_mins: array,
+    rg_ordered_on_maxs: array,
+    df_ordered_on: Series,
+    expected_error: Exception,
+) -> None:
+    """
+    Test input validation in compute_ordered_atomic_regions.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    rg_ordered_on_mins : array
+        Array of minimum values for row groups.
+    rg_ordered_on_maxs : array
+        Array of maximum values for row groups.
+    df_ordered_on : Series
+        Series of ordered values.
+    expected_error : Exception
+        Expected error to be raised.
+
+    """
+    with pytest.raises(ValueError, match=expected_error):
+        compute_ordered_atomic_regions(
+            rg_ordered_on_mins=rg_ordered_on_mins,
+            rg_ordered_on_maxs=rg_ordered_on_maxs,
+            df_ordered_on=df_ordered_on,
+            drop_duplicates=True,
+        )
 
 
 def test_nrows_split_strategy_likely_meets_target_size():

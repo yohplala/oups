@@ -291,15 +291,15 @@ def compute_ordered_merge_plan(
     #   DataFrame chunk),
     # - or as a DataFrame chunk not overlapping with any existing row groups.
     pf_statistics = pf.statistics
+    rg_ordered_on_mins = array(pf_statistics[MIN][ordered_on])
+    rg_ordered_on_maxs = array(pf_statistics[MAX][ordered_on])
     df_ordered_on = df.loc[:, ordered_on]
     oars_info = compute_ordered_atomic_regions(
-        rg_mins=pf_statistics[MIN][ordered_on],
-        rg_maxs=pf_statistics[MAX][ordered_on],
+        rg_ordered_on_mins=rg_ordered_on_mins,
+        rg_ordered_on_maxs=rg_ordered_on_maxs,
         df_ordered_on=df_ordered_on,
         drop_duplicates=drop_duplicates,
     )
-    # Initialize row group split strategy.
-    # TODO: implement ordered_on check at OAR creation.
     oar_split_strategy = (
         NRowsSplitStrategy(
             rgs_n_rows=array([rg.num_rows for rg in pf], dtype=int),
@@ -310,8 +310,8 @@ def compute_ordered_merge_plan(
         )
         if isinstance(row_group_target_size, int)
         else TimePeriodSplitStrategy(
-            rg_ordered_on_mins=pf_statistics[MIN][ordered_on],
-            rg_ordered_on_maxs=pf_statistics[MAX][ordered_on],
+            rg_ordered_on_mins=rg_ordered_on_mins,
+            rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
             oars_info=oars_info,
             row_group_period=row_group_target_size,

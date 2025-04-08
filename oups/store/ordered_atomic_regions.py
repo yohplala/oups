@@ -58,8 +58,8 @@ MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
 
 
 def compute_ordered_atomic_regions(
-    rg_mins: List[Union[int, float, Timestamp]],
-    rg_maxs: List[Union[int, float, Timestamp]],
+    rg_ordered_on_mins: NDArray,
+    rg_ordered_on_maxs: NDArray,
     df_ordered_on: Series,
     drop_duplicates: bool,
 ) -> NDArray:
@@ -79,9 +79,9 @@ def compute_ordered_atomic_regions(
 
     Parameters
     ----------
-    rg_mins : List
+    rg_ordered_on_mins : NDArray[Timestamp]
         Minimum values of 'ordered_on' in each row group.
-    rg_maxs : List
+    rg_ordered_on_maxs : NDArray[Timestamp]
         Maximum values of 'ordered_on' in each row group.
     df_ordered_on : Series[Timestamp]
         Values of 'ordered_on' column in DataFrame.
@@ -126,16 +126,24 @@ def compute_ordered_atomic_regions(
     rewriting these leading row groups.
 
     """
-    # TODO: check rg_mins is interlaced with rg_maxs +/- 1 and df is ordered.
-    # Find regions in DataFrame overlapping with row groups.
+    # Validate 'ordered_on' in row groups and DataFrame.
+    if len(rg_ordered_on_mins) != len(rg_ordered_on_maxs):
+        raise ValueError("rg_ordered_on_mins and rg_ordered_on_maxs must have the same length.")
+    # Check that rg_maxs[i] is less than rg_mins[i+1] (no overlapping row groups).
+    if len(rg_ordered_on_mins) > 1 and (rg_ordered_on_maxs[:-1] > rg_ordered_on_mins[1:]).any():
+        raise ValueError("row groups must not overlap.")
+    # Check that df_ordered_on is sorted.
+    if not df_ordered_on.is_monotonic_increasing:
+        raise ValueError("'df_ordered_on' must be sorted in ascending order.")
+
     if drop_duplicates:
         # Determine overlap start/end indices in row groups
-        df_idx_oar_starts = searchsorted(df_ordered_on, rg_mins, side=LEFT)
-        df_idx_oar_ends_excl = searchsorted(df_ordered_on, rg_maxs, side=RIGHT)
+        df_idx_oar_starts = searchsorted(df_ordered_on, rg_ordered_on_mins, side=LEFT)
+        df_idx_oar_ends_excl = searchsorted(df_ordered_on, rg_ordered_on_maxs, side=RIGHT)
     else:
         df_idx_oar_starts, df_idx_oar_ends_excl = searchsorted(
             df_ordered_on,
-            vstack((rg_mins, rg_maxs)),
+            vstack((rg_ordered_on_mins, rg_ordered_on_maxs)),
             side=LEFT,
         )
     # Find regions in DataFrame not overlapping with any row group.
@@ -147,7 +155,7 @@ def compute_ordered_atomic_regions(
     # Indices in row groups where a DataFrame chunk is not overlapping with any
     # row group.
     rg_idx_df_orphans = flatnonzero(df_interlaces_wo_overlap)
-    n_rgs = len(rg_mins)
+    n_rgs = len(rg_ordered_on_mins)
     rg_idxs_template = arange(n_rgs + 1)
     # Create a structured array to hold all related indices
     # DataFrame orphans are regions in DataFrame that do not overlap with any
