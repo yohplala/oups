@@ -643,11 +643,11 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         # Check if OAR fits in a single period
         single_period_oars = period_idx_oars[:, 0] == period_idx_oars[:, 1]
         # Check if OAR is the only one in its period
-        start_counts = bincount(period_idx_oars[:, 0])
-        end_counts = bincount(period_idx_oars[:, 1])
-        oars_single_in_period = (start_counts[period_idx_oars[:, 0]] == 1) & (
-            end_counts[period_idx_oars[:, 1]] == 1
-        )
+        period_counts = bincount(period_idx_oars.ravel())
+        # Each period index has to appear only twice (oncee for start, once for end).
+        # Since we already checked OARs don't span multiple periods (start == end),
+        # the check is then only made on the period start.
+        oars_single_in_period = period_counts[period_idx_oars[:, 0]] == 2
         return (
             self.single_component_oars  # Single component check
             & single_period_oars  # Single period check
