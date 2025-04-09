@@ -112,7 +112,7 @@ def set_true_in_regions(length: int, regions: NDArray[np_int]) -> NDArray[np_boo
     return cumsum(changes[:-1]).astype(np_bool)
 
 
-def _compute_enlarged_merge_regions(
+def compute_enlarged_merge_regions(
     oars_info: NDArray,
     oar_split_strategy: OARSplitStrategy,
     max_n_irgs: int,
@@ -121,7 +121,8 @@ def _compute_enlarged_merge_regions(
     Aggregate atomic merge regions into enlarged merge regions.
 
     Sets of contiguous atomic merge regions with DataFrame chunks are extended
-    with neighbor regions outside target size depending on two conditions,
+    with neighbor regions that are outside target size depending on two
+    conditions,
       - if the atomic merge region with DataFrame chunks is found to result in a
         row group potentially meeting target size.
       - if the total number of atomic merge regions outside target size in a
@@ -134,10 +135,10 @@ def _compute_enlarged_merge_regions(
         merge region.
     oar_split_strategy : OARSplitStrategy
         OARSplitStrategy providing methods to analyze completeness and
-        likelihood of creating complete row groups.
+        likelihood of creating right-sized row groups.
     max_n_irgs : int
         Maximum number of resulting contiguous row groups outside target size
-        (incomplete) allowed in a merge region.
+        allowed in a merge region.
 
     Returns
     -------
@@ -146,48 +147,53 @@ def _compute_enlarged_merge_regions(
         indices for each enlarged merge regions.
 
     """
+    # TODO: focus inputs to has_df_chunk & likely_meets_target_size
+    # TODO: test set_true_in_regions
+    #
     # Step 1: assess start indices (included) and end indices (excluded) of
     # enlarged merge regions.
     likely_outside_target_size = ~oar_split_strategy.likely_meets_target_size
-    enlarged_mrs = oars_info[HAS_DF_CHUNK] | likely_outside_target_size
-    indices_emrs = get_region_indices_of_true_values(enlarged_mrs)
+    potential_enlarged_mrs = oars_info[HAS_DF_CHUNK] | likely_outside_target_size
+    potential_emrs_starts_ends_excl = get_region_indices_of_true_values(potential_enlarged_mrs)
 
     # Step 2: Filter out enlarged candidates based on multiple criteria.
-    # 2.a - Get number of incomplete merge regions per enlarged merged region.
+    # 2.a - Get number of outside target size OARs per enlarged merged region.
     # Those where 'max_n_irgs' is not reached will be filtered out
-    n_oars_in_emrs = get_region_start_end_delta(
+    n_outside_target_size_oars_in_pemrs = get_region_start_end_delta(
         m_values=cumsum(likely_outside_target_size),
-        indices=indices_emrs,
+        indices=potential_emrs_starts_ends_excl,
     )
     # 2.b Get which enlarged regions into which the merge will likely create
     # right sized row groups.
-    creates_likely_right_sized_in_emrs = get_region_start_end_delta(
+    creates_likely_right_sized_oar_in_pemrs = get_region_start_end_delta(
         m_values=cumsum(
-            oar_split_strategy.has_df_chunk | oar_split_strategy.likely_meets_target_size,
+            oar_split_strategy.likely_meets_target_size,
         ),
-        indices=indices_emrs,
+        indices=potential_emrs_starts_ends_excl,
     ).astype(np_bool)
     # Keep enlarged merge regions with too many incomplete atomic merge regions
     # or with likely creation of complete row groups.
-    indices_emrs = indices_emrs[(n_oars_in_emrs >= max_n_irgs) | creates_likely_right_sized_in_emrs]
+    confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
+        (n_outside_target_size_oars_in_pemrs >= max_n_irgs)
+        | creates_likely_right_sized_oar_in_pemrs
+    ]
 
     # Step 3: Retrieve indices of merge regions which have DataFrame chunks but
     # are not in retained enlarged merge regions.
-    # Create an array of length the number of atomic merge regions, with value
-    # 1 if the atomic merge region is within an enlarged merge regions.
-    # Create an array of changes: +1 at starts, -1 at ends
-    indices_oars = get_region_indices_of_true_values(oars_info[HAS_DF_CHUNK])
-    enlarged_mrs = set_true_in_regions(
-        length=len(oar_split_strategy),
-        regions=indices_emrs,
+    confirmed_emrs = set_true_in_regions(
+        length=len(oars_info),
+        regions=confirmed_emrs_starts_ends_excl,
     )
-    overlaps_with_emrs = get_region_start_end_delta(
-        m_values=cumsum(enlarged_mrs),
-        indices=indices_oars,
+    # Create an array of length the number of atomic merge regions, with value
+    # 1 if the atomic merge region is within a merge regions.
+    simple_mrs_starts_ends_excl = get_region_indices_of_true_values(oars_info[HAS_DF_CHUNK])
+    overlaps_with_confirmed_emrs = get_region_start_end_delta(
+        m_values=cumsum(confirmed_emrs),
+        indices=simple_mrs_starts_ends_excl,
     ).astype(np_bool)
-    indices_oars = indices_oars[~overlaps_with_emrs]
+    simple_mrs_starts_ends_excl = simple_mrs_starts_ends_excl[~overlaps_with_confirmed_emrs]
 
-    return vstack((indices_oars, indices_emrs))
+    return vstack((simple_mrs_starts_ends_excl, confirmed_emrs_starts_ends_excl))
 
 
 @dataclass
@@ -322,7 +328,7 @@ def compute_ordered_merge_plan(
     # possibly extended with neighbor incomplete row groups depending on
     # criteria.
     # It also restricts to the set of atomic merge regions to be yielded.
-    oar_idx_emrs_starts_ends_excl = _compute_enlarged_merge_regions(
+    oar_idx_emrs_starts_ends_excl = compute_enlarged_merge_regions(
         oars_info=oars_info,
         oar_split_strategy=oar_split_strategy,
         max_n_irgs=max_n_irgs,
