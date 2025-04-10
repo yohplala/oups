@@ -366,9 +366,21 @@ class NRowsSplitStrategy(OARSplitStrategy):
         conservative estimate.
 
         """
-        return (self.oars_max_n_rows >= self.oar_min_size) & (
-            self.oars_max_n_rows <= self.oar_target_size
-        )
+        # If an OAR is larger than target size, this will create at writing
+        # a complete row group. Over-sized OAR are then accounted for as
+        # right-sized OARs.
+        # This way:
+        # - we will not catch cases when an already existing row group is
+        #   over-sized to rewrite it. This is not so good.
+        # - But we will catch cases when we are writing in the midlle of
+        #   off-target size row groups a new row group which will be
+        #   right-sized. This case has to trigger the rewrite of the full
+        #   region, enlarging to off-target size neighbor existing row groups.
+        #   This is more important.
+        # Priority is given to cure regions that are modified, than curing
+        # regions that have been 'incorrectly' written in the past.
+        return self.oars_max_n_rows >= self.oar_min_size
+        # & self.oars_max_n_rows <= self.oar_target_size
 
     def consolidate_merge_plan(
         self,

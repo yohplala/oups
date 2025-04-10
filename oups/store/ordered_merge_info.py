@@ -137,7 +137,7 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
         return m_values[indices[:, 1] - 1] - m_values[indices[:, 0] - 1]
 
 
-def compute_enlarged_merge_regions(
+def compute_emrs_start_ends_excl(
     oars_has_df_chunk: NDArray[np_bool],
     oars_likely_meets_target_size: NDArray[np_bool],
     max_n_off_target_rgs: int,
@@ -169,7 +169,10 @@ def compute_enlarged_merge_regions(
     -------
     NDArray[np_int]
         A numpy array of shape (e, 2) containing the list of the start and end
-        indices for each enlarged merge regions.
+        indices for each enlarged merge regions. This list is unsorted. It
+        starts with start and end indices excluded of the simple (not enlarged)
+        merge regions, and then continues with start and end indices excluded
+        of the enlarged merge regions.
 
     Notes
     -----
@@ -185,6 +188,9 @@ def compute_enlarged_merge_regions(
     oars_likely_outside_target_size = ~oars_likely_meets_target_size
     potential_enlarged_mrs = oars_has_df_chunk | oars_likely_outside_target_size
     potential_emrs_starts_ends_excl = get_region_indices_of_true_values(potential_enlarged_mrs)
+    print()
+    print("potential_emrs_starts_ends_excl")
+    print(potential_emrs_starts_ends_excl)
 
     # Step 2: Filter out enlarged candidates based on multiple criteria.
     # 2.a - Get number of off target size OARs per enlarged merged region.
@@ -193,18 +199,27 @@ def compute_enlarged_merge_regions(
         m_values=cumsum(oars_likely_outside_target_size),
         indices=potential_emrs_starts_ends_excl,
     )
+    print()
+    print("n_outside_target_size_oars_in_pemrs")
+    print(n_outside_target_size_oars_in_pemrs)
     # 2.b Get which enlarged regions into which the merge will likely create
     # right sized row groups.
     creates_likely_right_sized_oar_in_pemrs = get_region_start_end_delta(
         m_values=cumsum(oars_likely_meets_target_size),
         indices=potential_emrs_starts_ends_excl,
     ).astype(np_bool)
+    print()
+    print("creates_likely_right_sized_oar_in_pemrs")
+    print(creates_likely_right_sized_oar_in_pemrs)
     # Keep enlarged merge regions with too many incomplete atomic merge regions
     # or with likely creation of complete row groups.
     confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
-        (n_outside_target_size_oars_in_pemrs >= max_n_off_target_rgs)
+        (n_outside_target_size_oars_in_pemrs > max_n_off_target_rgs)
         | creates_likely_right_sized_oar_in_pemrs
     ]
+    print()
+    print("is confirmed emrs")
+    print(confirmed_emrs_starts_ends_excl)
 
     # Step 3: Retrieve indices of merge regions which have DataFrame chunks but
     # are not in retained enlarged merge regions.
@@ -220,6 +235,13 @@ def compute_enlarged_merge_regions(
         indices=simple_mrs_starts_ends_excl,
     ).astype(np_bool)
     simple_mrs_starts_ends_excl = simple_mrs_starts_ends_excl[~overlaps_with_confirmed_emrs]
+    print()
+    print("simple_mrs_starts_ends_excl")
+    print(simple_mrs_starts_ends_excl)
+    print("confirmed_emrs_starts_ends_excl")
+    print(confirmed_emrs_starts_ends_excl)
+    print("after vstack")
+    print(vstack((simple_mrs_starts_ends_excl, confirmed_emrs_starts_ends_excl)))
 
     return vstack((simple_mrs_starts_ends_excl, confirmed_emrs_starts_ends_excl))
 
@@ -356,7 +378,7 @@ def compute_ordered_merge_plan(
     # possibly extended with neighbor incomplete row groups depending on
     # criteria.
     # It also restricts to the set of atomic merge regions to be yielded.
-    oar_idx_emrs_starts_ends_excl = compute_enlarged_merge_regions(
+    oar_idx_emrs_starts_ends_excl = compute_emrs_start_ends_excl(
         oars_has_df_chunk=oars_info[HAS_DF_CHUNK],
         oars_likely_meets_target_size=oar_split_strategy.likely_meets_target_size,
         max_n_off_target_rgs=max_n_off_target_rgs,

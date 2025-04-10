@@ -261,14 +261,6 @@ def test_compute_ordered_atomic_regions_validation(
 def test_nrows_split_strategy_likely_meets_target_size():
     """
     Test NRowsSplitStrategy strategy and likely_meets_target_size.
-
-    Tests various scenarios:
-    1. OAR with only row group
-    2. OAR with only DataFrame chunk
-    3. OAR with both row group and DataFrame chunk
-    4. OAR that's too small
-    5. OAR that's too large
-
     """
     target_size = 100  # min size: 80
     # Create mock oars_info with 5 regions:
@@ -276,8 +268,8 @@ def test_nrows_split_strategy_likely_meets_target_size():
     # 2. DF only (85 rows) - meets target
     # 3. Both RG (50) and DF (40) - meets target due to potential duplicates
     # 4. Both RG (30) and DF (30) - too small
-    # 5. Both RG (120) and DF (0) - too large
-    # 6. Both RG (30) and DF (80) - too large
+    # 5. Both RG (120) and DF (0) - too large but we accept
+    # 6. Both RG (30) and DF (80) - too large but we accept
     oars_info = ones(
         6,
         dtype=[
@@ -315,7 +307,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
     # 5. False - RG only with 120 rows (above target_size)
     # 6. False - Combined RG(30) + DF(80) could be too large
     result = strategy.likely_meets_target_size
-    expected = array([True, True, True, False, False, False])
+    expected = array([True, True, True, False, True, True])
     assert_array_equal(result, expected)
 
 

@@ -22,6 +22,7 @@ from pandas import date_range
 
 from oups.store.ordered_atomic_regions import NRowsSplitStrategy
 from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
+from oups.store.ordered_merge_info import compute_emrs_start_ends_excl
 from oups.store.ordered_merge_info import compute_ordered_merge_plan
 from oups.store.ordered_merge_info import get_region_indices_of_same_values
 from oups.store.ordered_merge_info import get_region_indices_of_true_values
@@ -1461,3 +1462,116 @@ def test_compute_ordered_merge_plan(
             },
             2,
         ),"""
+
+
+@pytest.mark.parametrize(
+    "test_id, oars_has_df_chunk, oars_likely_meets_target_size, max_n_off_target_rgs, expected",
+    [
+        (  # Case 1: Contiguous OARs with DataFrame chunk.
+            # No need to enlarge since neighbors OARs are right-sized.
+            "contiguous_dfcs_no_off_target",
+            array([False, True, True, False]),  # Has DataFrame chunk
+            array([True, False, True, True]),  # Meets target size
+            3,  # max_n_off_target_rgs - is not triggered
+            array([[1, 3]]),  # Single region
+        ),
+        (  # Case 2:
+            # First EMR has enough neighbor off-target OARs.
+            # There is a second one potential EMR without DataFrame chunk.
+            # The 3rd has not enough neighbor off-target OARs to be enlarged.
+            "enlarging_based_on_off_target_oars",
+            # OARS:   0,     1,     2,    3,     4,     5,     6,    7,     8
+            # EMRs:  [0,                 4),                     [7,8)
+            array([True, False, False, True, False, False, False, True, False]),
+            array([False, False, False, False, True, False, True, False, False]),
+            3,  # max_n_off_target_rgs
+            array([[7, 8], [0, 4]]),  # Two regions: [0-1) and [2-4)
+        ),
+        (
+            # Case 3: Confirm EMR because of likely right-sized OAR with
+            # DataFrame chunk.
+            "enlarging_because_adding_likely_right_sized_oar_with_dfc",
+            array([False, True, False, False]),
+            array([True, True, False, True]),
+            3,  # max_n_off_target_rgs
+            array([[1, 3]]),  # Adding 3rd OAR in EMR.
+        ),
+        (
+            # Case 4: Alternating regions with and without DataFrame chunks
+            # Should only merge regions with DataFrame chunks
+            "alternating_regions",
+            array([True, False, True, False]),  # Alternating DataFrame chunks
+            array([True, True, True, True]),  # All meet target size
+            1,  # max_n_off_target_rgs
+            array([[0, 1], [2, 3]]),  # Two separate regions
+        ),
+        (
+            # Case 5: Multiple off-target regions between DataFrame chunks
+            # Should merge if number of off-target regions exceeds max_n_off_target_rgs
+            "multiple_off_target_between_chunks",
+            array([True, False, False, True]),  # DataFrame chunks at ends
+            array([False, False, False, False]),  # All off target
+            1,  # max_n_off_target_rgs
+            array([[0, 4]]),  # Single region covering all
+        ),
+        (
+            # Case 6: No regions with DataFrame chunks
+            # Should return empty array
+            "no_df_chunks",
+            array([False, False, False]),  # No DataFrame chunks
+            array([True, True, True]),  # All meet target size
+            1,  # max_n_off_target_rgs
+            array([], dtype=int).reshape(0, 2),  # Empty array
+        ),
+        (
+            # Case 7: Single off-target region with DataFrame chunk
+            # Should return single region
+            "single_off_target_with_df_chunk",
+            array([True]),  # Has DataFrame chunk
+            array([False]),  # Off target
+            1,  # max_n_off_target_rgs
+            array([[0, 1]]),  # Single region
+        ),
+        (
+            # Case 8: Complex pattern with varying conditions
+            # Tests multiple conditions in one test
+            "complex_pattern",
+            array([True, False, True, False, True, False]),  # DataFrame chunks at 0,2,4
+            array([False, True, False, False, True, True]),  # Meets target at 1,4,5
+            2,  # max_n_off_target_rgs
+            array([[0, 2], [2, 6]]),  # Two regions: [0-2) and [2-6)
+        ),
+        # TODO: test case with max_n_off_target = None
+        # TODO: test case with max_n_off_target = 0
+    ],
+)
+def test_compute_emrs_start_ends_excl(
+    test_id: str,
+    oars_has_df_chunk: NDArray[bool_],
+    oars_likely_meets_target_size: NDArray[bool_],
+    max_n_off_target_rgs: int,
+    expected: NDArray[int_],
+) -> None:
+    """
+    Test compute_emrs_start_ends_excl function with various inputs.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    oars_has_df_chunk : NDArray[bool_]
+        Boolean array indicating if each atomic region has a DataFrame chunk.
+    oars_likely_meets_target_size : NDArray[bool_]
+        Boolean array indicating if each atomic region likely meets target size.
+    max_n_off_target_rgs : int
+        Maximum number of off-target row groups allowed.
+    expected : NDArray[int_]
+        Expected output containing start and end indices for enlarged merge regions.
+
+    """
+    result = compute_emrs_start_ends_excl(
+        oars_has_df_chunk=oars_has_df_chunk,
+        oars_likely_meets_target_size=oars_likely_meets_target_size,
+        max_n_off_target_rgs=max_n_off_target_rgs,
+    )
+    assert array_equal(result, expected)
