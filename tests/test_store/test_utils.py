@@ -14,10 +14,6 @@ from os import path as os_path
 
 import pytest
 from fastparquet import write
-from numpy import array
-from numpy import array_equal
-from numpy import cumsum
-from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import MultiIndex
 from pandas import Timestamp
@@ -27,7 +23,6 @@ from oups.store.utils import ceil_ts
 from oups.store.utils import conform_cmidx
 from oups.store.utils import files_at_depth
 from oups.store.utils import floor_ts
-from oups.store.utils import get_region_start_end_delta
 
 from .. import TEST_DATA
 
@@ -96,72 +91,6 @@ def test_conform_cmidx(tmp_path):
     # Conform cmidx.
     conform_cmidx(df)
     assert df.columns == MultiIndex.from_tuples([("a", "1", "o")], names=["", "oh", ""])
-
-
-@pytest.mark.parametrize(
-    "test_id, values, indices, expected",
-    [
-        (
-            "single_region_at_first",
-            array([1, 2, 3, 4]),  # values, cumsum = [1,3,6,10]
-            array([[0, 3]]),  # one region: indices 0-2
-            array([6]),  # 1+2+3 = 6-0 = 6
-        ),
-        (
-            "single_region_at_second",
-            array([1, 2, 3, 4, 5]),  # values, cumsum = [1,3,6,10,15]
-            array([[1, 4]]),  # one region: indices 1-3
-            array([9]),  # 2+3+4 = 10-1 = 9
-        ),
-        (
-            "multiple_overlapping_regions",
-            array([1, 2, 3, 4, 5, 6]),  # values, cumsum = [1,3,6,10,15,21]
-            array(
-                [
-                    [0, 2],  # region 1: indices 0-1
-                    [2, 5],  # region 2: indices 2-4
-                    [4, 6],  # region 3: indices 4-5
-                ],
-            ),
-            array([3, 12, 11]),  # 3-0=3, 15-3=12, 21-10=11
-        ),
-        (
-            "boolean_values",
-            array([0, 1, 0, 1, 1, 0]),  # values, cumsum = [0,1,1,2,3,3]
-            array(
-                [
-                    [1, 4],  # one region: indices 1-3
-                    [2, 5],  # one region: indices 2-4
-                ],
-            ),
-            array([2, 2]),  # 2-1=1, 3-1=2
-        ),
-    ],
-)
-def test_get_region_start_end_delta(
-    test_id: str,
-    values: NDArray,
-    indices: NDArray,
-    expected: NDArray,
-) -> None:
-    """
-    Test get_region_start_end_delta function with various inputs.
-
-    Parameters
-    ----------
-    test_id : str
-        Identifier for the test case.
-    values : NDArray
-        Input array of values.
-    indices : NDArray
-        Array of shape (n, 2) containing start and end indices of regions.
-    expected : NDArray
-        Expected output containing sums for each region.
-
-    """
-    m_values = cumsum(values)
-    result = get_region_start_end_delta(m_values, indices)
-    assert array_equal(result, expected)
 
 
 @pytest.mark.parametrize(

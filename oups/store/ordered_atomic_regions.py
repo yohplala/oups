@@ -23,7 +23,6 @@ from typing import List, Tuple, Union
 from numpy import arange
 from numpy import bincount
 from numpy import bool_
-from numpy import cumsum
 from numpy import diff
 from numpy import flatnonzero
 from numpy import insert
@@ -32,7 +31,6 @@ from numpy import nonzero
 from numpy import ones
 from numpy import r_
 from numpy import searchsorted
-from numpy import unique
 from numpy import vstack
 from numpy import zeros
 from numpy.typing import NDArray
@@ -43,7 +41,6 @@ from pandas import date_range
 
 from oups.store.utils import ceil_ts
 from oups.store.utils import floor_ts
-from oups.store.utils import get_region_start_end_delta
 
 
 LEFT = "left"
@@ -283,7 +280,8 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
     This strategy ensures that row groups are split when they exceed a target
     size, while maintaining a minimum size to prevent too small row groups. It
-    also handles incomplete row groups through the max_n_irgs parameter.
+    also handles incomplete row groups through the 'max_n_off_target_rgs'
+    parameter.
 
     Attributes
     ----------
@@ -292,9 +290,9 @@ class NRowsSplitStrategy(OARSplitStrategy):
     oar_min_size : int
         Minimum number of rows in an ordered atomic region, computed as
         ``MAX_ROW_GROUP_SIZE_SCALE_FACTOR * row_group_target_size``.
-    max_n_irgs : int
-        Maximum number of incomplete row groups allowed in an ordered atomic
-        region.
+    max_n_off_target_rgs : int
+        Maximum number of row groups off target size allowed in an ordered
+        atomic region.
     oars_max_n_rows : NDArray
         Array of shape (e) containing the maximum number of rows in each ordered
         atomic region.
@@ -313,7 +311,7 @@ class NRowsSplitStrategy(OARSplitStrategy):
         rgs_n_rows: NDArray,
         oars_info: NDArray,
         row_group_target_size: int,
-        max_n_irgs: int,
+        max_n_off_target_rgs: int,
     ):
         """
         Initialize scheme with target size.
@@ -328,14 +326,14 @@ class NRowsSplitStrategy(OARSplitStrategy):
             atomic region.
         row_group_target_size : int
             Target number of rows above which a new row group should be created.
-        max_n_irgs : int
-            Maximum number of incomplete row groups allowed in an ordered atomic
-            region.
+        max_n_off_target_rgs : int
+            Maximum number of row groups off target size allowed in an ordered
+            atomic region.
 
         """
         self.oar_target_size = row_group_target_size
         self.oar_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
-        self.max_n_irgs = max_n_irgs
+        self.max_n_off_target_rgs = max_n_off_target_rgs
         # Max number of rows in each ordered atomic region. This is a max in case
         # there are duplicates between row groups and DataFrame that will be
         # dropped.
@@ -372,85 +370,6 @@ class NRowsSplitStrategy(OARSplitStrategy):
             self.oars_max_n_rows <= self.oar_target_size
         )
 
-    def get_risk_of_exceeding_rgst(
-        self,
-        indices_overlap: NDArray,
-        indices_enlarged: NDArray,
-    ) -> NDArray:
-        """
-        Check which enlarged regions risk fragmentation.
-
-        An overlap region risks fragmentation if the total number of rows (from
-        row groups and DataFrame chunk) is above 'min_size', potentially
-        creating a complete row group that would split a region of contiguous
-        incomplete row groups.
-
-        Rational of this logic is to prevent that the addition of new data after
-        existing incomplete row groups creates an isolated set of incomplete row
-        groups followed by complete row groups.
-
-        Example:
-          - Before addition:
-            - rg   [crg] [crg] [irg] [irg]
-            - df                        .....
-          - Not desired after addition:
-            - rg   [crg] [crg] [irg] [crg] [irg]
-          - Desired after addition:
-            - rg   [crg] [crg] [crg] [crg] [irg]
-
-        Parameters
-        ----------
-        indices_overlap : NDArray
-            Array of shape (o, 2) containing start and end indices of overlap
-            regions.
-        indices_enlarged : NDArray
-            Array of shape (e, 2) containing start and end indices of enlarged
-            regions (e <= o).
-
-        Returns
-        -------
-        NDArray
-            Boolean array of shape (e) indicating which enlarged regions contain
-            overlap regions that risk creating fragmentation when merged.
-
-        """
-        # Step 1: For each overlap region, compute total rows (rg + df chunk)
-        # and compare to min_size for risk of fragmentation.
-        rg_rows_per_overlap_regions = get_region_start_end_delta(
-            m_values=cumsum(self.rg_n_rows),
-            indices=indices_overlap,
-        )
-        # TODO:
-        # should include all rows of df that are over the overlap regions
-        # as well as df chunk neighbor to these regions and incomplete row
-        # groups
-        # reword fragmentation_risk into "exceed_rgs_target"
-        df_rows_per_overlap_regions = get_region_start_end_delta(
-            m_values=self.df_idx_tmrg_ends_excl - self.df_idx_tmrg_starts - 1,
-            indices=indices_overlap,
-        )
-        # 'overlap_has_risk' is an array of length the number of overlap
-        # regions.
-        overlap_has_risk = (
-            rg_rows_per_overlap_regions + df_rows_per_overlap_regions >= self.min_size
-        )
-
-        # Step 2: Map risks to enlarged regions.
-        # For each retained overlap region with fragmentation risk, find which
-        # enlarged region contains its start.
-        overlap_with_fragmentation_risk = zeros(len(indices_enlarged), dtype=bool)
-        overlap_with_fragmentation_risk[
-            unique(
-                searchsorted(
-                    indices_enlarged[:, 0],
-                    indices_overlap[overlap_has_risk][:, 0],
-                    side=RIGHT,
-                ),
-            )
-            - 1
-        ] = True
-        return overlap_with_fragmentation_risk
-
     def consolidate_merge_plan(
         self,
     ) -> Tuple[List[int], List[int]]:
@@ -473,11 +392,11 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
         min_n_rows = (
             self.min_size
-            if self.max_n_irgs
+            if self.max_n_off_target_rgs
             else int(self.min_size * MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS)
         )
         # Consolidation loop is processed backward.
-        # This makes possible to manage a 'max_n_irgs' set to 0 (meaning no
+        # This makes possible to manage a 'max_n_off_target_rgs' set to 0 (meaning no
         # incomplete row groups is allowed), by forcing the last chunk to
         # encompass
         # 'MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS * row_group_target_size' rows.
@@ -516,15 +435,15 @@ class NRowsSplitStrategy(OARSplitStrategy):
         This size is defined in terms of number of rows. Result is to be used
         as `row_group_size` parameter in `iter_dataframe` method.
 
-        Logic varies based on `max_n_irgs` setting and whether this is the last
-        chunk.
+        Logic varies based on `max_n_off_target_rgs` setting and whether this is
+        the last chunk.
 
         """
-        if self.max_n_irgs == 0 or len(chunk) <= self.row_group_target_size:
-            # Always uniform splitting for max_n_irgs = 0
+        if self.max_n_off_target_rgs == 0 or len(chunk) <= self.row_group_target_size:
+            # Always uniform splitting for max_n_off_target_rgs = 0
             return self.row_group_target_size
         else:
-            # When a max_n_irgs is set larger than 0, then
+            # When a max_n_off_target_rgs is set larger than 0, then
             # calculate split points to create chunks of target size
             # and potentially a smaller final piece.
             return list(range(len(chunk), step=self.row_group_target_size))
@@ -641,118 +560,23 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
             side=RIGHT,
         )
         # Check if OAR fits in a single period
-        single_period_oars = period_idx_oars[:, 0] == period_idx_oars[:, 1]
+        # single_period_oars = period_idx_oars[:, 0] == period_idx_oars[:, 1]
         # Check if OAR is the only one in its period
-        period_counts = bincount(period_idx_oars.ravel())
+        # period_counts = bincount(period_idx_oars.ravel())
         # Each period index has to appear only twice (oncee for start, once for end).
         # Since we already checked OARs don't span multiple periods (start == end),
         # the check is then only made on the period start.
-        oars_single_in_period = period_counts[period_idx_oars[:, 0]] == 2
+        # oars_single_in_period = period_counts[period_idx_oars[:, 0]] == 2
         return (
-            self.single_component_oars  # Single component check
-            & single_period_oars  # Single period check
-            & oars_single_in_period  # Single OAR in period check
+            # Check single component OARs
+            self.single_component_oars
+            # Check single period OARs
+            & (period_idx_oars[:, 0] == period_idx_oars[:, 1])
+            # Check single OAR in period
+            & (bincount(period_idx_oars.ravel())[period_idx_oars[:, 0]] == 2)
         )
 
     def consolidate_merge_plan(
-        self,
-        rg_stats: NDArray,
-        df_ordered_on: Series,
-    ) -> Tuple[List[int], List[int]]:
-        """
-        Consolidate chunks based on time periods.
-        """
-        # Generate period starts
-        start_ts = min(df_ordered_on.iloc[0], rg_stats[0]).floor(self.oar_period)
-        end_ts = max(df_ordered_on.iloc[-1], rg_stats[-1]).ceil(self.oar_period)
-        period_starts = date_range(start=start_ts, end=end_ts, freq=self.oar_period)[1:]
-
-        # Get indices for row groups and DataFrame chunks
-        rg_idx_tmrg_ends_excl = searchsorted(rg_stats, period_starts, side=LEFT)
-        df_idx_period_ends_excl = searchsorted(df_ordered_on, period_starts, side=LEFT)
-
-        # Stack indices and find unique consecutive pairs
-        pairs = vstack((rg_idx_tmrg_ends_excl, df_idx_period_ends_excl))
-        # Find where consecutive pairs are different
-        is_different = (pairs[:, 1:] != pairs[:, :-1]).any(axis=0)
-        # Get indices where changes occur (including first and last)
-        change_indices = r_[0, nonzero(is_different)[0] + 1]
-
-        return (
-            rg_idx_tmrg_ends_excl[change_indices].tolist(),
-            df_idx_period_ends_excl[change_indices].tolist(),
-        )
-
-    def _rgst_as_str__irgs_analysis(
-        self,
-        rg_mins: NDArray,
-        rg_idx_merge_start: int,
-        rg_idx_merge_end_excl: int,
-        row_group_target_size: str,
-        df_min: Timestamp,
-        df_max: Timestamp,
-    ) -> Tuple[int, int, bool]:
-        """
-        Return neighbor incomplete row groups start and end indices (end excluded).
-
-        Parameters
-        ----------
-        rg_mins : NDArray
-            Minimum value of 'ordered_on' in each row group.
-        rg_idx_merge_start : int
-            Starting index of the current merge region in row groups.
-        rg_idx_merge_end_excl : int
-            Ending index (exclusive) of the current merge region in row groups.
-        row_group_target_size : str
-            Target row group size.
-        df_min : Timestamp
-            Value of 'ordered_on' at start of DataFrame.
-        df_max : Timestamp
-            Value of 'ordered_on' at end of DataFrame.
-
-        Returns
-        -------
-        Tuple[int, int, bool]
-            - First int: Start index of neighbor incomplete row groups (to the
-            left).
-            - Second int: End index (excluded) of neighbor incomplete row groups
-            (to the right).
-            - Third bool: True if new data is in distinct periods vs overlapping row
-            groups. This will trigger coalescing of incomplete row groups.
-
-        """
-        # Include incomplete row groups to the left.
-        left_neighbor_period_first_ts = Timestamp(rg_mins[rg_idx_merge_start]).floor(
-            row_group_target_size,
-        )
-        while (
-            rg_idx_merge_start > 0
-            and rg_mins[rg_idx_merge_start - 1] >= left_neighbor_period_first_ts
-        ):
-            rg_idx_merge_start -= 1
-
-        # Include incomplete row groups to the right.
-        right_neighbor_period_last_ts_excl = Timestamp(rg_mins[rg_idx_merge_end_excl - 1]).ceil(
-            row_group_target_size,
-        )
-        while (
-            rg_idx_merge_end_excl < len(rg_mins)
-            and rg_mins[rg_idx_merge_end_excl] < right_neighbor_period_last_ts_excl
-        ):
-            rg_idx_merge_end_excl += 1
-
-        left_neighbor_period_last_ts_excl = Timestamp(rg_mins[rg_idx_merge_start]).ceil(
-            row_group_target_size,
-        )
-        right_neighbor_period_first_ts = Timestamp(rg_mins[rg_idx_merge_end_excl - 1]).floor(
-            row_group_target_size,
-        )
-        should_coalesce = (
-            df_max >= left_neighbor_period_last_ts_excl or df_min < right_neighbor_period_first_ts
-        )
-        return rg_idx_merge_start, rg_idx_merge_end_excl, should_coalesce
-
-    def _rgst_as_str__merge_plan(
         self,
         rg_maxs: NDArray,
         row_group_period: str,

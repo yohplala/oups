@@ -10,7 +10,10 @@ from typing import List
 import pytest
 from numpy import array
 from numpy import array_equal
+from numpy import bool_
+from numpy import cumsum
 from numpy import empty
+from numpy import int_
 from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import Series
@@ -22,6 +25,8 @@ from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
 from oups.store.ordered_merge_info import compute_ordered_merge_plan
 from oups.store.ordered_merge_info import get_region_indices_of_same_values
 from oups.store.ordered_merge_info import get_region_indices_of_true_values
+from oups.store.ordered_merge_info import get_region_start_end_delta
+from oups.store.ordered_merge_info import set_true_in_regions
 from tests.test_store.conftest import create_parquet_file
 
 
@@ -83,6 +88,126 @@ def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> 
     array of int.
     """
     result = get_region_indices_of_same_values(ints)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "length, regions, expected",
+    [
+        (  # Case 1: Single region at the start
+            5,  # length
+            array([[0, 2]]),  # regions
+            array([True, True, False, False, False]),  # expected
+        ),
+        (  # Case 2: Single region in the middle
+            5,
+            array([[1, 3]]),
+            array([False, True, True, False, False]),
+        ),
+        (  # Case 3: Single region at the end
+            5,
+            array([[3, 5]]),
+            array([False, False, False, True, True]),
+        ),
+        (  # Case 4: Multiple non-overlapping regions
+            7,
+            array([[0, 2], [4, 6]]),
+            array([True, True, False, False, True, True, False]),
+        ),
+        (  # Case 5: Empty regions
+            3,
+            array([], dtype=int).reshape(0, 2),  # empty regions
+            array([False, False, False]),
+        ),
+        (  # Case 6: Region covering entire length
+            4,
+            array([[0, 4]]),
+            array([True, True, True, True]),
+        ),
+    ],
+)
+def test_set_true_in_regions(length: int, regions: NDArray[int_], expected: NDArray[bool_]) -> None:
+    """
+    Test set_true_in_regions function to verify it correctly sets True values in
+    specified regions.
+
+    Parameters
+    ----------
+    length : int
+        Length of the output array.
+    regions : NDArray[np_int]
+        2D array of shape (n, 2) containing [start, end) index pairs.
+    expected : NDArray[np_bool]
+        Expected boolean array with True values in specified regions.
+
+    """
+    result = set_true_in_regions(length=length, regions=regions)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "test_id, values, indices, expected",
+    [
+        (
+            "single_region_at_first",
+            array([1, 2, 3, 4]),  # values, cumsum = [1,3,6,10]
+            array([[0, 3]]),  # one region: indices 0-2
+            array([6]),  # 1+2+3 = 6-0 = 6
+        ),
+        (
+            "single_region_at_second",
+            array([1, 2, 3, 4, 5]),  # values, cumsum = [1,3,6,10,15]
+            array([[1, 4]]),  # one region: indices 1-3
+            array([9]),  # 2+3+4 = 10-1 = 9
+        ),
+        (
+            "multiple_overlapping_regions",
+            array([1, 2, 3, 4, 5, 6]),  # values, cumsum = [1,3,6,10,15,21]
+            array(
+                [
+                    [0, 2],  # region 1: indices 0-1
+                    [2, 5],  # region 2: indices 2-4
+                    [4, 6],  # region 3: indices 4-5
+                ],
+            ),
+            array([3, 12, 11]),  # 3-0=3, 15-3=12, 21-10=11
+        ),
+        (
+            "boolean_values",
+            array([0, 1, 0, 1, 1, 0]),  # values, cumsum = [0,1,1,2,3,3]
+            array(
+                [
+                    [1, 4],  # one region: indices 1-3
+                    [2, 5],  # one region: indices 2-4
+                ],
+            ),
+            array([2, 2]),  # 2-1=1, 3-1=2
+        ),
+    ],
+)
+def test_get_region_start_end_delta(
+    test_id: str,
+    values: NDArray,
+    indices: NDArray,
+    expected: NDArray,
+) -> None:
+    """
+    Test get_region_start_end_delta function with various inputs.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    values : NDArray
+        Input array of values.
+    indices : NDArray
+        Array of shape (n, 2) containing start and end indices of regions.
+    expected : NDArray
+        Expected output containing sums for each region.
+
+    """
+    m_values = cumsum(values)
+    result = get_region_start_end_delta(m_values, indices)
     assert array_equal(result, expected)
 
 

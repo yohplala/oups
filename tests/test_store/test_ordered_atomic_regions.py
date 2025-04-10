@@ -300,7 +300,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
         oars_info=oars_info,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=target_size,
-        max_n_irgs=1,
+        max_n_off_target_rgs=1,
     )
     # Expected results for oars_max_n_rows:
     # rg_n_rows:       [90,  0, 50, 30, 120,  30]

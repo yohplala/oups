@@ -8,7 +8,6 @@ Created on Wed Dec  4 21:30:00 2021.
 from os import scandir
 from typing import Iterator, List, Tuple
 
-from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import Timestamp
 from pandas import date_range
@@ -121,33 +120,6 @@ def conform_cmidx(df: DataFrame):
             level_updated.append(str_level)
     if level_updated:
         df.columns = df.columns.set_levels(level_updated, level=level_updated_idx)
-
-
-def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
-    """
-    Get difference between values at end and start of each region.
-
-    Parameters
-    ----------
-    m_values : NDArray
-        Array of monotonic values, such as coming from a cumulative sum.
-    indices : NDArray
-        Array of shape (n, 2) where 'n' is the number of regions, and each row
-        contains start included and end excluded indices of a region.
-
-    Returns
-    -------
-    NDArray
-        Array of length 'n' containing the difference between values at end and
-        start of each region.
-
-    """
-    if indices[0, 0] == 0:
-        start_values = m_values[indices[:, 0] - 1]
-        start_values[0] = 0
-        return m_values[indices[:, 1] - 1] - start_values
-    else:
-        return m_values[indices[:, 1] - 1] - m_values[indices[:, 0] - 1]
 
 
 def floor_ts(ts: Timestamp, freq: str) -> Timestamp:
