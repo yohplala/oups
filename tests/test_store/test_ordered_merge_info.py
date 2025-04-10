@@ -351,7 +351,7 @@ def test_NRowsPattern_get_fragmentation_risk(
     "test_id, rg_n_rows, row_group_size_target, df_idx_tmrg_starts, df_idx_tmrg_ends_excl, expected",
     [
         (
-            "complete_rgs_split_regions",
+            "on_target_rgs_split_regions",
             # Row groups with varying sizes
             # 0    1    2   3   4   5    6    7
             array([100, 100, 50, 50, 50, 100, 100, 100]),  # rg_n_rows
@@ -361,7 +361,7 @@ def test_NRowsPattern_get_fragmentation_risk(
             array([0, 14, 14, 20, 34, 34, 34, 50]),  # df_idx_tmrg_starts
             array([1, 15, 15, 29, 35, 35, 35, 55]),  # df_idx_tmrg_ends_excl
             {
-                # Complete row groups (rg_n_rows >= 80) at indices 0,1,5,6,7
+                # On target size row groups (rg_n_rows >= 80) at indices 0,1,5,6,7
                 # and non-overlapping at indices 0,1,2,4,5,6
                 # split the merge regions at indices 0,1,5
                 "splits_merge_regions_starts": array([0, 1, 5]),
@@ -369,21 +369,21 @@ def test_NRowsPattern_get_fragmentation_risk(
             },
         ),
         (
-            "no_complete_rgs",
+            "no_on_target_rgs",
             # All row groups off target size
             [50, 40, 30, 20],  # rg_n_rows
             100,  # row_group_size_target
             array([0, 10, 20, 30]),  # df_idx_tmrg_starts
             array([5, 15, 25, 35]),  # df_idx_tmrg_ends_excl
             {
-                # No complete row groups, so no splits
+                # No on target size row groups, so no splits
                 "splits_merge_regions_starts": array([0]),
                 "splits_merge_regions_ends_excl": array([4]),
             },
         ),
         (
-            "all_complete_rgs",
-            # All row groups complete and non-overlapping
+            "all_on_target_rgs",
+            # All row groups on target size and non-overlapping
             [100, 100, 100],  # rg_n_rows
             100,  # row_group_size_target
             array([0, 100, 200]),  # df_idx_tmrg_starts
@@ -767,7 +767,7 @@ def test_rgst_as_str__merge_plan(
             [0, 1],
             [2, 6, 7, 8, 9, 10],
             [0, 2, 4, 5],  # row_group_offsets
-            2,  # row_group_size_target | df enough to make complete rg, should merge.
+            2,  # row_group_size_target | df enough to make on target size rg, should merge.
             True,  # no duplicates to drop
             2,  # max_n_irgs | not triggered
             {
@@ -785,7 +785,7 @@ def test_rgst_as_str__merge_plan(
             [0],
             [2, 6, 7, 8, 9, 10],
             [0, 2, 4, 5],  # row_group_offsets
-            2,  # row_group_size_target | df not enough to make complete rg, should not merge.
+            2,  # row_group_size_target | df not enough to make on target size rg, should not merge.
             True,  # no duplicates to drop
             2,  # max_n_irgs | not triggered
             {
@@ -894,7 +894,7 @@ def test_rgst_as_str__merge_plan(
             [0, 2, 3],  # row_group_offsets
             "2h",  # row_group_size_target | should not rewrite tail
             False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_irgs | should not rewrite tail
+            3,  # max_n_off_targetrgs | should not rewrite tail
             {
                 "chunk_counter": [1],
                 "sort_rgs_after_write": False,
@@ -1185,7 +1185,7 @@ def test_rgst_as_str__merge_plan(
             # Max row group size as int | df within pf data.
             # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
-            # One-but last row group is complete, but because df is
+            # One-but last row group is on target size, but because df is
             # overlapping with it, it has to be rewritten.
             # By choice, the rewrite does not propagate till the end.
             # row grps:  0        1              2             3
@@ -1247,7 +1247,7 @@ def test_rgst_as_str__merge_plan(
         # Do case when it is not possible to reach it, but showing all available
         # row groups are merge together nonetheless.
         # max_n_irgs
-        # test with impossibility to have complete row groups with subset to merge
+        # test with impossibility to have on target size row groups with subset to merge
         # then check left, right, and all available row groups to merge
         #   pf:  rg1, rg2, rg3, rg4, rg5
         #   df:            df1
@@ -1259,7 +1259,7 @@ def test_rgst_as_str__merge_plan(
         # test with freqstr, with several empty periods, to make sure the empty periods are
         #  not in the output
         # test with max_n_irgs set to 0, to make sure the last chunk is
-        #  large enough to ensure complete row groups (calculation of "min_size"
+        #  large enough to ensure on target size row groups (calculation of "min_size"
         #  in "consolidate_merge_plan")
     ],
 )
@@ -1465,13 +1465,13 @@ def test_compute_ordered_merge_plan(
 
 
 @pytest.mark.parametrize(
-    "test_id, oars_has_df_chunk, oars_likely_meets_target_size, max_n_off_target_rgs, expected",
+    "test_id, oars_has_df_chunk, oars_likely_on_target_size, max_n_off_target_rgs, expected",
     [
         (  # Case 1: Contiguous OARs with DataFrame chunk.
-            # No need to enlarge since neighbors OARs are right-sized.
+            # No need to enlarge since neighbors OARs are on target size.
             "contiguous_dfcs_no_off_target",
             array([False, True, True, False]),  # Has DataFrame chunk
-            array([True, False, True, True]),  # Meets target size
+            array([True, False, True, True]),  # On target size
             3,  # max_n_off_target_rgs - is not triggered
             array([[1, 3]]),  # Single region
         ),
@@ -1488,9 +1488,9 @@ def test_compute_ordered_merge_plan(
             array([[7, 8], [0, 4]]),  # Two regions: [0-1) and [2-4)
         ),
         (
-            # Case 3: Confirm EMR because of likely right-sized OAR with
+            # Case 3: Confirm EMR because of likely on target OAR with
             # DataFrame chunk.
-            "enlarging_because_adding_likely_right_sized_oar_with_dfc",
+            "enlarging_because_adding_likely_on_target_oar_with_dfc",
             array([False, True, False, False]),
             array([True, True, False, True]),
             3,  # max_n_off_target_rgs
@@ -1548,7 +1548,7 @@ def test_compute_ordered_merge_plan(
 def test_compute_emrs_start_ends_excl(
     test_id: str,
     oars_has_df_chunk: NDArray[bool_],
-    oars_likely_meets_target_size: NDArray[bool_],
+    oars_likely_on_target_size: NDArray[bool_],
     max_n_off_target_rgs: int,
     expected: NDArray[int_],
 ) -> None:
@@ -1561,8 +1561,8 @@ def test_compute_emrs_start_ends_excl(
         Identifier for the test case.
     oars_has_df_chunk : NDArray[bool_]
         Boolean array indicating if each atomic region has a DataFrame chunk.
-    oars_likely_meets_target_size : NDArray[bool_]
-        Boolean array indicating if each atomic region likely meets target size.
+    oars_likely_on_target_size : NDArray[bool_]
+        Boolean array indicating if each atomic region is likely to be on target size.
     max_n_off_target_rgs : int
         Maximum number of off-target row groups allowed.
     expected : NDArray[int_]
@@ -1571,7 +1571,7 @@ def test_compute_emrs_start_ends_excl(
     """
     result = compute_emrs_start_ends_excl(
         oars_has_df_chunk=oars_has_df_chunk,
-        oars_likely_meets_target_size=oars_likely_meets_target_size,
+        oars_likely_on_target_size=oars_likely_on_target_size,
         max_n_off_target_rgs=max_n_off_target_rgs,
     )
     assert array_equal(result, expected)

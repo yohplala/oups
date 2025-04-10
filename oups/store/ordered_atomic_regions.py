@@ -51,7 +51,7 @@ DF_IDX_END_EXCL = "df_idx_end_excl"
 HAS_ROW_GROUP = "has_row_group"
 HAS_DF_CHUNK = "has_df_chunk"
 MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
-MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
+MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
 
 
 def compute_ordered_atomic_regions(
@@ -199,7 +199,7 @@ class OARSplitStrategy(ABC):
     Abstract base class for ordered atomic region split strategies.
 
     This class defines strategies for:
-    - evaluating likelihood of region completeness after merge,
+    - evaluating likelihood of row groups being on target size after merge,
     - determining appropriate sizes for new row groups,
     - consolidating merge plans for efficient write operations.
 
@@ -211,13 +211,13 @@ class OARSplitStrategy(ABC):
 
     @cached_property
     @abstractmethod
-    def likely_meets_target_size(self) -> NDArray:
+    def likely_on_target_size(self) -> NDArray:
         """
-        Return boolean array indicating which OARs are likely to meet target size.
+        Return boolean array indicating which OARs are likely to be on target size.
 
         This can be the result of 2 conditions:
         - either a single DataFrame chunk or the merge of a Dataframe chunk and
-          a row group, with a (resulting) size that is on target size.
+          a row group, with a (resulting) size that is on target size
           (not under-sized, but over-sized is accepted).
         - or if there is only a row group, it is on target size on its own.
 
@@ -380,11 +380,11 @@ class NRowsSplitStrategy(OARSplitStrategy):
         # self.df_n_rows = oars_info[DF_IDX_END_EXCL][-1]
 
     @cached_property
-    def likely_meets_target_size(self) -> NDArray:
+    def likely_on_target_size(self) -> NDArray:
         """
-        Return boolean array indicating which OARs are likely to meet target size.
+        Return boolean array indicating which OARs are likely to be on target size.
 
-        An OAR is considered likely to meet target size if:
+        An OAR is considered likely to be on target size if:
         - for OARs containing a DataFrame chunk, its maximum possible size is
           above the minimum size. This is an estimate since the actual size
           after deduplication could be smaller.
@@ -395,42 +395,42 @@ class NRowsSplitStrategy(OARSplitStrategy):
         -------
         NDArray
             Boolean array of length equal to the number of ordered atomic
-            regions, where True indicates the OAR is likely to meet the target
+            regions, where True indicates the OAR is likely to be on target
             size.
 
         Notes
         -----
         The logic implements an asymmetric treatment of OARs with and without
         DataFrame chunks to prevent fragmentation and ensure proper compliance
-        with split strategy, including ill-sized existing row groups.
+        with split strategy, including off target existing row groups.
 
         1. For OARs containing a DataFrame chunk:
             - Writing is always triggered (systematic).
-            - If oversized, considered meeting target size to force rewrite of
-              neighbor already existing ill-sized row groups.
+            - If oversized, considered on target to force rewrite of neighbor
+              already existing off target row groups.
             - If undersized, considered off target to be properly accounted for
               when comparing to 'max_n_off_target_rgs'.
-           This ensures that writing a new right-sized row group will trigger
-           the rewrite of adjacent ill-sized row groups when
+           This ensures that writing a new on target row group will trigger
+           the rewrite of adjacent off target row groups when
            'max_n_off_target_rgs' is set.
 
         2. For OARs containing only row groups:
             - Writing is triggered only if:
-               * The OAR is within a set of contiguous off target size OARs
+               * The OAR is within a set of contiguous off target OARs
                  (under or over sized) and neighbors an OAR with a DataFrame
                  chunk.
-               * Either the number of off target size OARs exceeds
+               * Either the number of off target OARs exceeds
                  'max_n_off_target_rgs',
                * or an OAR to be written (with DataFrame chunk) will induce
-                 writing of a row group likely to meet target size.
+                 writing of a row group likely to be on target.
             - Considered off target if either under or over sized to ensure
               proper accounting when comparing to 'max_n_off_target_rgs'.
 
         This approach ensures:
-        - All ill-sized row groups are captured for potential rewrite.
-        - Writing a right-sized row group forces rewrite of all adjacent
-          ill-sized row groups (under or over sized).
-        - Fragmentation is prevented by consolidating ill-sized regions when
+        - All off target row groups are captured for potential rewrite.
+        - Writing an on target new row group forces rewrite of all adjacent
+          already existing off target row groups (under or over sized).
+        - Fragmentation is prevented by consolidating off target regions when
           such *full* rewrite is triggered.
 
         """
@@ -464,12 +464,12 @@ class NRowsSplitStrategy(OARSplitStrategy):
         min_n_rows = (
             self.min_size
             if self.max_n_off_target_rgs
-            else int(self.min_size * MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS)
+            else int(self.min_size * MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS)
         )
         # Consolidation loop is processed backward.
         # This makes possible to manage a 'max_n_off_target_rgs' set to 0
         # (meaning no off target size row groups is allowed), by forcing the
-        # last chunk to encompass 'MIN_RG_NUMBER_TO_ENSURE_COMPLETE_RGS *
+        # last chunk to encompass 'MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS *
         # row_group_target_size' rows.
         # Then whatever the number of rows in the remainder of df, it will be
         # possible to yield chunk with a size between 'row_group_target_size' and
@@ -531,7 +531,8 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
     Attributes
     ----------
     oar_period : str
-        Time period for a row group to be complete (e.g., 'MS' for month start).
+        Time period for a row group to be on target size (e.g., 'MS' for month
+        start).
     oars_has_df_chunk : NDArray
         Array of shape (e) containing booleans indicating whether each ordered
         atomic region contains a DataFrame chunk.
@@ -601,9 +602,9 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         self.period_bounds = date_range(start=start_ts, end=end_ts, freq=row_group_period)
 
     @cached_property
-    def likely_meets_target_size(self) -> NDArray:
+    def likely_on_target_size(self) -> NDArray:
         """
-        Return boolean array indicating which OARs are likely to meet target size.
+        Return boolean array indicating which OARs are likely to be on target size.
 
         An OAR meets target size if and only if:
          - It contains exactly one row group OR one DataFrame chunk (not both)
@@ -613,41 +614,41 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         -------
         NDArray
             Boolean array of length equal to the number of ordered atomic regions,
-            where True indicates the OAR is likely to meet the target size.
+            where True indicates the OAR is likely to be on target size.
 
         Notes
         -----
         The logic implements an asymmetric treatment of OARs with and without
         DataFrame chunks to prevent fragmentation and ensure proper compliance
-        with split strategy, including ill-sized existing row groups.
+        with split strategy, including off target existing row groups.
 
         1. For OARs containing a DataFrame chunk:
             - Writing is always triggered (systematic).
-            - If oversized, considered meeting target size to force rewrite of
-              neighbor already existing ill-sized row groups.
+            - If oversized, considered on target to force rewrite of neighbor
+              already existing off target row groups.
             - If undersized, considered off target to be properly accounted for
               when comparing to 'max_n_off_target_rgs'.
-           This ensures that writing a new right-sized row group will trigger
-           the rewrite of adjacent ill-sized row groups when
+           This ensures that writing a new on target row group will trigger
+           the rewrite of adjacent off target row groups when
            'max_n_off_target_rgs' is set.
 
         2. For OARs containing only row groups:
             - Writing is triggered only if:
-               * The OAR is within a set of contiguous off target size OARs
+               * The OAR is within a set of contiguous off target OARs
                  (under or over sized) and neighbors an OAR with a DataFrame
                  chunk.
-               * Either the number of off target size OARs exceeds
+               * Either the number of off target OARs exceeds
                  'max_n_off_target_rgs',
                * or an OAR to be written (with DataFrame chunk) will induce
-                 writing of a row group likely to meet target size.
+                 writing of a row group likely to be on target size.
             - Considered off target if either under or over sized to ensure
               proper accounting when comparing to 'max_n_off_target_rgs'.
 
         This approach ensures:
-        - All ill-sized row groups are captured for potential rewrite.
-        - Writing a right-sized row group forces rewrite of all adjacent
-          ill-sized row groups (under or over sized).
-        - Fragmentation is prevented by consolidating ill-sized regions when
+        - All off target row groups are captured for potential rewrite.
+        - Writing an on target new row group forces rewrite of all adjacent
+          already existing off target row groups (under or over sized).
+        - Fragmentation is prevented by consolidating off target regions when
           such *full* rewrite is triggered.
 
         """

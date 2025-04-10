@@ -258,15 +258,15 @@ def test_compute_ordered_atomic_regions_validation(
         )
 
 
-def test_nrows_split_strategy_likely_meets_target_size():
+def test_nrows_split_strategy_likely_on_target_size():
     """
-    Test NRowsSplitStrategy strategy and likely_meets_target_size.
+    Test NRowsSplitStrategy strategy and likely_on_target_size.
     """
     target_size = 100  # min size: 80
     # Create mock oars_info with 5 regions:
-    # 1. RG only (90 rows) - meets target
-    # 2. DF only (85 rows) - meets target
-    # 3. Both RG (50) and DF (40) - meets target due to potential duplicates
+    # 1. RG only (90 rows) - on target
+    # 2. DF only (85 rows) - on target
+    # 3. Both RG (50) and DF (40) - on target due to potential duplicates
     # 4. Both RG (30) and DF (30) - too small
     # 5. Both RG (120) and DF (0) - too large and only row group.
     # 6. Both RG (30) and DF (80) - too large but accepted since it has a dfc.
@@ -299,14 +299,14 @@ def test_nrows_split_strategy_likely_meets_target_size():
     # df_n_rows:       [ 0, 85, 40, 30,   0,  80]
     # oars_max_n_rows: [90, 85, 90, 60, 120, 110]
     assert_array_equal(strategy.oars_max_n_rows, array([90, 85, 90, 60, 120, 110]))
-    # Expected results for likely_meets_target_size:
+    # Expected results for likely_on_target_size:
     # 1. True  - RG only with 90 rows (between min_size and target_size)
     # 2. True  - DF only with 85 rows (between min_size and target_size)
-    # 3. True  - Combined RG(50) + DF(40) could meet target
+    # 3. True  - Combined RG(50) + DF(40) could be on target
     # 4. False - Combined RG(30) + DF(30) too small
     # 5. False - RG only with 120 rows (above target_size)
     # 6. True - Combined RG(30) + DF(80) oversized but with a RG
-    result = strategy.likely_meets_target_size
+    result = strategy.likely_on_target_size
     expected = array([True, True, True, False, False, True])
     assert_array_equal(result, expected)
 
@@ -348,7 +348,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         ],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, False, True]),
+                "likely_on_target": array([False, False, True]),
             },
         ),
         (
@@ -377,7 +377,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-02-01"), Timestamp("2024-03-15")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, True]),
+                "likely_on_target": array([False, True]),
             },
         ),
         (
@@ -404,7 +404,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-03-16")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([True]),
+                "likely_on_target": array([True]),
             },
         ),
         (
@@ -433,7 +433,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-05-03"), Timestamp("2024-06-15")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([True, True]),
+                "likely_on_target": array([True, True]),
             },
         ),
         (
@@ -461,7 +461,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-06-15"), Timestamp("2024-06-18")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, False]),
+                "likely_on_target": array([False, False]),
             },
         ),
         (
@@ -490,7 +490,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-08-10"), Timestamp("2024-08-17")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([True, False]),
+                "likely_on_target": array([True, False]),
             },
         ),
         (
@@ -519,7 +519,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-10-15"), Timestamp("2024-10-18")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, False]),
+                "likely_on_target": array([False, False]),
             },
         ),
         (
@@ -548,7 +548,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-11-17"), Timestamp("2024-12-05")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, False]),
+                "likely_on_target": array([False, False]),
             },
         ),
         (
@@ -577,7 +577,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-01-04"), Timestamp("2024-02-01")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, True]),
+                "likely_on_target": array([False, True]),
             },
         ),
         (
@@ -605,7 +605,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-03-02"), Timestamp("2024-04-30")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([True, True]),
+                "likely_on_target": array([True, True]),
             },
         ),
         (
@@ -641,7 +641,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-06-02"), Timestamp("2024-06-30")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([True, False]),
+                "likely_on_target": array([True, False]),
             },
         ),
         (
@@ -670,7 +670,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-04-28"), Timestamp("2024-06-02")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, True]),
+                "likely_on_target": array([False, True]),
             },
         ),
         (
@@ -700,19 +700,19 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-05-15"), Timestamp("2024-06-01")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, True]),
+                "likely_on_target": array([False, True]),
             },
         ),
     ],
 )
 def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oars, expected):
     """
-    Test TimePeriodSplitStrategy initialization and likely_meets_target_size.
+    Test TimePeriodSplitStrategy initialization and likely_on_target_size.
     """
     time_period = "MS"
     # Create oars_info with 6 regions
     oars_info = ones(
-        len(expected["likely_meets_target"]),
+        len(expected["likely_on_target"]),
         dtype=[
             (RG_IDX_START, int_),
             (RG_IDX_END_EXCL, int_),
@@ -737,5 +737,5 @@ def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oa
     assert_array_equal(strategy.period_bounds, expected["period_bounds"])
     # Test oars_mins_maxs
     assert_array_equal(strategy.oars_mins_maxs, expected["oars_mins_maxs"])
-    # Test likely_meets_target_size
-    assert_array_equal(strategy.likely_meets_target_size, expected["likely_meets_target"])
+    # Test likely_on_target_size
+    assert_array_equal(strategy.likely_on_target_size, expected["likely_on_target"])

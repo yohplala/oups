@@ -30,7 +30,6 @@ from numpy import zeros
 from numpy.typing import NDArray
 from pandas import DataFrame
 
-from oups.store.ordered_atomic_regions import HAS_DF_CHUNK
 from oups.store.ordered_atomic_regions import NRowsSplitStrategy
 from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
 from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
@@ -139,7 +138,7 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
 
 def compute_emrs_start_ends_excl(
     oars_has_df_chunk: NDArray[np_bool],
-    oars_likely_meets_target_size: NDArray[np_bool],
+    oars_likely_on_target_size: NDArray[np_bool],
     max_n_off_target_rgs: int,
 ) -> NDArray[np_int]:
     """
@@ -149,7 +148,7 @@ def compute_emrs_start_ends_excl(
     with neighbor regions that are off target size depending on two
     conditions,
       - if the atomic merge region with DataFrame chunks is found to result in a
-        row group potentially meeting target size.
+        row group potentially on target size.
       - if the total number of atomic merge regions off target size in a
         given enlarged merge region is greater than `max_n_off_target_rgs`.
 
@@ -158,9 +157,9 @@ def compute_emrs_start_ends_excl(
     oars_has_df_chunk : NDArray[np_bool]
         Boolean array of shape (n) indicating if each atomic merge region
         contains a DataFrame chunk.
-    oars_likely_meets_target_size : NDArray[np_bool]
+    oars_likely_on_target_size : NDArray[np_bool]
         Boolean array of shape (n) indicating if each atomic merge region
-        is likely to result in a row group meeting target size.
+        is likely to be on target size.
     max_n_off_target_rgs : int
         Maximum number of off-target size row groups allowed in a contiguous set
         of row groups. This parameter helps limiting fragmentation by limiting
@@ -178,15 +177,15 @@ def compute_emrs_start_ends_excl(
     Notes
     -----
     Reason for including off target size OARs contiguous to a newly added OAR
-    likely to meet target size is to prevent that the addition of new data
-    creates isolated sets of off-target size row groups followed by complete
-    row groups. This most notably applies when new data is appended at the tail
-    of the DataFrame.
+    likely to be on target size is to prevent that the addition of new data
+    creates isolated sets of off target size row groups followed by on target
+    size row groups. This most notably applies when new data is appended at the
+    tail of the DataFrame.
 
     """
     # Step 1: assess start indices (included) and end indices (excluded) of
     # enlarged merge regions.
-    oars_off_target = ~oars_likely_meets_target_size
+    oars_off_target = ~oars_likely_on_target_size
     potential_enlarged_mrs = oars_has_df_chunk | oars_off_target
     potential_emrs_starts_ends_excl = get_region_indices_of_true_values(potential_enlarged_mrs)
     print()
@@ -206,7 +205,7 @@ def compute_emrs_start_ends_excl(
     # 2.b Get which enlarged regions into which the merge will likely create
     # on target row groups.
     creates_on_target_rg_in_pemrs = get_region_start_end_delta(
-        m_values=cumsum(oars_likely_meets_target_size),
+        m_values=cumsum(oars_likely_on_target_size),
         indices=potential_emrs_starts_ends_excl,
     ).astype(np_bool)
     print()
@@ -317,9 +316,10 @@ def compute_ordered_merge_plan(
         - ``None`` value induces no coalescing of row groups. If there is no
           drop of duplicates, new data is systematically appended.
         - A value of ``0`` means that new data will be merged to neighbors
-          existing row groups to attempt yielding only complete row groups after
+          existing row groups to attempt yielding only on target size row groups
+          after the merge.
           the merge.
-        - A value of ``n >= 1`` means that up to n contiguous off-target size
+        - A value of ``n >= 1`` means that up to n contiguous off target size
           row groups are allowed before triggering a merge, hereby limiting
           fragmentation.
 
@@ -343,8 +343,7 @@ def compute_ordered_merge_plan(
     neighbor off target size row groups and may adjust the overlap regions to
     include them in the merge and rewrite step.
 
-    """
-    # Compute atomic merge regions.
+    """  # Compute atomic merge regions.
     # An atomic merge region is defined
     # - either as a single existing row group (overlapping or not with a
     #   DataFrame chunk),
@@ -382,8 +381,8 @@ def compute_ordered_merge_plan(
     # criteria.
     # It also restricts to the set of atomic merge regions to be yielded.
     oar_idx_emrs_starts_ends_excl = compute_emrs_start_ends_excl(
-        oars_has_df_chunk=oars_info[HAS_DF_CHUNK],
-        oars_likely_meets_target_size=oar_split_strategy.likely_meets_target_size,
+        oars_has_df_chunk=oar_split_strategy.oars_has_df_chunk,
+        oars_likely_on_target_size=oar_split_strategy.likely_meets_target_size,
         max_n_off_target_rgs=max_n_off_target_rgs,
     )
     # Filter and reshape arrays describing atomic merge regions into enlarged
