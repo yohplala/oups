@@ -293,6 +293,9 @@ class NRowsSplitStrategy(OARSplitStrategy):
     max_n_off_target_rgs : int
         Maximum number of row groups off target size allowed in an ordered
         atomic region.
+    has_df_chunk : NDArray
+        Array of shape (e) containing booleans indicating whether each ordered
+        atomic region contains a DataFrame chunk.
     oars_max_n_rows : NDArray
         Array of shape (e) containing the maximum number of rows in each ordered
         atomic region.
@@ -334,6 +337,7 @@ class NRowsSplitStrategy(OARSplitStrategy):
         self.oar_target_size = row_group_target_size
         self.oar_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
         self.max_n_off_target_rgs = max_n_off_target_rgs
+        self.has_df_chunk = oars_info[HAS_DF_CHUNK]
         # Max number of rows in each ordered atomic region. This is a max in case
         # there are duplicates between row groups and DataFrame that will be
         # dropped.
@@ -347,40 +351,63 @@ class NRowsSplitStrategy(OARSplitStrategy):
         """
         Return boolean array indicating which OARs are likely to meet target size.
 
-        An OAR is considered likely to meet target size if its maximum possible
-        size (sum of row group and DataFrame chunk sizes) is between the minimum
-        and target sizes. This is a conservative estimate since the actual size
-        after deduplication could be smaller.
+        An OAR is considered likely to meet target size if:
+        - for OARs containing a DataFrame chunk, its maximum possible size is
+          above the minimum size. This is an estimate since the actual size
+          after deduplication could be smaller.
+        - for OARs containing only row groups, their maximum possible size is
+          between the minimum and target sizes.
 
         Returns
         -------
         NDArray
-            Boolean array of length equal to the number of ordered atomic regions,
-            where True indicates the OAR is likely to meet the target size.
+            Boolean array of length equal to the number of ordered atomic
+            regions, where True indicates the OAR is likely to meet the target
+            size.
 
         Notes
         -----
-        The likelihood aspect comes from the fact that at analysis time, the
-        exact final size of an OAR is not known due to potential duplicates
-        between row groups and DataFrame chunks. The maximum size is used as a
-        conservative estimate.
+        The logic implements an asymmetric treatment of OARs with and without
+        DataFrame chunks to prevent fragmentation and ensure proper compliance
+        with split strategy, including ill-sized existing row groups.
+
+        1. For OARs containing a DataFrame chunk:
+            - Writing is always triggered (systematic).
+            - If oversized, considered meeting target size to force rewrite of
+              neighbor already existing ill-sized row groups.
+            - If undersized, considered off target to be properly accounted for
+              when comparing to 'max_n_off_target_rgs'.
+           This ensures that writing a new right-sized row group will trigger
+           the rewrite of adjacent ill-sized row groups when
+           'max_n_off_target_rgs' is set.
+
+        2. For OARs containing only row groups:
+            - Writing is triggered only if:
+               * The OAR is within a set of contiguous off target size OARs
+                 (under or over sized) and neighbors an OAR with a DataFrame
+                 chunk.
+               * Either the number of off target size OARs exceeds
+                 'max_n_off_target_rgs',
+               * or an OAR to be written (with DataFrame chunk) will induce
+                 writing of a row group likely to meet target size.
+            - Considered off target if either under or over sized to ensure
+              proper accounting when comparing to 'max_n_off_target_rgs'.
+
+        This approach ensures:
+        - All ill-sized row groups are captured for potential rewrite.
+        - Writing a right-sized row group forces rewrite of all adjacent
+          ill-sized row groups (under or over sized).
+        - Fragmentation is prevented by consolidating ill-sized regions when
+          such *full* rewrite is triggered.
 
         """
-        # If an OAR is larger than target size, this will create at writing
-        # a complete row group. Over-sized OAR are then accounted for as
-        # right-sized OARs.
-        # This way:
-        # - we will not catch cases when an already existing row group is
-        #   over-sized to rewrite it. This is not so good.
-        # - But we will catch cases when we are writing in the midlle of
-        #   off-target size row groups a new row group which will be
-        #   right-sized. This case has to trigger the rewrite of the full
-        #   region, enlarging to off-target size neighbor existing row groups.
-        #   This is more important.
-        # Priority is given to cure regions that are modified, than curing
-        # regions that have been 'incorrectly' written in the past.
-        return self.oars_max_n_rows >= self.oar_min_size
-        # & self.oars_max_n_rows <= self.oar_target_size
+        return self.has_df_chunk & (  # OAR containing a DataFrame chunk.
+            self.oars_max_n_rows >= self.oar_min_size
+        ) | (  # OAR containing only row groups.
+            ~self.has_df_chunk
+            & (self.oars_max_n_rows >= self.oar_min_size)
+            & (self.oars_max_n_rows <= self.oar_target_size)
+        )
 
     def consolidate_merge_plan(
         self,

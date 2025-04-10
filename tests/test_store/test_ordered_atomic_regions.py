@@ -268,8 +268,8 @@ def test_nrows_split_strategy_likely_meets_target_size():
     # 2. DF only (85 rows) - meets target
     # 3. Both RG (50) and DF (40) - meets target due to potential duplicates
     # 4. Both RG (30) and DF (30) - too small
-    # 5. Both RG (120) and DF (0) - too large but we accept
-    # 6. Both RG (30) and DF (80) - too large but we accept
+    # 5. Both RG (120) and DF (0) - too large and only row group.
+    # 6. Both RG (30) and DF (80) - too large but accepted since it has a dfc.
     oars_info = ones(
         6,
         dtype=[
@@ -307,7 +307,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
     # 5. False - RG only with 120 rows (above target_size)
     # 6. False - Combined RG(30) + DF(80) could be too large
     result = strategy.likely_meets_target_size
-    expected = array([True, True, True, False, True, True])
+    expected = array([True, True, True, False, False, True])
     assert_array_equal(result, expected)
 
 
