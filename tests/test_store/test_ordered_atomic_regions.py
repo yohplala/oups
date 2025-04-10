@@ -302,10 +302,10 @@ def test_nrows_split_strategy_likely_meets_target_size():
     # Expected results for likely_meets_target_size:
     # 1. True  - RG only with 90 rows (between min_size and target_size)
     # 2. True  - DF only with 85 rows (between min_size and target_size)
-    # 3. True  - Combined RG(50) + DF(40) could meet target after deduplication
-    # 4. False - Combined RG(30) + DF(30) too small even without deduplication
+    # 3. True  - Combined RG(50) + DF(40) could meet target
+    # 4. False - Combined RG(30) + DF(30) too small
     # 5. False - RG only with 120 rows (above target_size)
-    # 6. False - Combined RG(30) + DF(80) could be too large
+    # 6. True - Combined RG(30) + DF(80) oversized but with a RG
     result = strategy.likely_meets_target_size
     expected = array([True, True, True, False, False, True])
     assert_array_equal(result, expected)
@@ -383,7 +383,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
         (
             "rg_and_dfc_in_same_oar",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
-            #   1,         Mar,   15/03,   16/03,   15/03,   15/03, False (both RG & DFc in period)
+            #   1,         Mar,   15/03,   16/03,   15/03,   15/03, True (both RG & DFc in period)
             array([Timestamp("2024-03-15")]),  # rg_mins
             array([Timestamp("2024-03-16")]),  # rg_maxs
             Series([Timestamp("2024-03-15")]),  # df_ordered_on
@@ -404,13 +404,13 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-03-16")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False]),
+                "likely_meets_target": array([True]),
             },
         ),
         (
             "dfc_spans_multiple_periods",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
-            #   1,         Apr,                     17/04,        , False (DFc spans several periods)
+            #   1,         Apr,                     17/04,        , True (DFc spans several periods)
             #   1,         May,                              03/05,
             #   2,         Jun,   10/06,   15/06,                 , True
             array([Timestamp("2024-06-10")]),  # rg_mins
@@ -433,7 +433,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-05-03"), Timestamp("2024-06-15")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, True]),
+                "likely_meets_target": array([True, True]),
             },
         ),
         (
@@ -490,7 +490,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-08-10"), Timestamp("2024-08-17")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, False]),
+                "likely_meets_target": array([True, False]),
             },
         ),
         (
@@ -577,7 +577,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-01-04"), Timestamp("2024-02-01")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, False]),
+                "likely_meets_target": array([False, True]),
             },
         ),
         (
@@ -641,7 +641,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-06-02"), Timestamp("2024-06-30")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, False]),
+                "likely_meets_target": array([True, False]),
             },
         ),
         (
@@ -670,7 +670,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-04-28"), Timestamp("2024-06-02")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, False]),
+                "likely_meets_target": array([False, True]),
             },
         ),
         (
@@ -700,7 +700,7 @@ def test_nrows_split_strategy_likely_meets_target_size():
                         "maxs": [Timestamp("2024-05-15"), Timestamp("2024-06-01")],
                     },
                 ).to_numpy(),
-                "likely_meets_target": array([False, False]),
+                "likely_meets_target": array([False, True]),
             },
         ),
     ],

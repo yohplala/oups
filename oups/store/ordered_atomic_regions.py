@@ -224,9 +224,38 @@ class OARSplitStrategy(ABC):
 
         Notes
         -----
-        The likelihood aspect results from the fact that the final completeness
-        of an OAR cannot be determined at analysis time for various reasons
-        depending on the split strategy.
+        The logic implements an asymmetric treatment of OARs with and without
+        DataFrame chunks to prevent fragmentation and ensure proper compliance
+        with split strategy, including ill-sized existing row groups.
+
+        1. For OARs containing a DataFrame chunk:
+            - Writing is always triggered (systematic).
+            - If oversized, considered meeting target size to force rewrite of
+              neighbor already existing ill-sized row groups.
+            - If undersized, considered off target to be properly accounted for
+              when comparing to 'max_n_off_target_rgs'.
+           This ensures that writing a new right-sized row group will trigger
+           the rewrite of adjacent ill-sized row groups when
+           'max_n_off_target_rgs' is set.
+
+        2. For OARs containing only row groups:
+            - Writing is triggered only if:
+               * The OAR is within a set of contiguous off target size OARs
+                 (under or over sized) and neighbors an OAR with a DataFrame
+                 chunk.
+               * Either the number of off target size OARs exceeds
+                 'max_n_off_target_rgs',
+               * or an OAR to be written (with DataFrame chunk) will induce
+                 writing of a row group likely to meet target size.
+            - Considered off target if either under or over sized to ensure
+              proper accounting when comparing to 'max_n_off_target_rgs'.
+
+        This approach ensures:
+        - All ill-sized row groups are captured for potential rewrite.
+        - Writing a right-sized row group forces rewrite of all adjacent
+          ill-sized row groups (under or over sized).
+        - Fragmentation is prevented by consolidating ill-sized regions when
+          such *full* rewrite is triggered.
 
         """
         raise NotImplementedError("Subclasses must implement this property")
@@ -293,7 +322,7 @@ class NRowsSplitStrategy(OARSplitStrategy):
     max_n_off_target_rgs : int
         Maximum number of row groups off target size allowed in an ordered
         atomic region.
-    has_df_chunk : NDArray
+    oars_has_df_chunk : NDArray
         Array of shape (e) containing booleans indicating whether each ordered
         atomic region contains a DataFrame chunk.
     oars_max_n_rows : NDArray
@@ -337,7 +366,7 @@ class NRowsSplitStrategy(OARSplitStrategy):
         self.oar_target_size = row_group_target_size
         self.oar_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
         self.max_n_off_target_rgs = max_n_off_target_rgs
-        self.has_df_chunk = oars_info[HAS_DF_CHUNK]
+        self.oars_has_df_chunk = oars_info[HAS_DF_CHUNK]
         # Max number of rows in each ordered atomic region. This is a max in case
         # there are duplicates between row groups and DataFrame that will be
         # dropped.
@@ -401,9 +430,9 @@ class NRowsSplitStrategy(OARSplitStrategy):
           such *full* rewrite is triggered.
 
         """
-        return self.has_df_chunk & (  # OAR containing a DataFrame chunk.
+        return self.oars_has_df_chunk & (  # OAR containing a DataFrame chunk.
             self.oars_max_n_rows >= self.oar_min_size
-        ) | ~self.has_df_chunk & (  # OAR containing only row groups.
+        ) | ~self.oars_has_df_chunk & (  # OAR containing only row groups.
             (self.oars_max_n_rows >= self.oar_min_size)
             & (self.oars_max_n_rows <= self.oar_target_size)
         )
@@ -499,12 +528,12 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
     ----------
     oar_period : str
         Time period for a row group to be complete (e.g., 'MS' for month start).
+    oars_has_df_chunk : NDArray
+        Array of shape (e) containing booleans indicating whether each ordered
+        atomic region contains a DataFrame chunk.
     oars_mins_maxs : NDArray
         Array of shape (e, 2) containing the start and end bounds of each
         ordered atomic region.
-    single_component_oars : NDArray
-        Array of shape (e) containing booleans indicating whether each ordered
-        atomic region has exactly one component (either RG or DF chunk, not both).
     period_bounds : DatetimeIndex
         Period bounds over the total time span of the dataset, considering both
         row groups and DataFrame.
@@ -545,6 +574,7 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
 
         """
         self.oar_period = row_group_period
+        self.oars_has_df_chunk = oars_info[HAS_DF_CHUNK]
         df_ordered_on_np = df_ordered_on.to_numpy()
         self.oars_mins_maxs = ones((len(oars_info), 2)).astype(df_ordered_on_np.dtype)
         # Row groups encompasses Dataframe chunks in an OAR.
@@ -561,9 +591,6 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         oar_idx_row_groups = flatnonzero(oars_info[HAS_ROW_GROUP])
         self.oars_mins_maxs[oar_idx_row_groups, 0] = rg_ordered_on_mins
         self.oars_mins_maxs[oar_idx_row_groups, 1] = rg_ordered_on_maxs
-        # Keep track where there is only one component (either RG or DF chunk,
-        # not both).
-        self.single_component_oars = oars_info[HAS_ROW_GROUP] ^ oars_info[HAS_DF_CHUNK]
         # Generate period bounds.
         start_ts = floor_ts(Timestamp(self.oars_mins_maxs[0, 0]), row_group_period)
         end_ts = ceil_ts(Timestamp(self.oars_mins_maxs[-1, 1]), row_group_period)
@@ -586,9 +613,38 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
 
         Notes
         -----
-        The likelihood aspect comes from the fact that the dataset is mutable,
-        and additional chunks may be added at a next run. However, this has no
-        impact the logic implemented.
+        The logic implements an asymmetric treatment of OARs with and without
+        DataFrame chunks to prevent fragmentation and ensure proper compliance
+        with split strategy, including ill-sized existing row groups.
+
+        1. For OARs containing a DataFrame chunk:
+            - Writing is always triggered (systematic).
+            - If oversized, considered meeting target size to force rewrite of
+              neighbor already existing ill-sized row groups.
+            - If undersized, considered off target to be properly accounted for
+              when comparing to 'max_n_off_target_rgs'.
+           This ensures that writing a new right-sized row group will trigger
+           the rewrite of adjacent ill-sized row groups when
+           'max_n_off_target_rgs' is set.
+
+        2. For OARs containing only row groups:
+            - Writing is triggered only if:
+               * The OAR is within a set of contiguous off target size OARs
+                 (under or over sized) and neighbors an OAR with a DataFrame
+                 chunk.
+               * Either the number of off target size OARs exceeds
+                 'max_n_off_target_rgs',
+               * or an OAR to be written (with DataFrame chunk) will induce
+                 writing of a row group likely to meet target size.
+            - Considered off target if either under or over sized to ensure
+              proper accounting when comparing to 'max_n_off_target_rgs'.
+
+        This approach ensures:
+        - All ill-sized row groups are captured for potential rewrite.
+        - Writing a right-sized row group forces rewrite of all adjacent
+          ill-sized row groups (under or over sized).
+        - Fragmentation is prevented by consolidating ill-sized regions when
+          such *full* rewrite is triggered.
 
         """
         # Find period indices for each OAR.
@@ -598,20 +654,17 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
             side=RIGHT,
         )
         # Check if OAR fits in a single period
-        # single_period_oars = period_idx_oars[:, 0] == period_idx_oars[:, 1]
+        single_period_oars = period_idx_oars[:, 0] == period_idx_oars[:, 1]
         # Check if OAR is the only one in its period
         # period_counts = bincount(period_idx_oars.ravel())
         # Each period index has to appear only twice (oncee for start, once for end).
         # Since we already checked OARs don't span multiple periods (start == end),
         # the check is then only made on the period start.
         # oars_single_in_period = period_counts[period_idx_oars[:, 0]] == 2
-        return (
-            # Check single component OARs
-            self.single_component_oars
-            # Check single period OARs
-            & (period_idx_oars[:, 0] == period_idx_oars[:, 1])
-            # Check single OAR in period
-            & (bincount(period_idx_oars.ravel())[period_idx_oars[:, 0]] == 2)
+        return (  # Over-sized OAR containing a DataFrame chunk.
+            self.oars_has_df_chunk & ~single_period_oars
+        ) | (  # OAR with or wo DataFrame chunk, single in period and within a single period.
+            single_period_oars & (bincount(period_idx_oars.ravel())[period_idx_oars[:, 0]] == 2)
         )
 
     def consolidate_merge_plan(
