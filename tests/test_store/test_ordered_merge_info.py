@@ -1467,7 +1467,7 @@ def test_compute_ordered_merge_plan(
 @pytest.mark.parametrize(
     "test_id, oars_has_df_chunk, oars_likely_on_target_size, max_n_off_target_rgs, expected",
     [
-        (  # Case 1: Contiguous OARs with DataFrame chunk.
+        (  # Contiguous OARs with DataFrame chunk.
             # No need to enlarge since neighbors OARs are on target size.
             "contiguous_dfcs_no_off_target",
             array([False, True, True, False]),  # Has DataFrame chunk
@@ -1475,8 +1475,7 @@ def test_compute_ordered_merge_plan(
             3,  # max_n_off_target_rgs - is not triggered
             array([[1, 3]]),  # Single region
         ),
-        (  # Case 2:
-            # First EMR has enough neighbor off-target OARs.
+        (  # First EMR has enough neighbor off-target OARs.
             # There is a second one potential EMR without DataFrame chunk.
             # The 3rd has not enough neighbor off-target OARs to be enlarged.
             "enlarging_based_on_off_target_oars",
@@ -1487,44 +1486,37 @@ def test_compute_ordered_merge_plan(
             3,  # max_n_off_target_rgs
             array([[7, 8], [0, 4]]),  # Two regions: [0-1) and [2-4)
         ),
-        (
-            # Case 3: Confirm EMR because of likely on target OAR with
-            # DataFrame chunk.
+        (  # Confirm EMR because of likely on target OAR with DataFrame chunk.
             "enlarging_because_adding_likely_on_target_oar_with_dfc",
-            array([False, True, False, False]),
-            array([True, True, False, True]),
+            array([False, True, False, False]),  # Has DataFrame chunk
+            array([True, True, False, True]),  # On target size
             3,  # max_n_off_target_rgs
             array([[1, 3]]),  # Adding 3rd OAR in EMR.
         ),
-        (
-            # Case 4: Alternating regions with and without DataFrame chunks
-            # Should only merge regions with DataFrame chunks
+        (  # Alternating regions with and without DataFrame chunks.
+            # Should only merge regions with DataFrame chunks.
             "alternating_regions",
             array([True, False, True, False]),  # Alternating DataFrame chunks
-            array([True, True, True, True]),  # All meet target size
-            1,  # max_n_off_target_rgs
+            array([True, True, True, True]),  # All on target size
+            2,  # max_n_off_target_rgs
             array([[0, 1], [2, 3]]),  # Two separate regions
         ),
-        (
-            # Case 5: Multiple off-target regions between DataFrame chunks
+        (  # Multiple off-target regions between DataFrame chunks
             # Should merge if number of off-target regions exceeds max_n_off_target_rgs
             "multiple_off_target_between_chunks",
-            array([True, False, False, True]),  # DataFrame chunks at ends
+            array([False, False, False, True]),  # DataFrame chunks at ends
             array([False, False, False, False]),  # All off target
             1,  # max_n_off_target_rgs
             array([[0, 4]]),  # Single region covering all
         ),
-        (
-            # Case 6: No regions with DataFrame chunks
-            # Should return empty array
+        (  # No regions with DataFrame chunks. Should return empty array
             "no_df_chunks",
             array([False, False, False]),  # No DataFrame chunks
-            array([True, True, True]),  # All meet target size
+            array([True, True, True]),  # All on target size
             1,  # max_n_off_target_rgs
             array([], dtype=int).reshape(0, 2),  # Empty array
         ),
-        (
-            # Case 7: Single off-target region with DataFrame chunk
+        (  # Single off-target region with DataFrame chunk
             # Should return single region
             "single_off_target_with_df_chunk",
             array([True]),  # Has DataFrame chunk
@@ -1532,17 +1524,28 @@ def test_compute_ordered_merge_plan(
             1,  # max_n_off_target_rgs
             array([[0, 1]]),  # Single region
         ),
-        (
-            # Case 8: Complex pattern with varying conditions
+        (  # Complex pattern with varying conditions
             # Tests multiple conditions in one test
-            "complex_pattern",
-            array([True, False, True, False, True, False]),  # DataFrame chunks at 0,2,4
-            array([False, True, False, False, True, True]),  # Meets target at 1,4,5
+            "mixed_pattern",
+            array([True, False, False, False, True, False]),  # DataFrame chunks at 0, 4
+            array([True, False, True, False, False, True]),  # Likely on target
             2,  # max_n_off_target_rgs
-            array([[0, 2], [2, 6]]),  # Two regions: [0-2) and [2-6)
+            array([[4, 5], [0, 2]]),
         ),
-        # TODO: test case with max_n_off_target = None
-        # TODO: test case with max_n_off_target = 0
+        (  # 'max_n_off_target' is None
+            "max_n_off_target_is_none",
+            array([True, False, False, False, True]),  # DataFrame chunks at 0, 4
+            array([True, False, True, False, False]),  # Likely on target
+            None,  # max_n_off_target_rgs
+            array([[0, 1], [4, 5]]),
+        ),
+        (  # 'max_n_off_target' is 0
+            "max_n_off_target_is_0",
+            array([True, False, False, False, True]),  # DataFrame chunks at 0, 4
+            array([False, False, True, False, False]),  # Likely on target
+            0,  # max_n_off_target_rgs
+            array([[0, 2], [3, 5]]),
+        ),
     ],
 )
 def test_compute_emrs_start_ends_excl(

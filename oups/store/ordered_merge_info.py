@@ -128,6 +128,8 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
         start of each region.
 
     """
+    if not indices.size:
+        return array([], dtype=int)
     if indices[0, 0] == 0:
         start_values = m_values[indices[:, 0] - 1]
         start_values[0] = 0
@@ -139,7 +141,7 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
 def compute_emrs_start_ends_excl(
     oars_has_df_chunk: NDArray[np_bool],
     oars_likely_on_target_size: NDArray[np_bool],
-    max_n_off_target_rgs: int,
+    max_n_off_target_rgs: Optional[int] = None,
 ) -> NDArray[np_int]:
     """
     Aggregate atomic merge regions into enlarged merge regions.
@@ -160,10 +162,12 @@ def compute_emrs_start_ends_excl(
     oars_likely_on_target_size : NDArray[np_bool]
         Boolean array of shape (n) indicating if each atomic merge region
         is likely to be on target size.
-    max_n_off_target_rgs : int
+    max_n_off_target_rgs : Optional[int]
         Maximum number of off-target size row groups allowed in a contiguous set
         of row groups. This parameter helps limiting fragmentation by limiting
         number of contiguous row groups off target size.
+        A ``None`` value induces no merging of off target size row groups
+        neighbor to a newly added row groups.
 
     Returns
     -------
@@ -183,15 +187,17 @@ def compute_emrs_start_ends_excl(
     tail of the DataFrame.
 
     """
+    simple_mrs_starts_ends_excl = get_region_indices_of_true_values(oars_has_df_chunk)
+    if max_n_off_target_rgs is None:
+        return simple_mrs_starts_ends_excl
+
+    # If 'max_n_off_target_rgs' is not None, then we need to compute the
+    # enlarged merge regions.
     # Step 1: assess start indices (included) and end indices (excluded) of
     # enlarged merge regions.
     oars_off_target = ~oars_likely_on_target_size
     potential_enlarged_mrs = oars_has_df_chunk | oars_off_target
     potential_emrs_starts_ends_excl = get_region_indices_of_true_values(potential_enlarged_mrs)
-    print()
-    print("potential_emrs_starts_ends_excl")
-    print(potential_emrs_starts_ends_excl)
-
     # Step 2: Filter out enlarged candidates based on multiple criteria.
     # 2.a - Get number of off target size OARs per enlarged merged region.
     # Those where 'max_n_off_target_rgs' is not reached will be filtered out
@@ -199,27 +205,17 @@ def compute_emrs_start_ends_excl(
         m_values=cumsum(oars_off_target),
         indices=potential_emrs_starts_ends_excl,
     )
-    print()
-    print("n_off_target_rgs_in_potential_emrs")
-    print(n_off_target_rgs_in_potential_emrs)
     # 2.b Get which enlarged regions into which the merge will likely create
     # on target row groups.
     creates_on_target_rg_in_pemrs = get_region_start_end_delta(
         m_values=cumsum(oars_likely_on_target_size),
         indices=potential_emrs_starts_ends_excl,
     ).astype(np_bool)
-    print()
-    print("creates_on_target_rg_in_pemrs")
-    print(creates_on_target_rg_in_pemrs)
     # Keep enlarged merge regions with too many off target atomic regions or
     # with likely creation of on target row groups.
     confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
         (n_off_target_rgs_in_potential_emrs > max_n_off_target_rgs) | creates_on_target_rg_in_pemrs
     ]
-    print()
-    print("is confirmed emrs")
-    print(confirmed_emrs_starts_ends_excl)
-
     # Step 3: Retrieve indices of merge regions which have DataFrame chunks but
     # are not in retained enlarged merge regions.
     confirmed_emrs = set_true_in_regions(
@@ -228,21 +224,17 @@ def compute_emrs_start_ends_excl(
     )
     # Create an array of length the number of atomic merge regions, with value
     # 1 if the atomic merge region is within a merge regions.
-    simple_mrs_starts_ends_excl = get_region_indices_of_true_values(oars_has_df_chunk)
     overlaps_with_confirmed_emrs = get_region_start_end_delta(
         m_values=cumsum(confirmed_emrs),
         indices=simple_mrs_starts_ends_excl,
     ).astype(np_bool)
-    simple_mrs_starts_ends_excl = simple_mrs_starts_ends_excl[~overlaps_with_confirmed_emrs]
-    print()
-    print("simple_mrs_starts_ends_excl")
-    print(simple_mrs_starts_ends_excl)
-    print("confirmed_emrs_starts_ends_excl")
-    print(confirmed_emrs_starts_ends_excl)
-    print("after vstack")
-    print(vstack((simple_mrs_starts_ends_excl, confirmed_emrs_starts_ends_excl)))
 
-    return vstack((simple_mrs_starts_ends_excl, confirmed_emrs_starts_ends_excl))
+    return vstack(
+        (
+            simple_mrs_starts_ends_excl[~overlaps_with_confirmed_emrs],
+            confirmed_emrs_starts_ends_excl,
+        ),
+    )
 
 
 @dataclass
