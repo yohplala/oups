@@ -162,8 +162,9 @@ def compute_emrs_start_ends_excl(
         Boolean array of shape (n) indicating if each atomic merge region
         is likely to result in a row group meeting target size.
     max_n_off_target_rgs : int
-        Maximum number of resulting contiguous row groups off target size
-        allowed in a merge region.
+        Maximum number of off-target size row groups allowed in a contiguous set
+        of row groups. This parameter helps limiting fragmentation by limiting
+        number of contiguous row groups off target size.
 
     Returns
     -------
@@ -185,8 +186,8 @@ def compute_emrs_start_ends_excl(
     """
     # Step 1: assess start indices (included) and end indices (excluded) of
     # enlarged merge regions.
-    oars_likely_outside_target_size = ~oars_likely_meets_target_size
-    potential_enlarged_mrs = oars_has_df_chunk | oars_likely_outside_target_size
+    oars_off_target = ~oars_likely_meets_target_size
+    potential_enlarged_mrs = oars_has_df_chunk | oars_off_target
     potential_emrs_starts_ends_excl = get_region_indices_of_true_values(potential_enlarged_mrs)
     print()
     print("potential_emrs_starts_ends_excl")
@@ -195,27 +196,26 @@ def compute_emrs_start_ends_excl(
     # Step 2: Filter out enlarged candidates based on multiple criteria.
     # 2.a - Get number of off target size OARs per enlarged merged region.
     # Those where 'max_n_off_target_rgs' is not reached will be filtered out
-    n_outside_target_size_oars_in_pemrs = get_region_start_end_delta(
-        m_values=cumsum(oars_likely_outside_target_size),
+    n_off_target_rgs_in_potential_emrs = get_region_start_end_delta(
+        m_values=cumsum(oars_off_target),
         indices=potential_emrs_starts_ends_excl,
     )
     print()
-    print("n_outside_target_size_oars_in_pemrs")
-    print(n_outside_target_size_oars_in_pemrs)
+    print("n_off_target_rgs_in_potential_emrs")
+    print(n_off_target_rgs_in_potential_emrs)
     # 2.b Get which enlarged regions into which the merge will likely create
-    # right sized row groups.
-    creates_likely_right_sized_oar_in_pemrs = get_region_start_end_delta(
+    # on target row groups.
+    creates_on_target_rg_in_pemrs = get_region_start_end_delta(
         m_values=cumsum(oars_likely_meets_target_size),
         indices=potential_emrs_starts_ends_excl,
     ).astype(np_bool)
     print()
-    print("creates_likely_right_sized_oar_in_pemrs")
-    print(creates_likely_right_sized_oar_in_pemrs)
-    # Keep enlarged merge regions with too many incomplete atomic merge regions
-    # or with likely creation of complete row groups.
+    print("creates_on_target_rg_in_pemrs")
+    print(creates_on_target_rg_in_pemrs)
+    # Keep enlarged merge regions with too many off target atomic regions or
+    # with likely creation of on target row groups.
     confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
-        (n_outside_target_size_oars_in_pemrs > max_n_off_target_rgs)
-        | creates_likely_right_sized_oar_in_pemrs
+        (n_off_target_rgs_in_potential_emrs > max_n_off_target_rgs) | creates_on_target_rg_in_pemrs
     ]
     print()
     print("is confirmed emrs")
@@ -311,14 +311,17 @@ def compute_ordered_merge_plan(
           scheduled at this index.
 
     max_n_off_target_rgs : Optional[int]
-        Max allowed number of 'incomplete' row groups.
+        Maximum number of off-target size row groups allowed in a contiguous set
+        of row groups. This parameter helps limiting fragmentation by limiting
+        number of contiguous off target size row groups.
         - ``None`` value induces no coalescing of row groups. If there is no
           drop of duplicates, new data is systematically appended.
         - A value of ``0`` means that new data will be merged to neighbors
           existing row groups to attempt yielding only complete row groups after
           the merge.
-        - A value of ``1`` means that new data will be merged to the last
-          existing row group only if it is not 'complete'.
+        - A value of ``n >= 1`` means that up to n contiguous off-target size
+          row groups are allowed before triggering a merge, hereby limiting
+          fragmentation.
 
     Returns
     -------
@@ -336,9 +339,9 @@ def compute_ordered_merge_plan(
     DataFrame i.e. anterior to it. This has an impact in overlap identification
     in case duplicates are not dropped.
 
-    When 'max_n_off_target_rgs' is specified, the method will analyze neighbor incomplete
-    row groups and may adjust the overlap regions to include them in the merge
-    and rewrite step.
+    When 'max_n_off_target_rgs' is specified, the method will analyze contiguous
+    neighbor off target size row groups and may adjust the overlap regions to
+    include them in the merge and rewrite step.
 
     """
     # Compute atomic merge regions.
@@ -375,7 +378,7 @@ def compute_ordered_merge_plan(
     )
     # Compute enlarged merge regions start and end indices.
     # Enlarged merge regions are set of contiguous atomic merge regions,
-    # possibly extended with neighbor incomplete row groups depending on
+    # possibly extended with neighbor off target size row groups depending on
     # criteria.
     # It also restricts to the set of atomic merge regions to be yielded.
     oar_idx_emrs_starts_ends_excl = compute_emrs_start_ends_excl(

@@ -370,7 +370,7 @@ def test_NRowsPattern_get_fragmentation_risk(
         ),
         (
             "no_complete_rgs",
-            # All row groups incomplete
+            # All row groups off target size
             [50, 40, 30, 20],  # rg_n_rows
             100,  # row_group_size_target
             array([0, 10, 20, 30]),  # df_idx_tmrg_starts
@@ -592,7 +592,7 @@ def test_rgst_as_str__merge_plan(
         # 'max_n_irgs' is never triggered.
         (
             # Max row group size as int.
-            # Writing after pf data, no incomplete row group.
+            # Writing after pf data, no off target size row group.
             # rg:  0      1
             # pf: [0,1], [2,3]
             # df:               [3]
@@ -610,7 +610,7 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as freqstr.
-            # Writing after pf data, no incomplete row group.
+            # Writing after pf data, no off target size row group.
             # rg:  0            1
             # pf: [8h10,9h10], [10h10]
             # df:                      [12h10]
@@ -628,7 +628,7 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as int.
-            # Writing at end of pf data, merging with incomplete row group.
+            # Writing at end of pf data, merging with off target size row group.
             # rg:  0        1        2
             # pf: [0,1,2], [6,7,8], [9]
             # df:                   [9]
@@ -647,7 +647,7 @@ def test_rgst_as_str__merge_plan(
         (
             # Max row group size as freqstr.
             # Values not on boundary to check 'floor()'.
-            # Writing after pf data, not merging with incomplete row group.
+            # Writing after pf data, not merging with off target size row group.
             # rg:  0            1
             # pf: [8h10,9h10], [10h10]
             # df:                      [10h10]
@@ -666,7 +666,7 @@ def test_rgst_as_str__merge_plan(
         (
             # Max row group size as freqstr.
             # Values not on boundary to check 'floor()'.
-            # Writing after pf data, merging with incomplete row group.
+            # Writing after pf data, merging with off target size row group.
             # rg:  0            1
             # pf: [8h10,9h10], [10h10]
             # df:              [10h10]
@@ -685,7 +685,7 @@ def test_rgst_as_str__merge_plan(
         (
             # Max row group size as freqstr.
             # Values on boundary.
-            # Writing after pf data, not merging with incomplete row group.
+            # Writing after pf data, not merging with off target size row group.
             # rg:  0            1
             # pf: [8h00,9h00], [10h00]
             # df:                      [10h00]
@@ -704,7 +704,7 @@ def test_rgst_as_str__merge_plan(
         (
             # Max row group size as freqstr.
             # Values on boundary.
-            # Writing after pf data, merging with incomplete row group.
+            # Writing after pf data, merging with off target size row group.
             # rg:  0            1
             # pf: [8h00,9h00], [10h00]
             # df:              [10h00]
@@ -722,7 +722,7 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as int.
-            # Writing after pf data, incomplete row group to merge.
+            # Writing after pf data, off target size row group to merge.
             # rg:  0        1        2    3
             # pf: [0,1,2], [3,4,5], [6], [7],
             # df:                             [8]
@@ -740,7 +740,7 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as freqstr.
-            # Writing after pf data, incomplete row group should be merged.
+            # Writing after pf data, off target size row group should be merged.
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
             # df:                               [13h00]
@@ -844,8 +844,8 @@ def test_rgst_as_str__merge_plan(
         # 3/ Adding data at complete end, testing 'max_n_irgs'.
         (
             # Max row group size as int
-            # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups.
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
             # df:                                   [12]
@@ -863,8 +863,8 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as int
-            # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups.
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
             # df:                                   [12]
@@ -882,9 +882,9 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as freqstr.
-            # df connected to incomplete rgs.
+            # df connected to off target size rgs.
             # Values on boundary.
-            # Writing after pf data, incomplete row groups.
+            # Writing after pf data, off target size row groups.
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
             # df:                               [11h00]
@@ -902,9 +902,9 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as freqstr.
-            # df connected to incomplete rgs.
+            # df connected to off target size rgs.
             # Values on boundary.
-            # Writing after pf data, incomplete row groups.
+            # Writing after pf data, off target size row groups.
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
             # df:                               [11h00]
@@ -922,8 +922,8 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as int.
-            # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups.
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
             # df:                                   [12]
@@ -941,9 +941,9 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as freqstr
-            # df connected to incomplete rgs.
+            # df connected to off target size rgs.
             # Values on boundary.
-            # Writing after pf data, incomplete row groups.
+            # Writing after pf data, off target size row groups.
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
             # df:                               [11h00]
@@ -959,11 +959,11 @@ def test_rgst_as_str__merge_plan(
                 "sort_rgs_after_write": False,
             },
         ),
-        # 4/ Adding data just before last incomplete row groups.
+        # 4/ Adding data just before last off target size row groups.
         (
             # Max row group size as int.
-            # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups.
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
             # rg:  0        1                    2
             # pf: [0,1,2], [6,7,8],             [11]
             # df:                   [8, 9, 10]
@@ -981,8 +981,8 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as int.
-            # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups
             # rg:  0        1                2
             # pf: [0,1,2], [6,7,8],         [11]
             # df:                   [8, 9]
@@ -1000,7 +1000,7 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as int.
-            # df connected to incomplete rgs.
+            # df connected to off target size rgs.
             # Incomplete row groups at the end of pf data.
             # rg:  0        1           2
             # pf: [0,1,2], [6,7,8],    [10]
@@ -1023,8 +1023,8 @@ def test_rgst_as_str__merge_plan(
         (
             # Test  11 (3.c) /
             # Max row group size as int.
-            # df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
             # Tail is rewritten because with df, 'max_n_irgs' is reached.
             # rg:  0        1        2
@@ -1044,7 +1044,7 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Max row group size as int.
-            # df connected to incomplete rgs.
+            # df connected to off target size rgs.
             # Incomplete row groups at the end of pf data.
             # Write of last row group is triggered
             # rg:  0         1                  2
@@ -1064,8 +1064,8 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Test  13 (3.c) /
-            # Max row group size as int | df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at
+            # Max row group size as int | df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
             # 'max_n_irgs' reached to rewrite all tail.
             # row grps:  0            1                 2
@@ -1091,8 +1091,8 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Test  14 (3.d) /
-            # Max row group size as int | df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at
+            # Max row group size as int | df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
             # df is not directly connected to existing values in row
             # groups, so tail is not rewritten.
@@ -1119,8 +1119,8 @@ def test_rgst_as_str__merge_plan(
         ),
         (
             # Test  15 (3.e) /
-            # Max row group size as int | df connected to incomplete rgs.
-            # Writing at end of pf data, with incomplete row groups at
+            # Max row group size as int | df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
             # df is not overlapping with existing row groups.
             # It should be added.
@@ -1149,12 +1149,12 @@ def test_rgst_as_str__merge_plan(
         (
             # Test  16 (4.a) /
             # Max row group size as int | df within pf data.
-            # Writing in-between pf data, with incomplete row groups at
+            # Writing in-between pf data, with off target size row groups at
             # the end of pf data.
             # row grps:  0      1            2       3    4
             # pf: [0,1], [2,      6], [7, 8], [9], [10]
             # df:        [2, 3, 4]
-            "insert_middle_with_incomplete_rgs",
+            "insert_middle_with_off_target_rgs",
             DataFrame({"ordered_on": [2, 3, 4]}),
             DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10]}),
             [0, 2, 4, 6, 7],
@@ -1166,7 +1166,7 @@ def test_rgst_as_str__merge_plan(
         (
             # Test  17 (4.b) /
             # Max row group size as int | df within pf data.
-            # Writing in-between pf data, with incomplete row groups at
+            # Writing in-between pf data, with off target size row groups at
             # the end of pf data.
             # row grps:  0           1        2
             # pf: [0,1,2],    [6,7,8],[9]
@@ -1183,7 +1183,7 @@ def test_rgst_as_str__merge_plan(
         (
             # Test  18 (4.c) /
             # Max row group size as int | df within pf data.
-            # Writing at end of pf data, with incomplete row groups at
+            # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
             # One-but last row group is complete, but because df is
             # overlapping with it, it has to be rewritten.
@@ -1203,12 +1203,12 @@ def test_rgst_as_str__merge_plan(
         (
             # Test  19 (4.d) /
             # Max row group size as pandas freqstr | df within pf data.
-            # Writing in-between pf data, with incomplete row groups at
+            # Writing in-between pf data, with off target size row groups at
             # the end of pf data.
             # row grps:  0        1           2           3      4
             # pf: [8h,9h], [10h, 11h], [12h, 13h], [14h], [15h]
             # df:               [11h]
-            "insert_timestamp_middle_with_incomplete_rgs",
+            "insert_timestamp_middle_with_off_target_rgs",
             DataFrame({"ordered_on": [Timestamp(f"{REF_D}11:00")]}),
             DataFrame({"ordered_on": date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=8)}),
             [0, 2, 4, 6, 7],
@@ -1220,7 +1220,7 @@ def test_rgst_as_str__merge_plan(
         (
             # Test  20 (4.e) /
             # Max row group size as pandas freqstr | df within pf data.
-            # Writing in-between pf data, with incomplete row groups at
+            # Writing in-between pf data, with off target size row groups at
             # the end of pf data.
             # row grps:  0          1           2           3      4
             # pf: [8h,9h],   [10h, 11h], [12h, 13h], [14h], [15h]
