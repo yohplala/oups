@@ -403,9 +403,8 @@ class NRowsSplitStrategy(OARSplitStrategy):
         """
         return self.has_df_chunk & (  # OAR containing a DataFrame chunk.
             self.oars_max_n_rows >= self.oar_min_size
-        ) | (  # OAR containing only row groups.
-            ~self.has_df_chunk
-            & (self.oars_max_n_rows >= self.oar_min_size)
+        ) | ~self.has_df_chunk & (  # OAR containing only row groups.
+            (self.oars_max_n_rows >= self.oar_min_size)
             & (self.oars_max_n_rows <= self.oar_target_size)
         )
 
