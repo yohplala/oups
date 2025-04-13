@@ -23,6 +23,7 @@ from typing import List, Tuple, Union
 from numpy import arange
 from numpy import bincount
 from numpy import bool_
+from numpy import cumsum
 from numpy import diff
 from numpy import flatnonzero
 from numpy import insert
@@ -51,7 +52,7 @@ DF_IDX_END_EXCL = "df_idx_end_excl"
 HAS_ROW_GROUP = "has_row_group"
 HAS_DF_CHUNK = "has_df_chunk"
 MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
-MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
+# MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
 
 
 def compute_ordered_atomic_regions(
@@ -154,7 +155,7 @@ def compute_ordered_atomic_regions(
     # DataFrame orphans are regions in DataFrame that do not overlap with any
     # row group.
     n_df_orphans = len(rg_idx_df_orphans)
-    oars_info = ones(
+    oars_desc = ones(
         n_rgs + n_df_orphans,
         dtype=[
             (RG_IDX_START, int_),
@@ -186,12 +187,12 @@ def compute_ordered_atomic_regions(
             df_idx_to_insert,
         )
 
-    oars_info[RG_IDX_START] = rg_idxs_template[:-1]
-    oars_info[RG_IDX_END_EXCL] = rg_idxs_template[1:]
-    oars_info[DF_IDX_END_EXCL] = df_idx_oar_ends_excl
-    oars_info[HAS_ROW_GROUP] = oars_info[RG_IDX_START] != oars_info[RG_IDX_END_EXCL]
-    oars_info[HAS_DF_CHUNK] = diff(oars_info[DF_IDX_END_EXCL], prepend=0) != 0
-    return oars_info
+    oars_desc[RG_IDX_START] = rg_idxs_template[:-1]
+    oars_desc[RG_IDX_END_EXCL] = rg_idxs_template[1:]
+    oars_desc[DF_IDX_END_EXCL] = df_idx_oar_ends_excl
+    oars_desc[HAS_ROW_GROUP] = oars_desc[RG_IDX_START] != oars_desc[RG_IDX_END_EXCL]
+    oars_desc[HAS_DF_CHUNK] = diff(oars_desc[DF_IDX_END_EXCL], prepend=0) != 0
+    return oars_desc
 
 
 class OARSplitStrategy(ABC):
@@ -265,11 +266,12 @@ class OARSplitStrategy(ABC):
         raise NotImplementedError("Subclasses must implement this property")
 
     @abstractmethod
-    def consolidate_merge_plan(
+    def partition_merge_regions(
         self,
-    ) -> Tuple[List[int], List[int]]:
+        oar_idx_mrs_starts_ends_excl: NDArray,
+    ) -> List[Tuple[NDArray, NDArray, NDArray]]:
         """
-        Consolidate row groups and DataFrame chunks for merging.
+        Partition merge regions (MRs) into optimally sized chunks for writing.
 
         Returns
         -------
@@ -331,7 +333,13 @@ class NRowsSplitStrategy(OARSplitStrategy):
         atomic region contains a DataFrame chunk.
     oars_max_n_rows : NDArray
         Array of shape (e) containing the maximum number of rows in each ordered
-        atomic region.
+        atomic region, obtained by summing the number of rows in a row group
+        (if present) and the number of rows in its corresponding DataFrame chunk
+        (if present).
+    oars_min_n_rows : NDArray
+        Array of shape (e) containing the likely  minimum number of rows in each
+        ordered atomic region. It is equal to ``oars_max_n_rows`` if
+        ``drop_duplicates`` is False.
 
     Notes
     -----
@@ -344,8 +352,9 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
     def __init__(
         self,
+        drop_duplicates: bool,
         rgs_n_rows: NDArray,
-        oars_info: NDArray,
+        oars_desc: NDArray,
         row_group_target_size: int,
         max_n_off_target_rgs: int,
     ):
@@ -354,11 +363,13 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
         Parameters
         ----------
+        drop_duplicates : bool
+            Whether to drop duplicates between row groups and DataFrame.
         rgs_n_rows : NDArray
             Array of shape (r) containing the number of rows in each row group
             in existing ParquetFile.
-        oars_info : NDArray
-            Array of shape (e, 5) containing the information about each ordered
+        oars_desc : NDArray
+            Array of shape (e, 5) containing the description about each ordered
             atomic region.
         row_group_target_size : int
             Target number of rows above which a new row group should be created.
@@ -367,17 +378,27 @@ class NRowsSplitStrategy(OARSplitStrategy):
             atomic region.
 
         """
+        self.oars_desc = oars_desc[[RG_IDX_START, RG_IDX_END_EXCL, DF_IDX_END_EXCL]]
         self.oar_target_size = row_group_target_size
         self.oar_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
         self.max_n_off_target_rgs = max_n_off_target_rgs
-        self.oars_has_df_chunk = oars_info[HAS_DF_CHUNK]
+        self.oars_has_df_chunk = oars_desc[HAS_DF_CHUNK]
         # Max number of rows in each ordered atomic region. This is a max in case
         # there are duplicates between row groups and DataFrame that will be
         # dropped.
-        self.oars_max_n_rows = zeros(len(oars_info), dtype=int)
-        self.oars_max_n_rows[oars_info[HAS_ROW_GROUP]] = rgs_n_rows
-        self.oars_max_n_rows += diff(oars_info[DF_IDX_END_EXCL], prepend=0)
-        # self.df_n_rows = oars_info[DF_IDX_END_EXCL][-1]
+        self.oars_max_n_rows = zeros(len(oars_desc), dtype=int)
+        self.oars_max_n_rows[oars_desc[HAS_ROW_GROUP]] = rgs_n_rows
+        df_n_rows = diff(oars_desc[DF_IDX_END_EXCL], prepend=0)
+        if drop_duplicates:
+            # 'oars_min_n_rows' is the likely minimum number of rows in each ordered
+            # atomic, valid if 'drop_duplicates' is set, and in Dataframe chunks,
+            # there are only duplicates with existing row groups.
+            self.oars_min_n_rows = self.oars_max_n_rows.copy()
+            oar_idx_only_df_chunk = flatnonzero(oars_desc[HAS_DF_CHUNK] & ~oars_desc[HAS_ROW_GROUP])
+            self.oars_min_n_rows[oar_idx_only_df_chunk] = df_n_rows[oar_idx_only_df_chunk]
+        else:
+            self.oars_min_n_rows = self.oars_max_n_rows
+        self.oars_max_n_rows += df_n_rows
 
     @cached_property
     def likely_on_target_size(self) -> NDArray:
@@ -441,63 +462,77 @@ class NRowsSplitStrategy(OARSplitStrategy):
             & (self.oars_max_n_rows <= self.oar_target_size)
         )
 
-    def consolidate_merge_plan(
+    def partition_merge_regions(
         self,
-    ) -> Tuple[List[int], List[int]]:
+        oar_idx_mrs_starts_ends_excl: NDArray,
+    ) -> List[Tuple[NDArray, NDArray, NDArray]]:
         """
-        Sequence row groups and DataFrame chunks to be written together .
+        Partition merge regions (MRs) into optimally sized chunks for writing.
+
+        For each enlarged merge region (EMR) defined in
+        'oar_idx_emrs_starts_ends_excl', this method:
+        1. Accumulates row counts using self.oars_max_n_rows
+        2. Determines split points where accumulated rows reach
+           'self.oar_target_size'
+        3. Creates consolidated chunks by filtering the original OARs indices to
+           ensure optimal row group loading.
+
+        This ensures each consolidated chunk approaches the target row size
+        while minimizing the number of row groups loaded into memory at once.
+
+        Parameters
+        ----------
+        oar_idx_mrs_starts_ends_excl : NDArray
+            Array of shape (e, 2) containing start and end indices (excluded)
+            for each enlarged merge region to be consolidated.
 
         Returns
         -------
-        Tuple[List[int], List[int]]
-            - First list: indices in ParquetFile describing where ends (excluded)
-              each set of row groups overlapping with corresponding DataFrame
-              chunk.
-            - Second list: indices in DataFrame describing where ends (excluded)
-              each DataFrame chunk for the corresponding set of row groups.
+        List[NDArray]
+            List of arrays, where each array contains the consolidated indices
+            for a chunk to be written. Each array has shape (n, 3) containing:
+            - rg_idx_start: Start indices of row groups in the chunk
+            - rg_idx_end_excl: End indices (exclusive) of row groups in the
+              chunk
+            - df_idx_end_excl: End indices (exclusive) of DataFrame chunks in
+              the chunk
+
+        Notes
+        -----
+        The partitioning optimizes memory usage by loading only the minimum
+        number of row groups needed to create complete chunks of approximately
+        target_size rows. The returned indices may be a subset of the original
+        OARs indices, filtered to ensure efficient memory usage during the
+        write process.
 
         """
-        if not self.df_idx_tmrg_ends_excl.size:
-            # If no row group to merge, then no need to consolidate.
-            return [0], [self.df_n_rows]
+        # Attempt of a strategy to make possible writing without having
+        # off target size row groups.
+        # min_n_rows = (
+        #    self.oar_min_size
+        #    if self.max_n_off_target_rgs
+        #    else int(self.oar_min_size * MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS)
+        # )
+        consolidated_oars_desc = []
 
-        min_n_rows = (
-            self.min_size
-            if self.max_n_off_target_rgs
-            else int(self.min_size * MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS)
-        )
-        # Consolidation loop is processed backward.
-        # This makes possible to manage a 'max_n_off_target_rgs' set to 0
-        # (meaning no off target size row groups is allowed), by forcing the
-        # last chunk to encompass 'MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS *
-        # row_group_target_size' rows.
-        # Then whatever the number of rows in the remainder of df, it will be
-        # possible to yield chunk with a size between 'row_group_target_size' and
-        # 'MAX_ROW_GROUP_SIZE_SCALE_FACTOR * row_group_target_size'.
-        consolidated_df_idx_tmrg_ends_excl = []
-        consolidated_rg_idx_tmrg_ends_excl = []
-        chunk_n_rows = 0
+        for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
+            # Cumulate number of rows.
+            cumsum_rows = cumsum(self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl])
+            # Get indices where multiples of target size are crossed.
+            split_points = searchsorted(
+                cumsum_rows,
+                arange(1, cumsum_rows[-1], step=self.oar_target_size),
+                side=RIGHT,
+            )
+            # Force last index to be length of cumsum_rows
+            split_points[-1] = len(cumsum_rows)
+            # Create a structured array with the filtered indices
+            consolidated_oars_desc.append(
+                self.oars_desc[oar_idx_start:oar_idx_end_excl][split_points],
+            )
+        # /!\ TODO: test oar_min_n_rows attribute
 
-        for m_rg_idx_end_excl, (_rg_n_rows, df_idx_end_excl) in enumerate(
-            zip(reversed(self.rg_n_rows), reversed(self.df_idx_tmrg_ends_excl)),
-            start=-self.n_rgs,
-        ):
-            # To make sure number of rows in chunk to write is larger than
-            # 'row_group_target_size' despite possible duplicates between df and rg,
-            # only account for rows in rg.
-            chunk_n_rows += _rg_n_rows
-            if chunk_n_rows >= min_n_rows:
-                consolidated_df_idx_tmrg_ends_excl.append(df_idx_end_excl)
-                consolidated_rg_idx_tmrg_ends_excl.append(-m_rg_idx_end_excl)
-                chunk_n_rows = 0
-
-        # Force df_idx_merge_end_excl to include all df rows
-        consolidated_df_idx_tmrg_ends_excl[-1] = self.df_n_rows
-
-        return (
-            list(reversed(consolidated_rg_idx_tmrg_ends_excl)),
-            list(reversed(consolidated_df_idx_tmrg_ends_excl)),
-        )
+        return consolidated_oars_desc
 
     def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
         """
@@ -557,7 +592,7 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         rg_ordered_on_mins: NDArray,
         rg_ordered_on_maxs: NDArray,
         df_ordered_on: Series,
-        oars_info: NDArray,
+        oars_desc: NDArray,
         row_group_period: str,
     ):
         """
@@ -571,29 +606,29 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
             Maximum value of 'ordered_on' in each row group.
         df_ordered_on : Series
             Values of 'ordered_on' column in DataFrame.
-        oars_info : NDArray
-            Array of shape (e, 5) containing the information about each ordered
+        oars_desc : NDArray
+            Array of shape (e, 5) containing the description about each ordered
             atomic region.
         row_group_period : str
             Target period for each row group (pandas freqstr).
 
         """
         self.oar_period = row_group_period
-        self.oars_has_df_chunk = oars_info[HAS_DF_CHUNK]
+        self.oars_has_df_chunk = oars_desc[HAS_DF_CHUNK]
         df_ordered_on_np = df_ordered_on.to_numpy()
-        self.oars_mins_maxs = ones((len(oars_info), 2)).astype(df_ordered_on_np.dtype)
+        self.oars_mins_maxs = ones((len(oars_desc), 2)).astype(df_ordered_on_np.dtype)
         # Row groups encompasses Dataframe chunks in an OAR.
         # Hence, start with Dataframe chunks starts and ends.
-        oar_idx_df_chunk = flatnonzero(oars_info[HAS_DF_CHUNK])
+        oar_idx_df_chunk = flatnonzero(oars_desc[HAS_DF_CHUNK])
         df_idx_chunk_starts = zeros(len(oar_idx_df_chunk), dtype=int)
-        df_idx_chunk_starts[1:] = oars_info[DF_IDX_END_EXCL][oar_idx_df_chunk[:-1]]
+        df_idx_chunk_starts[1:] = oars_desc[DF_IDX_END_EXCL][oar_idx_df_chunk[:-1]]
         self.oars_mins_maxs[oar_idx_df_chunk, 0] = df_ordered_on_np[df_idx_chunk_starts]
         self.oars_mins_maxs[oar_idx_df_chunk, 1] = df_ordered_on_np[
-            oars_info[DF_IDX_END_EXCL][oar_idx_df_chunk] - 1
+            oars_desc[DF_IDX_END_EXCL][oar_idx_df_chunk] - 1
         ]
         # Only then add row groups starts and ends. They will overwrite where
         # Dataframe chunks are present.
-        oar_idx_row_groups = flatnonzero(oars_info[HAS_ROW_GROUP])
+        oar_idx_row_groups = flatnonzero(oars_desc[HAS_ROW_GROUP])
         self.oars_mins_maxs[oar_idx_row_groups, 0] = rg_ordered_on_mins
         self.oars_mins_maxs[oar_idx_row_groups, 1] = rg_ordered_on_maxs
         # Generate period bounds.
@@ -672,14 +707,15 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
             single_period_oars & (bincount(period_idx_oars.ravel())[period_idx_oars[:, 0]] == 2)
         )
 
-    def consolidate_merge_plan(
+    def partition_merge_regions(
         self,
         rg_maxs: NDArray,
         row_group_period: str,
         df_ordered_on: Series,
-    ) -> Tuple[List[int], List[int]]:
+        oar_idx_mrs_starts_ends_excl: NDArray,
+    ) -> List[Tuple[NDArray, NDArray, NDArray]]:
         """
-        Sequence row groups and DataFrame chunks to be written together.
+        Partition merge regions (MRs) into optimally sized chunks for writing.
 
         Parameters
         ----------

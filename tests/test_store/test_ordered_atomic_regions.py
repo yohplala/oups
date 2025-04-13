@@ -263,14 +263,14 @@ def test_nrows_split_strategy_likely_on_target_size():
     Test NRowsSplitStrategy strategy and likely_on_target_size.
     """
     target_size = 100  # min size: 80
-    # Create mock oars_info with 5 regions:
+    # Create mock oars_desc with 5 regions:
     # 1. RG only (90 rows) - on target
     # 2. DF only (85 rows) - on target
     # 3. Both RG (50) and DF (40) - on target due to potential duplicates
     # 4. Both RG (30) and DF (30) - too small
     # 5. Both RG (120) and DF (0) - too large and only row group.
     # 6. Both RG (30) and DF (80) - too large but accepted since it has a dfc.
-    oars_info = ones(
+    oars_desc = ones(
         6,
         dtype=[
             (RG_IDX_START, int_),
@@ -281,15 +281,15 @@ def test_nrows_split_strategy_likely_on_target_size():
         ],
     )
     # Set which regions have row groups and DataFrame chunks
-    oars_info[HAS_ROW_GROUP] = array([True, False, True, True, True, True])
-    oars_info[HAS_DF_CHUNK] = array([False, True, True, True, False, True])
+    oars_desc[HAS_ROW_GROUP] = array([True, False, True, True, True, True])
+    oars_desc[HAS_DF_CHUNK] = array([False, True, True, True, False, True])
     # Set up DataFrame chunk sizes through df_idx_end_excl
-    oars_info[DF_IDX_END_EXCL] = array([0, 85, 125, 155, 155, 235])
+    oars_desc[DF_IDX_END_EXCL] = array([0, 85, 125, 155, 155, 235])
     # Create row group sizes array
     rgs_n_rows = array([90, 50, 30, 120, 30])
     # Initialize strategy
     strategy = NRowsSplitStrategy(
-        oars_info=oars_info,
+        oars_desc=oars_desc,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=target_size,
         max_n_off_target_rgs=1,
@@ -710,8 +710,8 @@ def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oa
     Test TimePeriodSplitStrategy initialization and likely_on_target_size.
     """
     time_period = "MS"
-    # Create oars_info with 6 regions
-    oars_info = ones(
+    # Create oars_desc with 6 regions
+    oars_desc = ones(
         len(expected["likely_on_target"]),
         dtype=[
             (RG_IDX_START, int_),
@@ -721,16 +721,16 @@ def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oa
             (HAS_DF_CHUNK, bool_),
         ],
     )
-    # Set required OAR infos
-    oars_info[DF_IDX_END_EXCL] = oars[DF_IDX_END_EXCL]
-    oars_info[HAS_ROW_GROUP] = oars[HAS_ROW_GROUP]
-    oars_info[HAS_DF_CHUNK] = oars[HAS_DF_CHUNK]
+    # Set required OAR description
+    oars_desc[DF_IDX_END_EXCL] = oars[DF_IDX_END_EXCL]
+    oars_desc[HAS_ROW_GROUP] = oars[HAS_ROW_GROUP]
+    oars_desc[HAS_DF_CHUNK] = oars[HAS_DF_CHUNK]
     # Initialize strategy
     strategy = TimePeriodSplitStrategy(
         rg_ordered_on_mins=rg_mins,
         rg_ordered_on_maxs=rg_maxs,
         df_ordered_on=df_ordered_on,
-        oars_info=oars_info,
+        oars_desc=oars_desc,
         row_group_period=time_period,
     )
     # Test period_bounds

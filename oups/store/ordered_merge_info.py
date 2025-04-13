@@ -246,10 +246,10 @@ class OrderedMergePlan:
 
     Attributes
     ----------
-    emrs_info : NDArray
-        Array of shape (e, 3) containing the information about each enlarged
+    emrs_desc : NDArray
+        Array of shape (e, 3) containing the description about each enlarged
         merge regions.
-        Each row contains the following information:
+        Each row contains the following description:
         - indices in ParquetFile containing the starts of each row group to
           merge.
         - indices in ParquetFile containing the ends (excluded) of each row
@@ -263,7 +263,7 @@ class OrderedMergePlan:
 
     """
 
-    emrs_info: NDArray
+    emrs_desc: NDArray
     rg_sizer: Callable
     sort_rgs_after_write: bool
 
@@ -344,7 +344,7 @@ def compute_ordered_merge_plan(
     rg_ordered_on_mins = array(pf_statistics[MIN][ordered_on])
     rg_ordered_on_maxs = array(pf_statistics[MAX][ordered_on])
     df_ordered_on = df.loc[:, ordered_on]
-    oars_info = compute_ordered_atomic_regions(
+    oars_desc = compute_ordered_atomic_regions(
         rg_ordered_on_mins=rg_ordered_on_mins,
         rg_ordered_on_maxs=rg_ordered_on_maxs,
         df_ordered_on=df_ordered_on,
@@ -354,7 +354,7 @@ def compute_ordered_merge_plan(
         NRowsSplitStrategy(
             rgs_n_rows=array([rg.num_rows for rg in pf], dtype=int),
             df_n_rows=len(df),
-            oars_info=oars_info,
+            oars_desc=oars_desc,
             row_group_target_size=row_group_target_size,
             max_n_off_target_rgs=max_n_off_target_rgs,
         )
@@ -363,7 +363,7 @@ def compute_ordered_merge_plan(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
-            oars_info=oars_info,
+            oars_desc=oars_desc,
             row_group_period=row_group_target_size,
         )
     )
@@ -381,12 +381,9 @@ def compute_ordered_merge_plan(
     # merge regions.
     # For each enlarged merge regions, aggregate atomic merge regions depending
     # on the split strategy.
-    emrs_info = [
-        oar_split_strategy.consolidate_enlarged_merge_regions(
-            oars_info=oars_info[start:end_excl],
-        )
-        for start, end_excl in oar_idx_emrs_starts_ends_excl
-    ]
+    emrs_desc = oar_split_strategy.consolidate_enlarged_merge_regions(
+        oar_idx_emrs_starts_ends_excl=oar_idx_emrs_starts_ends_excl,
+    )
 
     # Assess if row groups have to be sorted after write step
     #  - either if there is a merge region (new row groups are written first,
@@ -395,7 +392,7 @@ def compute_ordered_merge_plan(
     #    existing data.
     sort_rgs_after_write = True
     return OrderedMergePlan(
-        emrs_info=emrs_info,
+        emrs_desc=emrs_desc,
         rg_sizer=oar_split_strategy.rg_sizer,
         sort_rgs_after_write=sort_rgs_after_write,
     )
