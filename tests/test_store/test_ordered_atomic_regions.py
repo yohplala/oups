@@ -772,7 +772,9 @@ def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oa
                 ],
             },
         ),
-        # /!\ Todo: test when there are fewer rows in selection than target size.
+        # TODO: test when there are fewer rows in selection than target size.
+        # TODO: test case when not all rows in sequence are reached, and we need
+        # to force to last index to be length of cumsum_rows-1.
     ],
 )
 def test_nrows_split_strategy_partition_merge_regions(
