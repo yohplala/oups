@@ -5,6 +5,8 @@ Created on Thu Nov 14 18:00:00 2024.
 @author: yoh
 
 """
+from typing import Dict
+
 import pytest
 from numpy import array
 from numpy import bool_
@@ -289,6 +291,7 @@ def test_nrows_split_strategy_likely_on_target_size():
     rgs_n_rows = array([90, 50, 30, 120, 30])
     # Initialize strategy
     strategy = NRowsSplitStrategy(
+        drop_duplicates=True,
         oars_desc=oars_desc,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=target_size,
@@ -739,3 +742,112 @@ def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oa
     assert_array_equal(strategy.oars_mins_maxs, expected["oars_mins_maxs"])
     # Test likely_on_target_size
     assert_array_equal(strategy.likely_on_target_size, expected["likely_on_target"])
+
+
+@pytest.mark.parametrize(
+    "test_id, drop_duplicates, oars_desc_dict, rgs_n_rows, row_group_target_size, oar_idx_mrs_starts_ends_excl, expected",
+    [
+        (
+            "single_sequence_encompassing_all_oars_drop_duplicates",
+            # row_group_target_size : 100
+            # rgs_n_rows    :  [  50,   50,      ,   50,    50]
+            # has_row_group :  [True, True, False, True,  True]
+            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
+            # has_df_chunk  :  [True, True,  True, True, False]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([10, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+                HAS_DF_CHUNK: array([True, True, True, True, False]),
+            },
+            array([50, 50, 50, 50]),
+            100,  # row_group_target_size
+            array([[0, 5]]),  # merge region contains 3 OARs
+            {
+                "oars_min_n_rows": array([50, 50, 35, 50, 50]),
+                "oars_merge_sequences": [
+                    (0, array([[2, 25], [4, 75]])),  # single sequence with 3 OARs
+                ],
+            },
+        ),
+        # /!\ Todo: test when there are fewer rows in selection than target size.
+    ],
+)
+def test_nrows_split_strategy_partition_merge_regions(
+    test_id: str,
+    drop_duplicates: bool,
+    oars_desc_dict: Dict[str, NDArray],
+    rgs_n_rows: NDArray,
+    row_group_target_size: int,
+    oar_idx_mrs_starts_ends_excl: NDArray,
+    expected: Dict,
+) -> None:
+    """
+    Test NRowsSplitStrategy.partition_merge_regions method.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    drop_duplicates : bool
+        Whether to drop duplicates between row groups and DataFrame.
+    oars_desc_dict : Dict[str, NDArray]
+        Dictionary containing the oars_desc array.
+    rg_n_rows : NDArray
+        Array of shape (n) containing the number of rows in each row group.
+    row_group_target_size : int
+        Target number of rows above which a new row group should be created.
+    oar_idx_mrs_starts_ends_excl : NDArray
+        Array of shape (n, 2) containing start and end indices (excluded)
+        for each merge region to be consolidated.
+    expected : List[Tuple[int, NDArray]]
+        List of expected tuples, where each tuple contains:
+        - int: Start index of the first row group in the merge sequence
+        - NDArray: Array of shape (m, 2) containing end indices (excluded) for
+          row groups and DataFrame chunks in the merge sequence
+
+    """
+    # Create mock oars_desc with 6 regions
+    oars_desc = ones(
+        len(oars_desc_dict[RG_IDX_START]),
+        dtype=[
+            (RG_IDX_START, int_),
+            (RG_IDX_END_EXCL, int_),
+            (DF_IDX_END_EXCL, int_),
+            (HAS_ROW_GROUP, bool_),
+            (HAS_DF_CHUNK, bool_),
+        ],
+    )
+    oars_desc[RG_IDX_START] = oars_desc_dict[RG_IDX_START]
+    oars_desc[RG_IDX_END_EXCL] = oars_desc_dict[RG_IDX_END_EXCL]
+    oars_desc[DF_IDX_END_EXCL] = oars_desc_dict[DF_IDX_END_EXCL]
+    oars_desc[HAS_ROW_GROUP] = oars_desc_dict[HAS_ROW_GROUP]
+    oars_desc[HAS_DF_CHUNK] = oars_desc_dict[HAS_DF_CHUNK]
+
+    # Initialize strategy with target size of 100 rows
+    strategy = NRowsSplitStrategy(
+        drop_duplicates=drop_duplicates,
+        rgs_n_rows=rgs_n_rows,
+        oars_desc=oars_desc,
+        row_group_target_size=row_group_target_size,
+        max_n_off_target_rgs=1,
+    )
+    assert_array_equal(strategy.oars_min_n_rows, expected["oars_min_n_rows"])
+    # Test partition_merge_regions
+    result = strategy.partition_merge_regions(oar_idx_mrs_starts_ends_excl)
+    # Check
+    assert len(result) == len(expected["oars_merge_sequences"])
+    for (result_rg_start, result_cmpt_ends_excl), (
+        expected_rg_start,
+        expected_cmpt_ends_excl,
+    ) in zip(result, expected["oars_merge_sequences"]):
+        assert result_rg_start == expected_rg_start
+        print()
+        print("result_cmpt_ends_excl")
+        print(result_cmpt_ends_excl)
+        print()
+        print("expected_cmpt_ends_excl")
+        print(expected_cmpt_ends_excl)
+        assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)

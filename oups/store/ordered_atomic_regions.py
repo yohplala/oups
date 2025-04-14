@@ -21,6 +21,7 @@ from functools import cached_property
 from typing import List, Tuple, Union
 
 from numpy import arange
+from numpy import array
 from numpy import bincount
 from numpy import bool_
 from numpy import cumsum
@@ -378,7 +379,8 @@ class NRowsSplitStrategy(OARSplitStrategy):
             atomic region.
 
         """
-        self.oars_desc = oars_desc[[RG_IDX_START, RG_IDX_END_EXCL, DF_IDX_END_EXCL]]
+        self.oars_cmpt_ends_excl = array([oars_desc[RG_IDX_END_EXCL], oars_desc[DF_IDX_END_EXCL]]).T
+        self.oars_rg_starts = oars_desc[RG_IDX_START]
         self.oar_target_size = row_group_target_size
         self.oar_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
         self.max_n_off_target_rgs = max_n_off_target_rgs
@@ -488,14 +490,11 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
         Returns
         -------
-        List[NDArray]
-            List of arrays, where each array contains the consolidated indices
-            for a chunk to be written. Each array has shape (n, 3) containing:
-            - rg_idx_start: Start indices of row groups in the chunk
-            - rg_idx_end_excl: End indices (exclusive) of row groups in the
-              chunk
-            - df_idx_end_excl: End indices (exclusive) of DataFrame chunks in
-              the chunk
+        List[Tuple[int, NDArray]]
+            List of tuples, where each tuple contains for each merge sequence:
+            - the start index of the first row group in the merge sequence,
+            - an array of indices where row groups and DataFrame chunks end
+              (excluded) in the merge sequence.
 
         Notes
         -----
@@ -506,33 +505,47 @@ class NRowsSplitStrategy(OARSplitStrategy):
         write process.
 
         """
-        # Attempt of a strategy to make possible writing without having
-        # off target size row groups.
-        # min_n_rows = (
-        #    self.oar_min_size
-        #    if self.max_n_off_target_rgs
-        #    else int(self.oar_min_size * MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS)
-        # )
-        consolidated_oars_desc = []
+        oars_merge_sequences = []
+        print()
+        print("self.oars_min_n_rows")
+        print(self.oars_min_n_rows)
 
         for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
+            rg_idx_start = self.oars_rg_starts[oar_idx_start]
             # Cumulate number of rows.
+            print()
+            print("self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl]")
+            print(self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl])
             cumsum_rows = cumsum(self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl])
+            print()
+            print("cumsum_rows")
+            print(cumsum_rows)
+            print()
+            print("arange(0, cumsum_rows[-1], step=self.oar_target_size)")
+            print(arange(0, cumsum_rows[-1], step=self.oar_target_size))
             # Get indices where multiples of target size are crossed.
-            split_points = searchsorted(
-                cumsum_rows,
-                arange(1, cumsum_rows[-1], step=self.oar_target_size),
-                side=RIGHT,
-            )
+            if self.oar_target_size <= cumsum_rows[-1]:
+                target_size_crossings = searchsorted(
+                    cumsum_rows,
+                    arange(self.oar_target_size, cumsum_rows[-1], step=self.oar_target_size),
+                    side=LEFT,
+                )
+            else:
+                target_size_crossings = zeros(1, dtype=int)
+            print()
+            print("target_size_crossings")
+            print(target_size_crossings)
             # Force last index to be length of cumsum_rows
-            split_points[-1] = len(cumsum_rows)
+            target_size_crossings[-1] = oar_idx_end_excl - oar_idx_start - 1
             # Create a structured array with the filtered indices
-            consolidated_oars_desc.append(
-                self.oars_desc[oar_idx_start:oar_idx_end_excl][split_points],
+            oars_merge_sequences.append(
+                (
+                    rg_idx_start,
+                    self.oars_cmpt_ends_excl[oar_idx_start:oar_idx_end_excl][target_size_crossings],
+                ),
             )
-        # /!\ TODO: test oar_min_n_rows attribute
 
-        return consolidated_oars_desc
+        return oars_merge_sequences
 
     def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
         """
