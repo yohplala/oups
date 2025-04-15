@@ -29,10 +29,13 @@ from numpy import diff
 from numpy import flatnonzero
 from numpy import insert
 from numpy import int_
+from numpy import linspace
+from numpy import maximum
 from numpy import nonzero
 from numpy import ones
 from numpy import r_
 from numpy import searchsorted
+from numpy import unique
 from numpy import vstack
 from numpy import zeros
 from numpy.typing import NDArray
@@ -392,12 +395,13 @@ class NRowsSplitStrategy(OARSplitStrategy):
         self.oars_max_n_rows[oars_desc[HAS_ROW_GROUP]] = rgs_n_rows
         df_n_rows = diff(oars_desc[DF_IDX_END_EXCL], prepend=0)
         if drop_duplicates:
-            # 'oars_min_n_rows' is the likely minimum number of rows in each ordered
-            # atomic, valid if 'drop_duplicates' is set, and in Dataframe chunks,
-            # there are only duplicates with existing row groups.
-            self.oars_min_n_rows = self.oars_max_n_rows.copy()
-            oar_idx_only_df_chunk = flatnonzero(oars_desc[HAS_DF_CHUNK] & ~oars_desc[HAS_ROW_GROUP])
-            self.oars_min_n_rows[oar_idx_only_df_chunk] = df_n_rows[oar_idx_only_df_chunk]
+            # Assuming each DataFrame chunk and each row group have no
+            # duplicates within themselves, 'oars_min_n_rows' is set assuming
+            # that all rows in the smallest component are duplicates of rows
+            # in the largest component.
+            self.oars_min_n_rows = maximum(self.oars_max_n_rows, df_n_rows)
+        #           oar_idx_only_df_chunk = flatnonzero(oars_desc[HAS_DF_CHUNK] & ~oars_desc[HAS_ROW_GROUP])
+        #           self.oars_min_n_rows[oar_idx_only_df_chunk] = df_n_rows[oar_idx_only_df_chunk]
         else:
             self.oars_min_n_rows = self.oars_max_n_rows
         self.oars_max_n_rows += df_n_rows
@@ -506,37 +510,30 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
         """
         oars_merge_sequences = []
-        print()
-        print("self.oars_min_n_rows")
-        print(self.oars_min_n_rows)
-
         for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
             rg_idx_start = self.oars_rg_starts[oar_idx_start]
             # Cumulate number of rows.
-            print()
-            print("self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl]")
-            print(self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl])
             cumsum_rows = cumsum(self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl])
-            print()
-            print("cumsum_rows")
-            print(cumsum_rows)
-            print()
-            print("arange(0, cumsum_rows[-1], step=self.oar_target_size)")
-            print(arange(0, cumsum_rows[-1], step=self.oar_target_size))
+            n_target_size_multiples = cumsum_rows[-1] // self.oar_target_size
             # Get indices where multiples of target size are crossed.
             if self.oar_target_size <= cumsum_rows[-1]:
-                target_size_crossings = searchsorted(
-                    cumsum_rows,
-                    arange(self.oar_target_size, cumsum_rows[-1], step=self.oar_target_size),
-                    side=LEFT,
+                target_size_crossings = unique(
+                    searchsorted(
+                        cumsum_rows,
+                        # Using linspace instead of arange to include endpoint.
+                        linspace(
+                            self.oar_target_size,
+                            self.oar_target_size * n_target_size_multiples,
+                            n_target_size_multiples,
+                            endpoint=True,
+                        ),
+                        side=LEFT,
+                    ),
                 )
             else:
                 target_size_crossings = zeros(1, dtype=int)
-            print()
-            print("target_size_crossings")
-            print(target_size_crossings)
             # Force last index to be length of cumsum_rows
-            target_size_crossings[-1] = oar_idx_end_excl - oar_idx_start - 1
+            target_size_crossings[-1] = len(cumsum_rows) - 1
             # Create a structured array with the filtered indices
             oars_merge_sequences.append(
                 (

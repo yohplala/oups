@@ -762,19 +762,170 @@ def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oa
                 HAS_ROW_GROUP: array([True, True, False, True, True]),
                 HAS_DF_CHUNK: array([True, True, True, True, False]),
             },
-            array([50, 50, 50, 50]),
+            array([50, 50, 50, 50]),  # rg_n_rows
             100,  # row_group_target_size
-            array([[0, 5]]),  # merge region contains 3 OARs
+            array([[0, 5]]),  # merge region with all OARs
             {
                 "oars_min_n_rows": array([50, 50, 35, 50, 50]),
                 "oars_merge_sequences": [
-                    (0, array([[2, 25], [4, 75]])),  # single sequence with 3 OARs
+                    (0, array([[2, 25], [4, 75]])),  # single sequence
                 ],
             },
         ),
-        # TODO: test when there are fewer rows in selection than target size.
-        # TODO: test case when not all rows in sequence are reached, and we need
-        # to force to last index to be length of cumsum_rows-1.
+        (
+            "single_sequence_encompassing_all_oars_wo_drop_duplicates",
+            # This test case check that last row group in sequence is correctly
+            # added to merge region.
+            # row_group_target_size : 100
+            # rgs_n_rows    :  [  50,   50,      ,   50,    50]
+            # has_row_group :  [True, True, False, True,  True]
+            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
+            # has_df_chunk  :  [True, True,  True, True, False]
+            False,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([10, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+                HAS_DF_CHUNK: array([True, True, True, True, False]),
+            },
+            array([50, 50, 50, 50]),  # rg_n_rows
+            100,  # row_group_target_size
+            array([[0, 5]]),  # merge region with all OARs
+            {
+                "oars_min_n_rows": array([60, 65, 35, 65, 50]),
+                "oars_merge_sequences": [
+                    (0, array([[2, 25], [4, 75]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "small_single_sequence_drop_duplicates",
+            # row_group_target_size : 60
+            # rgs_n_rows    :  [   50,   50,      ,   50,    50]
+            # has_row_group :  [ True, True, False, True,  True]
+            # dfc_ends_excl:   [    0,   25,    60,   75,      ]
+            # has_df_chunk  :  [False, True,  True, True, False]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+                HAS_DF_CHUNK: array([False, True, True, True, False]),
+            },
+            array([50, 50, 50, 50]),  # rg_n_rows
+            60,  # row_group_target_size
+            array([[1, 4]]),  # merge region contains 3 OARs
+            {
+                "oars_min_n_rows": array([50, 50, 35, 50, 50]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 60], [3, 75]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "small_single_sequence_wo_drop_duplicates",
+            # row_group_target_size : 35
+            # rgs_n_rows    :  [   10,   10,      ,   30,    10]
+            # has_row_group :  [ True, True, False, True,  True]
+            # dfc_ends_excl:   [    0,   25,    60,   75,      ]
+            # has_df_chunk  :  [False, True,  True, True, False]
+            False,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+                HAS_DF_CHUNK: array([False, True, True, True, False]),
+            },
+            array([10, 10, 30, 10]),  # rg_n_rows
+            35,  # row_group_target_size
+            array([[1, 4]]),  # merge region contains 3 OARs
+            {
+                "oars_min_n_rows": array([10, 35, 35, 45, 10]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "multiple_sequences_drop_duplicates",
+            # row_group_target_size : 100
+            # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
+            # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
+            # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   190]
+            # has_df_chunk  :  [False, True,  True, True, False, True, True,  True,  True]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3, 4, 5, 6, 6]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4, 5, 6, 6, 6]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75, 90, 120, 165, 190]),
+                HAS_ROW_GROUP: array([True, True, False, True, True, True, True, False, False]),
+                HAS_DF_CHUNK: array([False, True, True, True, False, True, True, True, True]),
+            },
+            array([50, 50, 10, 60, 20, 20]),  # rg_n_rows
+            45,  # row_group_target_size
+            array([[1, 4], [5, 9]]),  # merge region
+            {
+                "oars_min_n_rows": array([50, 50, 35, 15, 60, 20, 30, 45, 25]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 25], [3, 75]])),
+                    (4, array([[6, 120], [6, 190]])),
+                ],
+            },
+        ),
+        (
+            "multiple_sequences_wo_drop_duplicates",
+            # row_group_target_size : 100
+            # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
+            # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
+            # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   210]
+            # has_df_chunk  :  [False, True,  True, True, False, True, True,  True,  True]
+            False,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3, 4, 5, 6, 6]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4, 5, 6, 6, 6]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75, 90, 120, 165, 210]),
+                HAS_ROW_GROUP: array([True, True, False, True, True, True, True, False, False]),
+                HAS_DF_CHUNK: array([False, True, True, True, False, True, True, True, True]),
+            },
+            array([50, 50, 10, 60, 20, 20]),  # rg_n_rows
+            45,  # row_group_target_size
+            array([[1, 4], [5, 9]]),  # merge region
+            {
+                "oars_min_n_rows": array([50, 75, 35, 25, 60, 35, 50, 45, 45]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 25], [2, 60], [3, 75]])),
+                    (4, array([[6, 120], [6, 165], [6, 210]])),
+                ],
+            },
+        ),
+        (
+            "small_row_group_target_size",
+            # row_group_target_size : 10
+            # rgs_n_rows    :  [  50,   50,      ,   50,    50]
+            # has_row_group :  [True, True, False, True,  True]
+            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
+            # has_df_chunk  :  [True, True,  True, True, False]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+                HAS_DF_CHUNK: array([False, True, True, True, False]),
+            },
+            array([50, 50, 50, 50]),  # rg_n_rows
+            10,  # row_group_target_size
+            array([[1, 4]]),  # merge region with all OARs
+            {
+                "oars_min_n_rows": array([50, 50, 35, 50, 50]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
+                ],
+            },
+        ),
     ],
 )
 def test_nrows_split_strategy_partition_merge_regions(
@@ -846,10 +997,4 @@ def test_nrows_split_strategy_partition_merge_regions(
         expected_cmpt_ends_excl,
     ) in zip(result, expected["oars_merge_sequences"]):
         assert result_rg_start == expected_rg_start
-        print()
-        print("result_cmpt_ends_excl")
-        print(result_cmpt_ends_excl)
-        print()
-        print("expected_cmpt_ends_excl")
-        print(expected_cmpt_ends_excl)
         assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
