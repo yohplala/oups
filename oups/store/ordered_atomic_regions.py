@@ -471,13 +471,13 @@ class NRowsSplitStrategy(OARSplitStrategy):
     def partition_merge_regions(
         self,
         oar_idx_mrs_starts_ends_excl: NDArray,
-    ) -> List[Tuple[NDArray, NDArray, NDArray]]:
+    ) -> List[Tuple[int, NDArray]]:
         """
         Partition merge regions (MRs) into optimally sized chunks for writing.
 
         For each enlarged merge region (EMR) defined in
         'oar_idx_emrs_starts_ends_excl', this method:
-        1. Accumulates row counts using self.oars_max_n_rows
+        1. Accumulates row counts using self.oars_min_n_rows
         2. Determines split points where accumulated rows reach
            'self.oar_target_size'
         3. Creates consolidated chunks by filtering the original OARs indices to
@@ -496,15 +496,17 @@ class NRowsSplitStrategy(OARSplitStrategy):
         -------
         List[Tuple[int, NDArray]]
             List of tuples, where each tuple contains for each merge sequence:
-            - the start index of the first row group in the merge sequence,
-            - an array of indices where row groups and DataFrame chunks end
-              (excluded) in the merge sequence.
+            - First element: Start index of the first row group in the merge
+              sequence.
+            - Second element: Array of shape (m, 2) containing end indices
+              (excluded) for row groups and DataFrame chunks in the merge
+              sequence.
 
         Notes
         -----
         The partitioning optimizes memory usage by loading only the minimum
         number of row groups needed to create complete chunks of approximately
-        target_size rows. The returned indices may be a subset of the original
+        target size rows. The returned indices may be a subset of the original
         OARs indices, filtered to ensure efficient memory usage during the
         write process.
 
