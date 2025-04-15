@@ -851,7 +851,7 @@ def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oa
         ),
         (
             "multiple_sequences_drop_duplicates",
-            # row_group_target_size : 100
+            # row_group_target_size : 45
             # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
             # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
             # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   190]
@@ -877,7 +877,7 @@ def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oa
         ),
         (
             "multiple_sequences_wo_drop_duplicates",
-            # row_group_target_size : 100
+            # row_group_target_size : 45
             # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
             # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
             # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   210]
