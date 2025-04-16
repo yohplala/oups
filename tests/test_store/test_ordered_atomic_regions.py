@@ -9,9 +9,7 @@ from typing import Dict
 
 import pytest
 from numpy import array
-from numpy import bool_
-from numpy import int_
-from numpy import ones
+from numpy import column_stack
 from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
 from pandas import DataFrame
@@ -19,14 +17,31 @@ from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.store.ordered_atomic_regions import DF_IDX_END_EXCL
-from oups.store.ordered_atomic_regions import HAS_DF_CHUNK
-from oups.store.ordered_atomic_regions import HAS_ROW_GROUP
-from oups.store.ordered_atomic_regions import RG_IDX_END_EXCL
-from oups.store.ordered_atomic_regions import RG_IDX_START
 from oups.store.ordered_atomic_regions import NRowsSplitStrategy
+from oups.store.ordered_atomic_regions import OARSplitStrategy
 from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
-from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
+
+
+RG_IDX_START = "rg_idx_start"
+RG_IDX_END_EXCL = "rg_idx_end_excl"
+DF_IDX_END_EXCL = "df_idx_end_excl"
+HAS_ROW_GROUP = "has_row_group"
+HAS_DF_CHUNK = "has_df_chunk"
+
+
+class TestOARSplitStrategy(OARSplitStrategy):
+    """
+    Concrete implementation for testing purposes.
+    """
+
+    def specialized_init(self, **kwargs):
+        pass
+
+    def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool):
+        raise NotImplementedError("Test implementation only")
+
+    def partition_merge_regions(self, oar_idx_mrs_starts_ends_excl: NDArray):
+        raise NotImplementedError("Test implementation only")
 
 
 @pytest.mark.parametrize(
@@ -174,7 +189,7 @@ from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
         ),
     ],
 )
-def test_compute_ordered_atomic_regions(
+def test_OARSplitStrategy_init(
     test_id: str,
     rg_mins: NDArray,
     rg_maxs: NDArray,
@@ -183,20 +198,20 @@ def test_compute_ordered_atomic_regions(
     expected: NDArray,
 ) -> None:
     """
-    Test compute_ordered_atomic_regions with various scenarios.
+    Test OARSplitStrategy with various scenarios.
     """
-    oars_prop = compute_ordered_atomic_regions(
+    oars_prop = TestOARSplitStrategy(
         rg_mins,
         rg_maxs,
         df_ordered_on,
         drop_duplicates,
     )
     # Check structured array fields
-    assert_array_equal(oars_prop[RG_IDX_START], expected[RG_IDX_START])
-    assert_array_equal(oars_prop[RG_IDX_END_EXCL], expected[RG_IDX_END_EXCL])
-    assert_array_equal(oars_prop[DF_IDX_END_EXCL], expected[DF_IDX_END_EXCL])
-    assert_array_equal(oars_prop[HAS_ROW_GROUP], expected[HAS_ROW_GROUP])
-    assert_array_equal(oars_prop[HAS_DF_CHUNK], expected[HAS_DF_CHUNK])
+    assert_array_equal(oars_prop.oars_rg_idx_starts, expected[RG_IDX_START])
+    assert_array_equal(oars_prop.oars_cmpt_idx_ends_excl[:, 0], expected[RG_IDX_END_EXCL].T)
+    assert_array_equal(oars_prop.oars_cmpt_idx_ends_excl[:, 1], expected[DF_IDX_END_EXCL].T)
+    assert_array_equal(oars_prop.oars_has_row_group, expected[HAS_ROW_GROUP])
+    assert_array_equal(oars_prop.oars_has_df_chunk, expected[HAS_DF_CHUNK])
 
 
 @pytest.mark.parametrize(
@@ -227,7 +242,7 @@ def test_compute_ordered_atomic_regions(
         ),
     ],
 )
-def test_compute_ordered_atomic_regions_validation(
+def test_OARSplitStrategy_validation(
     test_id: str,
     rg_ordered_on_mins: array,
     rg_ordered_on_maxs: array,
@@ -235,7 +250,7 @@ def test_compute_ordered_atomic_regions_validation(
     expected_error: Exception,
 ) -> None:
     """
-    Test input validation in compute_ordered_atomic_regions.
+    Test input validation in OARSplitStrategy.
 
     Parameters
     ----------
@@ -252,7 +267,7 @@ def test_compute_ordered_atomic_regions_validation(
 
     """
     with pytest.raises(ValueError, match=expected_error):
-        compute_ordered_atomic_regions(
+        TestOARSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
@@ -260,7 +275,7 @@ def test_compute_ordered_atomic_regions_validation(
         )
 
 
-def test_nrows_split_strategy_likely_on_target_size():
+def test_NRowsSplitStrategy_likely_on_target_size():
     """
     Test NRowsSplitStrategy strategy and likely_on_target_size.
     """
@@ -268,34 +283,25 @@ def test_nrows_split_strategy_likely_on_target_size():
     # Create mock oars_desc with 5 regions:
     # 1. RG only (90 rows) - on target
     # 2. DF only (85 rows) - on target
-    # 3. Both RG (50) and DF (40) - on target due to potential duplicates
+    # 3. Both RG (50) and DF (40) - on target
     # 4. Both RG (30) and DF (30) - too small
     # 5. Both RG (120) and DF (0) - too large and only row group.
     # 6. Both RG (30) and DF (80) - too large but accepted since it has a dfc.
-    oars_desc = ones(
-        6,
-        dtype=[
-            (RG_IDX_START, int_),
-            (RG_IDX_END_EXCL, int_),
-            (DF_IDX_END_EXCL, int_),
-            (HAS_ROW_GROUP, bool_),
-            (HAS_DF_CHUNK, bool_),
-        ],
-    )
     # Set which regions have row groups and DataFrame chunks
-    oars_desc[HAS_ROW_GROUP] = array([True, False, True, True, True, True])
-    oars_desc[HAS_DF_CHUNK] = array([False, True, True, True, False, True])
+    dummy_rg_idx = array([0, 1, 2, 3, 4, 5])
+    oars_has_row_group = array([True, False, True, True, True, True])
     # Set up DataFrame chunk sizes through df_idx_end_excl
-    oars_desc[DF_IDX_END_EXCL] = array([0, 85, 125, 155, 155, 235])
+    oars_df_idx_ends_excl = array([0, 85, 125, 155, 155, 235])
     # Create row group sizes array
     rgs_n_rows = array([90, 50, 30, 120, 30])
     # Initialize strategy
-    strategy = NRowsSplitStrategy(
+    strategy = NRowsSplitStrategy.from_oars_desc(
+        oars_rg_idx_starts=dummy_rg_idx,
+        oars_cmpt_idx_ends_excl=column_stack((dummy_rg_idx, oars_df_idx_ends_excl)),
+        oars_has_row_group=oars_has_row_group,
         drop_duplicates=True,
-        oars_desc=oars_desc,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=target_size,
-        max_n_off_target_rgs=1,
     )
     # Expected results for oars_max_n_rows:
     # rg_n_rows:       [90,  0, 50, 30, 120,  30]
@@ -312,6 +318,241 @@ def test_nrows_split_strategy_likely_on_target_size():
     result = strategy.likely_on_target_size
     expected = array([True, True, True, False, False, True])
     assert_array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "test_id, drop_duplicates, oars_desc_dict, rgs_n_rows, row_group_target_size, oar_idx_mrs_starts_ends_excl, expected",
+    [
+        (
+            "single_sequence_encompassing_all_oars_drop_duplicates",
+            # row_group_target_size : 100
+            # rgs_n_rows    :  [  50,   50,      ,   50,    50]
+            # has_row_group :  [True, True, False, True,  True]
+            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
+            # has_df_chunk  :  [True, True,  True, True, False]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([10, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+            },
+            array([50, 50, 50, 50]),  # rg_n_rows
+            100,  # row_group_target_size
+            array([[0, 5]]),  # merge region with all OARs
+            {
+                "oars_min_n_rows": array([50, 50, 35, 50, 50]),
+                "oars_merge_sequences": [
+                    (0, array([[2, 25], [4, 75]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "single_sequence_encompassing_all_oars_wo_drop_duplicates",
+            # This test case check that last row group in sequence is correctly
+            # added to merge region.
+            # row_group_target_size : 100
+            # rgs_n_rows    :  [  50,   50,      ,   50,    50]
+            # has_row_group :  [True, True, False, True,  True]
+            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
+            # has_df_chunk  :  [True, True,  True, True, False]
+            False,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([10, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+            },
+            array([50, 50, 50, 50]),  # rg_n_rows
+            100,  # row_group_target_size
+            array([[0, 5]]),  # merge region with all OARs
+            {
+                "oars_min_n_rows": array([60, 65, 35, 65, 50]),
+                "oars_merge_sequences": [
+                    (0, array([[2, 25], [4, 75]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "small_single_sequence_drop_duplicates",
+            # row_group_target_size : 60
+            # rgs_n_rows    :  [   50,   50,      ,   50,    50]
+            # has_row_group :  [ True, True, False, True,  True]
+            # dfc_ends_excl:   [    0,   25,    60,   75,      ]
+            # has_df_chunk  :  [False, True,  True, True, False]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+            },
+            array([50, 50, 50, 50]),  # rg_n_rows
+            60,  # row_group_target_size
+            array([[1, 4]]),  # merge region contains 3 OARs
+            {
+                "oars_min_n_rows": array([50, 50, 35, 50, 50]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 60], [3, 75]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "small_single_sequence_wo_drop_duplicates",
+            # row_group_target_size : 35
+            # rgs_n_rows    :  [   10,   10,      ,   30,    10]
+            # has_row_group :  [ True, True, False, True,  True]
+            # dfc_ends_excl:   [    0,   25,    60,   75,      ]
+            # has_df_chunk  :  [False, True,  True, True, False]
+            False,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+            },
+            array([10, 10, 30, 10]),  # rg_n_rows
+            35,  # row_group_target_size
+            array([[1, 4]]),  # merge region contains 3 OARs
+            {
+                "oars_min_n_rows": array([10, 35, 35, 45, 10]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "multiple_sequences_drop_duplicates",
+            # row_group_target_size : 45
+            # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
+            # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
+            # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   190]
+            # has_df_chunk  :  [False, True,  True, True, False, True, True,  True,  True]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3, 4, 5, 6, 6]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4, 5, 6, 6, 6]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75, 90, 120, 165, 190]),
+                HAS_ROW_GROUP: array([True, True, False, True, True, True, True, False, False]),
+            },
+            array([50, 50, 10, 60, 20, 20]),  # rg_n_rows
+            45,  # row_group_target_size
+            array([[1, 4], [5, 9]]),  # merge region
+            {
+                "oars_min_n_rows": array([50, 50, 35, 15, 60, 20, 30, 45, 25]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 25], [3, 75]])),
+                    (4, array([[6, 120], [6, 190]])),
+                ],
+            },
+        ),
+        (
+            "multiple_sequences_wo_drop_duplicates",
+            # row_group_target_size : 45
+            # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
+            # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
+            # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   210]
+            # has_df_chunk  :  [False, True,  True, True, False, True, True,  True,  True]
+            False,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3, 4, 5, 6, 6]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4, 5, 6, 6, 6]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75, 90, 120, 165, 210]),
+                HAS_ROW_GROUP: array([True, True, False, True, True, True, True, False, False]),
+            },
+            array([50, 50, 10, 60, 20, 20]),  # rg_n_rows
+            45,  # row_group_target_size
+            array([[1, 4], [5, 9]]),  # merge region
+            {
+                "oars_min_n_rows": array([50, 75, 35, 25, 60, 35, 50, 45, 45]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 25], [2, 60], [3, 75]])),
+                    (4, array([[6, 120], [6, 165], [6, 210]])),
+                ],
+            },
+        ),
+        (
+            "small_row_group_target_size",
+            # row_group_target_size : 10
+            # rgs_n_rows    :  [  50,   50,      ,   50,    50]
+            # has_row_group :  [True, True, False, True,  True]
+            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
+            # has_df_chunk  :  [True, True,  True, True, False]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
+                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75]),
+                HAS_ROW_GROUP: array([True, True, False, True, True]),
+            },
+            array([50, 50, 50, 50]),  # rg_n_rows
+            10,  # row_group_target_size
+            array([[1, 4]]),  # merge region with all OARs
+            {
+                "oars_min_n_rows": array([50, 50, 35, 50, 50]),
+                "oars_merge_sequences": [
+                    (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
+                ],
+            },
+        ),
+    ],
+)
+def test_NRowsSplitStrategy_partition_merge_regions(
+    test_id: str,
+    drop_duplicates: bool,
+    oars_desc_dict: Dict[str, NDArray],
+    rgs_n_rows: NDArray,
+    row_group_target_size: int,
+    oar_idx_mrs_starts_ends_excl: NDArray,
+    expected: Dict,
+) -> None:
+    """
+    Test NRowsSplitStrategy.partition_merge_regions method.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    drop_duplicates : bool
+        Whether to drop duplicates between row groups and DataFrame.
+    oars_desc_dict : Dict[str, NDArray]
+        Dictionary containing the oars_desc array.
+    rg_n_rows : NDArray
+        Array of shape (n) containing the number of rows in each row group.
+    row_group_target_size : int
+        Target number of rows above which a new row group should be created.
+    oar_idx_mrs_starts_ends_excl : NDArray
+        Array of shape (n, 2) containing start and end indices (excluded)
+        for each merge region to be consolidated.
+    expected : List[Tuple[int, NDArray]]
+        List of expected tuples, where each tuple contains:
+        - int: Start index of the first row group in the merge sequence
+        - NDArray: Array of shape (m, 2) containing end indices (excluded) for
+          row groups and DataFrame chunks in the merge sequence
+
+    """
+    # Initialize strategy with target size of 100 rows
+    strategy = NRowsSplitStrategy.from_oars_desc(
+        oars_rg_idx_starts=oars_desc_dict[RG_IDX_START],
+        oars_cmpt_idx_ends_excl=column_stack(
+            (oars_desc_dict[RG_IDX_END_EXCL], oars_desc_dict[DF_IDX_END_EXCL]),
+        ),
+        oars_has_row_group=oars_desc_dict[HAS_ROW_GROUP],
+        drop_duplicates=drop_duplicates,
+        rgs_n_rows=rgs_n_rows,
+        row_group_target_size=row_group_target_size,
+    )
+    assert_array_equal(strategy.oars_min_n_rows, expected["oars_min_n_rows"])
+    # Test partition_merge_regions
+    result = strategy.partition_merge_regions(oar_idx_mrs_starts_ends_excl)
+    # Check
+    assert len(result) == len(expected["oars_merge_sequences"])
+    for (result_rg_start, result_cmpt_ends_excl), (
+        expected_rg_start,
+        expected_cmpt_ends_excl,
+    ) in zip(result, expected["oars_merge_sequences"]):
+        assert result_rg_start == expected_rg_start
+        assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
 
 
 @pytest.mark.parametrize(
@@ -708,33 +949,25 @@ def test_nrows_split_strategy_likely_on_target_size():
         ),
     ],
 )
-def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oars, expected):
+def test_TimePeriodSplitStrategy_likely_on_target_size(
+    test_id,
+    rg_mins,
+    rg_maxs,
+    df_ordered_on,
+    oars,
+    expected,
+):
     """
     Test TimePeriodSplitStrategy initialization and likely_on_target_size.
     """
     time_period = "MS"
-    # Create oars_desc with 6 regions
-    oars_desc = ones(
-        len(expected["likely_on_target"]),
-        dtype=[
-            (RG_IDX_START, int_),
-            (RG_IDX_END_EXCL, int_),
-            (DF_IDX_END_EXCL, int_),
-            (HAS_ROW_GROUP, bool_),
-            (HAS_DF_CHUNK, bool_),
-        ],
-    )
-    # Set required OAR description
-    oars_desc[DF_IDX_END_EXCL] = oars[DF_IDX_END_EXCL]
-    oars_desc[HAS_ROW_GROUP] = oars[HAS_ROW_GROUP]
-    oars_desc[HAS_DF_CHUNK] = oars[HAS_DF_CHUNK]
     # Initialize strategy
     strategy = TimePeriodSplitStrategy(
         rg_ordered_on_mins=rg_mins,
         rg_ordered_on_maxs=rg_maxs,
         df_ordered_on=df_ordered_on,
-        oars_desc=oars_desc,
-        row_group_period=time_period,
+        drop_duplicates=False,
+        row_group_time_period=time_period,
     )
     # Test period_bounds
     assert_array_equal(strategy.period_bounds, expected["period_bounds"])
@@ -742,259 +975,3 @@ def test_time_period_split_strategy(test_id, rg_mins, rg_maxs, df_ordered_on, oa
     assert_array_equal(strategy.oars_mins_maxs, expected["oars_mins_maxs"])
     # Test likely_on_target_size
     assert_array_equal(strategy.likely_on_target_size, expected["likely_on_target"])
-
-
-@pytest.mark.parametrize(
-    "test_id, drop_duplicates, oars_desc_dict, rgs_n_rows, row_group_target_size, oar_idx_mrs_starts_ends_excl, expected",
-    [
-        (
-            "single_sequence_encompassing_all_oars_drop_duplicates",
-            # row_group_target_size : 100
-            # rgs_n_rows    :  [  50,   50,      ,   50,    50]
-            # has_row_group :  [True, True, False, True,  True]
-            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
-            # has_df_chunk  :  [True, True,  True, True, False]
-            True,  # drop_duplicates
-            {
-                RG_IDX_START: array([0, 1, 1, 2, 3]),
-                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
-                DF_IDX_END_EXCL: array([10, 25, 60, 75, 75]),
-                HAS_ROW_GROUP: array([True, True, False, True, True]),
-                HAS_DF_CHUNK: array([True, True, True, True, False]),
-            },
-            array([50, 50, 50, 50]),  # rg_n_rows
-            100,  # row_group_target_size
-            array([[0, 5]]),  # merge region with all OARs
-            {
-                "oars_min_n_rows": array([50, 50, 35, 50, 50]),
-                "oars_merge_sequences": [
-                    (0, array([[2, 25], [4, 75]])),  # single sequence
-                ],
-            },
-        ),
-        (
-            "single_sequence_encompassing_all_oars_wo_drop_duplicates",
-            # This test case check that last row group in sequence is correctly
-            # added to merge region.
-            # row_group_target_size : 100
-            # rgs_n_rows    :  [  50,   50,      ,   50,    50]
-            # has_row_group :  [True, True, False, True,  True]
-            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
-            # has_df_chunk  :  [True, True,  True, True, False]
-            False,  # drop_duplicates
-            {
-                RG_IDX_START: array([0, 1, 1, 2, 3]),
-                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
-                DF_IDX_END_EXCL: array([10, 25, 60, 75, 75]),
-                HAS_ROW_GROUP: array([True, True, False, True, True]),
-                HAS_DF_CHUNK: array([True, True, True, True, False]),
-            },
-            array([50, 50, 50, 50]),  # rg_n_rows
-            100,  # row_group_target_size
-            array([[0, 5]]),  # merge region with all OARs
-            {
-                "oars_min_n_rows": array([60, 65, 35, 65, 50]),
-                "oars_merge_sequences": [
-                    (0, array([[2, 25], [4, 75]])),  # single sequence
-                ],
-            },
-        ),
-        (
-            "small_single_sequence_drop_duplicates",
-            # row_group_target_size : 60
-            # rgs_n_rows    :  [   50,   50,      ,   50,    50]
-            # has_row_group :  [ True, True, False, True,  True]
-            # dfc_ends_excl:   [    0,   25,    60,   75,      ]
-            # has_df_chunk  :  [False, True,  True, True, False]
-            True,  # drop_duplicates
-            {
-                RG_IDX_START: array([0, 1, 1, 2, 3]),
-                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
-                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75]),
-                HAS_ROW_GROUP: array([True, True, False, True, True]),
-                HAS_DF_CHUNK: array([False, True, True, True, False]),
-            },
-            array([50, 50, 50, 50]),  # rg_n_rows
-            60,  # row_group_target_size
-            array([[1, 4]]),  # merge region contains 3 OARs
-            {
-                "oars_min_n_rows": array([50, 50, 35, 50, 50]),
-                "oars_merge_sequences": [
-                    (1, array([[2, 60], [3, 75]])),  # single sequence
-                ],
-            },
-        ),
-        (
-            "small_single_sequence_wo_drop_duplicates",
-            # row_group_target_size : 35
-            # rgs_n_rows    :  [   10,   10,      ,   30,    10]
-            # has_row_group :  [ True, True, False, True,  True]
-            # dfc_ends_excl:   [    0,   25,    60,   75,      ]
-            # has_df_chunk  :  [False, True,  True, True, False]
-            False,  # drop_duplicates
-            {
-                RG_IDX_START: array([0, 1, 1, 2, 3]),
-                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
-                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75]),
-                HAS_ROW_GROUP: array([True, True, False, True, True]),
-                HAS_DF_CHUNK: array([False, True, True, True, False]),
-            },
-            array([10, 10, 30, 10]),  # rg_n_rows
-            35,  # row_group_target_size
-            array([[1, 4]]),  # merge region contains 3 OARs
-            {
-                "oars_min_n_rows": array([10, 35, 35, 45, 10]),
-                "oars_merge_sequences": [
-                    (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
-                ],
-            },
-        ),
-        (
-            "multiple_sequences_drop_duplicates",
-            # row_group_target_size : 45
-            # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
-            # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
-            # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   190]
-            # has_df_chunk  :  [False, True,  True, True, False, True, True,  True,  True]
-            True,  # drop_duplicates
-            {
-                RG_IDX_START: array([0, 1, 1, 2, 3, 4, 5, 6, 6]),
-                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4, 5, 6, 6, 6]),
-                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75, 90, 120, 165, 190]),
-                HAS_ROW_GROUP: array([True, True, False, True, True, True, True, False, False]),
-                HAS_DF_CHUNK: array([False, True, True, True, False, True, True, True, True]),
-            },
-            array([50, 50, 10, 60, 20, 20]),  # rg_n_rows
-            45,  # row_group_target_size
-            array([[1, 4], [5, 9]]),  # merge region
-            {
-                "oars_min_n_rows": array([50, 50, 35, 15, 60, 20, 30, 45, 25]),
-                "oars_merge_sequences": [
-                    (1, array([[2, 25], [3, 75]])),
-                    (4, array([[6, 120], [6, 190]])),
-                ],
-            },
-        ),
-        (
-            "multiple_sequences_wo_drop_duplicates",
-            # row_group_target_size : 45
-            # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
-            # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
-            # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   210]
-            # has_df_chunk  :  [False, True,  True, True, False, True, True,  True,  True]
-            False,  # drop_duplicates
-            {
-                RG_IDX_START: array([0, 1, 1, 2, 3, 4, 5, 6, 6]),
-                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4, 5, 6, 6, 6]),
-                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75, 90, 120, 165, 210]),
-                HAS_ROW_GROUP: array([True, True, False, True, True, True, True, False, False]),
-                HAS_DF_CHUNK: array([False, True, True, True, False, True, True, True, True]),
-            },
-            array([50, 50, 10, 60, 20, 20]),  # rg_n_rows
-            45,  # row_group_target_size
-            array([[1, 4], [5, 9]]),  # merge region
-            {
-                "oars_min_n_rows": array([50, 75, 35, 25, 60, 35, 50, 45, 45]),
-                "oars_merge_sequences": [
-                    (1, array([[2, 25], [2, 60], [3, 75]])),
-                    (4, array([[6, 120], [6, 165], [6, 210]])),
-                ],
-            },
-        ),
-        (
-            "small_row_group_target_size",
-            # row_group_target_size : 10
-            # rgs_n_rows    :  [  50,   50,      ,   50,    50]
-            # has_row_group :  [True, True, False, True,  True]
-            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
-            # has_df_chunk  :  [True, True,  True, True, False]
-            True,  # drop_duplicates
-            {
-                RG_IDX_START: array([0, 1, 1, 2, 3]),
-                RG_IDX_END_EXCL: array([1, 2, 2, 3, 4]),
-                DF_IDX_END_EXCL: array([0, 25, 60, 75, 75]),
-                HAS_ROW_GROUP: array([True, True, False, True, True]),
-                HAS_DF_CHUNK: array([False, True, True, True, False]),
-            },
-            array([50, 50, 50, 50]),  # rg_n_rows
-            10,  # row_group_target_size
-            array([[1, 4]]),  # merge region with all OARs
-            {
-                "oars_min_n_rows": array([50, 50, 35, 50, 50]),
-                "oars_merge_sequences": [
-                    (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
-                ],
-            },
-        ),
-    ],
-)
-def test_nrows_split_strategy_partition_merge_regions(
-    test_id: str,
-    drop_duplicates: bool,
-    oars_desc_dict: Dict[str, NDArray],
-    rgs_n_rows: NDArray,
-    row_group_target_size: int,
-    oar_idx_mrs_starts_ends_excl: NDArray,
-    expected: Dict,
-) -> None:
-    """
-    Test NRowsSplitStrategy.partition_merge_regions method.
-
-    Parameters
-    ----------
-    test_id : str
-        Identifier for the test case.
-    drop_duplicates : bool
-        Whether to drop duplicates between row groups and DataFrame.
-    oars_desc_dict : Dict[str, NDArray]
-        Dictionary containing the oars_desc array.
-    rg_n_rows : NDArray
-        Array of shape (n) containing the number of rows in each row group.
-    row_group_target_size : int
-        Target number of rows above which a new row group should be created.
-    oar_idx_mrs_starts_ends_excl : NDArray
-        Array of shape (n, 2) containing start and end indices (excluded)
-        for each merge region to be consolidated.
-    expected : List[Tuple[int, NDArray]]
-        List of expected tuples, where each tuple contains:
-        - int: Start index of the first row group in the merge sequence
-        - NDArray: Array of shape (m, 2) containing end indices (excluded) for
-          row groups and DataFrame chunks in the merge sequence
-
-    """
-    # Create mock oars_desc with 6 regions
-    oars_desc = ones(
-        len(oars_desc_dict[RG_IDX_START]),
-        dtype=[
-            (RG_IDX_START, int_),
-            (RG_IDX_END_EXCL, int_),
-            (DF_IDX_END_EXCL, int_),
-            (HAS_ROW_GROUP, bool_),
-            (HAS_DF_CHUNK, bool_),
-        ],
-    )
-    oars_desc[RG_IDX_START] = oars_desc_dict[RG_IDX_START]
-    oars_desc[RG_IDX_END_EXCL] = oars_desc_dict[RG_IDX_END_EXCL]
-    oars_desc[DF_IDX_END_EXCL] = oars_desc_dict[DF_IDX_END_EXCL]
-    oars_desc[HAS_ROW_GROUP] = oars_desc_dict[HAS_ROW_GROUP]
-    oars_desc[HAS_DF_CHUNK] = oars_desc_dict[HAS_DF_CHUNK]
-
-    # Initialize strategy with target size of 100 rows
-    strategy = NRowsSplitStrategy(
-        drop_duplicates=drop_duplicates,
-        rgs_n_rows=rgs_n_rows,
-        oars_desc=oars_desc,
-        row_group_target_size=row_group_target_size,
-        max_n_off_target_rgs=1,
-    )
-    assert_array_equal(strategy.oars_min_n_rows, expected["oars_min_n_rows"])
-    # Test partition_merge_regions
-    result = strategy.partition_merge_regions(oar_idx_mrs_starts_ends_excl)
-    # Check
-    assert len(result) == len(expected["oars_merge_sequences"])
-    for (result_rg_start, result_cmpt_ends_excl), (
-        expected_rg_start,
-        expected_cmpt_ends_excl,
-    ) in zip(result, expected["oars_merge_sequences"]):
-        assert result_rg_start == expected_rg_start
-        assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)

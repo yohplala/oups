@@ -32,7 +32,6 @@ from pandas import DataFrame
 
 from oups.store.ordered_atomic_regions import NRowsSplitStrategy
 from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
-from oups.store.ordered_atomic_regions import compute_ordered_atomic_regions
 
 
 MIN = "min"
@@ -344,26 +343,22 @@ def compute_ordered_merge_plan(
     rg_ordered_on_mins = array(pf_statistics[MIN][ordered_on])
     rg_ordered_on_maxs = array(pf_statistics[MAX][ordered_on])
     df_ordered_on = df.loc[:, ordered_on]
-    oars_desc = compute_ordered_atomic_regions(
-        rg_ordered_on_mins=rg_ordered_on_mins,
-        rg_ordered_on_maxs=rg_ordered_on_maxs,
-        df_ordered_on=df_ordered_on,
-        drop_duplicates=drop_duplicates,
-    )
     oar_split_strategy = (
         NRowsSplitStrategy(
+            rg_ordered_on_mins=rg_ordered_on_mins,
+            rg_ordered_on_maxs=rg_ordered_on_maxs,
+            df_ordered_on=df_ordered_on,
+            drop_duplicates=drop_duplicates,
             rgs_n_rows=array([rg.num_rows for rg in pf], dtype=int),
             df_n_rows=len(df),
-            oars_desc=oars_desc,
             row_group_target_size=row_group_target_size,
-            max_n_off_target_rgs=max_n_off_target_rgs,
         )
         if isinstance(row_group_target_size, int)
         else TimePeriodSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
-            oars_desc=oars_desc,
+            drop_duplicates=drop_duplicates,
             row_group_period=row_group_target_size,
         )
     )

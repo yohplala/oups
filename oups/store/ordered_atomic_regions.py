@@ -21,14 +21,12 @@ from functools import cached_property
 from typing import List, Tuple, Union
 
 from numpy import arange
-from numpy import array
 from numpy import bincount
-from numpy import bool_
+from numpy import column_stack
 from numpy import cumsum
 from numpy import diff
 from numpy import flatnonzero
 from numpy import insert
-from numpy import int_
 from numpy import linspace
 from numpy import maximum
 from numpy import nonzero
@@ -50,153 +48,8 @@ from oups.store.utils import floor_ts
 
 LEFT = "left"
 RIGHT = "right"
-RG_IDX_START = "rg_idx_start"
-RG_IDX_END_EXCL = "rg_idx_end_excl"
-DF_IDX_END_EXCL = "df_idx_end_excl"
-HAS_ROW_GROUP = "has_row_group"
-HAS_DF_CHUNK = "has_df_chunk"
 MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
 # MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
-
-
-def compute_ordered_atomic_regions(
-    rg_ordered_on_mins: NDArray,
-    rg_ordered_on_maxs: NDArray,
-    df_ordered_on: Series,
-    drop_duplicates: bool,
-) -> NDArray:
-    """
-    Compute ordered atomic regions (OARs) from row groups and DataFrame.
-
-    An ordered atomic region is either:
-      - A row group and its overlapping DataFrame chunk (if any)
-      - A DataFrame chunk that doesn't overlap with any row group
-
-    Returned arrays provide the start and end (excluded) indices in row groups
-    and end (excluded) indices in DataFrame for each of these ordered atomic
-    regions. All these arrays are of same size and describe how are composed the
-    ordered atomic regions.
-
-    Parameters
-    ----------
-    rg_ordered_on_mins : NDArray[Timestamp]
-        Minimum values of 'ordered_on' in each row group.
-    rg_ordered_on_maxs : NDArray[Timestamp]
-        Maximum values of 'ordered_on' in each row group.
-    df_ordered_on : Series[Timestamp]
-        Values of 'ordered_on' column in DataFrame.
-    drop_duplicates : bool
-        Flag impacting how overlapping boundaries have to be managed.
-        More exactly, row groups are considered as first data, and DataFrame as
-        second data, coming after. In case of a row group leading a DataFrame
-        chunk, if the last value in row group is a duplicate of a value in
-        DataFrame chunk, then
-        - If True, at this index, overlap starts
-        - If False, no overlap at this index
-
-    Returns
-    -------
-    NDArray
-        Structured array with fields:
-        - rg_idx_start: Start indices of row groups in each OAR
-        - rg_idx_end_excl: End indices (exclusive) of row groups in each OAR
-        - df_idx_end_excl: End indices (exclusive) of DataFrame chunks in each OAR
-        - has_row_group: Boolean indicating if OAR contains a row group
-        - has_df_chunk: Boolean indicating if OAR contains a DataFrame chunk
-
-    Raises
-    ------
-    ValueError
-        If input arrays have inconsistent lengths or unsorted data.
-
-    Notes
-    -----
-    Start indices in DataFrame are not provided, as they can be inferred from
-    the end (excluded) indices in DataFrame of the previous ordered atomic region
-    (no part of the DataFrame is omitted for the write).
-
-    In case 'drop_duplicates' is False, and there are duplicate values between
-    row group max values and DataFrame 'ordered_on' values, then DataFrame
-    'ordered_on' values are considered to be the last occurrences of the
-    duplicates in 'ordered_on'. Leading row groups (with duplicate max values)
-    will not be in the same ordered atomic region as the DataFrame chunk starting
-    at the duplicate 'ordered_on' value. This is an optimization to prevent
-    rewriting these leading row groups.
-
-    """
-    # Validate 'ordered_on' in row groups and DataFrame.
-    if len(rg_ordered_on_mins) != len(rg_ordered_on_maxs):
-        raise ValueError("rg_ordered_on_mins and rg_ordered_on_maxs must have the same length.")
-    # Check that rg_maxs[i] is less than rg_mins[i+1] (no overlapping row groups).
-    if len(rg_ordered_on_mins) > 1 and (rg_ordered_on_maxs[:-1] > rg_ordered_on_mins[1:]).any():
-        raise ValueError("row groups must not overlap.")
-    # Check that df_ordered_on is sorted.
-    if not df_ordered_on.is_monotonic_increasing:
-        raise ValueError("'df_ordered_on' must be sorted in ascending order.")
-
-    if drop_duplicates:
-        # Determine overlap start/end indices in row groups
-        df_idx_oar_starts = searchsorted(df_ordered_on, rg_ordered_on_mins, side=LEFT)
-        df_idx_oar_ends_excl = searchsorted(df_ordered_on, rg_ordered_on_maxs, side=RIGHT)
-    else:
-        df_idx_oar_starts, df_idx_oar_ends_excl = searchsorted(
-            df_ordered_on,
-            vstack((rg_ordered_on_mins, rg_ordered_on_maxs)),
-            side=LEFT,
-        )
-    # Find regions in DataFrame not overlapping with any row group.
-    df_chunk_wo_overlap = r_[
-        df_idx_oar_starts[0],  # gap at start (0 to first start)
-        df_idx_oar_ends_excl[:-1] - df_idx_oar_starts[1:],
-        len(df_ordered_on) - df_idx_oar_ends_excl[-1],  # gap at end
-    ]
-    # Indices in row groups where a DataFrame chunk is not overlapping with any
-    # row group.
-    rg_idx_df_orphans = flatnonzero(df_chunk_wo_overlap)
-    n_rgs = len(rg_ordered_on_mins)
-    rg_idxs_template = arange(n_rgs + 1)
-    # Create a structured array to hold all related indices
-    # DataFrame orphans are regions in DataFrame that do not overlap with any
-    # row group.
-    n_df_orphans = len(rg_idx_df_orphans)
-    oars_desc = ones(
-        n_rgs + n_df_orphans,
-        dtype=[
-            (RG_IDX_START, int_),
-            (RG_IDX_END_EXCL, int_),
-            (DF_IDX_END_EXCL, int_),
-            (HAS_ROW_GROUP, bool_),
-            (HAS_DF_CHUNK, bool_),
-        ],
-    )
-    if n_df_orphans != 0:
-        # Case of non-overlapping regions in DataFrame.
-        # Resize 'rg_idxs', and duplicate values where there are non-overlapping
-        # regions in DataFrame.
-        rg_idx_to_insert = rg_idxs_template[rg_idx_df_orphans]
-        rg_idxs_template = insert(
-            rg_idxs_template,
-            rg_idx_df_orphans,
-            rg_idx_to_insert,
-        )
-        # 'Resize 'df_idx_oar_ends_excl', and duplicate values where there are
-        # non-overlapping regions in DataFrame.
-        if rg_idx_df_orphans[-1] == len(df_ordered_on):
-            df_idx_to_insert = df_idx_oar_starts[rg_idx_df_orphans]
-        else:
-            df_idx_to_insert = r_[df_idx_oar_starts, len(df_ordered_on)][rg_idx_df_orphans]
-        df_idx_oar_ends_excl = insert(
-            df_idx_oar_ends_excl,
-            rg_idx_df_orphans,
-            df_idx_to_insert,
-        )
-
-    oars_desc[RG_IDX_START] = rg_idxs_template[:-1]
-    oars_desc[RG_IDX_END_EXCL] = rg_idxs_template[1:]
-    oars_desc[DF_IDX_END_EXCL] = df_idx_oar_ends_excl
-    oars_desc[HAS_ROW_GROUP] = oars_desc[RG_IDX_START] != oars_desc[RG_IDX_END_EXCL]
-    oars_desc[HAS_DF_CHUNK] = diff(oars_desc[DF_IDX_END_EXCL], prepend=0) != 0
-    return oars_desc
 
 
 class OARSplitStrategy(ABC):
@@ -212,7 +65,198 @@ class OARSplitStrategy(ABC):
     (either in terms of number of rows or time period). Otherwise it is
     considered 'off target size'.
 
+    Attributes
+    ----------
+    oars_rg_idx_starts : NDArray[int_]
+        Start indices of row groups in each OAR.
+    oars_cmpt_idx_ends_excl : NDArray[int_, int_]
+        End indices (excluded) of row groups and DataFrame chunks in each OAR.
+    oars_has_row_group : NDArray[bool_]
+        Boolean array indicating if OAR contains a row group.
+    oars_df_n_rows : NDArray[int_]
+        Number of rows in each DataFrame chunk in each OAR.
+    oars_has_df_chunk : NDArray[bool_]
+        Boolean array indicating if OAR contains a DataFrame chunk.
+
     """
+
+    def __init__(
+        self,
+        rg_ordered_on_mins: NDArray,
+        rg_ordered_on_maxs: NDArray,
+        df_ordered_on: Series,
+        drop_duplicates: bool,
+    ):
+        """
+        Compute ordered atomic regions (OARs) from row groups and DataFrame.
+
+        An ordered atomic region is either:
+        - A row group and its overlapping DataFrame chunk (if any)
+        - A DataFrame chunk that doesn't overlap with any row group
+
+        Returned arrays provide the start and end (excluded) indices in row groups
+        and end (excluded) indices in DataFrame for each of these ordered atomic
+        regions. All these arrays are of same size and describe how are composed the
+        ordered atomic regions.
+
+        Parameters
+        ----------
+        rg_ordered_on_mins : NDArray[Timestamp]
+            Minimum values of 'ordered_on' in each row group.
+        rg_ordered_on_maxs : NDArray[Timestamp]
+            Maximum values of 'ordered_on' in each row group.
+        df_ordered_on : Series[Timestamp]
+            Values of 'ordered_on' column in DataFrame.
+        drop_duplicates : bool
+            Flag impacting how overlapping boundaries have to be managed.
+            More exactly, row groups are considered as first data, and DataFrame as
+            second data, coming after. In case of a row group leading a DataFrame
+            chunk, if the last value in row group is a duplicate of a value in
+            DataFrame chunk, then
+            - If True, at this index, overlap starts
+            - If False, no overlap at this index
+
+        Raises
+        ------
+        ValueError
+            If input arrays have inconsistent lengths or unsorted data.
+
+        Notes
+        -----
+        Start indices in DataFrame are not provided, as they can be inferred from
+        the end (excluded) indices in DataFrame of the previous ordered atomic region
+        (no part of the DataFrame is omitted for the write).
+
+        In case 'drop_duplicates' is False, and there are duplicate values between
+        row group max values and DataFrame 'ordered_on' values, then DataFrame
+        'ordered_on' values are considered to be the last occurrences of the
+        duplicates in 'ordered_on'. Leading row groups (with duplicate max values)
+        will not be in the same ordered atomic region as the DataFrame chunk starting
+        at the duplicate 'ordered_on' value. This is an optimization to prevent
+        rewriting these leading row groups.
+
+        """
+        # Validate 'ordered_on' in row groups and DataFrame.
+        if len(rg_ordered_on_mins) != len(rg_ordered_on_maxs):
+            raise ValueError("rg_ordered_on_mins and rg_ordered_on_maxs must have the same length.")
+        # Check that rg_maxs[i] is less than rg_mins[i+1] (no overlapping row groups).
+        if len(rg_ordered_on_mins) > 1 and (rg_ordered_on_maxs[:-1] > rg_ordered_on_mins[1:]).any():
+            raise ValueError("row groups must not overlap.")
+        # Check that df_ordered_on is sorted.
+        if not df_ordered_on.is_monotonic_increasing:
+            raise ValueError("'df_ordered_on' must be sorted in ascending order.")
+
+        if drop_duplicates:
+            # Determine overlap start/end indices in row groups
+            df_idx_oar_starts = searchsorted(df_ordered_on, rg_ordered_on_mins, side=LEFT)
+            df_idx_oar_ends_excl = searchsorted(df_ordered_on, rg_ordered_on_maxs, side=RIGHT)
+        else:
+            df_idx_oar_starts, df_idx_oar_ends_excl = searchsorted(
+                df_ordered_on,
+                vstack((rg_ordered_on_mins, rg_ordered_on_maxs)),
+                side=LEFT,
+            )
+        # Find regions in DataFrame not overlapping with any row group.
+        df_chunk_wo_overlap = r_[
+            df_idx_oar_starts[0],  # gap at start (0 to first start)
+            df_idx_oar_ends_excl[:-1] - df_idx_oar_starts[1:],
+            len(df_ordered_on) - df_idx_oar_ends_excl[-1],  # gap at end
+        ]
+        # Indices in row groups where a DataFrame chunk is not overlapping with
+        # any row group.
+        rg_idx_df_orphans = flatnonzero(df_chunk_wo_overlap)
+        n_rgs = len(rg_ordered_on_mins)
+        rg_idxs_template = arange(n_rgs + 1)
+        # DataFrame orphans are regions in DataFrame that do not overlap with
+        # any row group.
+        n_df_orphans = len(rg_idx_df_orphans)
+        if n_df_orphans != 0:
+            # Case of non-overlapping regions in DataFrame.
+            # Resize 'rg_idxs', and duplicate values where there are
+            # non-overlapping regions in DataFrame.
+            rg_idx_to_insert = rg_idxs_template[rg_idx_df_orphans]
+            rg_idxs_template = insert(
+                rg_idxs_template,
+                rg_idx_df_orphans,
+                rg_idx_to_insert,
+            )
+            # 'Resize 'df_idx_oar_ends_excl', and duplicate values where there
+            # are non-overlapping regions in DataFrame.
+            df_idx_to_insert = r_[df_idx_oar_starts, len(df_ordered_on)][rg_idx_df_orphans]
+            df_idx_oar_ends_excl = insert(
+                df_idx_oar_ends_excl,
+                rg_idx_df_orphans,
+                df_idx_to_insert,
+            )
+
+        self.oars_rg_idx_starts = rg_idxs_template[:-1]
+        self.oars_cmpt_idx_ends_excl = column_stack((rg_idxs_template[1:], df_idx_oar_ends_excl))
+        self.oars_has_row_group = rg_idxs_template[:-1] != rg_idxs_template[1:]
+        self.oars_df_n_rows = diff(df_idx_oar_ends_excl, prepend=0)
+        self.oars_has_df_chunk = self.oars_df_n_rows.astype(bool)
+
+    @abstractmethod
+    def specialized_init(self, **kwargs):
+        """
+        Initialize specialized attributes.
+
+        This method provides a base method to initialize specialized attributes
+        for testing purpose of other methods of the OARSPlitStrategy abstract
+        class.
+        It is intended to be overridden by subclasses to initialize additional
+        attributes specific to the strategy.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Additional keyword arguments to initialize specialized attributes.
+
+        """
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    @classmethod
+    def from_oars_desc(
+        cls,
+        oars_rg_idx_starts: NDArray,
+        oars_cmpt_idx_ends_excl: NDArray,
+        oars_has_row_group: NDArray,
+        **kwargs,
+    ) -> "OARSplitStrategy":
+        """
+        Create a strategy instance with a given OARs description.
+
+        This is primarily for testing purposes, allowing tests to directly set
+        the OARSplitStrategy base attributes without having to compute it from
+        row groups and DataFrame.
+
+        Parameters
+        ----------
+        oars_rg_idx_starts : NDArray
+            Start indices of row groups in each OAR.
+        oars_cmpt_idx_ends_excl : NDArray
+            End indices (excluded) of row groups and DataFrame chunks in each OAR.
+        oars_has_row_group : NDArray
+            Boolean array indicating if OAR contains a row group.
+        drop_duplicates : bool
+            Whether to drop duplicates between row groups and DataFrame.
+        **kwargs
+            Additional arguments needed by specific strategy implementations
+
+        Returns
+        -------
+        OARSplitStrategy
+            An instance of the strategy with the given OARs description.
+
+        """
+        instance = cls.__new__(cls)
+        instance.oars_rg_idx_starts = oars_rg_idx_starts
+        instance.oars_cmpt_idx_ends_excl = oars_cmpt_idx_ends_excl
+        instance.oars_has_row_group = oars_has_row_group
+        instance.oars_df_n_rows = diff(oars_cmpt_idx_ends_excl[:, 1], prepend=0)
+        instance.oars_has_df_chunk = instance.oars_df_n_rows.astype(bool)
+        instance.specialized_init(**kwargs)
+        return instance
 
     @cached_property
     @abstractmethod
@@ -324,17 +368,11 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
     Attributes
     ----------
-    oar_target_size : int
+    row_group_target_size : int
         Target number of rows above which a new row group should be created.
-    oar_min_size : int
+    row_group_min_size : int
         Minimum number of rows in an ordered atomic region, computed as
         ``MAX_ROW_GROUP_SIZE_SCALE_FACTOR * row_group_target_size``.
-    max_n_off_target_rgs : int
-        Maximum number of row groups off target size allowed in an ordered
-        atomic region.
-    oars_has_df_chunk : NDArray
-        Array of shape (e) containing booleans indicating whether each ordered
-        atomic region contains a DataFrame chunk.
     oars_max_n_rows : NDArray
         Array of shape (e) containing the maximum number of rows in each ordered
         atomic region, obtained by summing the number of rows in a row group
@@ -356,55 +394,83 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
     def __init__(
         self,
+        rg_ordered_on_mins: NDArray,
+        rg_ordered_on_maxs: NDArray,
+        df_ordered_on: Series,
         drop_duplicates: bool,
         rgs_n_rows: NDArray,
-        oars_desc: NDArray,
         row_group_target_size: int,
-        max_n_off_target_rgs: int,
     ):
         """
         Initialize scheme with target size.
 
         Parameters
         ----------
+        rg_ordered_on_mins : NDArray
+            Array of shape (r) containing the minimum values of the ordered
+            row groups.
+        rg_ordered_on_maxs : NDArray
+            Array of shape (r) containing the maximum values of the ordered
+            row groups.
+        df_ordered_on : Series
+            Series of shape (d) containing the ordered DataFrame.
         drop_duplicates : bool
             Whether to drop duplicates between row groups and DataFrame.
         rgs_n_rows : NDArray
             Array of shape (r) containing the number of rows in each row group
             in existing ParquetFile.
-        oars_desc : NDArray
-            Array of shape (e, 5) containing the description about each ordered
-            atomic region.
         row_group_target_size : int
             Target number of rows above which a new row group should be created.
-        max_n_off_target_rgs : int
-            Maximum number of row groups off target size allowed in an ordered
-            atomic region.
 
         """
-        self.oars_cmpt_ends_excl = array([oars_desc[RG_IDX_END_EXCL], oars_desc[DF_IDX_END_EXCL]]).T
-        self.oars_rg_starts = oars_desc[RG_IDX_START]
-        self.oar_target_size = row_group_target_size
-        self.oar_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
-        self.max_n_off_target_rgs = max_n_off_target_rgs
-        self.oars_has_df_chunk = oars_desc[HAS_DF_CHUNK]
+        super().__init__(
+            rg_ordered_on_mins,
+            rg_ordered_on_maxs,
+            df_ordered_on,
+            drop_duplicates,
+        )
+        self.specialized_init(
+            rgs_n_rows=rgs_n_rows,
+            row_group_target_size=row_group_target_size,
+            drop_duplicates=drop_duplicates,
+        )
+
+    def specialized_init(
+        self,
+        rgs_n_rows: NDArray,
+        row_group_target_size: int,
+        drop_duplicates: bool,
+    ):
+        """
+        Initialize scheme with target size.
+
+        Parameters
+        ----------
+        rgs_n_rows : NDArray
+            Array of shape (r) containing the number of rows in each row group
+            in existing ParquetFile.
+        row_group_target_size : int
+            Target number of rows above which a new row group should be created.
+        drop_duplicates : bool
+            Whether to drop duplicates between row groups and DataFrame.
+
+        """
+        self.row_group_target_size = row_group_target_size
+        self.row_group_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
         # Max number of rows in each ordered atomic region. This is a max in case
         # there are duplicates between row groups and DataFrame that will be
         # dropped.
-        self.oars_max_n_rows = zeros(len(oars_desc), dtype=int)
-        self.oars_max_n_rows[oars_desc[HAS_ROW_GROUP]] = rgs_n_rows
-        df_n_rows = diff(oars_desc[DF_IDX_END_EXCL], prepend=0)
+        self.oars_max_n_rows = zeros(len(self.oars_rg_idx_starts), dtype=int)
+        self.oars_max_n_rows[self.oars_has_row_group] = rgs_n_rows
         if drop_duplicates:
             # Assuming each DataFrame chunk and each row group have no
             # duplicates within themselves, 'oars_min_n_rows' is set assuming
             # that all rows in the smallest component are duplicates of rows
             # in the largest component.
-            self.oars_min_n_rows = maximum(self.oars_max_n_rows, df_n_rows)
-        #           oar_idx_only_df_chunk = flatnonzero(oars_desc[HAS_DF_CHUNK] & ~oars_desc[HAS_ROW_GROUP])
-        #           self.oars_min_n_rows[oar_idx_only_df_chunk] = df_n_rows[oar_idx_only_df_chunk]
+            self.oars_min_n_rows = maximum(self.oars_max_n_rows, self.oars_df_n_rows)
         else:
             self.oars_min_n_rows = self.oars_max_n_rows
-        self.oars_max_n_rows += df_n_rows
+        self.oars_max_n_rows += self.oars_df_n_rows
 
     @cached_property
     def likely_on_target_size(self) -> NDArray:
@@ -462,10 +528,10 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
         """
         return self.oars_has_df_chunk & (  # OAR containing a DataFrame chunk.
-            self.oars_max_n_rows >= self.oar_min_size
+            self.oars_max_n_rows >= self.row_group_min_size
         ) | ~self.oars_has_df_chunk & (  # OAR containing only row groups.
-            (self.oars_max_n_rows >= self.oar_min_size)
-            & (self.oars_max_n_rows <= self.oar_target_size)
+            (self.oars_max_n_rows >= self.row_group_min_size)
+            & (self.oars_max_n_rows <= self.row_group_target_size)
         )
 
     def partition_merge_regions(
@@ -479,7 +545,7 @@ class NRowsSplitStrategy(OARSplitStrategy):
         'oar_idx_emrs_starts_ends_excl', this method:
         1. Accumulates row counts using self.oars_min_n_rows
         2. Determines split points where accumulated rows reach
-           'self.oar_target_size'
+           'self.row_group_target_size'
         3. Creates consolidated chunks by filtering the original OARs indices to
            ensure optimal row group loading.
 
@@ -513,19 +579,19 @@ class NRowsSplitStrategy(OARSplitStrategy):
         """
         oars_merge_sequences = []
         for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
-            rg_idx_start = self.oars_rg_starts[oar_idx_start]
+            rg_idx_start = self.oars_rg_idx_starts[oar_idx_start]
             # Cumulate number of rows.
             cumsum_rows = cumsum(self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl])
-            n_target_size_multiples = cumsum_rows[-1] // self.oar_target_size
+            n_target_size_multiples = cumsum_rows[-1] // self.row_group_target_size
             # Get indices where multiples of target size are crossed.
-            if self.oar_target_size <= cumsum_rows[-1]:
+            if self.row_group_target_size <= cumsum_rows[-1]:
                 target_size_crossings = unique(
                     searchsorted(
                         cumsum_rows,
                         # Using linspace instead of arange to include endpoint.
                         linspace(
-                            self.oar_target_size,
-                            self.oar_target_size * n_target_size_multiples,
+                            self.row_group_target_size,
+                            self.row_group_target_size * n_target_size_multiples,
                             n_target_size_multiples,
                             endpoint=True,
                         ),
@@ -540,7 +606,9 @@ class NRowsSplitStrategy(OARSplitStrategy):
             oars_merge_sequences.append(
                 (
                     rg_idx_start,
-                    self.oars_cmpt_ends_excl[oar_idx_start:oar_idx_end_excl][target_size_crossings],
+                    self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
+                        target_size_crossings
+                    ],
                 ),
             )
 
@@ -577,12 +645,9 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
 
     Attributes
     ----------
-    oar_period : str
+    row_group_time_period : str
         Time period for a row group to be on target size (e.g., 'MS' for month
         start).
-    oars_has_df_chunk : NDArray
-        Array of shape (e) containing booleans indicating whether each ordered
-        atomic region contains a DataFrame chunk.
     oars_mins_maxs : NDArray
         Array of shape (e, 2) containing the start and end bounds of each
         ordered atomic region.
@@ -604,8 +669,47 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         rg_ordered_on_mins: NDArray,
         rg_ordered_on_maxs: NDArray,
         df_ordered_on: Series,
-        oars_desc: NDArray,
-        row_group_period: str,
+        drop_duplicates: bool,
+        row_group_time_period: str,
+    ):
+        """
+        Initialize scheme with time size.
+
+        Parameters
+        ----------
+        rg_ordered_on_mins : NDArray
+            Array of shape (r) containing the minimum values of the ordered
+            row groups.
+        rg_ordered_on_maxs : NDArray
+            Array of shape (r) containing the maximum values of the ordered
+            row groups.
+        df_ordered_on : Series
+            Series of shape (d) containing the ordered DataFrame.
+        drop_duplicates : bool
+            Whether to drop duplicates between row groups and DataFrame.
+        row_group_time_period : str
+            Target period for each row group (pandas freqstr).
+
+        """
+        super().__init__(
+            rg_ordered_on_mins,
+            rg_ordered_on_maxs,
+            df_ordered_on,
+            drop_duplicates,
+        )
+        self.specialized_init(
+            rg_ordered_on_mins,
+            rg_ordered_on_maxs,
+            df_ordered_on,
+            row_group_time_period,
+        )
+
+    def specialized_init(
+        self,
+        rg_ordered_on_mins: NDArray,
+        rg_ordered_on_maxs: NDArray,
+        df_ordered_on: Series,
+        row_group_time_period: str,
     ):
         """
         Initialize scheme with target period.
@@ -618,35 +722,31 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
             Maximum value of 'ordered_on' in each row group.
         df_ordered_on : Series
             Values of 'ordered_on' column in DataFrame.
-        oars_desc : NDArray
-            Array of shape (e, 5) containing the description about each ordered
-            atomic region.
-        row_group_period : str
-            Target period for each row group (pandas freqstr).
+        row_group_time_period : str
+            Expected time period for each row group (pandas freqstr).
 
         """
-        self.oar_period = row_group_period
-        self.oars_has_df_chunk = oars_desc[HAS_DF_CHUNK]
+        self.row_group_time_period = row_group_time_period
         df_ordered_on_np = df_ordered_on.to_numpy()
-        self.oars_mins_maxs = ones((len(oars_desc), 2)).astype(df_ordered_on_np.dtype)
+        self.oars_mins_maxs = ones((len(self.oars_rg_idx_starts), 2)).astype(df_ordered_on_np.dtype)
         # Row groups encompasses Dataframe chunks in an OAR.
         # Hence, start with Dataframe chunks starts and ends.
-        oar_idx_df_chunk = flatnonzero(oars_desc[HAS_DF_CHUNK])
+        oar_idx_df_chunk = flatnonzero(self.oars_has_df_chunk)
         df_idx_chunk_starts = zeros(len(oar_idx_df_chunk), dtype=int)
-        df_idx_chunk_starts[1:] = oars_desc[DF_IDX_END_EXCL][oar_idx_df_chunk[:-1]]
+        df_idx_chunk_starts[1:] = self.oars_cmpt_idx_ends_excl[oar_idx_df_chunk[:-1], 1]
         self.oars_mins_maxs[oar_idx_df_chunk, 0] = df_ordered_on_np[df_idx_chunk_starts]
         self.oars_mins_maxs[oar_idx_df_chunk, 1] = df_ordered_on_np[
-            oars_desc[DF_IDX_END_EXCL][oar_idx_df_chunk] - 1
+            self.oars_cmpt_idx_ends_excl[oar_idx_df_chunk, 1] - 1
         ]
         # Only then add row groups starts and ends. They will overwrite where
         # Dataframe chunks are present.
-        oar_idx_row_groups = flatnonzero(oars_desc[HAS_ROW_GROUP])
+        oar_idx_row_groups = flatnonzero(self.oars_has_row_group)
         self.oars_mins_maxs[oar_idx_row_groups, 0] = rg_ordered_on_mins
         self.oars_mins_maxs[oar_idx_row_groups, 1] = rg_ordered_on_maxs
         # Generate period bounds.
-        start_ts = floor_ts(Timestamp(self.oars_mins_maxs[0, 0]), row_group_period)
-        end_ts = ceil_ts(Timestamp(self.oars_mins_maxs[-1, 1]), row_group_period)
-        self.period_bounds = date_range(start=start_ts, end=end_ts, freq=row_group_period)
+        start_ts = floor_ts(Timestamp(self.oars_mins_maxs[0, 0]), row_group_time_period)
+        end_ts = ceil_ts(Timestamp(self.oars_mins_maxs[-1, 1]), row_group_time_period)
+        self.period_bounds = date_range(start=start_ts, end=end_ts, freq=row_group_time_period)
 
     @cached_property
     def likely_on_target_size(self) -> NDArray:
@@ -660,8 +760,9 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         Returns
         -------
         NDArray
-            Boolean array of length equal to the number of ordered atomic regions,
-            where True indicates the OAR is likely to be on target size.
+            Boolean array of length equal to the number of ordered atomic
+            regions, where True indicates the OAR is likely to be on target
+            size.
 
         Notes
         -----
