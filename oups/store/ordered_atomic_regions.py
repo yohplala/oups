@@ -235,13 +235,14 @@ class OARSplitStrategy(ABC):
         oars_rg_idx_starts : NDArray
             Start indices of row groups in each OAR.
         oars_cmpt_idx_ends_excl : NDArray
-            End indices (excluded) of row groups and DataFrame chunks in each OAR.
+            End indices (excluded) of row groups and DataFrame chunks in each
+            OAR.
         oars_has_row_group : NDArray
             Boolean array indicating if OAR contains a row group.
         drop_duplicates : bool
             Whether to drop duplicates between row groups and DataFrame.
         **kwargs
-            Additional arguments needed by specific strategy implementations
+            Additional arguments needed by specific strategy implementations.
 
         Returns
         -------
@@ -317,7 +318,7 @@ class OARSplitStrategy(ABC):
     def partition_merge_regions(
         self,
         oar_idx_mrs_starts_ends_excl: NDArray,
-    ) -> List[Tuple[NDArray, NDArray, NDArray]]:
+    ) -> List[Tuple[int, NDArray]]:
         """
         Partition merge regions (MRs) into optimally sized chunks for writing.
 
@@ -826,7 +827,7 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         row_group_period: str,
         df_ordered_on: Series,
         oar_idx_mrs_starts_ends_excl: NDArray,
-    ) -> List[Tuple[NDArray, NDArray, NDArray]]:
+    ) -> List[Tuple[int, NDArray]]:
         """
         Partition merge regions (MRs) into optimally sized chunks for writing.
 
