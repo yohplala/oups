@@ -35,7 +35,7 @@ class TestOARSplitStrategy(OARSplitStrategy):
     """
 
     def specialized_init(self, **kwargs):
-        pass
+        raise NotImplementedError("Test implementation only")
 
     def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool):
         raise NotImplementedError("Test implementation only")
@@ -543,9 +543,9 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         row_group_target_size=row_group_target_size,
     )
     assert_array_equal(strategy.oars_min_n_rows, expected["oars_min_n_rows"])
-    # Test partition_merge_regions
+    # Test partition_merge_regions.
     result = strategy.partition_merge_regions(oar_idx_mrs_starts_ends_excl)
-    # Check
+    # Check.
     assert len(result) == len(expected["oars_merge_sequences"])
     for (result_rg_start, result_cmpt_ends_excl), (
         expected_rg_start,
@@ -556,7 +556,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
 
 
 @pytest.mark.parametrize(
-    "test_id, rg_mins, rg_maxs, df_ordered_on, oars, expected",
+    "test_id, rg_mins, rg_maxs, df_ordered_on, expected",
     [
         (
             "two_rgs_in_period",
@@ -567,11 +567,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2023-12-15"), Timestamp("2023-12-20")]),  # rg_mins
             array([Timestamp("2023-12-19"), Timestamp("2023-12-28")]),  # rg_maxs
             Series([Timestamp("2024-03-15")]),  # df_ordered_on
-            {
-                DF_IDX_END_EXCL: array([0, 0, 1]),
-                HAS_ROW_GROUP: array([True, True, False]),
-                HAS_DF_CHUNK: array([False, False, True]),
-            },
             {
                 "period_bounds": date_range(
                     start=Timestamp("2023-12-01"),  # Floor of earliest timestamp
@@ -605,11 +600,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-02-01")]),  # rg_maxs, value on edge
             Series([Timestamp("2024-03-15")]),  # df_ordered_on
             {
-                DF_IDX_END_EXCL: array([0, 1]),
-                HAS_ROW_GROUP: array([True, False]),
-                HAS_DF_CHUNK: array([False, True]),
-            },
-            {
                 "period_bounds": date_range(
                     start=Timestamp("2024-01-01"),  # Floor of earliest timestamp
                     end=Timestamp("2024-04-01"),  # Ceil of latest timestamp
@@ -631,11 +621,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-03-15")]),  # rg_mins
             array([Timestamp("2024-03-16")]),  # rg_maxs
             Series([Timestamp("2024-03-15")]),  # df_ordered_on
-            {
-                DF_IDX_END_EXCL: array([1]),
-                HAS_ROW_GROUP: array([True]),
-                HAS_DF_CHUNK: array([True]),
-            },
             {
                 "period_bounds": date_range(
                     start=Timestamp("2024-03-01"),  # Floor of earliest timestamp
@@ -661,11 +646,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-06-15")]),  # rg_maxs
             Series([Timestamp("2024-04-17"), Timestamp("2024-05-03")]),  # df_ordered_on
             {
-                DF_IDX_END_EXCL: array([2, 2]),
-                HAS_ROW_GROUP: array([False, True]),
-                HAS_DF_CHUNK: array([True, False]),
-            },
-            {
                 "period_bounds": date_range(
                     start=Timestamp("2024-04-01"),  # Floor of earliest timestamp
                     end=Timestamp("2024-07-01"),  # Ceil of latest timestamp
@@ -688,11 +668,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-06-10")]),  # rg_mins
             array([Timestamp("2024-06-15")]),  # rg_maxs
             Series([Timestamp("2024-06-16"), Timestamp("2024-06-18")]),  # df_ordered_on
-            {
-                DF_IDX_END_EXCL: array([0, 2]),
-                HAS_ROW_GROUP: array([True, False]),
-                HAS_DF_CHUNK: array([False, True]),
-            },
             {
                 "period_bounds": date_range(
                     start=Timestamp("2024-06-01"),  # Floor of earliest timestamp
@@ -718,11 +693,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-08-17")]),  # rg_maxs
             Series([Timestamp("2024-07-15"), Timestamp("2024-08-10")]),  # df_ordered_on
             {
-                DF_IDX_END_EXCL: array([2, 2]),
-                HAS_ROW_GROUP: array([False, True]),
-                HAS_DF_CHUNK: array([True, False]),
-            },
-            {
                 "period_bounds": date_range(
                     start=Timestamp("2024-07-01"),  # Floor of earliest timestamp
                     end=Timestamp("2024-09-01"),  # Ceil of latest timestamp
@@ -746,11 +716,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-09-11")]),  # rg_mins
             array([Timestamp("2024-10-15")]),  # rg_maxs
             Series([Timestamp("2024-10-16"), Timestamp("2024-10-18")]),  # df_ordered_on
-            {
-                DF_IDX_END_EXCL: array([0, 2]),
-                HAS_ROW_GROUP: array([True, False]),
-                HAS_DF_CHUNK: array([False, True]),
-            },
             {
                 "period_bounds": date_range(
                     start=Timestamp("2024-09-01"),  # Floor of earliest timestamp
@@ -776,11 +741,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-12-05")]),  # rg_maxs
             Series([Timestamp("2024-11-15"), Timestamp("2024-11-17")]),  # df_ordered_on
             {
-                DF_IDX_END_EXCL: array([2, 2]),
-                HAS_ROW_GROUP: array([False, True]),
-                HAS_DF_CHUNK: array([True, False]),
-            },
-            {
                 "period_bounds": date_range(
                     start=Timestamp("2024-11-01"),  # Floor of earliest timestamp
                     end=Timestamp("2025-01-01"),  # Ceil of latest timestamp
@@ -805,11 +765,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-01-04")]),  # rg_maxs
             Series([Timestamp("2024-01-16"), Timestamp("2024-02-01")]),  # df_ordered_on
             {
-                DF_IDX_END_EXCL: array([0, 2]),
-                HAS_ROW_GROUP: array([True, False]),
-                HAS_DF_CHUNK: array([False, True]),
-            },
-            {
                 "period_bounds": date_range(
                     start=Timestamp("2024-01-01"),  # Floor of earliest timestamp
                     end=Timestamp("2024-03-01"),  # Ceil of latest timestamp
@@ -832,11 +787,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-03-01")]),  # rg_mins
             array([Timestamp("2024-03-02")]),  # rg_maxs
             Series([Timestamp("2024-04-01"), Timestamp("2024-04-30")]),  # df_ordered_on
-            {
-                DF_IDX_END_EXCL: array([0, 2]),
-                HAS_ROW_GROUP: array([True, False]),
-                HAS_DF_CHUNK: array([False, True]),
-            },
             {
                 "period_bounds": date_range(
                     start=Timestamp("2024-03-01"),  # Floor of earliest timestamp
@@ -869,11 +819,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
                 ],
             ),  # df_ordered_on
             {
-                DF_IDX_END_EXCL: array([2, 4]),
-                HAS_ROW_GROUP: array([True, False]),
-                HAS_DF_CHUNK: array([True, True]),
-            },
-            {
                 "period_bounds": date_range(
                     start=Timestamp("2024-05-01"),  # Floor of earliest timestamp
                     end=Timestamp("2024-07-01"),  # Ceil of latest timestamp
@@ -897,11 +842,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-04-01"), Timestamp("2024-04-29")]),  # rg_mins
             array([Timestamp("2024-04-28"), Timestamp("2024-06-02")]),  # rg_maxs
             Series([Timestamp("2024-05-01"), Timestamp("2024-06-01")]),  # df_ordered_on
-            {
-                DF_IDX_END_EXCL: array([0, 2]),
-                HAS_ROW_GROUP: array([True, True]),
-                HAS_DF_CHUNK: array([False, True]),
-            },
             {
                 "period_bounds": date_range(
                     start=Timestamp("2024-04-01"),  # Floor of earliest timestamp
@@ -928,11 +868,6 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([Timestamp("2024-05-15")]),  # rg_maxs
             Series([Timestamp("2024-05-18"), Timestamp("2024-06-01")]),  # df_ordered_on
             {
-                DF_IDX_END_EXCL: array([0, 2]),
-                HAS_ROW_GROUP: array([True, False]),
-                HAS_DF_CHUNK: array([False, True]),
-            },
-            {
                 "period_bounds": date_range(
                     start=Timestamp("2024-04-01"),  # Floor of earliest timestamp
                     end=Timestamp("2024-07-01"),  # Ceil of latest timestamp
@@ -954,7 +889,6 @@ def test_TimePeriodSplitStrategy_likely_on_target_size(
     rg_mins,
     rg_maxs,
     df_ordered_on,
-    oars,
     expected,
 ):
     """
@@ -975,3 +909,152 @@ def test_TimePeriodSplitStrategy_likely_on_target_size(
     assert_array_equal(strategy.oars_mins_maxs, expected["oars_mins_maxs"])
     # Test likely_on_target_size
     assert_array_equal(strategy.likely_on_target_size, expected["likely_on_target"])
+
+
+@pytest.mark.parametrize(
+    "test_id, rg_mins, rg_maxs, df_ordered_on, time_period, oar_idx_mrs_starts_ends_excl, expected",
+    [
+        (
+            "single_sequence_single_period",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max
+            #   1,         Jan,   01/01,   15/01,                 , single period
+            #   2,         Jan,                     16/01,   31/01, single period
+            array([Timestamp("2024-01-01")]),  # rg_mins
+            array([Timestamp("2024-01-15")]),  # rg_maxs
+            Series([Timestamp("2024-01-16"), Timestamp("2024-01-31")]),  # df_ordered_on
+            "MS",  # monthly periods
+            array([[0, 2]]),  # merge region with all OARs
+            {
+                "oars_merge_sequences": [
+                    (0, array([[1, 2]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "single_sequence_multiple_periods",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max
+            #   1,         Jan,   01/01,   15/01,                 , spans Jan
+            #   2,         Feb,                    01/02,   15/02, spans Feb
+            array([Timestamp("2024-01-01")]),  # rg_mins
+            array([Timestamp("2024-01-15")]),  # rg_maxs
+            Series([Timestamp("2024-02-01"), Timestamp("2024-02-15")]),  # df_ordered_on
+            "MS",  # monthly periods
+            array([[0, 2]]),  # merge region with all OARs
+            {
+                "oars_merge_sequences": [
+                    (0, array([[1, 0], [1, 2]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "multiple_sequences_multiple_periods",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max
+            #   1,         Jan,   01/01,   15/01,                 , spans Jan
+            #   2,         Feb,                    01/02,   15/02, spans Feb
+            #   3,         Mar,   01/03,   15/03,                 , spans Mar
+            #   4,         Apr,                    01/04,   15/04, spans Apr
+            array([Timestamp("2024-01-01"), Timestamp("2024-03-01")]),  # rg_mins
+            array([Timestamp("2024-01-15"), Timestamp("2024-03-15")]),  # rg_maxs
+            Series(
+                [
+                    Timestamp("2024-02-01"),
+                    Timestamp("2024-02-15"),
+                    Timestamp("2024-04-01"),
+                    Timestamp("2024-04-15"),
+                ],
+            ),  # df_ordered_on
+            "MS",  # monthly periods
+            array([[0, 2], [2, 4]]),  # two merge regions
+            {
+                "oars_merge_sequences": [
+                    (0, array([[1, 0], [1, 2]])),  # first sequence
+                    (2, array([[3, 2], [3, 4]])),  # second sequence
+                ],
+            },
+        ),
+        (
+            "rg_spans_multiple_periods",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max
+            #   1,         Jan,   15/01,                         , spans Jan-Feb
+            #   1,         Feb,            15/02,
+            #   2,         Mar,                    01/03,   31/03, spans Mar
+            array([Timestamp("2024-01-15")]),  # rg_mins
+            array([Timestamp("2024-02-15")]),  # rg_maxs
+            Series([Timestamp("2024-03-01"), Timestamp("2024-03-31")]),  # df_ordered_on
+            "MS",  # monthly periods
+            array([[0, 2]]),  # merge region with all OARs
+            {
+                "oars_merge_sequences": [
+                    (0, array([[1, 0], [1, 2]])),  # single sequence
+                ],
+            },
+        ),
+        (
+            "dfc_spans_multiple_periods",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max
+            #   1,         Jan,   01/01,   15/01,                 , spans Jan
+            #   2,         Feb,                    01/02,         , spans Feb-Mar
+            #   2,         Mar,                            15/03,
+            array([Timestamp("2024-01-01")]),  # rg_mins
+            array([Timestamp("2024-01-15")]),  # rg_maxs
+            Series([Timestamp("2024-02-01"), Timestamp("2024-03-15")]),  # df_ordered_on
+            "MS",  # monthly periods
+            array([[0, 2]]),  # merge region with all OARs
+            {
+                "oars_merge_sequences": [
+                    (0, array([[1, 0], [1, 2]])),  # single sequence
+                ],
+            },
+        ),
+    ],
+)
+def test_TimePeriodSplitStrategy_partition_merge_regions(
+    test_id: str,
+    rg_mins: NDArray,
+    rg_maxs: NDArray,
+    df_ordered_on: Series,
+    time_period: str,
+    oar_idx_mrs_starts_ends_excl: NDArray,
+    expected: Dict,
+) -> None:
+    """
+    Test TimePeriodSplitStrategy.partition_merge_regions method.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    rg_mins : NDArray
+        Array of minimum values for row groups.
+    rg_maxs : NDArray
+        Array of maximum values for row groups.
+    df_ordered_on : Series
+        Series of ordered values.
+    oars_desc_dict : Dict[str, NDArray]
+        Dictionary containing the oars_desc array.
+    time_period : str
+        Time period for row groups.
+    oar_idx_mrs_starts_ends_excl : NDArray
+        Array of shape (n, 2) containing start and end indices (excluded)
+        for each merge region to be consolidated.
+    expected : Dict
+        Dictionary containing expected results.
+
+    """
+    # Initialize strategy.
+    strategy = TimePeriodSplitStrategy(
+        rg_ordered_on_mins=rg_mins,
+        rg_ordered_on_maxs=rg_maxs,
+        df_ordered_on=df_ordered_on,
+        drop_duplicates=False,
+        row_group_time_period=time_period,
+    )
+    # Test partition_merge_regions.
+    result = strategy.partition_merge_regions(oar_idx_mrs_starts_ends_excl)
+    # Check
+    for (result_rg_start, result_cmpt_ends_excl), (
+        expected_rg_start,
+        expected_cmpt_ends_excl,
+    ) in zip(result, expected["oars_merge_sequences"]):
+        assert result_rg_start == expected_rg_start
+        assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
