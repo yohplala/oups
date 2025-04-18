@@ -187,6 +187,39 @@ class TestOARSplitStrategy(OARSplitStrategy):
                 HAS_DF_CHUNK: array([False, True, True, True]),
             },
         ),
+        (
+            "with_timestamps",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max
+            #   1,         Jan,   01/01,   15/01,                 , spans Jan
+            #   2,         Feb,                     01/02,   15/02, spans Feb
+            #   3,         Mar,   01/03,   15/03,                 , spans Mar
+            #   4,         Apr,                     01/04,   15/04, spans Apr
+            #   5,         May,   08/05,   12/05,   08/05,   10/05, spans May
+            array(
+                [Timestamp("2024-01-01"), Timestamp("2024-03-01"), Timestamp("2024-05-08")],
+            ),  # rg_mins
+            array(
+                [Timestamp("2024-01-15"), Timestamp("2024-03-15"), Timestamp("2024-05-12")],
+            ),  # rg_maxs
+            Series(
+                [
+                    Timestamp("2024-02-01"),
+                    Timestamp("2024-02-15"),
+                    Timestamp("2024-04-01"),
+                    Timestamp("2024-04-15"),
+                    Timestamp("2024-05-08"),
+                    Timestamp("2024-05-10"),
+                ],
+            ),
+            False,
+            {
+                RG_IDX_START: array([0, 1, 1, 2, 2]),
+                RG_IDX_END_EXCL: array([1, 1, 2, 2, 3]),
+                DF_IDX_END_EXCL: array([0, 2, 2, 4, 6]),
+                HAS_ROW_GROUP: array([True, False, True, False, True]),
+                HAS_DF_CHUNK: array([False, True, False, True, True]),
+            },
+        ),
     ],
 )
 def test_OARSplitStrategy_init(
@@ -663,8 +696,8 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         (
             "rg_and_dfc_in_same_period",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
-            #   1,         Jun,   10/06,   15/06,                , False (both RG & DFc in period)
-            #   2,         Jun,                    16/06,   18/06, False (both RG & DFc in period)
+            #   1,         Jun,   10/06,   15/06,                 , False (both RG & DFc in period)
+            #   2,         Jun,                     16/06,   18/06, False (both RG & DFc in period)
             array([Timestamp("2024-06-10")]),  # rg_mins
             array([Timestamp("2024-06-15")]),  # rg_maxs
             Series([Timestamp("2024-06-16"), Timestamp("2024-06-18")]),  # df_ordered_on
@@ -686,9 +719,9 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         (
             "dfc_ends_in period_with_a_rg",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
-            #   1,         Jul,                    15/07,        , False (DFc spans several periods)
-            #   1,         Aug,                             10/08,
-            #   2,         Aug,   15/08,   17/08,                , False (both RG & DFc in period)
+            #   1,         Jul,                     15/07,        , False (DFc spans several periods)
+            #   1,         Aug,                              10/08,
+            #   2,         Aug,   15/08,   17/08,                 , False (both RG & DFc in period)
             array([Timestamp("2024-08-15")]),  # rg_mins
             array([Timestamp("2024-08-17")]),  # rg_maxs
             Series([Timestamp("2024-07-15"), Timestamp("2024-08-10")]),  # df_ordered_on
@@ -710,9 +743,9 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         (
             "rg_ends_in_period_with_a_dfc",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
-            #   1,         Sep,   11/09,                         , False (RG spans several periods)
+            #   1,         Sep,   11/09,                          , False (RG spans several periods)
             #   1,         Oct,            15/10,
-            #   2,         Oct,                    16/10,   18/10, False (both RG & DFc in period)
+            #   2,         Oct,                     16/10,   18/10, False (both RG & DFc in period)
             array([Timestamp("2024-09-11")]),  # rg_mins
             array([Timestamp("2024-10-15")]),  # rg_maxs
             Series([Timestamp("2024-10-16"), Timestamp("2024-10-18")]),  # df_ordered_on
@@ -734,8 +767,8 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         (
             "rg_starts_in_period_with_a_dfc",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
-            #   1,         Nov,                    15/11,   17/11, False (both RG & DFc in period)
-            #   2,         Nov,   18/11,                         , False (RG spans several periods)
+            #   1,         Nov,                     15/11,   17/11, False (both RG & DFc in period)
+            #   2,         Nov,   18/11,                          , False (RG spans several periods)
             #   2,         Dec,            05/12,
             array([Timestamp("2024-11-18")]),  # rg_mins
             array([Timestamp("2024-12-05")]),  # rg_maxs
@@ -758,9 +791,9 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         (
             "dfc_starts_in_period_with_a_rg",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
-            #  14,         Jan,   01/01,   04/01,                , False (both RG & DFc in period)
-            #  15,         Jan,                    16/01,        , False (DFc spans several periods)
-            #  15,         Feb,                             01/02,
+            #  14,         Jan,   01/01,   04/01,                 , False (both RG & DFc in period)
+            #  15,         Jan,                     16/01,        , False (DFc spans several periods)
+            #  15,         Feb,                              01/02,
             array([Timestamp("2024-01-01")]),  # rg_mins
             array([Timestamp("2024-01-04")]),  # rg_maxs
             Series([Timestamp("2024-01-16"), Timestamp("2024-02-01")]),  # df_ordered_on
@@ -782,8 +815,8 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         (
             "rg_and_dfc_ok",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
-            #   1,         Mar,   01/03,   02/03,                , True (single RG in period)
-            #   2,         Apr,                    01/04,   30/04, True (single DFc in period)
+            #   1,         Mar,   01/03,   02/03,                 , True (single RG in period)
+            #   2,         Apr,                     01/04,   30/04, True (single DFc in period)
             array([Timestamp("2024-03-01")]),  # rg_mins
             array([Timestamp("2024-03-02")]),  # rg_maxs
             Series([Timestamp("2024-04-01"), Timestamp("2024-04-30")]),  # df_ordered_on
@@ -934,7 +967,7 @@ def test_TimePeriodSplitStrategy_likely_on_target_size(
             "single_sequence_multiple_periods",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max
             #   1,         Jan,   01/01,   15/01,                 , spans Jan
-            #   2,         Feb,                    01/02,   15/02, spans Feb
+            #   2,         Feb,                     01/02,   15/02, spans Feb
             array([Timestamp("2024-01-01")]),  # rg_mins
             array([Timestamp("2024-01-15")]),  # rg_maxs
             Series([Timestamp("2024-02-01"), Timestamp("2024-02-15")]),  # df_ordered_on
@@ -950,42 +983,63 @@ def test_TimePeriodSplitStrategy_likely_on_target_size(
             "multiple_sequences_multiple_periods",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max
             #   1,         Jan,   01/01,   15/01,                 , spans Jan
-            #   2,         Feb,                    01/02,   15/02, spans Feb
+            #   2,         Feb,                     01/02,   15/02, spans Feb
             #   3,         Mar,   01/03,   15/03,                 , spans Mar
-            #   4,         Apr,                    01/04,   15/04, spans Apr
-            array([Timestamp("2024-01-01"), Timestamp("2024-03-01")]),  # rg_mins
-            array([Timestamp("2024-01-15"), Timestamp("2024-03-15")]),  # rg_maxs
+            #   4,         Apr,                     01/04,   15/04, spans Apr
+            #   5,         May,   08/05,   12/05,   08/05,   10/05, spans May
+            array(
+                [Timestamp("2024-01-01"), Timestamp("2024-03-01"), Timestamp("2024-05-08")],
+            ),  # rg_mins
+            array(
+                [Timestamp("2024-01-15"), Timestamp("2024-03-15"), Timestamp("2024-05-12")],
+            ),  # rg_maxs
             Series(
                 [
                     Timestamp("2024-02-01"),
                     Timestamp("2024-02-15"),
                     Timestamp("2024-04-01"),
                     Timestamp("2024-04-15"),
+                    Timestamp("2024-05-08"),
+                    Timestamp("2024-05-10"),
                 ],
             ),  # df_ordered_on
             "MS",  # monthly periods
-            array([[0, 2], [2, 4]]),  # two merge regions
+            array([[0, 2], [3, 5]]),  # two merge regions
             {
                 "oars_merge_sequences": [
                     (0, array([[1, 0], [1, 2]])),  # first sequence
-                    (2, array([[3, 2], [3, 4]])),  # second sequence
+                    (2, array([[2, 4], [3, 6]])),  # second sequence
                 ],
             },
         ),
         (
-            "rg_spans_multiple_periods",
+            "rg_dfc_span_multiple_periods",
             # OAR, Time period, RGs min, RGs max, DFc min, DFc max
-            #   1,         Jan,   15/01,                         , spans Jan-Feb
+            #   1,         Jan,   15/01,                          , spans Jan-Feb
             #   1,         Feb,            15/02,
-            #   2,         Mar,                    01/03,   31/03, spans Mar
-            array([Timestamp("2024-01-15")]),  # rg_mins
-            array([Timestamp("2024-02-15")]),  # rg_maxs
-            Series([Timestamp("2024-03-01"), Timestamp("2024-03-31")]),  # df_ordered_on
+            #   2,         Mar,                     01/03,        , spans Mar-Apr
+            #   2,         Apr,                              01/04
+            #   3,         Apr,   02/04,   15/04,   02/04,   15/04, spans Apr
+            #   4,         Jun,   01/06,   15/06,                 , spans Jun
+            array(
+                [Timestamp("2024-01-15"), Timestamp("2024-04-02"), Timestamp("2024-06-01")],
+            ),  # rg_mins
+            array(
+                [Timestamp("2024-02-15"), Timestamp("2024-04-15"), Timestamp("2024-06-15")],
+            ),  # rg_maxs
+            Series(
+                [
+                    Timestamp("2024-03-01"),
+                    Timestamp("2024-04-01"),
+                    Timestamp("2024-04-02"),
+                    Timestamp("2024-04-15"),
+                ],
+            ),  # df_ordered_on
             "MS",  # monthly periods
-            array([[0, 2]]),  # merge region with all OARs
+            array([[0, 3]]),  # merge region with 3 OARs
             {
                 "oars_merge_sequences": [
-                    (0, array([[1, 0], [1, 2]])),  # single sequence
+                    (0, array([[1, 0], [1, 2], [2, 3]])),  # single sequence
                 ],
             },
         ),

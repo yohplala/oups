@@ -872,44 +872,41 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         during the write process.
 
         """
-        oars_merge_sequences = []
-        for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
-            rg_idx_start = self.oars_rg_idx_starts[oar_idx_start]
-            print()
-            print("self.oars_period_idx[oar_idx_start:oar_idx_end_excl, 0]")
-            print(self.oars_period_idx[oar_idx_start:oar_idx_end_excl, 0])
-            # Find all OARs in this merge region that start a new period
-            oar_idx_last_periods = (
-                oar_idx_end_excl
-                - oar_idx_start
-                - 1
-                - unique(
-                    self.oars_period_idx[oar_idx_start:oar_idx_end_excl, 0][::-1],
-                    return_index=True,
-                )[1]
+        # oars_merge_sequences = []
+        # for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
+        #    rg_idx_start = self.oars_rg_idx_starts[oar_idx_start]
+        #    # Find all OARs in this merge region that start a new period
+        #    oar_idx_last_periods = (
+        #        oar_idx_end_excl
+        #        - oar_idx_start
+        #        - 1
+        #        - unique(
+        #            self.oars_period_idx[oar_idx_start:oar_idx_end_excl, 0][::-1],
+        #            return_index=True,
+        #        )[1]
+        #    )
+        #    period_component_ends = self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
+        #        oar_idx_last_periods
+        #    ]
+        #    oars_merge_sequences.append((rg_idx_start, period_component_ends))
+
+        return [
+            (
+                self.oars_rg_idx_starts[oar_idx_start],
+                self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
+                    (
+                        oar_idx_end_excl
+                        - oar_idx_start
+                        - 1
+                        - unique(
+                            self.oars_period_idx[oar_idx_start:oar_idx_end_excl, 0][::-1],
+                            return_index=True,
+                        )
+                    )[1]
+                ],
             )
-            print()
-            print("oar_idx_last_periods")
-            print(oar_idx_last_periods)
-            period_component_ends = self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
-                oar_idx_last_periods
-            ]
-            print()
-            print("period_component_ends")
-            print(period_component_ends)
-            oars_merge_sequences.append((rg_idx_start, period_component_ends))
-
-        return oars_merge_sequences
-
-    #        [
-    #    (
-    #        self.oars_rg_idx_starts[oar_idx_start],
-    #        self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
-    #            unique(self.oars_period_idx[oar_idx_start:oar_idx_end_excl, 0], return_index=True)[1]
-    #        ]
-    #    )
-    #    for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl
-    # ]
+            for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl
+        ]
 
     def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
         """
