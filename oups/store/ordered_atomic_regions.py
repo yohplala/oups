@@ -582,42 +582,63 @@ class NRowsSplitStrategy(OARSplitStrategy):
         write process.
 
         """
-        oars_merge_sequences = []
-        for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
-            rg_idx_start = self.oars_rg_idx_starts[oar_idx_start]
-            # Cumulate number of rows.
-            cumsum_rows = cumsum(self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl])
-            n_target_size_multiples = cumsum_rows[-1] // self.row_group_target_size
-            # Get indices where multiples of target size are crossed.
-            if self.row_group_target_size <= cumsum_rows[-1]:
-                target_size_crossings = unique(
-                    searchsorted(
-                        cumsum_rows,
-                        # Using linspace instead of arange to include endpoint.
-                        linspace(
-                            self.row_group_target_size,
-                            self.row_group_target_size * n_target_size_multiples,
-                            n_target_size_multiples,
-                            endpoint=True,
-                        ),
-                        side=LEFT,
-                    ),
-                )
-            else:
-                target_size_crossings = zeros(1, dtype=int)
-            # Force last index to be length of cumsum_rows
-            target_size_crossings[-1] = oar_idx_end_excl - oar_idx_start - 1
-            # Create a structured array with the filtered indices
-            oars_merge_sequences.append(
-                (
-                    rg_idx_start,
-                    self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
-                        target_size_crossings
-                    ],
-                ),
+        # oars_merge_sequences = []
+        # for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
+        #    rg_idx_start = self.oars_rg_idx_starts[oar_idx_start]
+        #    # Cumulate number of rows.
+        #    cumsum_rows = cumsum(self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl])
+        #    n_target_size_multiples = cumsum_rows[-1] // self.row_group_target_size
+        #    # Get indices where multiples of target size are crossed.
+        #    # Force last index to be length of cumsum_rows
+        #    target_size_crossings = r_[unique(
+        #        searchsorted(
+        #            cumsum_rows,
+        #            # Using linspace instead of arange to include endpoint.
+        #            linspace(
+        #                self.row_group_target_size,
+        #                self.row_group_target_size * n_target_size_multiples,
+        #                n_target_size_multiples,
+        #                endpoint=True,
+        #            ),
+        #            side=LEFT,
+        #        ),
+        #    )[:-1], oar_idx_end_excl - oar_idx_start - 1]
+        #    oars_merge_sequences.append(
+        #        (
+        #            rg_idx_start,
+        #            self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
+        #                target_size_crossings
+        #            ],
+        #        ),
+        #    )
+        return [
+            (
+                self.oars_rg_idx_starts[oar_idx_start],
+                self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
+                    r_[
+                        unique(
+                            searchsorted(
+                                (
+                                    cum_rows := cumsum(
+                                        self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl],
+                                    )
+                                ),
+                                linspace(
+                                    self.row_group_target_size,
+                                    self.row_group_target_size
+                                    * (n_multiples := cum_rows[-1] // self.row_group_target_size),
+                                    n_multiples,
+                                    endpoint=True,
+                                ),
+                                side=LEFT,
+                            ),
+                        )[:-1],
+                        oar_idx_end_excl - oar_idx_start - 1,
+                    ]
+                ],
             )
-
-        return oars_merge_sequences
+            for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl
+        ]
 
     def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
         """
@@ -889,7 +910,6 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         #        oar_idx_last_periods
         #    ]
         #    oars_merge_sequences.append((rg_idx_start, period_component_ends))
-
         return [
             (
                 self.oars_rg_idx_starts[oar_idx_start],
