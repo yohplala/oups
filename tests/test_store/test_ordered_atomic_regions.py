@@ -1148,13 +1148,13 @@ def test_TimePeriodSplitStrategy_partition_merge_regions(
     [
         (
             "monthly_periods_exact",
-            date_range(start="2024-01-01", end="2024-04-01", freq="D"),  # 3 months of daily data
+            date_range(start="2024-01-01", end="2024-04-01", freq="D"),
             "MS",  # Month Start
             [0, 31, 60, 91],  # End of Jan, Feb, Mar
         ),
         (
             "monthly_periods_with_remainder",
-            date_range(start="2024-01-28", end="2024-02-03", freq="D"),  # 2 months of daily data
+            date_range(start="2024-01-28", end="2024-02-03", freq="D"),
             "MS",  # Month Start
             [0, 4],  # End of Jan
         ),
@@ -1175,6 +1175,12 @@ def test_TimePeriodSplitStrategy_partition_merge_regions(
             date_range(start="2024-01-01", periods=3, freq="h"),  # 3 hours
             "h",  # Hourly
             [0, 1, 2],  # End of first and second hour
+        ),
+        (
+            "sparse_df_ordered_on",
+            Series([Timestamp("2024-01-01 12:00"), Timestamp("2024-06-01 12:00")]),
+            "D",  # Daily
+            [0, 1],  # End of first day
         ),
     ],
 )
