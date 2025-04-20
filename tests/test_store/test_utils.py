@@ -211,3 +211,25 @@ def test_floor_ceil_timestamp(
     """
     assert floor_ts(ts, freq) == expected_floor
     assert ceil_ts(ts, freq) == expected_ceil
+
+
+def test_pandas_bug_timestamp_on_offset_and_ceil():
+    # If fixed in pandas, correct in 'oups.store.utils.ceil_ts()'
+    # 'ceil' in pandas and a Timestamp on offset returns its floor,
+    # not its ceil.
+    ts = Timestamp("2024-03-15 00:00:00")
+    # Expected: 2024-03-16 00:00:00
+    assert ts.ceil("D") == ts
+    # Same with 'h'our...
+    assert ts.ceil("h") == Timestamp("2024-03-15 00:00:00")
+
+
+def test_pandas_bug_floor_ceil_with_non_fixed_frequency():
+    # If fixed in pandas, correct in 'oups.store.utils.ceil_ts()' and
+    # 'oups.store.utils.floor_ts()'.
+    # 'floor' & 'ceil' do not accept non-fixed freqstr.
+    ts = Timestamp("2024-03-15 00:00:00")
+    with pytest.raises(ValueError, match=".*is a non-fixed frequency$"):
+        ts.floor("MS")
+    with pytest.raises(ValueError, match=".*is a non-fixed frequency$"):
+        ts.ceil("MS")
