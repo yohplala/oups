@@ -9,6 +9,7 @@ from os import scandir
 from typing import Iterator, List, Tuple
 
 from pandas import DataFrame
+from pandas import Timedelta
 from pandas import Timestamp
 from pandas import date_range
 
@@ -155,6 +156,9 @@ def ceil_ts(ts: Timestamp, freq: str) -> Timestamp:
 
     """
     try:
-        return ts.ceil(freq)
+        # Can't use 'ceil' from pandas because it does not work on 'D'aily
+        # frequency.
+        # return ts.ceil(freq)
+        return (ts + Timedelta(1, unit=freq)).floor(freq)
     except ValueError:
         return date_range(start=floor_ts(ts, freq), periods=2, freq=freq)[1]

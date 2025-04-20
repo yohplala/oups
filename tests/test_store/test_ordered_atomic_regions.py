@@ -37,10 +37,10 @@ class TestOARSplitStrategy(OARSplitStrategy):
     def specialized_init(self, **kwargs):
         raise NotImplementedError("Test implementation only")
 
-    def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool):
+    def partition_merge_regions(self, oar_idx_mrs_starts_ends_excl: NDArray):
         raise NotImplementedError("Test implementation only")
 
-    def partition_merge_regions(self, oar_idx_mrs_starts_ends_excl: NDArray):
+    def row_group_offsets(self, chunk: DataFrame, is_last_chunk: bool):
         raise NotImplementedError("Test implementation only")
 
 
@@ -589,6 +589,35 @@ def test_NRowsSplitStrategy_partition_merge_regions(
 
 
 @pytest.mark.parametrize(
+    "df_size,target_size,expected_offsets",
+    [
+        # DataFrame larger than target size, no remainder.
+        (100, 20, [0, 20, 40, 60, 80]),
+        # DataFrame smaller than target size.
+        (15, 20, [0]),
+        # DataFrame larger than target size, with remainder.
+        (45, 20, [0, 20, 40]),
+        # Single row DataFrame.
+        (1, 20, [0]),
+    ],
+)
+def test_row_group_offsets(df_size, target_size, expected_offsets):
+    # Create test data
+    # Initialize strategy
+    strategy = NRowsSplitStrategy(
+        rg_ordered_on_mins=Series([0]),  # dummy value
+        rg_ordered_on_maxs=Series([1]),  # dummy value
+        df_ordered_on=Series([0]),  # dummy value
+        rgs_n_rows=Series([1]),  # dummy value
+        row_group_target_size=target_size,
+    )
+    # Get offsets
+    offsets = strategy.row_group_offsets(df_ordered_on=Series(range(df_size)))
+    # Verify results
+    assert offsets == expected_offsets
+
+
+@pytest.mark.parametrize(
     "test_id, rg_mins, rg_maxs, df_ordered_on, expected",
     [
         (
@@ -1112,3 +1141,52 @@ def test_TimePeriodSplitStrategy_partition_merge_regions(
     ) in zip(result, expected["oars_merge_sequences"]):
         assert result_rg_start == expected_rg_start
         assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
+
+
+@pytest.mark.parametrize(
+    "test_id,df_dates,target_period,expected_offsets",
+    [
+        (
+            "monthly_periods_exact",
+            date_range(start="2024-01-01", end="2024-04-01", freq="D"),  # 3 months of daily data
+            "MS",  # Month Start
+            [0, 31, 60, 91],  # End of Jan, Feb, Mar
+        ),
+        (
+            "monthly_periods_with_remainder",
+            date_range(start="2024-01-28", end="2024-02-03", freq="D"),  # 2 months of daily data
+            "MS",  # Month Start
+            [0, 4],  # End of Jan
+        ),
+        (
+            "daily_periods_with_remainder",
+            date_range(start="2024-01-01 12:00", periods=2, freq="D"),  # 2 days starting at noon
+            "D",  # Daily
+            [0, 1],  # End of first day
+        ),
+        (
+            "single_day",
+            date_range(start="2024-01-01", periods=1, freq="D"),  # Single day
+            "D",  # Daily
+            [0],  # No splits needed
+        ),
+        (
+            "hourly_periods",
+            date_range(start="2024-01-01", periods=3, freq="h"),  # 3 hours
+            "h",  # Hourly
+            [0, 1, 2],  # End of first and second hour
+        ),
+    ],
+)
+def test_time_period_row_group_offsets(test_id, df_dates, target_period, expected_offsets):
+    # Initialize strategy
+    strategy = TimePeriodSplitStrategy(
+        rg_ordered_on_mins=Series([Timestamp("2024/01/01 04:00:00")]),  # dummy value
+        rg_ordered_on_maxs=Series([Timestamp("2024/01/05 14:00:00")]),  # dummy value
+        df_ordered_on=Series(Timestamp("2024/01/06 04:00:00")),  # dummy value
+        row_group_time_period=target_period,
+    )
+    # Get offsets
+    offsets = strategy.row_group_offsets(df_ordered_on=Series(df_dates))
+    # Verify results
+    assert offsets == expected_offsets

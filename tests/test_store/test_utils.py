@@ -160,8 +160,22 @@ def test_conform_cmidx(tmp_path):
             Timestamp("2024-03-15 15:00:00"),  # ceil to next hour
         ),
         (
+            "hourly_exact",
+            Timestamp("2024-03-15 01:00:00"),  # timestamp with minutes and seconds
+            "h",  # hourly
+            Timestamp("2024-03-15 01:00:00"),  # floor to hour
+            Timestamp("2024-03-15 02:00:00"),  # ceil to next hour
+        ),
+        (
             "daily",
             Timestamp("2024-03-15 14:37:23"),  # timestamp with time
+            "D",  # daily
+            Timestamp("2024-03-15 00:00:00"),  # floor to day
+            Timestamp("2024-03-16 00:00:00"),  # ceil to next day
+        ),
+        (
+            "daily_exact",
+            Timestamp("2024-03-15 00:00:00"),  # timestamp with time
             "D",  # daily
             Timestamp("2024-03-15 00:00:00"),  # floor to day
             Timestamp("2024-03-16 00:00:00"),  # ceil to next day

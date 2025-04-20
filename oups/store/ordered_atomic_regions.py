@@ -18,7 +18,7 @@ is either:
 from abc import ABC
 from abc import abstractmethod
 from functools import cached_property
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 from numpy import arange
 from numpy import bincount
@@ -86,7 +86,7 @@ class OARSplitStrategy(ABC):
         rg_ordered_on_mins: NDArray,
         rg_ordered_on_maxs: NDArray,
         df_ordered_on: Series,
-        drop_duplicates: bool,
+        drop_duplicates: Optional[bool] = False,
     ):
         """
         Compute ordered atomic regions (OARs) from row groups and DataFrame.
@@ -108,7 +108,7 @@ class OARSplitStrategy(ABC):
             Maximum values of 'ordered_on' in each row group.
         df_ordered_on : Series[Timestamp]
             Values of 'ordered_on' column in DataFrame.
-        drop_duplicates : bool
+        drop_duplicates : Optional[bool], default False
             Flag impacting how overlapping boundaries have to be managed.
             More exactly, row groups are considered as first data, and DataFrame as
             second data, coming after. In case of a row group leading a DataFrame
@@ -338,25 +338,23 @@ class OARSplitStrategy(ABC):
         raise NotImplementedError("Subclasses must implement this method")
 
     @abstractmethod
-    def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
+    def row_group_offsets(self, df_ordered_on: Series) -> Union[int, List[int]]:
         """
-        Define the appropriate row group size or split points for a chunk.
+        Define the row group offsets for a chunk depending row group target size.
 
-        This size is defined in terms of number of rows. Result is to be used
-        as `row_group_size` parameter in `iter_dataframe` method.
+        Result is to be used as `row_group_offsets` parameter in
+        `iter_dataframe` method.
 
         Parameters
         ----------
-        chunk : DataFrame
-            DataFrame chunk to process.
-        is_last_chunk : bool
-            Whether this is the last chunk in the iteration.
+        df_ordered_on : Series
+            Series by which the DataFrame to be written is ordered.
 
         Returns
         -------
         Union[int, List[int]]
-            Either a single integer (for uniform splitting) or a list of indices
-            where the chunk should be split
+            A list of indices with the explicit index values to start new row
+            groups.
 
         """
         raise NotImplementedError("Subclasses must implement this method")
@@ -402,9 +400,9 @@ class NRowsSplitStrategy(OARSplitStrategy):
         rg_ordered_on_mins: NDArray,
         rg_ordered_on_maxs: NDArray,
         df_ordered_on: Series,
-        drop_duplicates: bool,
         rgs_n_rows: NDArray,
         row_group_target_size: int,
+        drop_duplicates: Optional[bool] = False,
     ):
         """
         Initialize scheme with target size.
@@ -419,13 +417,13 @@ class NRowsSplitStrategy(OARSplitStrategy):
             row groups.
         df_ordered_on : Series
             Series of shape (d) containing the ordered DataFrame.
-        drop_duplicates : bool
-            Whether to drop duplicates between row groups and DataFrame.
         rgs_n_rows : NDArray
             Array of shape (r) containing the number of rows in each row group
             in existing ParquetFile.
         row_group_target_size : int
             Target number of rows above which a new row group should be created.
+        drop_duplicates : Optional[bool], default False
+            Whether to drop duplicates between row groups and DataFrame.
 
         """
         super().__init__(
@@ -444,7 +442,7 @@ class NRowsSplitStrategy(OARSplitStrategy):
         self,
         rgs_n_rows: NDArray,
         row_group_target_size: int,
-        drop_duplicates: bool,
+        drop_duplicates: Optional[bool] = False,
     ):
         """
         Initialize scheme with target size.
@@ -456,7 +454,7 @@ class NRowsSplitStrategy(OARSplitStrategy):
             in existing ParquetFile.
         row_group_target_size : int
             Target number of rows above which a new row group should be created.
-        drop_duplicates : bool
+        drop_duplicates : Optional[bool], default False
             Whether to drop duplicates between row groups and DataFrame.
 
         """
@@ -640,25 +638,26 @@ class NRowsSplitStrategy(OARSplitStrategy):
             for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl
         ]
 
-    def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
+    def row_group_offsets(self, df_ordered_on: DataFrame) -> Union[int, List[int]]:
         """
-        Define the appropriate row group size or split points for a chunk.
+        Define the row group offsets for a chunk depending row group target size.
 
-        This size is defined in terms of number of rows. Result is to be used
-        as `row_group_size` parameter in `iter_dataframe` method.
+        Result is to be used as `row_group_offsets` parameter in
+        `iter_dataframe` method.
 
-        Logic varies based on `max_n_off_target_rgs` setting and whether this is
-        the last chunk.
+        Parameters
+        ----------
+        df_ordered_on : Series
+            Series by which the DataFrame to be written is ordered.
+
+        Returns
+        -------
+        Union[int, List[int]]
+            A list of indices with the explicit index values to start new row
+            groups.
 
         """
-        if self.max_n_off_target_rgs == 0 or len(chunk) <= self.row_group_target_size:
-            # Always uniform splitting for max_n_off_target_rgs = 0
-            return self.row_group_target_size
-        else:
-            # When a max_n_off_target_rgs is set larger than 0, then
-            # calculate split points to create chunks of target size
-            # and potentially a smaller final piece.
-            return list(range(len(chunk), step=self.row_group_target_size))
+        return list(range(0, len(df_ordered_on), self.row_group_target_size))
 
 
 class TimePeriodSplitStrategy(OARSplitStrategy):
@@ -698,8 +697,8 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         rg_ordered_on_mins: NDArray,
         rg_ordered_on_maxs: NDArray,
         df_ordered_on: Series,
-        drop_duplicates: bool,
         row_group_time_period: str,
+        drop_duplicates: Optional[bool] = False,
     ):
         """
         Initialize scheme with time size.
@@ -714,7 +713,7 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
             row groups.
         df_ordered_on : Series
             Series of shape (d) containing the ordered DataFrame.
-        drop_duplicates : bool
+        drop_duplicates : Optional[bool], default False
             Whether to drop duplicates between row groups and DataFrame.
         row_group_time_period : str
             Target period for each row group (pandas freqstr).
@@ -928,25 +927,38 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
             for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl
         ]
 
-    def get_row_group_size(self, chunk: DataFrame, is_last_chunk: bool) -> Union[int, List[int]]:
+    def row_group_offsets(self, df_ordered_on: Series) -> Union[int, List[int]]:
         """
-        Define the appropriate row group size or split points for a chunk.
+        Define the row group offsets for a chunk depending row group target size.
 
-        This size is defined in terms of number of rows. Result is to be used
-        as `row_group_size` parameter in `iter_dataframe` method.
+        Result is to be used as `row_group_offsets` parameter in
+        `iter_dataframe` method.
 
         Parameters
         ----------
-        chunk : DataFrame
-            DataFrame chunk to process.
-        is_last_chunk : bool
-            Whether this is the last chunk in the iteration.
+        df_ordered_on : Series
+            Series by which the DataFrame to be written is ordered.
 
         Returns
         -------
         Union[int, List[int]]
-            Either a single integer (for uniform splitting) or a list of indices
-            where the chunk should be split
+            A list of indices with the explicit index values to start new row
+            groups.
 
         """
-        raise NotImplementedError("Subclasses must implement this method")
+        # Generate period bounds for the chunk.
+        # start_ts = floor_ts(Timestamp(df_ordered_on.iloc[0]), self.row_group_time_period)
+        # end_ts = ceil_ts(Timestamp(df_ordered_on.iloc[-1]), self.row_group_time_period)
+        # period_bounds = date_range(start=start_ts, end=end_ts, freq=self.row_group_time_period)[:-1]
+        # Find where each period boundary falls in 'df_ordered_on'.
+        return unique(
+            searchsorted(
+                df_ordered_on,
+                date_range(
+                    start=floor_ts(Timestamp(df_ordered_on.iloc[0]), self.row_group_time_period),
+                    end=ceil_ts(Timestamp(df_ordered_on.iloc[-1]), self.row_group_time_period),
+                    freq=self.row_group_time_period,
+                )[:-1],
+                side=LEFT,
+            ),
+        ).tolist()
