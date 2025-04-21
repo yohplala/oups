@@ -23,9 +23,9 @@ from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.store.ordered_atomic_regions import NRowsSplitStrategy
-from oups.store.ordered_atomic_regions import OARSplitStrategy
-from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
+from oups.store.ordered_atomic_regions import NRowsMergeSplitStrategy
+from oups.store.ordered_atomic_regions import OARMergeSplitStrategy
+from oups.store.ordered_atomic_regions import TimePeriodMergeSplitStrategy
 from oups.store.ordered_atomic_regions import get_region_indices_of_same_values
 from oups.store.ordered_atomic_regions import get_region_indices_of_true_values
 from oups.store.ordered_atomic_regions import get_region_start_end_delta
@@ -43,7 +43,7 @@ HAS_DF_CHUNK = "has_df_chunk"
 REF_D = "2020/01/01 "
 
 
-class TestOARSplitStrategy(OARSplitStrategy):
+class TestOARMergeSplitStrategy(OARMergeSplitStrategy):
     """
     Concrete implementation for testing purposes.
     """
@@ -51,7 +51,7 @@ class TestOARSplitStrategy(OARSplitStrategy):
     def specialized_init(self, **kwargs):
         raise NotImplementedError("Test implementation only")
 
-    def partition_merge_regions(self, oar_idx_mrs_starts_ends_excl: NDArray):
+    def partition_merge_regions(self):
         raise NotImplementedError("Test implementation only")
 
     def row_group_offsets(self, chunk: DataFrame, is_last_chunk: bool):
@@ -425,7 +425,7 @@ def test_OARSplitStrategy_init(
     """
     Test OARSplitStrategy with various scenarios.
     """
-    oars_prop = TestOARSplitStrategy(
+    oars_prop = TestOARMergeSplitStrategy(
         rg_mins,
         rg_maxs,
         df_ordered_on,
@@ -492,7 +492,7 @@ def test_OARSplitStrategy_validation(
 
     """
     with pytest.raises(ValueError, match=expected_error):
-        TestOARSplitStrategy(
+        TestOARMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
@@ -608,7 +608,7 @@ def test_compute_merge_regions_start_ends_excl(
         Expected output containing start and end indices for enlarged merge regions.
 
     """
-    split_strat = TestOARSplitStrategy(
+    split_strat = TestOARMergeSplitStrategy(
         rg_ordered_on_mins=zeros(1, dtype=int_),
         rg_ordered_on_maxs=zeros(1, dtype=int_),
         df_ordered_on=Series([1]),
@@ -643,7 +643,7 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
     # Create row group sizes array
     rgs_n_rows = array([90, 50, 30, 120, 30])
     # Initialize strategy
-    strategy = NRowsSplitStrategy.from_oars_desc(
+    strategy = NRowsMergeSplitStrategy.from_oars_desc(
         oars_rg_idx_starts=dummy_rg_idx,
         oars_cmpt_idx_ends_excl=column_stack((dummy_rg_idx, oars_df_idx_ends_excl)),
         oars_has_row_group=oars_has_row_group,
@@ -880,7 +880,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
 
     """
     # Initialize strategy with target size of 100 rows
-    strategy = NRowsSplitStrategy.from_oars_desc(
+    strategy = NRowsMergeSplitStrategy.from_oars_desc(
         oars_rg_idx_starts=oars_desc_dict[RG_IDX_START],
         oars_cmpt_idx_ends_excl=column_stack(
             (oars_desc_dict[RG_IDX_END_EXCL], oars_desc_dict[DF_IDX_END_EXCL]),
@@ -920,7 +920,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
 def test_row_group_offsets(df_size, target_size, expected_offsets):
     # Create test data
     # Initialize strategy
-    strategy = NRowsSplitStrategy(
+    strategy = NRowsMergeSplitStrategy(
         rg_ordered_on_mins=Series([0]),  # dummy value
         rg_ordered_on_maxs=Series([1]),  # dummy value
         df_ordered_on=Series([0]),  # dummy value
@@ -1274,7 +1274,7 @@ def test_TimePeriodSplitStrategy_oars_likely_on_target_size(
     """
     time_period = "MS"
     # Initialize strategy
-    strategy = TimePeriodSplitStrategy(
+    strategy = TimePeriodMergeSplitStrategy(
         rg_ordered_on_mins=rg_mins,
         rg_ordered_on_maxs=rg_maxs,
         df_ordered_on=df_ordered_on,
@@ -1441,7 +1441,7 @@ def test_TimePeriodSplitStrategy_partition_merge_regions(
 
     """
     # Initialize strategy.
-    strategy = TimePeriodSplitStrategy(
+    strategy = TimePeriodMergeSplitStrategy(
         rg_ordered_on_mins=rg_mins,
         rg_ordered_on_maxs=rg_maxs,
         df_ordered_on=df_ordered_on,
@@ -1520,7 +1520,7 @@ def test_TimePeriodSplitStrategy_partition_merge_regions(
 )
 def test_time_period_row_group_offsets(test_id, df_dates, target_period, expected_offsets):
     # Initialize strategy
-    strategy = TimePeriodSplitStrategy(
+    strategy = TimePeriodMergeSplitStrategy(
         rg_ordered_on_mins=Series([Timestamp("2024/01/01 04:00:00")]),  # dummy value
         rg_ordered_on_maxs=Series([Timestamp("2024/01/05 14:00:00")]),  # dummy value
         df_ordered_on=Series(Timestamp("2024/01/06 04:00:00")),  # dummy value
@@ -2231,14 +2231,14 @@ def test_compute_ordered_merge_plan(
     rg_ordered_on_maxs = array(pf_statistics[MAX]["ordered_on"])
     df_ordered_on = df.loc[:, "ordered_on"]
     if isinstance(row_group_size_target, str):
-        split_strat = TimePeriodSplitStrategy(
+        split_strat = TimePeriodMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
             row_group_time_period=row_group_size_target,
         )
     else:
-        split_strat = NRowsSplitStrategy(
+        split_strat = NRowsMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,

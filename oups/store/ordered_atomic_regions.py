@@ -158,9 +158,9 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
         return m_values[indices[:, 1] - 1] - m_values[indices[:, 0] - 1]
 
 
-class OARSplitStrategy(ABC):
+class OARMergeSplitStrategy(ABC):
     """
-    Abstract base class for ordered atomic region split strategies.
+    Abstract base class for ordered atomic region merge and split strategies.
 
     This class defines strategies for:
     - evaluating likelihood of row groups being on target size after merge,
@@ -426,13 +426,13 @@ class OARSplitStrategy(ABC):
         oars_cmpt_idx_ends_excl: NDArray,
         oars_has_row_group: NDArray,
         **kwargs,
-    ) -> "OARSplitStrategy":
+    ) -> "OARMergeSplitStrategy":
         """
         Create a strategy instance with a given OARs description.
 
         This is primarily for testing purposes, allowing tests to directly set
-        the OARSplitStrategy base attributes without having to compute it from
-        row groups and DataFrame.
+        the 'OARMergeSplitStrategy' base attributes without having to compute it
+        from row groups and DataFrame.
 
         Parameters
         ----------
@@ -450,7 +450,7 @@ class OARSplitStrategy(ABC):
 
         Returns
         -------
-        OARSplitStrategy
+        OARMergeSplitStrategy
             An instance of the strategy with the given OARs description.
 
         """
@@ -562,9 +562,9 @@ class OARSplitStrategy(ABC):
         raise NotImplementedError("Subclasses must implement this method")
 
 
-class NRowsSplitStrategy(OARSplitStrategy):
+class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
     """
-    Row group split strategy based on a target number of rows per row group.
+    OAR merge and split strategy based on a target number of rows per row group.
 
     This strategy ensures that row groups are split when they exceed a target
     size, while maintaining a minimum size to prevent too small row groups. It
@@ -855,9 +855,9 @@ class NRowsSplitStrategy(OARSplitStrategy):
         return list(range(0, len(df_ordered_on), self.row_group_target_size))
 
 
-class TimePeriodSplitStrategy(OARSplitStrategy):
+class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
     """
-    Row group split strategy based on a time period target per row group.
+    OAR merge and split strategy based on a time period target per row group.
 
     This strategy ensures that row groups are split based on time periods. Each
     resulting row group will ideally contain data from a single time period

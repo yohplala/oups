@@ -13,8 +13,8 @@ from numpy import searchsorted
 from pandas import DataFrame
 from pandas import concat
 
-from oups.store.ordered_atomic_regions import NRowsSplitStrategy
-from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
+from oups.store.ordered_atomic_regions import NRowsMergeSplitStrategy
+from oups.store.ordered_atomic_regions import TimePeriodMergeSplitStrategy
 
 
 MIN = "min"
@@ -262,7 +262,7 @@ def iter_merged_pf_df(
     rg_ordered_on_maxs = array(pf_statistics[MAX][ordered_on])
     df_ordered_on = df.loc[:, ordered_on]
     if isinstance(row_group_size_target, int):
-        oar_split_strategy = NRowsSplitStrategy(
+        oar_split_strategy = NRowsMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
@@ -272,7 +272,7 @@ def iter_merged_pf_df(
             row_group_target_size=row_group_size_target,
         )
     else:
-        oar_split_strategy = TimePeriodSplitStrategy(
+        oar_split_strategy = TimePeriodMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
