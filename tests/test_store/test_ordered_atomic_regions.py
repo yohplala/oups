@@ -1534,11 +1534,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
 
 @pytest.mark.parametrize(
     (
-        "test_id, df_data, pf_data, row_group_offsets, row_group_size_target, drop_duplicates, max_n_irgs, expected"
+        "test_id, df_data, pf_data, row_group_offsets, row_group_size, drop_duplicates, max_n_off_target_rgs, expected"
     ),
     [
         # 1/ Adding data at complete tail, testing 'drop_duplicates'.
-        # 'max_n_irgs' is never triggered.
+        # 'max_n_off_target_rgs' is never triggered.
         (
             # Max row group size as int.
             # Writing after pf data, no off target size row group.
@@ -1549,11 +1549,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [3],
             [0, 1, 2, 3],
             [0, 2],  # row_group_offsets
-            2,  # row_group_size_target | no irgs to merge with
+            2,  # row_group_size | no irgs to merge with
             False,  # drop_duplicates | should not merge with preceding rg
-            2,  # max_n_irgs | no irgs to rewrite
+            2,  # max_n_off_target_rgs | no irgs to rewrite
             {
-                "chunk_counter": [1],
+                "merge_plan": [(2, array([[2, 1]]))],
                 "sort_rgs_after_write": False,
             },
         ),
@@ -1567,11 +1567,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [Timestamp(f"{REF_D}12:10")],
             date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
             [0, 2],
-            "2h",  # row_group_size_target | should not merge irg
+            "2h",  # row_group_size | should not merge irg
             False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_irgs | should not rewrite irg
+            3,  # max_n_off_target_rgs | should not rewrite irg
             {
-                "chunk_counter": [1],
+                "merge_plan": [1],
                 "sort_rgs_after_write": False,
             },
         ),
@@ -1585,11 +1585,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [9],
             [0, 1, 2, 6, 7, 8, 9],
             [0, 3, 6],  # row_group_offsets
-            3,  # row_group_size_target | should not merge irg
+            3,  # row_group_size | should not merge irg
             True,  # drop_duplicates | should merge with irg
-            2,  # max_n_irgs | should not rewrite irg
+            2,  # max_n_off_target_rgs | should not rewrite irg
             {
-                "chunk_counter": [0, 1],
+                "merge_plan": [0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1604,11 +1604,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [Timestamp(f"{REF_D}10:10")],
             date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
             [0, 2],
-            "2h",  # row_group_size_target | should not merge irg
+            "2h",  # row_group_size | should not merge irg
             False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_irgs | should not rewrite irg
+            3,  # max_n_off_target_rgs | should not rewrite irg
             {
-                "chunk_counter": [1],
+                "merge_plan": [1],
                 "sort_rgs_after_write": False,
             },
         ),
@@ -1623,11 +1623,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [Timestamp(f"{REF_D}10:10")],
             date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
             [0, 2],
-            "2h",  # row_group_size_target | should not merge irg
+            "2h",  # row_group_size | should not merge irg
             True,  # drop_duplicates | should merge with irg
-            3,  # max_n_irgs | should not rewrite irg
+            3,  # max_n_off_target_rgs | should not rewrite irg
             {
-                "chunk_counter": [0, 1],
+                "merge_plan": [0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1642,11 +1642,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [Timestamp(f"{REF_D}10:00")],
             date_range(Timestamp(f"{REF_D}08:00"), freq="1h", periods=3),
             [0, 2],  # row_group_offsets
-            "2h",  # row_group_size_target | should not merge irg
+            "2h",  # row_group_size | should not merge irg
             False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_irgs | should not rewrite irg
+            3,  # max_n_off_target_rgs | should not rewrite irg
             {
-                "chunk_counter": [1],
+                "merge_plan": [1],
                 "sort_rgs_after_write": False,
             },
         ),
@@ -1661,11 +1661,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [Timestamp(f"{REF_D}10:00")],
             date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=3),
             [0, 2],  # row_group_offsets
-            "2h",  # row_group_size_target | should not merge irg
+            "2h",  # row_group_size | should not merge irg
             True,  # drop_duplicates | should merge with irg
-            3,  # max_n_irgs | should not rewrite irg
+            3,  # max_n_off_target_rgs | should not rewrite irg
             {
-                "chunk_counter": [0, 1],
+                "merge_plan": [0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1679,11 +1679,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [8],
             range(8),
             [0, 3, 6, 7],  # row_group_offsets
-            3,  # row_group_size_target | should merge irgs
+            3,  # row_group_size | should merge irgs
             False,  # drop_duplicates | should not merge with preceding rg
-            4,  # max_n_irgs | should not rewrite irg
+            4,  # max_n_off_target_rgs | should not rewrite irg
             {
-                "chunk_counter": [0, 0, 0, 1],
+                "merge_plan": [0, 0, 0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1697,11 +1697,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [Timestamp(f"{REF_D}13:00")],
             date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
             [0, 2, 3],  # row_group_offsets
-            "2h",  # row_group_size_target | new period, should merge irgs
+            "2h",  # row_group_size | new period, should merge irgs
             True,  # drop_duplicates | no duplicates to drop
-            3,  # max_n_irgs | should not rewrite irg
+            3,  # max_n_off_target_rgs | should not rewrite irg
             {
-                "chunk_counter": [0, 0, 0, 1],
+                "merge_plan": [0, 0, 0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1716,11 +1716,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [0, 1],
             [2, 6, 7, 8, 9, 10],
             [0, 2, 4, 5],  # row_group_offsets
-            2,  # row_group_size_target | df enough to make on target size rg, should merge.
+            2,  # row_group_size | df enough to make on target size rg, should merge.
             True,  # no duplicates to drop
-            2,  # max_n_irgs | not triggered
+            2,  # max_n_off_target_rgs | not triggered
             {
-                "chunk_counter": [2],
+                "merge_plan": [2],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1734,11 +1734,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [0],
             [2, 6, 7, 8, 9, 10],
             [0, 2, 4, 5],  # row_group_offsets
-            2,  # row_group_size_target | df not enough to make on target size rg, should not merge.
+            2,  # row_group_size | df not enough to make on target size rg, should not merge.
             True,  # no duplicates to drop
-            2,  # max_n_irgs | not triggered
+            2,  # max_n_off_target_rgs | not triggered
             {
-                "chunk_counter": [0, 1],
+                "merge_plan": [0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1758,11 +1758,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 Timestamp(f"{REF_D}14:00"),
             ],
             [0, 2, 3],
-            "2h",  # row_group_size_target | no rg in same period to merge with
+            "2h",  # row_group_size | no rg in same period to merge with
             True,  # no duplicates to drop
-            2,  # max_n_irgs | should rewrite tail
+            2,  # max_n_off_target_rgs | should rewrite tail
             {
-                "chunk_counter": [1],
+                "merge_plan": [1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1782,15 +1782,15 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 Timestamp(f"{REF_D}14:10"),
             ],
             [0, 2, 3],  # row_group_offsets
-            "2h",  # row_group_size_target | should merge with rg in same period
+            "2h",  # row_group_size | should merge with rg in same period
             True,  # no duplicates to drop
-            2,  # max_n_irgs | should rewrite tail
+            2,  # max_n_off_target_rgs | should rewrite tail
             {
-                "chunk_counter": [0, 1],
+                "merge_plan": [0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
-        # 3/ Adding data at complete end, testing 'max_n_irgs'.
+        # 3/ Adding data at complete end, testing 'max_n_off_target_rgs'.
         (
             # Max row group size as int
             # df connected to off target size rgs.
@@ -1798,15 +1798,15 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
             # df:                                   [12]
-            "max_n_irgs_not_reached_simple_append_int",
+            "max_n_off_target_rgs_not_reached_simple_append_int",
             [12],
             [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
             [0, 4, 8, 9],  # row_group_offsets
-            4,  # row_group_size_target | should not rewrite tail
+            4,  # row_group_size | should not rewrite tail
             False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_irgs | should not rewrite tail
+            3,  # max_n_off_target_rgs | should not rewrite tail
             {
-                "chunk_counter": [1],
+                "merge_plan": [1],
                 "sort_rgs_after_write": False,
             },
         ),
@@ -1817,15 +1817,15 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
             # df:                                   [12]
-            "max_n_irgs_reached_tail_rewrite_int",
+            "max_n_off_target_rgs_reached_tail_rewrite_int",
             [12],
             [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
             [0, 4, 8, 9],  # row_group_offsets
-            4,  # row_group_size_target | should not rewrite tail
+            4,  # row_group_size | should not rewrite tail
             False,  # drop_duplicates | should not merge with preceding rg
-            2,  # max_n_irgs | should rewrite tail
+            2,  # max_n_off_target_rgs | should rewrite tail
             {
-                "chunk_counter": [0, 0, 0, 1],
+                "merge_plan": [0, 0, 0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1837,15 +1837,15 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
             # df:                               [11h00]
-            "max_n_irgs_not_reached_simple_append_timestamp",
+            "max_n_off_target_rgs_not_reached_simple_append_timestamp",
             [Timestamp(f"{REF_D}11:00")],
             date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
             [0, 2, 3],  # row_group_offsets
-            "2h",  # row_group_size_target | should not rewrite tail
+            "2h",  # row_group_size | should not rewrite tail
             False,  # drop_duplicates | should not merge with preceding rg
             3,  # max_n_off_targetrgs | should not rewrite tail
             {
-                "chunk_counter": [1],
+                "merge_plan": [1],
                 "sort_rgs_after_write": False,
             },
         ),
@@ -1857,15 +1857,15 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
             # df:                               [11h00]
-            "max_n_irgs_reached_tail_rewrite_timestamp",
+            "max_n_off_target_rgs_reached_tail_rewrite_timestamp",
             [Timestamp(f"{REF_D}11:00")],
             date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
             [0, 2, 3],  # row_group_offsets
-            "2h",  # row_group_size_target | should not merge with irg.
+            "2h",  # row_group_size | should not merge with irg.
             False,  # drop_duplicates | should not merge with preceding rg
-            2,  # max_n_irgs | should rewrite tail
+            2,  # max_n_off_target_rgs | should rewrite tail
             {
-                "chunk_counter": [0, 0, 0, 1],
+                "merge_plan": [0, 0, 0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1876,15 +1876,15 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
             # df:                                   [12]
-            "max_n_irgs_none_simple_append_int",
+            "max_n_off_target_rgs_none_simple_append_int",
             [12],
             [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
             [0, 4, 8, 9],
-            4,  # row_group_size_target | should not rewrite tail
+            4,  # row_group_size | should not rewrite tail
             False,  # drop_duplicates | should not merge with preceding rg
-            None,  # max_n_irgs | should not rewrite tail
+            None,  # max_n_off_target_rgs | should not rewrite tail
             {
-                "chunk_counter": [1],
+                "merge_plan": [1],
                 "sort_rgs_after_write": False,
             },
         ),
@@ -1896,15 +1896,15 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
             # df:                               [11h00]
-            "max_n_irgs_none_simple_append_timestamp",
+            "max_n_off_target_rgs_none_simple_append_timestamp",
             [Timestamp(f"{REF_D}11:00")],
             date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
             [0, 2, 3],  # row_group_offsets
-            "2h",  # row_group_size_target
+            "2h",  # row_group_size
             False,  # drop_duplicates
-            None,  # max_n_irgs
+            None,  # max_n_off_target_rgs
             {
-                "chunk_counter": [1],
+                "merge_plan": [1],
                 "sort_rgs_after_write": False,
             },
         ),
@@ -1920,11 +1920,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [8, 9, 10],
             [0, 1, 2, 6, 7, 8, 11],
             [0, 3, 6],
-            3,  # row_group_size_target | no df remainder to merge with next rg
+            3,  # row_group_size | no df remainder to merge with next rg
             False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_irgs | should not rewrite tail
+            3,  # max_n_off_target_rgs | should not rewrite tail
             {
-                "chunk_counter": [3],
+                "merge_plan": [3],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1939,11 +1939,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [8, 9],
             [0, 1, 2, 6, 7, 8, 11],
             [0, 3, 6],
-            3,  # row_group_size_target | df remainder to merge with next rg
+            3,  # row_group_size | df remainder to merge with next rg
             False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_irgs | should not rewrite tail
+            3,  # max_n_off_target_rgs | should not rewrite tail
             {
-                "chunk_counter": [0, 2],
+                "merge_plan": [0, 2],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1958,14 +1958,14 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [8, 9],
             [0, 1, 2, 6, 7, 8, 10],
             [0, 3, 6],
-            3,  # row_group_size_target | because df merge with previous df,
+            3,  # row_group_size | because df merge with previous df,
             # df remainder should not merge with next rg
             True,  # drop_duplicates | merge with preceding rg
-            3,  # max_n_irgs | should not rewrite tail
+            3,  # max_n_off_target_rgs | should not rewrite tail
             {
                 # Other acceptable solution:
                 # [0, 1, 1, 2]
-                "chunk_counter": [0, 2],
+                "merge_plan": [0, 2],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -1975,7 +1975,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             # df connected to off target size rgs.
             # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
-            # Tail is rewritten because with df, 'max_n_irgs' is reached.
+            # Tail is rewritten because with df, 'max_n_off_target_rgs' is reached.
             # rg:  0        1        2
             # pf: [0,1,2], [6,7,8], [10]
             # df:              [8]
@@ -1983,11 +1983,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [8],
             [0, 1, 2, 6, 7, 8, 10],
             [0, 3, 6],
-            3,  # row_group_size_target | should not rewrite tail
+            3,  # row_group_size | should not rewrite tail
             True,  # drop_duplicates | merge with preceding rg
-            3,  # max_n_irgs | should not rewrite tail
+            3,  # max_n_off_target_rgs | should not rewrite tail
             {
-                "chunk_counter": [0, 1],
+                "merge_plan": [0, 1],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -2003,11 +2003,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             [8, 9],
             [0, 1, 2, 3, 6, 7, 8, 8, 10],
             [0, 4, 8],
-            4,  # row_group_size_target | should merge with next rg.
+            4,  # row_group_size | should merge with next rg.
             False,  # drop_duplicates
-            3,  # max_n_irgs | should not rewrite tail
+            3,  # max_n_off_target_rgs | should not rewrite tail
             {
-                "chunk_counter": [0, 2],
+                "merge_plan": [0, 2],
                 "sort_rgs_after_write": True,
             },
         ),
@@ -2016,11 +2016,11 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             # Max row group size as int | df connected to off target size rgs.
             # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
-            # 'max_n_irgs' reached to rewrite all tail.
+            # 'max_n_off_target_rgs' reached to rewrite all tail.
             # row grps:  0            1                 2
             # pf: [8h00,9h00], [10h00],          [13h00]
             # df:                       [12h00]
-            "insert_timestamp_max_n_irgs_tail_rewrite",
+            "insert_timestamp_max_n_off_target_rgs_tail_rewrite",
             DataFrame({"ordered_on": [Timestamp(f"{REF_D}12:00")]}),
             DataFrame(
                 {
@@ -2033,9 +2033,9 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 },
             ),
             [0, 2, 3],
-            "2h",  # row_group_size_target | should not specifically rewrite tail
+            "2h",  # row_group_size | should not specifically rewrite tail
             True,  # drop_duplicates
-            2,  # max_n_irgs | should rewrite tail
+            2,  # max_n_off_target_rgs | should rewrite tail
             (2, None, False),  # bool: need to sort rgs after write
         ),
         (
@@ -2061,9 +2061,9 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 },
             ),
             [0, 2, 3],
-            "2h",  # row_group_size_target | should not specifically rewrite tail
+            "2h",  # row_group_size | should not specifically rewrite tail
             True,  # drop_duplicates
-            2,  # max_n_irgs | should not rewrite tail
+            2,  # max_n_off_target_rgs | should not rewrite tail
             (None, None, True),  # bool: need to sort rgs after write
         ),
         (
@@ -2089,9 +2089,9 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 },
             ),
             [0, 2, 3],
-            "2h",  # row_group_size_target | should not specifically rewrite tail
+            "2h",  # row_group_size | should not specifically rewrite tail
             True,  # drop_duplicates
-            2,  # max_n_irgs | should not rewrite tail
+            2,  # max_n_off_target_rgs | should not rewrite tail
             (None, None, True),  # bool: need to sort rgs after write
         ),
         # 5/ Adding data in the middle of pf data.
@@ -2107,9 +2107,9 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             DataFrame({"ordered_on": [2, 3, 4]}),
             DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10]}),
             [0, 2, 4, 6, 7],
-            2,  # row_group_size_target | should rewrite tail
+            2,  # row_group_size | should rewrite tail
             True,  # drop_duplicates
-            2,  # max_n_irgs | should rewrite tail
+            2,  # max_n_off_target_rgs | should rewrite tail
             (1, 2, True),  # bool: need to sort rgs after write
         ),
         (
@@ -2124,9 +2124,9 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             DataFrame({"ordered_on": [3]}),
             DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
             [0, 3, 6],
-            3,  # row_group_size_target | should not rewrite tail
+            3,  # row_group_size | should not rewrite tail
             False,  # drop_duplicates
-            2,  # max_n_irgs | should not rewrite tail
+            2,  # max_n_off_target_rgs | should not rewrite tail
             (None, None, True),  # bool: need to sort rgs after write
         ),
         (
@@ -2144,9 +2144,9 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             DataFrame({"ordered_on": [9, 10]}),
             DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10, 11, 12, 13]}),
             [0, 3, 6, 9],
-            3,  # row_group_size_target | should not rewrite tail
+            3,  # row_group_size | should not rewrite tail
             True,  # drop_duplicates
-            2,  # max_n_irgs | should not rewrite tail
+            2,  # max_n_off_target_rgs | should not rewrite tail
             (2, 3, True),
         ),
         (
@@ -2161,9 +2161,9 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             DataFrame({"ordered_on": [Timestamp(f"{REF_D}11:00")]}),
             DataFrame({"ordered_on": date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=8)}),
             [0, 2, 4, 6, 7],
-            "2h",  # row_group_size_target
+            "2h",  # row_group_size
             True,  # drop_duplicates
-            2,  # max_n_irgs | should rewrite tail
+            2,  # max_n_off_target_rgs | should rewrite tail
             (1, 2, True),
         ),
         (
@@ -2178,9 +2178,9 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             DataFrame({"ordered_on": [Timestamp(f"{REF_D}9:00")]}),
             DataFrame({"ordered_on": date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=8)}),
             [0, 2, 4, 6, 7],
-            "2h",  # row_group_size_target
+            "2h",  # row_group_size
             False,  # drop_duplicates
-            2,  # max_n_irgs
+            2,  # max_n_off_target_rgs
             (None, None, True),
         ),
         # Do "island" cases
@@ -2190,12 +2190,12 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
         # df3                       [4, 5      8]             # should have df_head + merge?
         # df4                       [4, 5]   # here df not to be merged with following row group
         # df5                       [4, 5, 6]   # here, should be merged
-        # df6                                         + same with row_group_size_target as str
-        # plenty of test with max_n_irgs set to 0 to check merging of last row groups
-        # up to reach 4 x row_group_size_target
+        # df6                                         + same with row_group_size as str
+        # plenty of test with max_n_off_target_rgs set to 0 to check merging of last row groups
+        # up to reach 4 x row_group_size
         # Do case when it is not possible to reach it, but showing all available
         # row groups are merge together nonetheless.
-        # max_n_irgs
+        # max_n_off_target_rgs
         # test with impossibility to have on target size row groups with subset to merge
         # then check left, right, and all available row groups to merge
         #   pf:  rg1, rg2, rg3, rg4, rg5
@@ -2207,7 +2207,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
         #   will merge with right and left
         # test with freqstr, with several empty periods, to make sure the empty periods are
         #  not in the output
-        # test with max_n_irgs set to 0, to make sure the last chunk is
+        # test with max_n_off_target_rgs set to 0, to make sure the last chunk is
         #  large enough to ensure on target size row groups (calculation of "min_size"
         #  in "consolidate_merge_plan")
     ],
@@ -2217,9 +2217,9 @@ def test_compute_ordered_merge_plan(
     df_data,
     pf_data,
     row_group_offsets,
-    row_group_size_target,
+    row_group_size,
     drop_duplicates,
-    max_n_irgs,
+    max_n_off_target_rgs,
     expected,
     tmp_path,
 ):
@@ -2230,28 +2230,33 @@ def test_compute_ordered_merge_plan(
     rg_ordered_on_mins = array(pf_statistics[MIN]["ordered_on"])
     rg_ordered_on_maxs = array(pf_statistics[MAX]["ordered_on"])
     df_ordered_on = df.loc[:, "ordered_on"]
-    if isinstance(row_group_size_target, str):
+    if isinstance(row_group_size, str):
         split_strat = TimePeriodMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
-            row_group_time_period=row_group_size_target,
+            row_group_time_period=row_group_size,
         )
     else:
         split_strat = NRowsMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
-            row_group_size_target=row_group_size_target,
+            rgs_n_rows=[rg.num_rows for rg in pf.row_groups],
+            row_group_target_size=row_group_size,
+            drop_duplicates=drop_duplicates,
         )
-    chunk_counter = split_strat.compute_merge_regions_start_ends_excl(
-        max_n_off_target_rgs=max_n_irgs,
-    ).partition_merge_regions()
+    split_strat.compute_merge_regions_start_ends_excl(
+        max_n_off_target_rgs=max_n_off_target_rgs,
+    )
+    merge_plan = split_strat.partition_merge_regions()
 
-    assert array_equal(chunk_counter, expected["chunk_counter"])
-    sort_rgs_after_write = len(chunk_counter) > 1 or chunk_counter[0][0] < len(pf)
-    print("chunk_counter")
-    print(chunk_counter)
+    print("merge_plan")
+    print(merge_plan)
     print("len(pf)")
     print(len(pf))
+    for ms_idx, expected_merge_sequence in enumerate(expected["merge_plan"]):
+        assert merge_plan[ms_idx][0] == expected_merge_sequence[0]
+        assert array_equal(merge_plan[ms_idx][1], expected_merge_sequence[1])
+    sort_rgs_after_write = len(merge_plan) > 1 or merge_plan[0][0] < len(pf)
     assert sort_rgs_after_write == expected["sort_rgs_after_write"]
