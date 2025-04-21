@@ -49,8 +49,7 @@ class TestOARSplitStrategy(OARSplitStrategy):
     """
 
     def specialized_init(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+        raise NotImplementedError("Test implementation only")
 
     def partition_merge_regions(self, oar_idx_mrs_starts_ends_excl: NDArray):
         raise NotImplementedError("Test implementation only")
@@ -432,7 +431,7 @@ def test_OARSplitStrategy_init(
         df_ordered_on,
         drop_duplicates,
     )
-    # Check structured array fields
+    # Check array fields
     assert_array_equal(oars_prop.oars_rg_idx_starts, expected[RG_IDX_START])
     assert_array_equal(oars_prop.oars_cmpt_idx_ends_excl[:, 0], expected[RG_IDX_END_EXCL].T)
     assert_array_equal(oars_prop.oars_cmpt_idx_ends_excl[:, 1], expected[DF_IDX_END_EXCL].T)
@@ -609,14 +608,15 @@ def test_compute_merge_regions_start_ends_excl(
         Expected output containing start and end indices for enlarged merge regions.
 
     """
-    split_strat = TestOARSplitStrategy.from_oars_desc(
-        oars_rg_idx_starts=zeros(1, dtype=int_),
-        oars_cmpt_idx_ends_excl=zeros((1, 2), dtype=int_),
-        oars_has_row_group=zeros(1, dtype=bool_),
-        n_oars=len(oars_has_df_chunk),
-        oars_has_df_chunk=oars_has_df_chunk,
-        oars_likely_on_target_size=oars_likely_on_target_size,
+    split_strat = TestOARSplitStrategy(
+        rg_ordered_on_mins=zeros(1, dtype=int_),
+        rg_ordered_on_maxs=zeros(1, dtype=int_),
+        df_ordered_on=Series([1]),
+        drop_duplicates=True,
     )
+    split_strat.oars_has_df_chunk = oars_has_df_chunk
+    split_strat.oars_likely_on_target_size = oars_likely_on_target_size
+    split_strat.n_oars = len(oars_has_df_chunk)
     split_strat.compute_merge_regions_start_ends_excl(
         max_n_off_target_rgs=max_n_off_target_rgs,
     )
