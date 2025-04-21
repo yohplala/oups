@@ -137,16 +137,16 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
         return m_values[indices[:, 1] - 1] - m_values[indices[:, 0] - 1]
 
 
-def compute_emrs_start_ends_excl(
+def compute_merge_regions_start_ends_excl(
     oars_has_df_chunk: NDArray[np_bool],
     oars_likely_on_target_size: NDArray[np_bool],
     max_n_off_target_rgs: Optional[int] = None,
 ) -> NDArray[np_int]:
     """
-    Aggregate atomic merge regions into enlarged merge regions.
+    Aggregate ordered atomic regions into merge regions.
 
-    Sets of contiguous atomic merge regions with DataFrame chunks are extended
-    with neighbor regions that are off target size depending on two
+    Sets of contiguous ordered atomic regions with DataFrame chunks are possibly
+    extended with neighbor regions that are off target size depending on two
     conditions,
       - if the atomic merge region with DataFrame chunks is found to result in a
         row group potentially on target size.
@@ -156,10 +156,10 @@ def compute_emrs_start_ends_excl(
     Parameters
     ----------
     oars_has_df_chunk : NDArray[np_bool]
-        Boolean array of shape (n) indicating if each atomic merge region
+        Boolean array of shape (n) indicating if each ordered atomic region
         contains a DataFrame chunk.
     oars_likely_on_target_size : NDArray[np_bool]
-        Boolean array of shape (n) indicating if each atomic merge region
+        Boolean array of shape (n) indicating if each ordered atomic region
         is likely to be on target size.
     max_n_off_target_rgs : Optional[int]
         Maximum number of off-target size row groups allowed in a contiguous set
@@ -172,10 +172,10 @@ def compute_emrs_start_ends_excl(
     -------
     NDArray[np_int]
         A numpy array of shape (e, 2) containing the list of the start and end
-        indices for each enlarged merge regions. This list is unsorted. It
-        starts with start and end indices excluded of the simple (not enlarged)
-        merge regions, and then continues with start and end indices excluded
-        of the enlarged merge regions.
+        indices for each merge regions. This list is unsorted. It starts with
+        start and end indices excluded simple (not enlarged) merge regions,
+        and then continues with start and end indices excluded enlarged merge
+        regions.
 
     Notes
     -----
@@ -191,7 +191,7 @@ def compute_emrs_start_ends_excl(
         return simple_mrs_starts_ends_excl
 
     # If 'max_n_off_target_rgs' is not None, then we need to compute the
-    # enlarged merge regions.
+    # merge regions.
     # Step 1: assess start indices (included) and end indices (excluded) of
     # enlarged merge regions.
     oars_off_target = ~oars_likely_on_target_size
@@ -221,8 +221,8 @@ def compute_emrs_start_ends_excl(
         length=len(oars_has_df_chunk),
         regions=confirmed_emrs_starts_ends_excl,
     )
-    # Create an array of length the number of atomic merge regions, with value
-    # 1 if the atomic merge region is within a merge regions.
+    # Create an array of length the number of simple merge regions, with value
+    # 1 if the simple merge region is within an enlarged merge regions.
     overlaps_with_confirmed_emrs = get_region_start_end_delta(
         m_values=cumsum(confirmed_emrs),
         indices=simple_mrs_starts_ends_excl,
@@ -255,7 +255,7 @@ class OrderedMergePlan:
           group to merge.
         - indices in DataFrame containing the ends (excluded) of each DataFrame
           chunk to merge.
-    rg_sizer : Callable
+    row_group_offsets : Callable
         Callable determining the sizing logic for row groups.
     sort_rgs_after_write : bool
         Flag indicating if row groups need to be resorted after merge.
@@ -263,7 +263,7 @@ class OrderedMergePlan:
     """
 
     emrs_desc: NDArray
-    rg_sizer: Callable
+    row_group_offsets: Callable
     sort_rgs_after_write: bool
 
 
@@ -367,7 +367,7 @@ def compute_ordered_merge_plan(
     # possibly extended with neighbor off target size row groups depending on
     # criteria.
     # It also restricts to the set of atomic merge regions to be yielded.
-    oar_idx_emrs_starts_ends_excl = compute_emrs_start_ends_excl(
+    oar_idx_mrs_starts_ends_excl = compute_merge_regions_start_ends_excl(
         oars_has_df_chunk=oar_split_strategy.oars_has_df_chunk,
         oars_likely_on_target_size=oar_split_strategy.likely_meets_target_size,
         max_n_off_target_rgs=max_n_off_target_rgs,
@@ -377,7 +377,7 @@ def compute_ordered_merge_plan(
     # For each enlarged merge regions, aggregate atomic merge regions depending
     # on the split strategy.
     emrs_desc = oar_split_strategy.consolidate_enlarged_merge_regions(
-        oar_idx_emrs_starts_ends_excl=oar_idx_emrs_starts_ends_excl,
+        oar_idx_mrs_starts_ends_excl=oar_idx_mrs_starts_ends_excl,
     )
 
     # Assess if row groups have to be sorted after write step
@@ -388,6 +388,6 @@ def compute_ordered_merge_plan(
     sort_rgs_after_write = True
     return OrderedMergePlan(
         emrs_desc=emrs_desc,
-        rg_sizer=oar_split_strategy.rg_sizer,
+        row_group_offsets=oar_split_strategy.row_group_offsets,
         sort_rgs_after_write=sort_rgs_after_write,
     )

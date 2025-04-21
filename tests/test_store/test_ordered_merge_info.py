@@ -22,7 +22,7 @@ from pandas import date_range
 
 from oups.store.ordered_atomic_regions import NRowsSplitStrategy
 from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
-from oups.store.ordered_merge_info import compute_emrs_start_ends_excl
+from oups.store.ordered_merge_info import compute_merge_regions_start_ends_excl
 from oups.store.ordered_merge_info import compute_ordered_merge_plan
 from oups.store.ordered_merge_info import get_region_indices_of_same_values
 from oups.store.ordered_merge_info import get_region_indices_of_true_values
@@ -1548,7 +1548,7 @@ def test_compute_ordered_merge_plan(
         ),
     ],
 )
-def test_compute_emrs_start_ends_excl(
+def test_compute_merge_regions_start_ends_excl(
     test_id: str,
     oars_has_df_chunk: NDArray[bool_],
     oars_likely_on_target_size: NDArray[bool_],
@@ -1556,7 +1556,7 @@ def test_compute_emrs_start_ends_excl(
     expected: NDArray[int_],
 ) -> None:
     """
-    Test compute_emrs_start_ends_excl function with various inputs.
+    Test compute_merge_regions_start_ends_excl function with various inputs.
 
     Parameters
     ----------
@@ -1572,7 +1572,7 @@ def test_compute_emrs_start_ends_excl(
         Expected output containing start and end indices for enlarged merge regions.
 
     """
-    result = compute_emrs_start_ends_excl(
+    result = compute_merge_regions_start_ends_excl(
         oars_has_df_chunk=oars_has_df_chunk,
         oars_likely_on_target_size=oars_likely_on_target_size,
         max_n_off_target_rgs=max_n_off_target_rgs,
