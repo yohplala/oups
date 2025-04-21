@@ -22,11 +22,15 @@ from typing import List, Optional, Tuple, Union
 
 from numpy import arange
 from numpy import bincount
+from numpy import bool_
 from numpy import column_stack
 from numpy import cumsum
 from numpy import diff
+from numpy import empty
 from numpy import flatnonzero
 from numpy import insert
+from numpy import int8
+from numpy import int_
 from numpy import linspace
 from numpy import maximum
 from numpy import ones
@@ -49,6 +53,109 @@ LEFT = "left"
 RIGHT = "right"
 MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
 # MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
+
+
+MIN = "min"
+MAX = "max"
+
+
+def get_region_indices_of_true_values(mask: NDArray[bool_]) -> NDArray[int_]:
+    """
+    Compute the start and end indices of each connected components in `mask`.
+
+    Taken from https://stackoverflow.com/questions/68514880/finding-contiguous-regions-in-a-1d-boolean-array.
+
+    Parameters
+    ----------
+    mask : NDArray[np_bool]
+        A 1d numpy array of dtype `bool`.
+
+    Returns
+    -------
+    NDArray[np_int]
+        A numpy array containing the list of the start and end indices of each
+        connected components in `mask`.
+
+    """
+    return flatnonzero(diff(r_[int8(0), mask.astype(int8), int8(0)])).reshape(-1, 2)
+
+
+def get_region_indices_of_same_values(ints: NDArray[int_]) -> NDArray[int_]:
+    """
+    Compute the start and end indices of regions made of same values in `ints`.
+
+    Parameters
+    ----------
+    ints : NDArray[np_int]
+        A 1d numpy array of dtype `int`.
+
+    Returns
+    -------
+    NDArray[np_int]
+        A numpy array containing the list of the start and end indices of
+        regions made of same values in `ints`.
+
+    """
+    boundaries = r_[0, flatnonzero(diff(ints)) + 1, len(ints)]
+    return column_stack((boundaries[:-1], boundaries[1:]))
+
+
+def set_true_in_regions(length: int, regions: NDArray[int_]) -> NDArray[bool_]:
+    """
+    Set regions in a boolean array to True based on start-end index pairs.
+
+    Regions have to be non overlapping.
+
+    Parameters
+    ----------
+    length : int
+        Length of the output array.
+    regions : NDArray[np_int]
+        2D array of shape (n, 2) where each row contains [start, end) indices.
+        Start indices are inclusive, end indices are exclusive.
+        Regions are assumed to be non-overlapping.
+
+    Returns
+    -------
+    NDArray[np_bool]
+        Boolean array of length 'length' with True values in specified regions.
+
+    """
+    # Array of changes with +1 at starts, and -1 at ends of regions.
+    changes = zeros(length + 1, dtype=int8)
+    changes[regions[:, 0]] = 1
+    changes[regions[:, 1]] = -1
+    # Positive cumulative sum provides which positions are inside regions
+    return cumsum(changes[:-1]).astype(bool_)
+
+
+def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
+    """
+    Get difference between values at end and start of each region.
+
+    Parameters
+    ----------
+    m_values : NDArray
+        Array of monotonic values, such as coming from a cumulative sum.
+    indices : NDArray
+        Array of shape (n, 2) where 'n' is the number of regions, and each row
+        contains start included and end excluded indices of a region.
+
+    Returns
+    -------
+    NDArray
+        Array of length 'n' containing the difference between values at end and
+        start of each region.
+
+    """
+    if not indices.size:
+        return empty(0, dtype=int_)
+    if indices[0, 0] == 0:
+        start_values = m_values[indices[:, 0] - 1]
+        start_values[0] = 0
+        return m_values[indices[:, 1] - 1] - start_values
+    else:
+        return m_values[indices[:, 1] - 1] - m_values[indices[:, 0] - 1]
 
 
 class OARSplitStrategy(ABC):
@@ -78,6 +185,13 @@ class OARSplitStrategy(ABC):
         Boolean array indicating if OAR contains a DataFrame chunk.
     n_oars : int
         Number of ordered atomic regions.
+    oars_likely_on_target_size : NDArray[bool_]
+        Boolean array indicating if OAR is likely to be on target size.
+    oar_idx_mrs_starts_ends_excl : NDArray[int_]
+        array of shape (e, 2) containing the list of the start and end indices
+        for each merge regions. This list is unsorted. It starts with start and
+        end indices excluded simple (not enlarged) merge regions, and then
+        continues with start and end indices excluded enlarged merge regions.
 
     """
 
@@ -201,20 +315,109 @@ class OARSplitStrategy(ABC):
         """
         Initialize specialized attributes.
 
-        This method provides a base method to initialize specialized attributes
-        for testing purpose of other methods of the OARSPlitStrategy abstract
-        class.
-        It is intended to be overridden by subclasses to initialize additional
-        attributes specific to the strategy.
+        This method initializes attributes specific to strategy concrete
+        implementation.
 
         Parameters
         ----------
         **kwargs : dict
-            Additional keyword arguments to initialize specialized attributes.
+            Keyword arguments to initialize specialized attributes.
 
         """
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+        raise NotImplementedError("Subclasses must implement this method")
+
+    def compute_merge_regions_start_ends_excl(
+        self,
+        max_n_off_target_rgs: Optional[int] = None,
+    ) -> NDArray[int_]:
+        """
+        Aggregate ordered atomic regions into merge regions.
+
+        Sets of contiguous ordered atomic regions with DataFrame chunks are
+        possibly extended with neighbor regions that are off target size
+        depending on two conditions,
+        - if the atomic merge region with DataFrame chunks is found to result in
+          a row group potentially on target size.
+        - if the total number of atomic merge regions off target size in a
+          given enlarged merge region is greater than `max_n_off_target_rgs`.
+
+        Parameters
+        ----------
+        max_n_off_target_rgs : Optional[int_]
+            Maximum number of off-target size row groups allowed in a contiguous
+            set of row groups. This parameter helps limiting fragmentation by
+            limiting number of contiguous row groups off target size.
+            A ``None`` value induces no merging of off target size row groups
+            neighbor to a newly added row groups.
+
+        Returns
+        -------
+        NDArray[np_int]
+            A numpy array of shape (e, 2) containing the list of the start and
+            end indices for each merge regions. This list is unsorted. It starts
+            with start and end indices excluded simple (not enlarged) merge
+            regions, and then continues with start and end indices excluded
+            enlarged merge regions.
+
+        Notes
+        -----
+        Reason for including off target size OARs contiguous to a newly added
+        OAR likely to be on target size is to prevent that the addition of new
+        data creates isolated sets of off target size row groups followed by on
+        target size row groups. This most notably applies when new data is
+        appended at the tail of the DataFrame.
+
+        """
+        simple_mrs_starts_ends_excl = get_region_indices_of_true_values(self.oars_has_df_chunk)
+        if max_n_off_target_rgs is None:
+            self.oar_idx_mrs_starts_ends_excl = simple_mrs_starts_ends_excl
+            return
+
+        # If 'max_n_off_target_rgs' is not None, then we need to compute the
+        # merge regions.
+        # Step 1: assess start indices (included) and end indices (excluded) of
+        # enlarged merge regions.
+        oars_off_target = ~self.oars_likely_on_target_size
+        potential_enlarged_mrs = self.oars_has_df_chunk | oars_off_target
+        potential_emrs_starts_ends_excl = get_region_indices_of_true_values(potential_enlarged_mrs)
+        # Step 2: Filter out enlarged candidates based on multiple criteria.
+        # 2.a - Get number of off target size OARs per enlarged merged region.
+        # Those where 'max_n_off_target_rgs' is not reached will be filtered out
+        n_off_target_rgs_in_potential_emrs = get_region_start_end_delta(
+            m_values=cumsum(oars_off_target),
+            indices=potential_emrs_starts_ends_excl,
+        )
+        # 2.b Get which enlarged regions into which the merge will likely create
+        # on target row groups.
+        creates_on_target_rg_in_pemrs = get_region_start_end_delta(
+            m_values=cumsum(self.oars_likely_on_target_size),
+            indices=potential_emrs_starts_ends_excl,
+        ).astype(bool_)
+        # Keep enlarged merge regions with too many off target atomic regions or
+        # with likely creation of on target row groups.
+        confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
+            (n_off_target_rgs_in_potential_emrs > max_n_off_target_rgs)
+            | creates_on_target_rg_in_pemrs
+        ]
+        # Step 3: Retrieve indices of merge regions which have DataFrame chunks but
+        # are not in retained enlarged merge regions.
+        confirmed_emrs = set_true_in_regions(
+            length=self.n_oars,
+            regions=confirmed_emrs_starts_ends_excl,
+        )
+        # Create an array of length the number of simple merge regions, with value
+        # 1 if the simple merge region is within an enlarged merge regions.
+        overlaps_with_confirmed_emrs = get_region_start_end_delta(
+            m_values=cumsum(confirmed_emrs),
+            indices=simple_mrs_starts_ends_excl,
+        ).astype(bool_)
+
+        self.oar_idx_mrs_starts_ends_excl = vstack(
+            (
+                simple_mrs_starts_ends_excl[~overlaps_with_confirmed_emrs],
+                confirmed_emrs_starts_ends_excl,
+            ),
+        )
 
     @classmethod
     def from_oars_desc(
@@ -263,7 +466,7 @@ class OARSplitStrategy(ABC):
 
     @cached_property
     @abstractmethod
-    def likely_on_target_size(self) -> NDArray:
+    def oars_likely_on_target_size(self) -> NDArray:
         """
         Return boolean array indicating which OARs are likely to be on target size.
 
@@ -319,7 +522,6 @@ class OARSplitStrategy(ABC):
     @abstractmethod
     def partition_merge_regions(
         self,
-        oar_idx_mrs_starts_ends_excl: NDArray,
     ) -> List[Tuple[int, NDArray]]:
         """
         Partition merge regions (MRs) into optimally sized chunks for writing.
@@ -476,7 +678,7 @@ class NRowsSplitStrategy(OARSplitStrategy):
         self.oars_max_n_rows += self.oars_df_n_rows
 
     @cached_property
-    def likely_on_target_size(self) -> NDArray:
+    def oars_likely_on_target_size(self) -> NDArray:
         """
         Return boolean array indicating which OARs are likely to be on target size.
 
@@ -539,7 +741,6 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
     def partition_merge_regions(
         self,
-        oar_idx_mrs_starts_ends_excl: NDArray,
     ) -> List[Tuple[int, NDArray]]:
         """
         Partition merge regions (MRs) into optimally sized chunks for writing.
@@ -554,12 +755,6 @@ class NRowsSplitStrategy(OARSplitStrategy):
 
         This ensures each consolidated chunk approaches the target row size
         while minimizing the number of row groups loaded into memory at once.
-
-        Parameters
-        ----------
-        oar_idx_mrs_starts_ends_excl : NDArray
-            Array of shape (e, 2) containing start and end indices (excluded)
-            for each merge region to be consolidated.
 
         Returns
         -------
@@ -635,7 +830,7 @@ class NRowsSplitStrategy(OARSplitStrategy):
                     ]
                 ],
             )
-            for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl
+            for oar_idx_start, oar_idx_end_excl in self.oar_idx_mrs_starts_ends_excl
         ]
 
     def row_group_offsets(self, df_ordered_on: DataFrame) -> Union[int, List[int]]:
@@ -783,7 +978,7 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
         )
 
     @cached_property
-    def likely_on_target_size(self) -> NDArray:
+    def oars_likely_on_target_size(self) -> NDArray:
         """
         Return boolean array indicating which OARs are likely to be on target size.
 
@@ -851,7 +1046,6 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
 
     def partition_merge_regions(
         self,
-        oar_idx_mrs_starts_ends_excl: NDArray,
     ) -> List[Tuple[int, NDArray]]:
         """
         Partition merge regions (MRs) into optimally sized chunks for writing.
@@ -866,12 +1060,6 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
 
         This ensures each consolidated chunk approaches row group time period
         while minimizing the number of row groups loaded into memory at once.
-
-        Parameters
-        ----------
-        oar_idx_mrs_starts_ends_excl : NDArray
-            Array of shape (e, 2) containing start and end indices (excluded)
-            for each merge region to be consolidated.
 
         Returns
         -------
@@ -924,7 +1112,7 @@ class TimePeriodSplitStrategy(OARSplitStrategy):
                     )[1]
                 ],
             )
-            for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl
+            for oar_idx_start, oar_idx_end_excl in self.oar_idx_mrs_starts_ends_excl
         ]
 
     def row_group_offsets(self, df_ordered_on: Series) -> Union[int, List[int]]:

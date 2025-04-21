@@ -9,7 +9,13 @@ from typing import Dict
 
 import pytest
 from numpy import array
+from numpy import array_equal
+from numpy import bool_
 from numpy import column_stack
+from numpy import cumsum
+from numpy import empty
+from numpy import int_
+from numpy import zeros
 from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
 from pandas import DataFrame
@@ -20,13 +26,21 @@ from pandas import date_range
 from oups.store.ordered_atomic_regions import NRowsSplitStrategy
 from oups.store.ordered_atomic_regions import OARSplitStrategy
 from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
+from oups.store.ordered_atomic_regions import get_region_indices_of_same_values
+from oups.store.ordered_atomic_regions import get_region_indices_of_true_values
+from oups.store.ordered_atomic_regions import get_region_start_end_delta
+from oups.store.ordered_atomic_regions import set_true_in_regions
+from tests.test_store.conftest import create_parquet_file
 
 
+MIN = "min"
+MAX = "max"
 RG_IDX_START = "rg_idx_start"
 RG_IDX_END_EXCL = "rg_idx_end_excl"
 DF_IDX_END_EXCL = "df_idx_end_excl"
 HAS_ROW_GROUP = "has_row_group"
 HAS_DF_CHUNK = "has_df_chunk"
+REF_D = "2020/01/01 "
 
 
 class TestOARSplitStrategy(OARSplitStrategy):
@@ -35,13 +49,192 @@ class TestOARSplitStrategy(OARSplitStrategy):
     """
 
     def specialized_init(self, **kwargs):
-        raise NotImplementedError("Test implementation only")
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def partition_merge_regions(self, oar_idx_mrs_starts_ends_excl: NDArray):
         raise NotImplementedError("Test implementation only")
 
     def row_group_offsets(self, chunk: DataFrame, is_last_chunk: bool):
         raise NotImplementedError("Test implementation only")
+
+
+@pytest.mark.parametrize(
+    "mask, expected",
+    [
+        (  # Case 1: Entire mask is single region.
+            array([True, True, True]),
+            array([[0, 3]]),
+        ),
+        (  # Case 2: A mask with two regions.
+            array([False, True, True, False, True]),
+            array([[1, 3], [4, 5]]),
+        ),
+        (  # Case 3: no region.
+            array([False, False, False]),
+            empty((0, 2), dtype=int),
+        ),
+        (  # Case 4: One region at start, one region at end.
+            array([True, False, True]),
+            array([[0, 1], [2, 3]]),
+        ),
+    ],
+)
+def test_get_region_indices_of_true_values(mask: NDArray, expected: NDArray) -> None:
+    """
+    Test get_region_indices_of_true_values to verify that it correctly returns the start
+    and end indices (as [start, end) pairs) for each region of contiguous True values in
+    a boolean array.
+    """
+    result = get_region_indices_of_true_values(mask)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "ints, expected",
+    [
+        (  # Case 1: 2 regions of same values.
+            array([1, 1, 2]),
+            array([[0, 2], [2, 3]]),
+        ),
+        (  # Case 2: 1 region of same values.
+            array([1, 1, 1]),
+            array([[0, 3]]),
+        ),
+        (  # Case 3: 3 region of one value.
+            array([1, 2, 3]),
+            array([[0, 1], [1, 2], [2, 3]]),
+        ),
+    ],
+)
+def test_get_region_indices_of_same_values(ints: NDArray, expected: NDArray) -> None:
+    """
+    Test get_region_indices_of_same_values to verify that it correctly returns the start
+    and end indices (as [start, end) pairs) for each region made of same values in an
+    array of int.
+    """
+    result = get_region_indices_of_same_values(ints)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "length, regions, expected",
+    [
+        (  # Case 1: Single region at the start
+            5,  # length
+            array([[0, 2]]),  # regions
+            array([True, True, False, False, False]),  # expected
+        ),
+        (  # Case 2: Single region in the middle
+            5,
+            array([[1, 3]]),
+            array([False, True, True, False, False]),
+        ),
+        (  # Case 3: Single region at the end
+            5,
+            array([[3, 5]]),
+            array([False, False, False, True, True]),
+        ),
+        (  # Case 4: Multiple non-overlapping regions
+            7,
+            array([[0, 2], [4, 6]]),
+            array([True, True, False, False, True, True, False]),
+        ),
+        (  # Case 5: Empty regions
+            3,
+            array([], dtype=int).reshape(0, 2),  # empty regions
+            array([False, False, False]),
+        ),
+        (  # Case 6: Region covering entire length
+            4,
+            array([[0, 4]]),
+            array([True, True, True, True]),
+        ),
+    ],
+)
+def test_set_true_in_regions(length: int, regions: NDArray[int_], expected: NDArray[bool_]) -> None:
+    """
+    Test set_true_in_regions function to verify it correctly sets True values in
+    specified regions.
+
+    Parameters
+    ----------
+    length : int
+        Length of the output array.
+    regions : NDArray[np_int]
+        2D array of shape (n, 2) containing [start, end) index pairs.
+    expected : NDArray[np_bool]
+        Expected boolean array with True values in specified regions.
+
+    """
+    result = set_true_in_regions(length=length, regions=regions)
+    assert array_equal(result, expected)
+
+
+@pytest.mark.parametrize(
+    "test_id, values, indices, expected",
+    [
+        (
+            "single_region_at_first",
+            array([1, 2, 3, 4]),  # values, cumsum = [1,3,6,10]
+            array([[0, 3]]),  # one region: indices 0-2
+            array([6]),  # 1+2+3 = 6-0 = 6
+        ),
+        (
+            "single_region_at_second",
+            array([1, 2, 3, 4, 5]),  # values, cumsum = [1,3,6,10,15]
+            array([[1, 4]]),  # one region: indices 1-3
+            array([9]),  # 2+3+4 = 10-1 = 9
+        ),
+        (
+            "multiple_overlapping_regions",
+            array([1, 2, 3, 4, 5, 6]),  # values, cumsum = [1,3,6,10,15,21]
+            array(
+                [
+                    [0, 2],  # region 1: indices 0-1
+                    [2, 5],  # region 2: indices 2-4
+                    [4, 6],  # region 3: indices 4-5
+                ],
+            ),
+            array([3, 12, 11]),  # 3-0=3, 15-3=12, 21-10=11
+        ),
+        (
+            "boolean_values",
+            array([0, 1, 0, 1, 1, 0]),  # values, cumsum = [0,1,1,2,3,3]
+            array(
+                [
+                    [1, 4],  # one region: indices 1-3
+                    [2, 5],  # one region: indices 2-4
+                ],
+            ),
+            array([2, 2]),  # 2-1=1, 3-1=2
+        ),
+    ],
+)
+def test_get_region_start_end_delta(
+    test_id: str,
+    values: NDArray,
+    indices: NDArray,
+    expected: NDArray,
+) -> None:
+    """
+    Test get_region_start_end_delta function with various inputs.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    values : NDArray
+        Input array of values.
+    indices : NDArray
+        Array of shape (n, 2) containing start and end indices of regions.
+    expected : NDArray
+        Expected output containing sums for each region.
+
+    """
+    m_values = cumsum(values)
+    result = get_region_start_end_delta(m_values, indices)
+    assert array_equal(result, expected)
 
 
 @pytest.mark.parametrize(
@@ -308,9 +501,131 @@ def test_OARSplitStrategy_validation(
         )
 
 
-def test_NRowsSplitStrategy_likely_on_target_size():
+@pytest.mark.parametrize(
+    "test_id, oars_has_df_chunk, oars_likely_on_target_size, max_n_off_target_rgs, expected",
+    [
+        (  # Contiguous OARs with DataFrame chunk.
+            # No need to enlarge since neighbors OARs are on target size.
+            "contiguous_dfcs_no_off_target",
+            array([False, True, True, False]),  # Has DataFrame chunk
+            array([True, False, True, True]),  # On target size
+            3,  # max_n_off_target_rgs - is not triggered
+            array([[1, 3]]),  # Single region
+        ),
+        (  # First EMR has enough neighbor off-target OARs.
+            # There is a second one potential EMR without DataFrame chunk.
+            # The 3rd has not enough neighbor off-target OARs to be enlarged.
+            "enlarging_based_on_off_target_oars",
+            # OARS:   0,     1,     2,    3,     4,     5,     6,    7,     8
+            # EMRs:  [0,                 4),                     [7,8)
+            array([True, False, False, True, False, False, False, True, False]),
+            array([False, False, False, False, True, False, True, False, False]),
+            3,  # max_n_off_target_rgs
+            array([[7, 8], [0, 4]]),  # Two regions: [0-1) and [2-4)
+        ),
+        (  # Confirm EMR because of likely on target OAR with DataFrame chunk.
+            "enlarging_because_adding_likely_on_target_oar_with_dfc",
+            array([False, True, False, False]),  # Has DataFrame chunk
+            array([True, True, False, True]),  # On target size
+            3,  # max_n_off_target_rgs
+            array([[1, 3]]),  # Adding 3rd OAR in EMR.
+        ),
+        (  # Alternating regions with and without DataFrame chunks.
+            # Should only merge regions with DataFrame chunks.
+            "alternating_regions",
+            array([True, False, True, False]),  # Alternating DataFrame chunks
+            array([True, True, True, True]),  # All on target size
+            2,  # max_n_off_target_rgs
+            array([[0, 1], [2, 3]]),  # Two separate regions
+        ),
+        (  # Multiple off-target regions between DataFrame chunks
+            # Should merge if number of off-target regions exceeds max_n_off_target_rgs
+            "multiple_off_target_between_chunks",
+            array([False, False, False, True]),  # DataFrame chunks at ends
+            array([False, False, False, False]),  # All off target
+            1,  # max_n_off_target_rgs
+            array([[0, 4]]),  # Single region covering all
+        ),
+        (  # No regions with DataFrame chunks. Should return empty array
+            "no_df_chunks",
+            array([False, False, False]),  # No DataFrame chunks
+            array([True, True, True]),  # All on target size
+            1,  # max_n_off_target_rgs
+            array([], dtype=int).reshape(0, 2),  # Empty array
+        ),
+        (  # Single off-target region with DataFrame chunk
+            # Should return single region
+            "single_off_target_with_df_chunk",
+            array([True]),  # Has DataFrame chunk
+            array([False]),  # Off target
+            1,  # max_n_off_target_rgs
+            array([[0, 1]]),  # Single region
+        ),
+        (  # Complex pattern with varying conditions
+            # Tests multiple conditions in one test
+            "mixed_pattern",
+            array([True, False, False, False, True, False]),  # DataFrame chunks at 0, 4
+            array([True, False, True, False, False, True]),  # Likely on target
+            2,  # max_n_off_target_rgs
+            array([[4, 5], [0, 2]]),
+        ),
+        (  # 'max_n_off_target' is None
+            "max_n_off_target_is_none",
+            array([True, False, False, False, True]),  # DataFrame chunks at 0, 4
+            array([True, False, True, False, False]),  # Likely on target
+            None,  # max_n_off_target_rgs
+            array([[0, 1], [4, 5]]),
+        ),
+        (  # 'max_n_off_target' is 0
+            "max_n_off_target_is_0",
+            array([True, False, False, False, True]),  # DataFrame chunks at 0, 4
+            array([False, False, True, False, False]),  # Likely on target
+            0,  # max_n_off_target_rgs
+            array([[0, 2], [3, 5]]),
+        ),
+    ],
+)
+def test_compute_merge_regions_start_ends_excl(
+    test_id: str,
+    oars_has_df_chunk: NDArray[bool_],
+    oars_likely_on_target_size: NDArray[bool_],
+    max_n_off_target_rgs: int,
+    expected: NDArray[int_],
+) -> None:
     """
-    Test NRowsSplitStrategy strategy and likely_on_target_size.
+    Test compute_merge_regions_start_ends_excl function with various inputs.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    oars_has_df_chunk : NDArray[bool_]
+        Boolean array indicating if each atomic region has a DataFrame chunk.
+    oars_likely_on_target_size : NDArray[bool_]
+        Boolean array indicating if each atomic region is likely to be on target size.
+    max_n_off_target_rgs : int
+        Maximum number of off-target row groups allowed.
+    expected : NDArray[int_]
+        Expected output containing start and end indices for enlarged merge regions.
+
+    """
+    split_strat = TestOARSplitStrategy.from_oars_desc(
+        oars_rg_idx_starts=zeros(1, dtype=int_),
+        oars_cmpt_idx_ends_excl=zeros((1, 2), dtype=int_),
+        oars_has_row_group=zeros(1, dtype=bool_),
+        n_oars=len(oars_has_df_chunk),
+        oars_has_df_chunk=oars_has_df_chunk,
+        oars_likely_on_target_size=oars_likely_on_target_size,
+    )
+    split_strat.compute_merge_regions_start_ends_excl(
+        max_n_off_target_rgs=max_n_off_target_rgs,
+    )
+    assert array_equal(split_strat.oar_idx_mrs_starts_ends_excl, expected)
+
+
+def test_NRowsSplitStrategy_oars_likely_on_target_size():
+    """
+    Test NRowsSplitStrategy strategy and oars_likely_on_target_size.
     """
     target_size = 100  # min size: 80
     # Create mock oars_desc with 5 regions:
@@ -348,7 +663,7 @@ def test_NRowsSplitStrategy_likely_on_target_size():
     # 4. False - Combined RG(30) + DF(30) too small
     # 5. False - RG only with 120 rows (above target_size)
     # 6. True - Combined RG(30) + DF(80) oversized but with a RG
-    result = strategy.likely_on_target_size
+    result = strategy.oars_likely_on_target_size
     expected = array([True, True, True, False, False, True])
     assert_array_equal(result, expected)
 
@@ -577,7 +892,8 @@ def test_NRowsSplitStrategy_partition_merge_regions(
     )
     assert_array_equal(strategy.oars_min_n_rows, expected["oars_min_n_rows"])
     # Test partition_merge_regions.
-    result = strategy.partition_merge_regions(oar_idx_mrs_starts_ends_excl)
+    strategy.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl
+    result = strategy.partition_merge_regions()
     # Check.
     assert len(result) == len(expected["oars_merge_sequences"])
     for (result_rg_start, result_cmpt_ends_excl), (
@@ -946,7 +1262,7 @@ def test_row_group_offsets(df_size, target_size, expected_offsets):
         ),
     ],
 )
-def test_TimePeriodSplitStrategy_likely_on_target_size(
+def test_TimePeriodSplitStrategy_oars_likely_on_target_size(
     test_id,
     rg_mins,
     rg_maxs,
@@ -954,7 +1270,7 @@ def test_TimePeriodSplitStrategy_likely_on_target_size(
     expected,
 ):
     """
-    Test TimePeriodSplitStrategy initialization and likely_on_target_size.
+    Test TimePeriodSplitStrategy initialization and oars_likely_on_target_size.
     """
     time_period = "MS"
     # Initialize strategy
@@ -970,7 +1286,7 @@ def test_TimePeriodSplitStrategy_likely_on_target_size(
     # Test oars_mins_maxs
     assert_array_equal(strategy.oars_mins_maxs, expected["oars_mins_maxs"])
     # Test likely_on_target_size
-    assert_array_equal(strategy.likely_on_target_size, expected["likely_on_target"])
+    assert_array_equal(strategy.oars_likely_on_target_size, expected["likely_on_target"])
 
 
 @pytest.mark.parametrize(
@@ -1133,7 +1449,8 @@ def test_TimePeriodSplitStrategy_partition_merge_regions(
         row_group_time_period=time_period,
     )
     # Test partition_merge_regions.
-    result = strategy.partition_merge_regions(oar_idx_mrs_starts_ends_excl)
+    strategy.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl
+    result = strategy.partition_merge_regions()
     # Check
     for (result_rg_start, result_cmpt_ends_excl), (
         expected_rg_start,
@@ -1213,3 +1530,728 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
     offsets = strategy.row_group_offsets(df_ordered_on=Series(df_dates))
     # Verify results
     assert offsets == expected_offsets
+
+
+@pytest.mark.parametrize(
+    (
+        "test_id, df_data, pf_data, row_group_offsets, row_group_size_target, drop_duplicates, max_n_irgs, expected"
+    ),
+    [
+        # 1/ Adding data at complete tail, testing 'drop_duplicates'.
+        # 'max_n_irgs' is never triggered.
+        (
+            # Max row group size as int.
+            # Writing after pf data, no off target size row group.
+            # rg:  0      1
+            # pf: [0,1], [2,3]
+            # df:               [3]
+            "new_rg_simple_append_int",
+            [3],
+            [0, 1, 2, 3],
+            [0, 2],  # row_group_offsets
+            2,  # row_group_size_target | no irgs to merge with
+            False,  # drop_duplicates | should not merge with preceding rg
+            2,  # max_n_irgs | no irgs to rewrite
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # Writing after pf data, no off target size row group.
+            # rg:  0            1
+            # pf: [8h10,9h10], [10h10]
+            # df:                      [12h10]
+            "new_rg_simple_append_timestamp_not_on_boundary",
+            [Timestamp(f"{REF_D}12:10")],
+            date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
+            [0, 2],
+            "2h",  # row_group_size_target | should not merge irg
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Max row group size as int.
+            # Writing at end of pf data, merging with off target size row group.
+            # rg:  0        1        2
+            # pf: [0,1,2], [6,7,8], [9]
+            # df:                   [9]
+            "drop_duplicates_merge_tail_int",
+            [9],
+            [0, 1, 2, 6, 7, 8, 9],
+            [0, 3, 6],  # row_group_offsets
+            3,  # row_group_size_target | should not merge irg
+            True,  # drop_duplicates | should merge with irg
+            2,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # Values not on boundary to check 'floor()'.
+            # Writing after pf data, not merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h10,9h10], [10h10]
+            # df:                      [10h10]
+            "no_drop_duplicates_simple_append_timestamp_not_on_boundary",
+            [Timestamp(f"{REF_D}10:10")],
+            date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
+            [0, 2],
+            "2h",  # row_group_size_target | should not merge irg
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # Values not on boundary to check 'floor()'.
+            # Writing after pf data, merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h10,9h10], [10h10]
+            # df:              [10h10]
+            "drop_duplicates_merge_tail_timestamp_not_on_boundary",
+            [Timestamp(f"{REF_D}10:10")],
+            date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
+            [0, 2],
+            "2h",  # row_group_size_target | should not merge irg
+            True,  # drop_duplicates | should merge with irg
+            3,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # Values on boundary.
+            # Writing after pf data, not merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h00,9h00], [10h00]
+            # df:                      [10h00]
+            "no_drop_duplicates_simple_append_timestamp_on_boundary",
+            [Timestamp(f"{REF_D}10:00")],
+            date_range(Timestamp(f"{REF_D}08:00"), freq="1h", periods=3),
+            [0, 2],  # row_group_offsets
+            "2h",  # row_group_size_target | should not merge irg
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # Values on boundary.
+            # Writing after pf data, merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h00,9h00], [10h00]
+            # df:              [10h00]
+            "drop_duplicates_merge_tail_timestamp_on_boundary",
+            [Timestamp(f"{REF_D}10:00")],
+            date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=3),
+            [0, 2],  # row_group_offsets
+            "2h",  # row_group_size_target | should not merge irg
+            True,  # drop_duplicates | should merge with irg
+            3,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as int.
+            # Writing after pf data, off target size row group to merge.
+            # rg:  0        1        2    3
+            # pf: [0,1,2], [3,4,5], [6], [7],
+            # df:                             [8]
+            "last_row_group_exceeded_merge_tail_int",
+            [8],
+            range(8),
+            [0, 3, 6, 7],  # row_group_offsets
+            3,  # row_group_size_target | should merge irgs
+            False,  # drop_duplicates | should not merge with preceding rg
+            4,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [0, 0, 0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # Writing after pf data, off target size row group should be merged.
+            # rg:  0            1        2
+            # pf: [8h00,9h00], [10h00], [11h00]
+            # df:                               [13h00]
+            "last_row_group_exceeded_merge_tail_timestamp",
+            [Timestamp(f"{REF_D}13:00")],
+            date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
+            [0, 2, 3],  # row_group_offsets
+            "2h",  # row_group_size_target | new period, should merge irgs
+            True,  # drop_duplicates | no duplicates to drop
+            3,  # max_n_irgs | should not rewrite irg
+            {
+                "chunk_counter": [0, 0, 0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        # 2/ Adding data right at the start.
+        (
+            # Max row group size as int.
+            # df at the start of pf data.
+            # rg:         0       1       2    3
+            # pf:        [2, 6], [7, 8], [9], [10]
+            # df: [0,1]
+            "no_duplicates_insert_at_start_new_rg_int",
+            [0, 1],
+            [2, 6, 7, 8, 9, 10],
+            [0, 2, 4, 5],  # row_group_offsets
+            2,  # row_group_size_target | df enough to make on target size rg, should merge.
+            True,  # no duplicates to drop
+            2,  # max_n_irgs | not triggered
+            {
+                "chunk_counter": [2],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as int.
+            # df at the start of pf data.
+            # rg:       0       1       2    3
+            # pf:      [2, 6], [7, 8], [9], [10]
+            # df: [0]
+            "no_duplicates_insert_at_start_no_new_rg_int",
+            [0],
+            [2, 6, 7, 8, 9, 10],
+            [0, 2, 4, 5],  # row_group_offsets
+            2,  # row_group_size_target | df not enough to make on target size rg, should not merge.
+            True,  # no duplicates to drop
+            2,  # max_n_irgs | not triggered
+            {
+                "chunk_counter": [0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # df at the start of pf data.
+            # df is not overlapping with existing row groups.
+            # rg:           0            1        2
+            # pf:          [8h00,9h00], [12h00], [13h00]
+            # df:  [7h30]
+            "no_duplicates_insert_at_start_new_rg_timestamp_not_on_boundary",
+            [Timestamp(f"{REF_D}7:30")],
+            [
+                Timestamp(f"{REF_D}08:00"),
+                Timestamp(f"{REF_D}09:00"),
+                Timestamp(f"{REF_D}12:00"),
+                Timestamp(f"{REF_D}14:00"),
+            ],
+            [0, 2, 3],
+            "2h",  # row_group_size_target | no rg in same period to merge with
+            True,  # no duplicates to drop
+            2,  # max_n_irgs | should rewrite tail
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # df at the start of pf data.
+            # df is overlapping with existing row groups.
+            # rg:            0            1        2
+            # pf:           [8h10,9h10], [12h10], [13h10]
+            # df:           [8h00]
+            "no_duplicates_insert_at_start_no_new_rg_timestamp_on_boundary",
+            [Timestamp(f"{REF_D}8:00")],
+            [
+                Timestamp(f"{REF_D}08:10"),
+                Timestamp(f"{REF_D}09:10"),
+                Timestamp(f"{REF_D}12:10"),
+                Timestamp(f"{REF_D}14:10"),
+            ],
+            [0, 2, 3],  # row_group_offsets
+            "2h",  # row_group_size_target | should merge with rg in same period
+            True,  # no duplicates to drop
+            2,  # max_n_irgs | should rewrite tail
+            {
+                "chunk_counter": [0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        # 3/ Adding data at complete end, testing 'max_n_irgs'.
+        (
+            # Max row group size as int
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
+            # rg:  0          1           2     3
+            # pf: [0,1,2,6], [7,8,9,10], [11], [12]
+            # df:                                   [12]
+            "max_n_irgs_not_reached_simple_append_int",
+            [12],
+            [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
+            [0, 4, 8, 9],  # row_group_offsets
+            4,  # row_group_size_target | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_irgs | should not rewrite tail
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Max row group size as int
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
+            # rg:  0          1           2     3
+            # pf: [0,1,2,6], [7,8,9,10], [11], [12]
+            # df:                                   [12]
+            "max_n_irgs_reached_tail_rewrite_int",
+            [12],
+            [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
+            [0, 4, 8, 9],  # row_group_offsets
+            4,  # row_group_size_target | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            2,  # max_n_irgs | should rewrite tail
+            {
+                "chunk_counter": [0, 0, 0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # df connected to off target size rgs.
+            # Values on boundary.
+            # Writing after pf data, off target size row groups.
+            # rg:  0            1        2
+            # pf: [8h00,9h00], [10h00], [11h00]
+            # df:                               [11h00]
+            "max_n_irgs_not_reached_simple_append_timestamp",
+            [Timestamp(f"{REF_D}11:00")],
+            date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
+            [0, 2, 3],  # row_group_offsets
+            "2h",  # row_group_size_target | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_off_targetrgs | should not rewrite tail
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Max row group size as freqstr.
+            # df connected to off target size rgs.
+            # Values on boundary.
+            # Writing after pf data, off target size row groups.
+            # rg:  0            1        2
+            # pf: [8h00,9h00], [10h00], [11h00]
+            # df:                               [11h00]
+            "max_n_irgs_reached_tail_rewrite_timestamp",
+            [Timestamp(f"{REF_D}11:00")],
+            date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
+            [0, 2, 3],  # row_group_offsets
+            "2h",  # row_group_size_target | should not merge with irg.
+            False,  # drop_duplicates | should not merge with preceding rg
+            2,  # max_n_irgs | should rewrite tail
+            {
+                "chunk_counter": [0, 0, 0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as int.
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
+            # rg:  0          1           2     3
+            # pf: [0,1,2,6], [7,8,9,10], [11], [12]
+            # df:                                   [12]
+            "max_n_irgs_none_simple_append_int",
+            [12],
+            [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
+            [0, 4, 8, 9],
+            4,  # row_group_size_target | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            None,  # max_n_irgs | should not rewrite tail
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Max row group size as freqstr
+            # df connected to off target size rgs.
+            # Values on boundary.
+            # Writing after pf data, off target size row groups.
+            # rg:  0            1        2
+            # pf: [8h00,9h00], [10h00], [11h00]
+            # df:                               [11h00]
+            "max_n_irgs_none_simple_append_timestamp",
+            [Timestamp(f"{REF_D}11:00")],
+            date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=4),
+            [0, 2, 3],  # row_group_offsets
+            "2h",  # row_group_size_target
+            False,  # drop_duplicates
+            None,  # max_n_irgs
+            {
+                "chunk_counter": [1],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        # 4/ Adding data just before last off target size row groups.
+        (
+            # Max row group size as int.
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
+            # rg:  0        1                    2
+            # pf: [0,1,2], [6,7,8],             [11]
+            # df:                   [8, 9, 10]
+            "insert_before_irgs_simple_append_int",
+            [8, 9, 10],
+            [0, 1, 2, 6, 7, 8, 11],
+            [0, 3, 6],
+            3,  # row_group_size_target | no df remainder to merge with next rg
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_irgs | should not rewrite tail
+            {
+                "chunk_counter": [3],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as int.
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups
+            # rg:  0        1                2
+            # pf: [0,1,2], [6,7,8],         [11]
+            # df:                   [8, 9]
+            "insert_before_irgs_tail_rewrite_int",
+            [8, 9],
+            [0, 1, 2, 6, 7, 8, 11],
+            [0, 3, 6],
+            3,  # row_group_size_target | df remainder to merge with next rg
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_irgs | should not rewrite tail
+            {
+                "chunk_counter": [0, 2],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as int.
+            # df connected to off target size rgs.
+            # Incomplete row groups at the end of pf data.
+            # rg:  0        1           2
+            # pf: [0,1,2], [6,7,8],    [10]
+            # df:              [8, 9]
+            "insert_before_irgs_drop_duplicates_no_tail_rewrite_int",
+            [8, 9],
+            [0, 1, 2, 6, 7, 8, 10],
+            [0, 3, 6],
+            3,  # row_group_size_target | because df merge with previous df,
+            # df remainder should not merge with next rg
+            True,  # drop_duplicates | merge with preceding rg
+            3,  # max_n_irgs | should not rewrite tail
+            {
+                # Other acceptable solution:
+                # [0, 1, 1, 2]
+                "chunk_counter": [0, 2],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Test  11 (3.c) /
+            # Max row group size as int.
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups at
+            # the end of pf data.
+            # Tail is rewritten because with df, 'max_n_irgs' is reached.
+            # rg:  0        1        2
+            # pf: [0,1,2], [6,7,8], [10]
+            # df:              [8]
+            "insert_before_irgs_drop_duplicates_tail_rewrite_int",
+            [8],
+            [0, 1, 2, 6, 7, 8, 10],
+            [0, 3, 6],
+            3,  # row_group_size_target | should not rewrite tail
+            True,  # drop_duplicates | merge with preceding rg
+            3,  # max_n_irgs | should not rewrite tail
+            {
+                "chunk_counter": [0, 1],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Max row group size as int.
+            # df connected to off target size rgs.
+            # Incomplete row groups at the end of pf data.
+            # Write of last row group is triggered
+            # rg:  0         1                  2
+            # pf: [0,1,2,3],[6,7,8,8],         [10]
+            # df:                      [8, 9]
+            "insert_before_irgs_tail_rewrite_int",
+            [8, 9],
+            [0, 1, 2, 3, 6, 7, 8, 8, 10],
+            [0, 4, 8],
+            4,  # row_group_size_target | should merge with next rg.
+            False,  # drop_duplicates
+            3,  # max_n_irgs | should not rewrite tail
+            {
+                "chunk_counter": [0, 2],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Test  13 (3.c) /
+            # Max row group size as int | df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups at
+            # the end of pf data.
+            # 'max_n_irgs' reached to rewrite all tail.
+            # row grps:  0            1                 2
+            # pf: [8h00,9h00], [10h00],          [13h00]
+            # df:                       [12h00]
+            "insert_timestamp_max_n_irgs_tail_rewrite",
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}12:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": [
+                        Timestamp(f"{REF_D}08:00"),
+                        Timestamp(f"{REF_D}09:00"),
+                        Timestamp(f"{REF_D}10:00"),
+                        Timestamp(f"{REF_D}13:00"),
+                    ],
+                },
+            ),
+            [0, 2, 3],
+            "2h",  # row_group_size_target | should not specifically rewrite tail
+            True,  # drop_duplicates
+            2,  # max_n_irgs | should rewrite tail
+            (2, None, False),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  14 (3.d) /
+            # Max row group size as int | df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups at
+            # the end of pf data.
+            # df is not directly connected to existing values in row
+            # groups, so tail is not rewritten.
+            # row grps:  0            1                 2
+            # pf: [8h00,9h00], [10h00],          [13h00]
+            # df:                       [11h00]
+            "insert_timestamp_disconnected_no_rewrite",
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}11:00")]}),
+            DataFrame(
+                {
+                    "ordered_on": [
+                        Timestamp(f"{REF_D}08:00"),
+                        Timestamp(f"{REF_D}09:00"),
+                        Timestamp(f"{REF_D}10:00"),
+                        Timestamp(f"{REF_D}13:00"),
+                    ],
+                },
+            ),
+            [0, 2, 3],
+            "2h",  # row_group_size_target | should not specifically rewrite tail
+            True,  # drop_duplicates
+            2,  # max_n_irgs | should not rewrite tail
+            (None, None, True),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  15 (3.e) /
+            # Max row group size as int | df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups at
+            # the end of pf data.
+            # df is not overlapping with existing row groups.
+            # It should be added.
+            # row grps:  0                   1        2
+            # pf: [8h00,9h00],        [12h00], [14h00]
+            # df:             [10h30]
+            "insert_timestamp_non_overlapping",
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}10:30")]}),
+            DataFrame(
+                {
+                    "ordered_on": [
+                        Timestamp(f"{REF_D}08:00"),
+                        Timestamp(f"{REF_D}09:00"),
+                        Timestamp(f"{REF_D}12:00"),
+                        Timestamp(f"{REF_D}14:00"),
+                    ],
+                },
+            ),
+            [0, 2, 3],
+            "2h",  # row_group_size_target | should not specifically rewrite tail
+            True,  # drop_duplicates
+            2,  # max_n_irgs | should not rewrite tail
+            (None, None, True),  # bool: need to sort rgs after write
+        ),
+        # 5/ Adding data in the middle of pf data.
+        (
+            # Test  16 (4.a) /
+            # Max row group size as int | df within pf data.
+            # Writing in-between pf data, with off target size row groups at
+            # the end of pf data.
+            # row grps:  0      1            2       3    4
+            # pf: [0,1], [2,      6], [7, 8], [9], [10]
+            # df:        [2, 3, 4]
+            "insert_middle_with_off_target_rgs",
+            DataFrame({"ordered_on": [2, 3, 4]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10]}),
+            [0, 2, 4, 6, 7],
+            2,  # row_group_size_target | should rewrite tail
+            True,  # drop_duplicates
+            2,  # max_n_irgs | should rewrite tail
+            (1, 2, True),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  17 (4.b) /
+            # Max row group size as int | df within pf data.
+            # Writing in-between pf data, with off target size row groups at
+            # the end of pf data.
+            # row grps:  0           1        2
+            # pf: [0,1,2],    [6,7,8],[9]
+            # df:         [3]
+            "insert_middle_single_value",
+            DataFrame({"ordered_on": [3]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
+            [0, 3, 6],
+            3,  # row_group_size_target | should not rewrite tail
+            False,  # drop_duplicates
+            2,  # max_n_irgs | should not rewrite tail
+            (None, None, True),  # bool: need to sort rgs after write
+        ),
+        (
+            # Test  18 (4.c) /
+            # Max row group size as int | df within pf data.
+            # Writing at end of pf data, with off target size row groups at
+            # the end of pf data.
+            # One-but last row group is on target size, but because df is
+            # overlapping with it, it has to be rewritten.
+            # By choice, the rewrite does not propagate till the end.
+            # row grps:  0        1              2             3
+            # pf: [0,1,2], [6,7,8],       [10, 11, 12], [13]
+            # df:                  [9, 10]
+            "insert_middle_partial_rewrite",
+            DataFrame({"ordered_on": [9, 10]}),
+            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10, 11, 12, 13]}),
+            [0, 3, 6, 9],
+            3,  # row_group_size_target | should not rewrite tail
+            True,  # drop_duplicates
+            2,  # max_n_irgs | should not rewrite tail
+            (2, 3, True),
+        ),
+        (
+            # Test  19 (4.d) /
+            # Max row group size as pandas freqstr | df within pf data.
+            # Writing in-between pf data, with off target size row groups at
+            # the end of pf data.
+            # row grps:  0        1           2           3      4
+            # pf: [8h,9h], [10h, 11h], [12h, 13h], [14h], [15h]
+            # df:               [11h]
+            "insert_timestamp_middle_with_off_target_rgs",
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}11:00")]}),
+            DataFrame({"ordered_on": date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=8)}),
+            [0, 2, 4, 6, 7],
+            "2h",  # row_group_size_target
+            True,  # drop_duplicates
+            2,  # max_n_irgs | should rewrite tail
+            (1, 2, True),
+        ),
+        (
+            # Test  20 (4.e) /
+            # Max row group size as pandas freqstr | df within pf data.
+            # Writing in-between pf data, with off target size row groups at
+            # the end of pf data.
+            # row grps:  0          1           2           3      4
+            # pf: [8h,9h],   [10h, 11h], [12h, 13h], [14h], [15h]
+            # df:        [9h]
+            "insert_timestamp_middle_no_rewrite",
+            DataFrame({"ordered_on": [Timestamp(f"{REF_D}9:00")]}),
+            DataFrame({"ordered_on": date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=8)}),
+            [0, 2, 4, 6, 7],
+            "2h",  # row_group_size_target
+            False,  # drop_duplicates
+            2,  # max_n_irgs
+            (None, None, True),
+        ),
+        # Do "island" cases
+        # pf:         [0, 1]                [7, 9]                [ 15, 16]
+        # df1                       [4, 5            11, 12]  # should have df_head, df_tail, no merge?
+        # df2                                [ 8, 11, 12]     # should have merge + df_tail?
+        # df3                       [4, 5      8]             # should have df_head + merge?
+        # df4                       [4, 5]   # here df not to be merged with following row group
+        # df5                       [4, 5, 6]   # here, should be merged
+        # df6                                         + same with row_group_size_target as str
+        # plenty of test with max_n_irgs set to 0 to check merging of last row groups
+        # up to reach 4 x row_group_size_target
+        # Do case when it is not possible to reach it, but showing all available
+        # row groups are merge together nonetheless.
+        # max_n_irgs
+        # test with impossibility to have on target size row groups with subset to merge
+        # then check left, right, and all available row groups to merge
+        #   pf:  rg1, rg2, rg3, rg4, rg5
+        #   df:            df1
+        #   will merge with only right or only left
+        #
+        #   pf:  rg1, rg2, rg3
+        #   df:       df1
+        #   will merge with right and left
+        # test with freqstr, with several empty periods, to make sure the empty periods are
+        #  not in the output
+        # test with max_n_irgs set to 0, to make sure the last chunk is
+        #  large enough to ensure on target size row groups (calculation of "min_size"
+        #  in "consolidate_merge_plan")
+    ],
+)
+def test_compute_ordered_merge_plan(
+    test_id,
+    df_data,
+    pf_data,
+    row_group_offsets,
+    row_group_size_target,
+    drop_duplicates,
+    max_n_irgs,
+    expected,
+    tmp_path,
+):
+    df = DataFrame({"ordered_on": df_data})
+    pf_data = DataFrame({"ordered_on": pf_data})
+    pf = create_parquet_file(tmp_path, pf_data, row_group_offsets=row_group_offsets)
+    pf_statistics = pf.statistics
+    rg_ordered_on_mins = array(pf_statistics[MIN]["ordered_on"])
+    rg_ordered_on_maxs = array(pf_statistics[MAX]["ordered_on"])
+    df_ordered_on = df.loc[:, "ordered_on"]
+    if isinstance(row_group_size_target, str):
+        split_strat = TimePeriodSplitStrategy(
+            rg_ordered_on_mins=rg_ordered_on_mins,
+            rg_ordered_on_maxs=rg_ordered_on_maxs,
+            df_ordered_on=df_ordered_on,
+            row_group_time_period=row_group_size_target,
+        )
+    else:
+        split_strat = NRowsSplitStrategy(
+            rg_ordered_on_mins=rg_ordered_on_mins,
+            rg_ordered_on_maxs=rg_ordered_on_maxs,
+            df_ordered_on=df_ordered_on,
+            row_group_size_target=row_group_size_target,
+        )
+    chunk_counter = split_strat.compute_merge_regions_start_ends_excl(
+        max_n_off_target_rgs=max_n_irgs,
+    ).partition_merge_regions()
+
+    assert array_equal(chunk_counter, expected["chunk_counter"])
+    sort_rgs_after_write = len(chunk_counter) > 1 or chunk_counter[0][0] < len(pf)
+    print("chunk_counter")
+    print(chunk_counter)
+    print("len(pf)")
+    print(len(pf))
+    assert sort_rgs_after_write == expected["sort_rgs_after_write"]

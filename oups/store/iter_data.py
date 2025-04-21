@@ -8,11 +8,17 @@ Created on Fri Nov  8 22:30:00 2024.
 from typing import Iterable, List, Optional, Tuple, Union
 
 from fastparquet import ParquetFile
+from numpy import array
 from numpy import searchsorted
 from pandas import DataFrame
 from pandas import concat
 
-from oups.store.ordered_merge_info import compute_ordered_merge_plan
+from oups.store.ordered_atomic_regions import NRowsSplitStrategy
+from oups.store.ordered_atomic_regions import TimePeriodSplitStrategy
+
+
+MIN = "min"
+MAX = "max"
 
 
 def _validate_duplicate_on_param(
@@ -247,9 +253,64 @@ def iter_merged_pf_df(
             columns=list(df.columns),
         )
 
+    # An atomic merge region is defined
+    # - either as a single existing row group (overlapping or not with a
+    #   DataFrame chunk),
+    # - or as a DataFrame chunk not overlapping with any existing row groups.
+    pf_statistics = pf.statistics
+    rg_ordered_on_mins = array(pf_statistics[MIN][ordered_on])
+    rg_ordered_on_maxs = array(pf_statistics[MAX][ordered_on])
+    df_ordered_on = df.loc[:, ordered_on]
+    if isinstance(row_group_size_target, int):
+        oar_split_strategy = NRowsSplitStrategy(
+            rg_ordered_on_mins=rg_ordered_on_mins,
+            rg_ordered_on_maxs=rg_ordered_on_maxs,
+            df_ordered_on=df_ordered_on,
+            drop_duplicates=duplicates_on is not None,
+            rgs_n_rows=array([rg.num_rows for rg in pf], dtype=int),
+            df_n_rows=len(df),
+            row_group_target_size=row_group_size_target,
+        )
+    else:
+        oar_split_strategy = TimePeriodSplitStrategy(
+            rg_ordered_on_mins=rg_ordered_on_mins,
+            rg_ordered_on_maxs=rg_ordered_on_maxs,
+            df_ordered_on=df_ordered_on,
+            drop_duplicates=duplicates_on is not None,
+            row_group_period=row_group_size_target,
+        )
+    merge_plan = (
+        oar_split_strategy.compute_merge_regions_starts_ends_excl().partition_merge_regions()
+    )
+    row_group_sizer = oar_split_strategy.row_group_offsets
+    # Compute enlarged merge regions start and end indices.
+    # Enlarged merge regions are set of contiguous atomic merge regions,
+    # possibly extended with neighbor off target size row groups depending on
+    # criteria.
+    # It also restricts to the set of atomic merge regions to be yielded.
+    # oar_idx_mrs_starts_ends_excl = compute_merge_regions_start_ends_excl(
+    #    oars_has_df_chunk=oar_split_strategy.oars_has_df_chunk,
+    #    oars_likely_on_target_size=oar_split_strategy.likely_meets_target_size,
+    #    max_n_off_target_rgs=max_n_off_target_rgs,
+    # )
+    # Filter and reshape arrays describing atomic merge regions into enlarged
+    # merge regions.
+    # For each enlarged merge regions, aggregate atomic merge regions depending
+    # on the split strategy.
+    # emrs_desc = oar_split_strategy.consolidate_enlarged_merge_regions(
+    #    oar_idx_mrs_starts_ends_excl=oar_idx_mrs_starts_ends_excl,
+    # )
+
+    # Assess if row groups have to be sorted after write step
+    #  - either if there is a merge region (new row groups are written first,
+    #    then old row groups are removed).
+    #  - or there is no merge region but df is not appended at the tail of
+    #    existing data.
+    # sort_rgs_after_write = True
+
     # TODO:
     # correct here!!
-    max_n_irgs = None
+    # max_n_irgs = None
 
     # Identify overlapping row groups.
     # If intent is to drop duplicates, 'analyze_chunks_to_merge' has to be
@@ -258,20 +319,6 @@ def iter_merged_pf_df(
     # /!\ drop duplicates before calling 'analyze_chunks_to_merge' /!\
     if duplicates_on:
         df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
-    (
-        rg_idx_starts,
-        rg_idx_ends_excl,
-        df_idx_ends_excl,
-        row_group_sizer,
-        sort_rgs_after_write,
-    ) = compute_ordered_merge_plan(
-        df=df,
-        pf=pf,
-        ordered_on=ordered_on,
-        row_group_size_target=row_group_size_target,
-        drop_duplicates=duplicates_on is not None,
-        max_n_irgs=max_n_irgs,
-    )
 
     has_pf = 0
     has_df = 0
@@ -283,8 +330,8 @@ def iter_merged_pf_df(
     # chunk_n_rows = 0
     remainder = None
     for chunk_countdown, rg_idx_start, rg_idx_end_excl, df_idx_end_excl in enumerate(
-        zip(rg_idx_starts, rg_idx_ends_excl, df_idx_ends_excl),
-        start=-len(df_idx_ends_excl),
+        merge_plan,
+        start=-len(merge_plan),
     ):
         # Each step is a write step.
         if df_idx_end_excl > _df_idx_start:
