@@ -342,7 +342,7 @@ def test_get_region_start_end_delta(
             array([20, 40, 43]),  # rg_mins
             array([25, 42, 45]),  # rg_maxs
             Series([5, 22, 32, 41, 42, 46, 52]),  # df_ordered_on
-            True,
+            True,  # drop duplicates
             {
                 RG_IDX_START: array([0, 0, 1, 1, 2, 3]),
                 RG_IDX_END_EXCL: array([0, 1, 1, 2, 3, 3]),
@@ -363,6 +363,62 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3, 3, 4, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
                 HAS_DF_CHUNK: array([True, True, True, False, True, True]),
+            },
+        ),
+        (
+            "no_drop_duplicates_rg_same_min_max",
+            array([20, 40, 43]),  # rg_mins, 43 overlaps with previous rg max
+            array([25, 43, 43]),  # rg_maxs
+            Series([5, 22, 32, 43, 46, 52]),  # df_ordered_on - 43 is duplicate
+            False,  # don't drop duplicates - 43 expected to fall after last rg
+            {
+                RG_IDX_START: array([0, 0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([0, 1, 1, 2, 3, 3]),
+                DF_IDX_END_EXCL: array([1, 2, 3, 3, 3, 6]),
+                HAS_ROW_GROUP: array([False, True, False, True, True, False]),
+                HAS_DF_CHUNK: array([True, True, True, False, False, True]),
+            },
+        ),
+        (
+            "drop_duplicates_rg_same_min_max",
+            array([20, 40, 43]),  # rg_mins, 43 overlaps with previous rg max
+            array([25, 43, 43]),  # rg_maxs
+            Series([5, 22, 32, 43, 46, 52]),  # df_ordered_on - 43 is duplicate
+            True,  # drop duplicates - 43 expected to fall after last rg
+            {
+                RG_IDX_START: array([0, 0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([0, 1, 1, 2, 3, 3]),
+                DF_IDX_END_EXCL: array([1, 2, 3, 4, 4, 6]),
+                HAS_ROW_GROUP: array([False, True, False, True, True, False]),
+                HAS_DF_CHUNK: array([True, True, True, True, False, True]),
+            },
+        ),
+        (
+            "drop_duplicates_rg_same_min_max_df_same_value",
+            array([20, 40, 43]),  # rg_mins, 43 overlaps with previous rg max
+            array([25, 43, 43]),  # rg_maxs
+            Series([5, 22, 32, 43, 43, 52]),  # df_ordered_on - 43 is duplicate
+            True,  # drop duplicates - 43 expected to fall in 1st rg with 43
+            {
+                RG_IDX_START: array([0, 0, 1, 1, 2, 3]),
+                RG_IDX_END_EXCL: array([0, 1, 1, 2, 3, 3]),
+                DF_IDX_END_EXCL: array([1, 2, 3, 5, 5, 6]),
+                HAS_ROW_GROUP: array([False, True, False, True, True, False]),
+                HAS_DF_CHUNK: array([True, True, True, True, False, True]),
+            },
+        ),
+        (
+            "drop_duplicates_rg_same_min_max_df_same_value",
+            array([40, 43]),  # rg_mins, 43 overlaps with previous rg max
+            array([43, 45]),  # rg_maxs
+            Series([22, 32, 43, 43, 44, 46]),  # df_ordered_on - 43 is duplicate
+            True,  # drop duplicates - 43 expected to fall after last rg
+            {
+                RG_IDX_START: array([0, 0, 1, 2]),
+                RG_IDX_END_EXCL: array([0, 1, 2, 2]),
+                DF_IDX_END_EXCL: array([2, 4, 5, 6]),
+                HAS_ROW_GROUP: array([False, True, True, False]),
+                HAS_DF_CHUNK: array([True, True, True, True]),
             },
         ),
         (

@@ -209,10 +209,10 @@ class OARMergeSplitStrategy(ABC):
         - A row group and its overlapping DataFrame chunk (if any)
         - A DataFrame chunk that doesn't overlap with any row group
 
-        Returned arrays provide the start and end (excluded) indices in row groups
-        and end (excluded) indices in DataFrame for each of these ordered atomic
-        regions. All these arrays are of same size and describe how are composed the
-        ordered atomic regions.
+        Returned arrays provide the start and end (excluded) indices in row
+        groups and end (excluded) indices in DataFrame for each of these ordered
+        atomic regions. All these arrays are of same size and describe how are
+        composed the ordered atomic regions.
 
         Parameters
         ----------
@@ -224,10 +224,10 @@ class OARMergeSplitStrategy(ABC):
             Values of 'ordered_on' column in DataFrame.
         drop_duplicates : Optional[bool], default False
             Flag impacting how overlapping boundaries have to be managed.
-            More exactly, row groups are considered as first data, and DataFrame as
-            second data, coming after. In case of a row group leading a DataFrame
-            chunk, if the last value in row group is a duplicate of a value in
-            DataFrame chunk, then
+            More exactly, row groups are considered as first data, and DataFrame
+            as second data, coming after. In case of a row group leading a
+            DataFrame chunk, if the last value in row group is a duplicate of a
+            value in DataFrame chunk, then
             - If True, at this index, overlap starts
             - If False, no overlap at this index
 
@@ -238,17 +238,21 @@ class OARMergeSplitStrategy(ABC):
 
         Notes
         -----
-        Start indices in DataFrame are not provided, as they can be inferred from
-        the end (excluded) indices in DataFrame of the previous ordered atomic region
-        (no part of the DataFrame is omitted for the write).
+        Start indices in DataFrame are not provided, as they can be inferred
+        from the end (excluded) indices in DataFrame of the previous ordered
+        atomic region (no part of the DataFrame is omitted for the write).
 
-        In case 'drop_duplicates' is False, and there are duplicate values between
-        row group max values and DataFrame 'ordered_on' values, then DataFrame
-        'ordered_on' values are considered to be the last occurrences of the
-        duplicates in 'ordered_on'. Leading row groups (with duplicate max values)
-        will not be in the same ordered atomic region as the DataFrame chunk starting
-        at the duplicate 'ordered_on' value. This is an optimization to prevent
-        rewriting these leading row groups.
+        In case 'drop_duplicates' is False, and there are duplicate values
+        between row group max values and DataFrame 'ordered_on' values, then
+        DataFrame 'ordered_on' values are considered to be the last occurrences
+        of the duplicates in 'ordered_on'. Leading row groups (with duplicate
+        max values) will not be in the same ordered atomic region as the
+        DataFrame chunk starting at the duplicate 'ordered_on' value. This is
+        an optimization to prevent rewriting these leading row groups.
+
+        On the opposite, if 'drop_duplicates' is True, then the first occurrence
+        of a duplicate 'ordered_on' value in a row group will be considered to
+        be the one corresponding to that in the DataFrame chunk.
 
         """
         # Validate 'ordered_on' in row groups and DataFrame.
@@ -265,10 +269,25 @@ class OARMergeSplitStrategy(ABC):
 
         if drop_duplicates:
             # Determine overlap start/end indices in row groups
-            df_idx_oar_starts = searchsorted(df_ordered_on, rg_ordered_on_mins, side=LEFT)
-            df_idx_oar_ends_excl = searchsorted(df_ordered_on, rg_ordered_on_maxs, side=RIGHT)
+            df_idx_rgs_starts = searchsorted(df_ordered_on, rg_ordered_on_mins, side=LEFT)
+            df_idx_rgs_ends_excl = searchsorted(df_ordered_on, rg_ordered_on_maxs, side=RIGHT)
+            if any(rg_min_equ_max := (rg_ordered_on_mins[1:] == rg_ordered_on_maxs[:-1])):
+                # In case rg_maxs[i] is a duplicate of rg_mins[i+1],
+                # then df_idx_oar_start for rg[i+1] should be set to
+                # df_idx_oar_end_excl of rg[i], so that this df chunk is not in
+                # several row groups.
+                # This case is then further addressed in
+                # 'compute_merge_regions_start_ends_excl', by aggregating these
+                # row groups into an equivalent single 'OAR'.
+                # This fix is not applied here, as it could before doing the
+                # searchsorted step just above, so that accounting of noumber of
+                # rows remains managed row group per row group.
+                rg_idx_mins_to_correct = flatnonzero(rg_min_equ_max) + 1
+                df_idx_rgs_starts[rg_idx_mins_to_correct] = df_idx_rgs_ends_excl[
+                    rg_idx_mins_to_correct - 1
+                ]
         else:
-            df_idx_oar_starts, df_idx_oar_ends_excl = searchsorted(
+            df_idx_rgs_starts, df_idx_rgs_ends_excl = searchsorted(
                 df_ordered_on,
                 vstack((rg_ordered_on_mins, rg_ordered_on_maxs)),
                 side=LEFT,
@@ -277,9 +296,9 @@ class OARMergeSplitStrategy(ABC):
         # any row group. Find indices in row groups of DataFrame orphans.
         rg_idx_df_orphans = flatnonzero(
             r_[
-                df_idx_oar_starts[0],  # gap at start (0 to first start)
-                df_idx_oar_ends_excl[:-1] - df_idx_oar_starts[1:],
-                n_df_rows - df_idx_oar_ends_excl[-1],  # gap at end
+                df_idx_rgs_starts[0],  # gap at start (0 to first start)
+                df_idx_rgs_ends_excl[:-1] - df_idx_rgs_starts[1:],
+                n_df_rows - df_idx_rgs_ends_excl[-1],  # gap at end
             ],
         )
         n_df_orphans = len(rg_idx_df_orphans)
@@ -296,17 +315,17 @@ class OARMergeSplitStrategy(ABC):
             )
             # 'Resize 'df_idx_oar_ends_excl', and duplicate values where there
             # are non-overlapping regions in DataFrame.
-            df_idx_to_insert = r_[df_idx_oar_starts, n_df_rows][rg_idx_df_orphans]
-            df_idx_oar_ends_excl = insert(
-                df_idx_oar_ends_excl,
+            df_idx_to_insert = r_[df_idx_rgs_starts, n_df_rows][rg_idx_df_orphans]
+            df_idx_rgs_ends_excl = insert(
+                df_idx_rgs_ends_excl,
                 rg_idx_df_orphans,
                 df_idx_to_insert,
             )
 
         self.oars_rg_idx_starts = rg_idxs_template[:-1]
-        self.oars_cmpt_idx_ends_excl = column_stack((rg_idxs_template[1:], df_idx_oar_ends_excl))
+        self.oars_cmpt_idx_ends_excl = column_stack((rg_idxs_template[1:], df_idx_rgs_ends_excl))
         self.oars_has_row_group = rg_idxs_template[:-1] != rg_idxs_template[1:]
-        self.oars_df_n_rows = diff(df_idx_oar_ends_excl, prepend=0)
+        self.oars_df_n_rows = diff(df_idx_rgs_ends_excl, prepend=0)
         self.oars_has_df_chunk = self.oars_df_n_rows.astype(bool)
         self.n_oars = len(self.oars_rg_idx_starts)
 
@@ -368,6 +387,22 @@ class OARMergeSplitStrategy(ABC):
         appended at the tail of the DataFrame.
 
         """
+        # TODO
+        # In case rg_maxs[i] is a duplicate of rg_mins[i+1],
+        # then df_idx_oar_start for rg[i+1] should be set to
+        # df_idx_oar_end_excl of rg[i], so that this df chunk is not in
+        # several row groups.
+        # This case is then further addressed in
+        # 'compute_merge_regions_start_ends_excl', by aggregating these row
+        # groups into an equivalent single 'OAR'.
+        # This fix is not applied here, as it could before doing the
+        # searchsorted step just above, so that accounting of noumber of
+        # rows remains managed row group per row group.
+        # Adjustments:
+        # merge together row groups with same min and max values IF 1st rg
+        # has a df chunk AND drop duplicates
+        # si pas drop duplicate, do nothing?
+
         simple_mrs_starts_ends_excl = get_region_indices_of_true_values(self.oars_has_df_chunk)
         if max_n_off_target_rgs is None:
             self.oar_idx_mrs_starts_ends_excl = simple_mrs_starts_ends_excl
@@ -418,6 +453,10 @@ class OARMergeSplitStrategy(ABC):
                 confirmed_emrs_starts_ends_excl,
             ),
         )
+        # Sort along 1st column.
+        # self.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl[
+        #    oar_idx_mrs_starts_ends_excl[:, 0].argsort()
+        # ]
 
     @classmethod
     def from_oars_desc(
