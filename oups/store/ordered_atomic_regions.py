@@ -279,9 +279,10 @@ class OARMergeSplitStrategy(ABC):
                 # This case is then further addressed in
                 # 'compute_merge_regions_start_ends_excl', by aggregating these
                 # row groups into an equivalent single 'OAR'.
-                # This fix is not applied here, as it could before doing the
-                # searchsorted step just above, so that accounting of noumber of
-                # rows remains managed row group per row group.
+                # This fix could have been applied here before doing the
+                # searchsorted step just above. It is not so that accounting
+                # of number of rows remains managed row group per row group
+                # in 'oars_likely_on_target_size'.
                 rg_idx_mins_to_correct = flatnonzero(rg_min_equ_max) + 1
                 df_idx_rgs_starts[rg_idx_mins_to_correct] = df_idx_rgs_ends_excl[
                     rg_idx_mins_to_correct - 1
