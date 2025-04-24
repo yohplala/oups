@@ -291,7 +291,7 @@ class OARMergeSplitStrategy(ABC):
             # several row groups.
             # Restrict the correction to row groups that overlap with a
             # DataFrame chunk.
-            rg_idx_maxs_to_correct = flatnonzero(rgs_min_equ_max & rgs_has_df_overlap)
+            rg_idx_maxs_to_correct = flatnonzero(rgs_min_equ_max & rgs_has_df_overlap[:-1])
             df_idx_rgs_ends_excl[rg_idx_maxs_to_correct] = df_idx_rgs_starts[
                 rg_idx_maxs_to_correct + 1
             ]
