@@ -52,7 +52,7 @@ class TestOARMergeSplitStrategy(OARMergeSplitStrategy):
     def specialized_init(self, **kwargs):
         raise NotImplementedError("Test implementation only")
 
-    def partition_merge_regions(self):
+    def specialized_partition_merge_regions(self):
         raise NotImplementedError("Test implementation only")
 
     def row_group_offsets(self, chunk: DataFrame, is_last_chunk: bool):
@@ -422,10 +422,20 @@ def test_get_region_start_end_delta(
                 HAS_DF_OVERLAP: array([True, True, True, True]),
             },
         ),
-        # TODO: add test case with rg_max = rg_min but no DataFrame overlap.
-        #
-        #
-        #
+        (
+            "drop_duplicates_successive_rgs_same_min_max_no_df_overlap",
+            array([40, 43, 43, 50]),  # rg_mins, 43 overlaps with previous rg max
+            array([43, 43, 45, 50]),  # rg_maxs
+            Series([22, 32, 46, 50]),  # df_ordered_on - no 43
+            True,  # drop duplicates - 43 expected to fall after last rg
+            {
+                RG_IDX_START: array([0, 0, 1, 2, 3, 3]),
+                RG_IDX_END_EXCL: array([0, 1, 2, 3, 3, 4]),
+                DF_IDX_END_EXCL: array([2, 2, 2, 2, 3, 4]),
+                HAS_ROW_GROUP: array([False, True, True, True, False, True]),
+                HAS_DF_OVERLAP: array([True, False, False, False, True, True]),
+            },
+        ),
         (
             "no_drop_duplicates_with_gap_wo_overlapping_rg",
             array([10, 20]),  # rg_mins
@@ -709,6 +719,7 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
         oars_cmpt_idx_ends_excl=column_stack((dummy_rg_idx, oars_df_idx_ends_excl)),
         oars_has_row_group=oars_has_row_group,
         oars_has_df_overlap=diff(oars_df_idx_ends_excl, prepend=0).astype(bool),
+        rg_idx_not_to_use_as_split_points=None,
         drop_duplicates=True,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=target_size,
@@ -949,6 +960,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         ),
         oars_has_row_group=oars_desc_dict[HAS_ROW_GROUP],
         oars_has_df_overlap=diff(oars_desc_dict[DF_IDX_END_EXCL], prepend=0).astype(bool),
+        rg_idx_not_to_use_as_split_points=None,
         drop_duplicates=drop_duplicates,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=row_group_target_size,

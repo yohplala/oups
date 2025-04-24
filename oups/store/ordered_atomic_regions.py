@@ -31,6 +31,7 @@ from numpy import flatnonzero
 from numpy import insert
 from numpy import int8
 from numpy import int_
+from numpy import isin
 from numpy import linspace
 from numpy import maximum
 from numpy import ones
@@ -188,10 +189,15 @@ class OARMergeSplitStrategy(ABC):
     oars_likely_on_target_size : NDArray[bool_]
         Boolean array indicating if OAR is likely to be on target size.
     oar_idx_mrs_starts_ends_excl : NDArray[int_]
-        array of shape (e, 2) containing the list of the start and end indices
+        Array of shape (e, 2) containing the list of the start and end indices
         for each merge regions. This list is unsorted. It starts with start and
         end indices excluded simple (not enlarged) merge regions, and then
         continues with start and end indices excluded enlarged merge regions.
+    rg_idx_not_to_use_as_split_points : NDArray[int_]
+        Array containing indices of row group which should not be used as split
+        points in 'partition_merge_regions'. This ensures these row groups will
+        be loaded all together so that duplicate search can be made over all
+        relevant row groups.
 
     """
 
@@ -282,20 +288,24 @@ class OARMergeSplitStrategy(ABC):
             )
         # Keep track of which row groups have an overlap with a DataFrame chunk.
         rgs_has_df_overlap = df_idx_rgs_starts != df_idx_rgs_ends_excl
+        # 'rg_idx_not_to_use_as_split_points' keeps track of row group indices
+        # which should not be used as split points.
+        self.rg_idx_not_to_use_as_split_points = None
         if drop_duplicates and any(
             rgs_min_equ_max := (rg_ordered_on_mins[1:] == rg_ordered_on_maxs[:-1])
             & rgs_has_df_overlap[:-1],
         ):
             # In case rg_maxs[i] is a duplicate of rg_mins[i+1],
             # then df_idx_rg_ends_excl for rg[i] should be set to
-            # df_idx_rg_starts of rg[i+1], so that this df chunk is not in
-            # several row groups.
+            # df_idx_rg_starts of rg[i+1], so that the overlapping df chunk is
+            # not in several row groups.
             # Restrict the correction to row groups that overlap with a
             # DataFrame chunk.
             rg_idx_maxs_to_correct = flatnonzero(rgs_min_equ_max)
             df_idx_rgs_ends_excl[rg_idx_maxs_to_correct] = df_idx_rgs_starts[
                 rg_idx_maxs_to_correct + 1
             ]
+            self.rg_idx_not_to_use_as_split_points = rg_idx_maxs_to_correct
         # DataFrame orphans are regions in DataFrame that do not overlap with
         # any row group. Find indices in row groups of DataFrame orphans.
         rg_idx_df_orphans = flatnonzero(
@@ -459,6 +469,7 @@ class OARMergeSplitStrategy(ABC):
         oars_cmpt_idx_ends_excl: NDArray,
         oars_has_row_group: NDArray,
         oars_has_df_overlap: NDArray,
+        rg_idx_not_to_use_as_split_points: Union[NDArray, None],
         **kwargs,
     ) -> "OARMergeSplitStrategy":
         """
@@ -479,6 +490,9 @@ class OARMergeSplitStrategy(ABC):
             Boolean array indicating if OAR contains a row group.
         oars_has_df_overlap : NDArray
             Boolean array indicating if OAR overlaps with a DataFrame chunk.
+        rg_idx_not_to_use_as_split_points : Union[NDArray, None]
+            Array of indices for row group not to use as split points. There are
+            filtered out from results in 'partition_merge_regions'.
         drop_duplicates : bool
             Whether to drop duplicates between row groups and DataFrame.
         **kwargs
@@ -496,6 +510,7 @@ class OARMergeSplitStrategy(ABC):
         instance.oars_has_row_group = oars_has_row_group
         instance.oars_df_n_rows = diff(oars_cmpt_idx_ends_excl[:, 1], prepend=0)
         instance.oars_has_df_overlap = oars_has_df_overlap
+        instance.rg_idx_not_to_use_as_split_points = rg_idx_not_to_use_as_split_points
         instance.n_oars = len(oars_rg_idx_starts)
         instance.specialized_init(**kwargs)
         return instance
@@ -555,8 +570,48 @@ class OARMergeSplitStrategy(ABC):
         """
         raise NotImplementedError("Subclasses must implement this property")
 
-    @abstractmethod
     def partition_merge_regions(
+        self,
+    ) -> List[Tuple[int, NDArray]]:
+        """
+        Partition merge regions (MRs) into optimally sized chunks for writing.
+
+        This method is a wrapper to child 'specialized_partition_merge_regions'.
+        It ensures row group indices listed in
+        'rg_idx_not_to_use_as_split_points' are not in the output returned
+        by child 'specialized_partition_merge_regions'.
+
+        Returns
+        -------
+        List[Tuple[int, NDArray]]
+            List of tuples, where each tuple contains for each merge sequence:
+            - First element: Start index of the first row group in the merge
+              sequence.
+            - Second element: Array of shape (m, 2) containing end indices
+              (excluded) for row groups and DataFrame chunks in the merge
+              sequence.
+
+        """
+        merge_sequences = self.specialized_partition_merge_regions()
+        return (
+            merge_sequences
+            if self.rg_idx_not_to_use_as_split_points is None
+            else [
+                (
+                    rg_idx_start,
+                    cmpt_ends_excl[
+                        ~isin(
+                            cmpt_ends_excl[:, 0] + rg_idx_start,
+                            self.rg_idx_not_to_use_as_split_points,
+                        )
+                    ],
+                )
+                for rg_idx_start, cmpt_ends_excl in merge_sequences
+            ]
+        )
+
+    @abstractmethod
+    def specialized_partition_merge_regions(
         self,
     ) -> List[Tuple[int, NDArray]]:
         """
@@ -775,7 +830,7 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
             & (self.oars_max_n_rows <= self.row_group_target_size)
         )
 
-    def partition_merge_regions(
+    def specialized_partition_merge_regions(
         self,
     ) -> List[Tuple[int, NDArray]]:
         """
@@ -1080,7 +1135,7 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
             & (bincount(self.oars_period_idx.ravel())[self.oars_period_idx[:, 0]] == 2)
         )
 
-    def partition_merge_regions(
+    def specialized_partition_merge_regions(
         self,
     ) -> List[Tuple[int, NDArray]]:
         """
