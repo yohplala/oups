@@ -13,6 +13,7 @@ from numpy import array_equal
 from numpy import bool_
 from numpy import column_stack
 from numpy import cumsum
+from numpy import diff
 from numpy import empty
 from numpy import int_
 from numpy import zeros
@@ -39,7 +40,7 @@ RG_IDX_START = "rg_idx_start"
 RG_IDX_END_EXCL = "rg_idx_end_excl"
 DF_IDX_END_EXCL = "df_idx_end_excl"
 HAS_ROW_GROUP = "has_row_group"
-HAS_DF_CHUNK = "has_df_chunk"
+HAS_DF_OVERLAP = "has_df_overlap"
 REF_D = "2020/01/01 "
 
 
@@ -250,7 +251,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([1, 2, 3]),
                 DF_IDX_END_EXCL: array([1, 2, 3]),
                 HAS_ROW_GROUP: array([True, True, True]),
-                HAS_DF_CHUNK: array([True, True, True]),
+                HAS_DF_OVERLAP: array([True, True, True]),
             },
         ),
         (
@@ -264,7 +265,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([0, 1, 2]),
                 DF_IDX_END_EXCL: array([1, 2, 3]),
                 HAS_ROW_GROUP: array([False, True, True]),
-                HAS_DF_CHUNK: array([True, True, True]),
+                HAS_DF_OVERLAP: array([True, True, True]),
             },
         ),
         (
@@ -278,7 +279,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([1, 1, 2]),
                 DF_IDX_END_EXCL: array([1, 2, 3]),
                 HAS_ROW_GROUP: array([True, False, True]),
-                HAS_DF_CHUNK: array([True, True, True]),
+                HAS_DF_OVERLAP: array([True, True, True]),
             },
         ),
         (
@@ -292,7 +293,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([1, 2, 2]),
                 DF_IDX_END_EXCL: array([1, 2, 3]),
                 HAS_ROW_GROUP: array([True, True, False]),
-                HAS_DF_CHUNK: array([True, True, True]),
+                HAS_DF_OVERLAP: array([True, True, True]),
             },
         ),
         (
@@ -306,7 +307,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([1, 2, 3]),
                 DF_IDX_END_EXCL: array([0, 1, 2]),
                 HAS_ROW_GROUP: array([True, True, True]),
-                HAS_DF_CHUNK: array([False, True, True]),
+                HAS_DF_OVERLAP: array([False, True, True]),
             },
         ),
         (
@@ -320,7 +321,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([1, 2, 3]),
                 DF_IDX_END_EXCL: array([1, 1, 2]),
                 HAS_ROW_GROUP: array([True, True, True]),
-                HAS_DF_CHUNK: array([True, False, True]),
+                HAS_DF_OVERLAP: array([True, False, True]),
             },
         ),
         (
@@ -334,7 +335,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([1, 2, 3]),
                 DF_IDX_END_EXCL: array([1, 2, 2]),
                 HAS_ROW_GROUP: array([True, True, True]),
-                HAS_DF_CHUNK: array([True, True, False]),
+                HAS_DF_OVERLAP: array([True, True, False]),
             },
         ),
         (
@@ -348,7 +349,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([0, 1, 1, 2, 3, 3]),
                 DF_IDX_END_EXCL: array([1, 2, 3, 5, 5, 7]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
-                HAS_DF_CHUNK: array([True, True, True, True, False, True]),
+                HAS_DF_OVERLAP: array([True, True, True, True, False, True]),
             },
         ),
         (
@@ -362,7 +363,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([0, 1, 1, 2, 3, 3]),
                 DF_IDX_END_EXCL: array([1, 2, 3, 3, 4, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
-                HAS_DF_CHUNK: array([True, True, True, False, True, True]),
+                HAS_DF_OVERLAP: array([True, True, True, False, True, True]),
             },
         ),
         (
@@ -376,7 +377,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([0, 1, 1, 2, 3, 3]),
                 DF_IDX_END_EXCL: array([1, 2, 3, 3, 3, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
-                HAS_DF_CHUNK: array([True, True, True, False, False, True]),
+                HAS_DF_OVERLAP: array([True, True, True, False, False, True]),
             },
         ),
         (
@@ -388,9 +389,9 @@ def test_get_region_start_end_delta(
             {
                 RG_IDX_START: array([0, 0, 1, 1, 2, 3]),
                 RG_IDX_END_EXCL: array([0, 1, 1, 2, 3, 3]),
-                DF_IDX_END_EXCL: array([1, 2, 3, 4, 4, 6]),
+                DF_IDX_END_EXCL: array([1, 2, 3, 3, 4, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
-                HAS_DF_CHUNK: array([True, True, True, True, False, True]),
+                HAS_DF_OVERLAP: array([True, True, True, True, True, True]),
             },
         ),
         (
@@ -402,13 +403,13 @@ def test_get_region_start_end_delta(
             {
                 RG_IDX_START: array([0, 0, 1, 1, 2, 3]),
                 RG_IDX_END_EXCL: array([0, 1, 1, 2, 3, 3]),
-                DF_IDX_END_EXCL: array([1, 2, 3, 5, 5, 6]),
+                DF_IDX_END_EXCL: array([1, 2, 3, 3, 5, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
-                HAS_DF_CHUNK: array([True, True, True, True, False, True]),
+                HAS_DF_OVERLAP: array([True, True, True, True, True, True]),
             },
         ),
         (
-            "drop_duplicates_rg_same_min_max_df_same_value",
+            "drop_duplicates_successive_rgs_same_min_max_df_same_value",
             array([40, 43]),  # rg_mins, 43 overlaps with previous rg max
             array([43, 45]),  # rg_maxs
             Series([22, 32, 43, 43, 44, 46]),  # df_ordered_on - 43 is duplicate
@@ -416,11 +417,15 @@ def test_get_region_start_end_delta(
             {
                 RG_IDX_START: array([0, 0, 1, 2]),
                 RG_IDX_END_EXCL: array([0, 1, 2, 2]),
-                DF_IDX_END_EXCL: array([2, 4, 5, 6]),
+                DF_IDX_END_EXCL: array([2, 2, 5, 6]),
                 HAS_ROW_GROUP: array([False, True, True, False]),
-                HAS_DF_CHUNK: array([True, True, True, True]),
+                HAS_DF_OVERLAP: array([True, True, True, True]),
             },
         ),
+        # TODO: add test case with rg_max = rg_min but no DataFrame overlap.
+        #
+        #
+        #
         (
             "no_drop_duplicates_with_gap_wo_overlapping_rg",
             array([10, 20]),  # rg_mins
@@ -432,7 +437,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([1, 1, 2, 2]),
                 DF_IDX_END_EXCL: array([0, 3, 4, 5]),
                 HAS_ROW_GROUP: array([True, False, True, False]),
-                HAS_DF_CHUNK: array([False, True, True, True]),
+                HAS_DF_OVERLAP: array([False, True, True, True]),
             },
         ),
         (
@@ -465,7 +470,7 @@ def test_get_region_start_end_delta(
                 RG_IDX_END_EXCL: array([1, 1, 2, 2, 3]),
                 DF_IDX_END_EXCL: array([0, 2, 2, 4, 6]),
                 HAS_ROW_GROUP: array([True, False, True, False, True]),
-                HAS_DF_CHUNK: array([False, True, False, True, True]),
+                HAS_DF_OVERLAP: array([False, True, False, True, True]),
             },
         ),
     ],
@@ -492,7 +497,7 @@ def test_OARSplitStrategy_init(
     assert_array_equal(oars_prop.oars_cmpt_idx_ends_excl[:, 0], expected[RG_IDX_END_EXCL].T)
     assert_array_equal(oars_prop.oars_cmpt_idx_ends_excl[:, 1], expected[DF_IDX_END_EXCL].T)
     assert_array_equal(oars_prop.oars_has_row_group, expected[HAS_ROW_GROUP])
-    assert_array_equal(oars_prop.oars_has_df_chunk, expected[HAS_DF_CHUNK])
+    assert_array_equal(oars_prop.oars_has_df_overlap, expected[HAS_DF_OVERLAP])
 
 
 @pytest.mark.parametrize(
@@ -557,7 +562,7 @@ def test_OARSplitStrategy_validation(
 
 
 @pytest.mark.parametrize(
-    "test_id, oars_has_df_chunk, oars_likely_on_target_size, max_n_off_target_rgs, expected",
+    "test_id, oars_has_df_overlap, oars_likely_on_target_size, max_n_off_target_rgs, expected",
     [
         (  # Contiguous OARs with DataFrame chunk.
             # No need to enlarge since neighbors OARs are on target size.
@@ -642,7 +647,7 @@ def test_OARSplitStrategy_validation(
 )
 def test_compute_merge_regions_start_ends_excl(
     test_id: str,
-    oars_has_df_chunk: NDArray[bool_],
+    oars_has_df_overlap: NDArray[bool_],
     oars_likely_on_target_size: NDArray[bool_],
     max_n_off_target_rgs: int,
     expected: NDArray[int_],
@@ -654,7 +659,7 @@ def test_compute_merge_regions_start_ends_excl(
     ----------
     test_id : str
         Identifier for the test case.
-    oars_has_df_chunk : NDArray[bool_]
+    oars_has_df_overlap : NDArray[bool_]
         Boolean array indicating if each atomic region has a DataFrame chunk.
     oars_likely_on_target_size : NDArray[bool_]
         Boolean array indicating if each atomic region is likely to be on target size.
@@ -670,9 +675,9 @@ def test_compute_merge_regions_start_ends_excl(
         df_ordered_on=Series([1]),
         drop_duplicates=True,
     )
-    split_strat.oars_has_df_chunk = oars_has_df_chunk
+    split_strat.oars_has_df_overlap = oars_has_df_overlap
     split_strat.oars_likely_on_target_size = oars_likely_on_target_size
-    split_strat.n_oars = len(oars_has_df_chunk)
+    split_strat.n_oars = len(oars_has_df_overlap)
     split_strat.compute_merge_regions_start_ends_excl(
         max_n_off_target_rgs=max_n_off_target_rgs,
     )
@@ -703,6 +708,7 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
         oars_rg_idx_starts=dummy_rg_idx,
         oars_cmpt_idx_ends_excl=column_stack((dummy_rg_idx, oars_df_idx_ends_excl)),
         oars_has_row_group=oars_has_row_group,
+        oars_has_df_overlap=diff(oars_df_idx_ends_excl, prepend=0).astype(bool),
         drop_duplicates=True,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=target_size,
@@ -732,8 +738,8 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
             # row_group_target_size : 100
             # rgs_n_rows    :  [  50,   50,      ,   50,    50]
             # has_row_group :  [True, True, False, True,  True]
-            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
-            # has_df_chunk  :  [True, True,  True, True, False]
+            # dfc_ends_excl :  [  10,   25,    60,   75,      ]
+            # has_df_overlap:  [True, True,  True, True, False]
             True,  # drop_duplicates
             {
                 RG_IDX_START: array([0, 1, 1, 2, 3]),
@@ -758,8 +764,8 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
             # row_group_target_size : 100
             # rgs_n_rows    :  [  50,   50,      ,   50,    50]
             # has_row_group :  [True, True, False, True,  True]
-            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
-            # has_df_chunk  :  [True, True,  True, True, False]
+            # dfc_ends_excl :  [  10,   25,    60,   75,      ]
+            # has_df_overlap:  [True, True,  True, True, False]
             False,  # drop_duplicates
             {
                 RG_IDX_START: array([0, 1, 1, 2, 3]),
@@ -782,8 +788,8 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
             # row_group_target_size : 60
             # rgs_n_rows    :  [   50,   50,      ,   50,    50]
             # has_row_group :  [ True, True, False, True,  True]
-            # dfc_ends_excl:   [    0,   25,    60,   75,      ]
-            # has_df_chunk  :  [False, True,  True, True, False]
+            # dfc_ends_excl :  [    0,   25,    60,   75,      ]
+            # has_df_overlap:  [False, True,  True, True, False]
             True,  # drop_duplicates
             {
                 RG_IDX_START: array([0, 1, 1, 2, 3]),
@@ -806,8 +812,8 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
             # row_group_target_size : 35
             # rgs_n_rows    :  [   10,   10,      ,   30,    10]
             # has_row_group :  [ True, True, False, True,  True]
-            # dfc_ends_excl:   [    0,   25,    60,   75,      ]
-            # has_df_chunk  :  [False, True,  True, True, False]
+            # dfc_ends_excl :  [    0,   25,    60,   75,      ]
+            # has_df_overlap:  [False, True,  True, True, False]
             False,  # drop_duplicates
             {
                 RG_IDX_START: array([0, 1, 1, 2, 3]),
@@ -830,8 +836,8 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
             # row_group_target_size : 45
             # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
             # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
-            # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   190]
-            # has_df_chunk  :  [False, True,  True, True, False, True, True,  True,  True]
+            # dfc_ends_excl :  [    0,   25,    60,   75,      ,   90,  120,   165,   190]
+            # has_df_overlap:  [False, True,  True, True, False, True, True,  True,  True]
             True,  # drop_duplicates
             {
                 RG_IDX_START: array([0, 1, 1, 2, 3, 4, 5, 6, 6]),
@@ -855,8 +861,8 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
             # row_group_target_size : 45
             # rgs_n_rows    :  [   50,   50,      ,   10,    60,   20,   20,             ]
             # has_row_group :  [ True, True, False, True,  True, True, True, False, False]
-            # dfc_ends_excl:   [    0,   25,    60,   75,      ,   90,  120,   165,   210]
-            # has_df_chunk  :  [False, True,  True, True, False, True, True,  True,  True]
+            # dfc_ends_excl :  [    0,   25,    60,   75,      ,   90,  120,   165,   210]
+            # has_df_overlap:  [False, True,  True, True, False, True, True,  True,  True]
             False,  # drop_duplicates
             {
                 RG_IDX_START: array([0, 1, 1, 2, 3, 4, 5, 6, 6]),
@@ -880,8 +886,8 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
             # row_group_target_size : 10
             # rgs_n_rows    :  [  50,   50,      ,   50,    50]
             # has_row_group :  [True, True, False, True,  True]
-            # dfc_ends_excl:   [  10,   25,    60,   75,      ]
-            # has_df_chunk  :  [True, True,  True, True, False]
+            # dfc_ends_excl :  [  10,   25,    60,   75,      ]
+            # has_df_overlap:  [True, True,  True, True, False]
             True,  # drop_duplicates
             {
                 RG_IDX_START: array([0, 1, 1, 2, 3]),
@@ -942,6 +948,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             (oars_desc_dict[RG_IDX_END_EXCL], oars_desc_dict[DF_IDX_END_EXCL]),
         ),
         oars_has_row_group=oars_desc_dict[HAS_ROW_GROUP],
+        oars_has_df_overlap=diff(oars_desc_dict[DF_IDX_END_EXCL], prepend=0).astype(bool),
         drop_duplicates=drop_duplicates,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=row_group_target_size,

@@ -181,7 +181,7 @@ class OARMergeSplitStrategy(ABC):
         Boolean array indicating if OAR contains a row group.
     oars_df_n_rows : NDArray[int_]
         Number of rows in each DataFrame chunk in each OAR.
-    oars_has_df_chunk : NDArray[bool_]
+    oars_has_df_overlap : NDArray[bool_]
         Boolean array indicating if OAR contains a DataFrame chunk.
     n_oars : int
         Number of ordered atomic regions.
@@ -250,9 +250,12 @@ class OARMergeSplitStrategy(ABC):
         DataFrame chunk starting at the duplicate 'ordered_on' value. This is
         an optimization to prevent rewriting these leading row groups.
 
-        On the opposite, if 'drop_duplicates' is True, then the first occurrence
-        of a duplicate 'ordered_on' value in a row group will be considered to
-        be the one corresponding to that in the DataFrame chunk.
+        On the opposite, if 'drop_duplicates' is True, then the row group with
+        the last occurrence of a duplicate 'ordered_on' value will be considered
+        to be the one corresponding to the DataFrame chunk with this value.
+        But all row groups with a this duplicate 'ordered_on' value will be
+        considered to have an overlap with the DataFrame chunk with this value,
+        i.e. 'self.oars_has_df_overlap' will be True for these row groups.
 
         """
         # Validate 'ordered_on' in row groups and DataFrame.
@@ -271,28 +274,27 @@ class OARMergeSplitStrategy(ABC):
             # Determine overlap start/end indices in row groups
             df_idx_rgs_starts = searchsorted(df_ordered_on, rg_ordered_on_mins, side=LEFT)
             df_idx_rgs_ends_excl = searchsorted(df_ordered_on, rg_ordered_on_maxs, side=RIGHT)
-            if any(rg_min_equ_max := (rg_ordered_on_mins[1:] == rg_ordered_on_maxs[:-1])):
-                # In case rg_maxs[i] is a duplicate of rg_mins[i+1],
-                # then df_idx_oar_start for rg[i+1] should be set to
-                # df_idx_oar_end_excl of rg[i], so that this df chunk is not in
-                # several row groups.
-                # This case is then further addressed in
-                # 'compute_merge_regions_start_ends_excl', by aggregating these
-                # row groups into an equivalent single 'OAR'.
-                # This fix could have been applied here before doing the
-                # searchsorted step just above. It is not so that accounting
-                # of number of rows remains managed row group per row group
-                # in 'oars_likely_on_target_size'.
-                rg_idx_mins_to_correct = flatnonzero(rg_min_equ_max) + 1
-                df_idx_rgs_starts[rg_idx_mins_to_correct] = df_idx_rgs_ends_excl[
-                    rg_idx_mins_to_correct - 1
-                ]
         else:
             df_idx_rgs_starts, df_idx_rgs_ends_excl = searchsorted(
                 df_ordered_on,
                 vstack((rg_ordered_on_mins, rg_ordered_on_maxs)),
                 side=LEFT,
             )
+        # Keep track of which row groups have an overlap with a DataFrame chunk.
+        rgs_has_df_overlap = df_idx_rgs_starts != df_idx_rgs_ends_excl
+        if drop_duplicates and any(
+            rgs_min_equ_max := (rg_ordered_on_mins[1:] == rg_ordered_on_maxs[:-1]),
+        ):
+            # In case rg_maxs[i] is a duplicate of rg_mins[i+1],
+            # then df_idx_rg_ends_excl for rg[i] should be set to
+            # df_idx_rg_starts of rg[i+1], so that this df chunk is not in
+            # several row groups.
+            # Restrict the correction to row groups that overlap with a
+            # DataFrame chunk.
+            rg_idx_maxs_to_correct = flatnonzero(rgs_min_equ_max & rgs_has_df_overlap)
+            df_idx_rgs_ends_excl[rg_idx_maxs_to_correct] = df_idx_rgs_starts[
+                rg_idx_maxs_to_correct + 1
+            ]
         # DataFrame orphans are regions in DataFrame that do not overlap with
         # any row group. Find indices in row groups of DataFrame orphans.
         rg_idx_df_orphans = flatnonzero(
@@ -308,6 +310,7 @@ class OARMergeSplitStrategy(ABC):
             # Case of non-overlapping regions in DataFrame.
             # Resize 'rg_idxs', and duplicate values where there are
             # non-overlapping regions in DataFrame.
+            # These really become now the OARs.
             rg_idx_to_insert = rg_idxs_template[rg_idx_df_orphans]
             rg_idxs_template = insert(
                 rg_idxs_template,
@@ -322,12 +325,17 @@ class OARMergeSplitStrategy(ABC):
                 rg_idx_df_orphans,
                 df_idx_to_insert,
             )
+            rgs_has_df_overlap = insert(
+                rgs_has_df_overlap,
+                rg_idx_df_orphans,
+                True,
+            )
 
         self.oars_rg_idx_starts = rg_idxs_template[:-1]
         self.oars_cmpt_idx_ends_excl = column_stack((rg_idxs_template[1:], df_idx_rgs_ends_excl))
         self.oars_has_row_group = rg_idxs_template[:-1] != rg_idxs_template[1:]
         self.oars_df_n_rows = diff(df_idx_rgs_ends_excl, prepend=0)
-        self.oars_has_df_chunk = self.oars_df_n_rows.astype(bool)
+        self.oars_has_df_overlap = rgs_has_df_overlap
         self.n_oars = len(self.oars_rg_idx_starts)
 
     @abstractmethod
@@ -388,23 +396,7 @@ class OARMergeSplitStrategy(ABC):
         appended at the tail of the DataFrame.
 
         """
-        # TODO
-        # In case rg_maxs[i] is a duplicate of rg_mins[i+1],
-        # then df_idx_oar_start for rg[i+1] should be set to
-        # df_idx_oar_end_excl of rg[i], so that this df chunk is not in
-        # several row groups.
-        # This case is then further addressed in
-        # 'compute_merge_regions_start_ends_excl', by aggregating these row
-        # groups into an equivalent single 'OAR'.
-        # This fix is not applied here, as it could before doing the
-        # searchsorted step just above, so that accounting of noumber of
-        # rows remains managed row group per row group.
-        # Adjustments:
-        # merge together row groups with same min and max values IF 1st rg
-        # has a df chunk AND drop duplicates
-        # si pas drop duplicate, do nothing?
-
-        simple_mrs_starts_ends_excl = get_region_indices_of_true_values(self.oars_has_df_chunk)
+        simple_mrs_starts_ends_excl = get_region_indices_of_true_values(self.oars_has_df_overlap)
         if max_n_off_target_rgs is None:
             self.oar_idx_mrs_starts_ends_excl = simple_mrs_starts_ends_excl
             return
@@ -414,7 +406,7 @@ class OARMergeSplitStrategy(ABC):
         # Step 1: assess start indices (included) and end indices (excluded) of
         # enlarged merge regions.
         oars_off_target = ~self.oars_likely_on_target_size
-        potential_enlarged_mrs = self.oars_has_df_chunk | oars_off_target
+        potential_enlarged_mrs = self.oars_has_df_overlap | oars_off_target
         potential_emrs_starts_ends_excl = get_region_indices_of_true_values(potential_enlarged_mrs)
         # Step 2: Filter out enlarged candidates based on multiple criteria.
         # 2.a - Get number of off target size OARs per enlarged merged region.
@@ -465,6 +457,7 @@ class OARMergeSplitStrategy(ABC):
         oars_rg_idx_starts: NDArray,
         oars_cmpt_idx_ends_excl: NDArray,
         oars_has_row_group: NDArray,
+        oars_has_df_overlap: NDArray,
         **kwargs,
     ) -> "OARMergeSplitStrategy":
         """
@@ -483,6 +476,8 @@ class OARMergeSplitStrategy(ABC):
             OAR.
         oars_has_row_group : NDArray
             Boolean array indicating if OAR contains a row group.
+        oars_has_df_overlap : NDArray
+            Boolean array indicating if OAR overlaps with a DataFrame chunk.
         drop_duplicates : bool
             Whether to drop duplicates between row groups and DataFrame.
         **kwargs
@@ -499,7 +494,7 @@ class OARMergeSplitStrategy(ABC):
         instance.oars_cmpt_idx_ends_excl = oars_cmpt_idx_ends_excl
         instance.oars_has_row_group = oars_has_row_group
         instance.oars_df_n_rows = diff(oars_cmpt_idx_ends_excl[:, 1], prepend=0)
-        instance.oars_has_df_chunk = instance.oars_df_n_rows.astype(bool)
+        instance.oars_has_df_overlap = oars_has_df_overlap
         instance.n_oars = len(oars_rg_idx_starts)
         instance.specialized_init(**kwargs)
         return instance
@@ -772,9 +767,9 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
           such *full* rewrite is triggered.
 
         """
-        return self.oars_has_df_chunk & (  # OAR containing a DataFrame chunk.
+        return self.oars_has_df_overlap & (  # OAR containing a DataFrame chunk.
             self.oars_max_n_rows >= self.row_group_min_size
-        ) | ~self.oars_has_df_chunk & (  # OAR containing only row groups.
+        ) | ~self.oars_has_df_overlap & (  # OAR containing only row groups.
             (self.oars_max_n_rows >= self.row_group_min_size)
             & (self.oars_max_n_rows <= self.row_group_target_size)
         )
@@ -994,7 +989,7 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
         self.oars_mins_maxs = ones((self.n_oars, 2)).astype(df_ordered_on_np.dtype)
         # Row groups encompasses Dataframe chunks in an OAR.
         # Hence, start with Dataframe chunks starts and ends.
-        oar_idx_df_chunk = flatnonzero(self.oars_has_df_chunk)
+        oar_idx_df_chunk = flatnonzero(self.oars_has_df_overlap)
         df_idx_chunk_starts = zeros(len(oar_idx_df_chunk), dtype=int)
         df_idx_chunk_starts[1:] = self.oars_cmpt_idx_ends_excl[oar_idx_df_chunk[:-1], 1]
         self.oars_mins_maxs[oar_idx_df_chunk, 0] = df_ordered_on_np[df_idx_chunk_starts]
@@ -1078,7 +1073,7 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
         # the check is then only made on the period start.
         # oars_single_in_period = period_counts[period_idx_oars[:, 0]] == 2
         return (  # Over-sized OAR containing a DataFrame chunk.
-            self.oars_has_df_chunk & ~single_period_oars
+            self.oars_has_df_overlap & ~single_period_oars
         ) | (  # OAR with or wo DataFrame chunk, single in period and within a single period.
             single_period_oars
             & (bincount(self.oars_period_idx.ravel())[self.oars_period_idx[:, 0]] == 2)
