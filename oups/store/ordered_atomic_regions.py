@@ -579,9 +579,9 @@ class OARMergeSplitStrategy(ABC):
         Partition merge regions (MRs) into optimally sized chunks for writing.
 
         This method is a wrapper to child 'specialized_partition_merge_regions'.
-        It ensures row group indices listed in
-        'rg_idx_ends_excl_not_to_use_as_split_points' are not in the output
-        returned by child 'specialized_partition_merge_regions'.
+        It removes row group indices listed in
+        'rg_idx_ends_excl_not_to_use_as_split_points' from the output returned
+        by child 'specialized_partition_merge_regions'.
 
         Returns
         -------
@@ -595,9 +595,6 @@ class OARMergeSplitStrategy(ABC):
 
         """
         merge_sequences = self.specialized_partition_merge_regions()
-        print()
-        print("merge_sequences before filtering")
-        print(merge_sequences)
         return (
             merge_sequences
             if self.rg_idx_ends_excl_not_to_use_as_split_points is None
