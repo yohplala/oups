@@ -1013,10 +1013,8 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             # df_ordered_on :  [                         14, 18, 19, 20, 26]
             # df_idx        :                             0,  1,  2,  3,  4
             #
-            # rg_idx_not_to_use_as_split_points :  [4, 5]
-            # merge regions :  [(4, [[7, 1],
-            #                        [8, 3],
-            #                        [8, 4]])]
+            # rg_idx_ends_excl_not_to_use_as_split_points :  [5, 6]
+            # merge regions :  [(3, [[7, 2], [8, 5]])]
             array([1, 3, 8, 11, 12, 14, 14, 19]),
             array([3, 6, 10, 11, 14, 14, 14, 22]),
             Series([14, 18, 19, 20, 26]),
