@@ -41,6 +41,7 @@ RG_IDX_END_EXCL = "rg_idx_end_excl"
 DF_IDX_END_EXCL = "df_idx_end_excl"
 HAS_ROW_GROUP = "has_row_group"
 HAS_DF_OVERLAP = "has_df_overlap"
+RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS = "rg_idx_ends_excl_not_to_use_as_split_points"
 REF_D = "2020/01/01 "
 
 
@@ -252,6 +253,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3]),
                 HAS_ROW_GROUP: array([True, True, True]),
                 HAS_DF_OVERLAP: array([True, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -266,6 +268,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3]),
                 HAS_ROW_GROUP: array([False, True, True]),
                 HAS_DF_OVERLAP: array([True, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -280,6 +283,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3]),
                 HAS_ROW_GROUP: array([True, False, True]),
                 HAS_DF_OVERLAP: array([True, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -294,6 +298,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3]),
                 HAS_ROW_GROUP: array([True, True, False]),
                 HAS_DF_OVERLAP: array([True, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -308,6 +313,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([0, 1, 2]),
                 HAS_ROW_GROUP: array([True, True, True]),
                 HAS_DF_OVERLAP: array([False, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -322,6 +328,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 1, 2]),
                 HAS_ROW_GROUP: array([True, True, True]),
                 HAS_DF_OVERLAP: array([True, False, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -336,6 +343,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 2]),
                 HAS_ROW_GROUP: array([True, True, True]),
                 HAS_DF_OVERLAP: array([True, True, False]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -350,6 +358,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3, 5, 5, 7]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
                 HAS_DF_OVERLAP: array([True, True, True, True, False, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -364,6 +373,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3, 3, 4, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
                 HAS_DF_OVERLAP: array([True, True, True, False, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -378,6 +388,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3, 3, 3, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
                 HAS_DF_OVERLAP: array([True, True, True, False, False, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -392,6 +403,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3, 3, 4, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
                 HAS_DF_OVERLAP: array([True, True, True, True, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: array([2]),
             },
         ),
         (
@@ -406,6 +418,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3, 3, 5, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
                 HAS_DF_OVERLAP: array([True, True, True, True, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: array([2]),
             },
         ),
         (
@@ -420,6 +433,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([2, 2, 5, 6]),
                 HAS_ROW_GROUP: array([False, True, True, False]),
                 HAS_DF_OVERLAP: array([True, True, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: array([1]),
             },
         ),
         (
@@ -434,6 +448,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([2, 2, 2, 2, 3, 4]),
                 HAS_ROW_GROUP: array([False, True, True, True, False, True]),
                 HAS_DF_OVERLAP: array([True, False, False, False, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -448,6 +463,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([0, 3, 4, 5]),
                 HAS_ROW_GROUP: array([True, False, True, False]),
                 HAS_DF_OVERLAP: array([False, True, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
         (
@@ -481,6 +497,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([0, 2, 2, 4, 6]),
                 HAS_ROW_GROUP: array([True, False, True, False, True]),
                 HAS_DF_OVERLAP: array([False, True, False, True, True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
     ],
@@ -508,6 +525,10 @@ def test_OARSplitStrategy_init(
     assert_array_equal(oars_prop.oars_cmpt_idx_ends_excl[:, 1], expected[DF_IDX_END_EXCL].T)
     assert_array_equal(oars_prop.oars_has_row_group, expected[HAS_ROW_GROUP])
     assert_array_equal(oars_prop.oars_has_df_overlap, expected[HAS_DF_OVERLAP])
+    assert_array_equal(
+        oars_prop.rg_idx_ends_excl_not_to_use_as_split_points,
+        expected[RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS],
+    )
 
 
 @pytest.mark.parametrize(
@@ -719,7 +740,7 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
         oars_cmpt_idx_ends_excl=column_stack((dummy_rg_idx, oars_df_idx_ends_excl)),
         oars_has_row_group=oars_has_row_group,
         oars_has_df_overlap=diff(oars_df_idx_ends_excl, prepend=0).astype(bool),
-        rg_idx_not_to_use_as_split_points=None,
+        rg_idx_ends_excl_not_to_use_as_split_points=None,
         drop_duplicates=True,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=target_size,
@@ -960,7 +981,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         ),
         oars_has_row_group=oars_desc_dict[HAS_ROW_GROUP],
         oars_has_df_overlap=diff(oars_desc_dict[DF_IDX_END_EXCL], prepend=0).astype(bool),
-        rg_idx_not_to_use_as_split_points=None,
+        rg_idx_ends_excl_not_to_use_as_split_points=None,
         drop_duplicates=drop_duplicates,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=row_group_target_size,
@@ -976,6 +997,104 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         expected_cmpt_ends_excl,
     ) in zip(result, expected["oars_merge_sequences"]):
         assert result_rg_start == expected_rg_start
+        assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
+
+
+@pytest.mark.parametrize(
+    "test_id, rg_mins, rg_maxs, df_ordered_on, row_group_target_size, drop_duplicates, rgs_n_rows, max_n_off_target, expected",
+    [
+        (
+            "with_drop_duplicates",
+            # row_group_target_size : 3
+            # rg_idx        :     0,  1,  2,  3,  4,  5,  6,          7
+            # rg_mins       :  [  1,  3,  8, 11, 12  14, 14,     19]
+            # rg_maxs       :  [  3,  6, 10, 11, 14, 14, 14,         22]
+            # rgs_n_rows    :  [  3,  3,  3,  1,  3,  3,  1,          2]
+            # df_ordered_on :  [                         14, 18, 19, 20, 26]
+            # df_idx        :                             0,  1,  2,  3,  4
+            #
+            # rg_idx_not_to_use_as_split_points :  [4, 5]
+            # merge regions :  [(4, [[7, 1],
+            #                        [8, 3],
+            #                        [8, 4]])]
+            array([1, 3, 8, 11, 12, 14, 14, 19]),
+            array([3, 6, 10, 11, 14, 14, 14, 22]),
+            Series([14, 18, 19, 20, 26]),
+            3,  # row_group_target_size
+            True,  # drop_duplicates
+            [3, 3, 3, 1, 3, 3, 1, 2],  # rgs_n_rows
+            1,  # max_n_off_target
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: array([5, 6]),
+                "oars_merge_sequences": [
+                    (3, array([[7, 2], [8, 5]])),
+                ],
+            },
+        ),
+    ],
+)
+def test_NRowsSplitStrategy_integration_partition_merge_regions(
+    test_id: str,
+    rg_mins: NDArray,
+    rg_maxs: NDArray,
+    df_ordered_on: NDArray,
+    row_group_target_size: int,
+    drop_duplicates: bool,
+    rgs_n_rows: NDArray,
+    max_n_off_target: int,
+    expected: Dict,
+) -> None:
+    """
+    Integration test for NRowsSplitStrategy method.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    rg_mins : NDArray
+        Array of shape (n) containing the minimum values of the row groups.
+    rg_maxs : NDArray
+        Array of shape (n) containing the maximum values of the row groups.
+    df_ordered_on : NDArray
+        Array of shape (m) containing the values of the DataFrame to be ordered on.
+    row_group_target_size : int
+        Target number of rows above which a new row group should be created.
+    drop_duplicates : bool
+        Whether to drop duplicates between row groups and DataFrame.
+    rgs_n_rows : NDArray
+        Array of shape (n) containing the number of rows in each row group.
+    max_n_off_target : int
+        Maximum number of off-target row groups allowed.
+    expected : Dict
+        Dictionary containing the expected results.
+
+    """
+    # Initialize strategy.
+    strategy = NRowsMergeSplitStrategy(
+        rg_ordered_on_mins=rg_mins,
+        rg_ordered_on_maxs=rg_maxs,
+        df_ordered_on=df_ordered_on,
+        rgs_n_rows=rgs_n_rows,
+        row_group_target_size=row_group_target_size,
+        drop_duplicates=drop_duplicates,
+    )
+    if expected[RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS] is not None:
+        assert_array_equal(
+            strategy.rg_idx_ends_excl_not_to_use_as_split_points,
+            expected[RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS],
+        )
+    else:
+        assert strategy.rg_idx_ends_excl_not_to_use_as_split_points is None
+    # Test partition_merge_regions.
+    strategy.compute_merge_regions_start_ends_excl(max_n_off_target_rgs=max_n_off_target)
+    result = strategy.partition_merge_regions()
+    # Check.
+    assert len(result) == len(expected["oars_merge_sequences"])
+    for (result_rg_idx_start, result_cmpt_ends_excl), (
+        expected_rg_idx_start,
+        expected_cmpt_ends_excl,
+    ) in zip(result, expected["oars_merge_sequences"]):
+        assert result_rg_idx_start == expected_rg_idx_start
         assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
 
 
