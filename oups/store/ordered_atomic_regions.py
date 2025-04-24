@@ -283,7 +283,8 @@ class OARMergeSplitStrategy(ABC):
         # Keep track of which row groups have an overlap with a DataFrame chunk.
         rgs_has_df_overlap = df_idx_rgs_starts != df_idx_rgs_ends_excl
         if drop_duplicates and any(
-            rgs_min_equ_max := (rg_ordered_on_mins[1:] == rg_ordered_on_maxs[:-1]),
+            rgs_min_equ_max := (rg_ordered_on_mins[1:] == rg_ordered_on_maxs[:-1])
+            & rgs_has_df_overlap[:-1],
         ):
             # In case rg_maxs[i] is a duplicate of rg_mins[i+1],
             # then df_idx_rg_ends_excl for rg[i] should be set to
@@ -291,7 +292,7 @@ class OARMergeSplitStrategy(ABC):
             # several row groups.
             # Restrict the correction to row groups that overlap with a
             # DataFrame chunk.
-            rg_idx_maxs_to_correct = flatnonzero(rgs_min_equ_max & rgs_has_df_overlap[:-1])
+            rg_idx_maxs_to_correct = flatnonzero(rgs_min_equ_max)
             df_idx_rgs_ends_excl[rg_idx_maxs_to_correct] = df_idx_rgs_starts[
                 rg_idx_maxs_to_correct + 1
             ]
