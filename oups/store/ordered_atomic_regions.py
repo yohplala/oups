@@ -198,6 +198,8 @@ class OARMergeSplitStrategy(ABC):
         points in 'partition_merge_regions'. This ensures these row groups will
         be loaded all together so that duplicate search can be made over all
         relevant row groups.
+    n_rgs : int
+        Number of existing row groups.
 
     """
 
@@ -348,6 +350,7 @@ class OARMergeSplitStrategy(ABC):
         self.oars_df_n_rows = diff(df_idx_rgs_ends_excl, prepend=0)
         self.oars_has_df_overlap = rgs_has_df_overlap
         self.n_oars = len(self.oars_rg_idx_starts)
+        self.n_rgs = n_rgs
 
     @abstractmethod
     def specialized_init(self, **kwargs):
@@ -517,6 +520,25 @@ class OARMergeSplitStrategy(ABC):
         instance.specialized_init(**kwargs)
         return instance
 
+    def sort_rgs_after_write(self) -> bool:
+        """
+        Whether to sort row groups after writing.
+
+        Row groups witten may be so in the middle of existing row groups.
+        It is then required to sort them so that order is maintained between
+        row groups.
+
+        Returns
+        -------
+        bool
+            Whether to sort row groups after writing.
+
+        """
+        return (
+            len(self.filtered_merge_sequences) > 1
+            or self.filtered_merge_sequences[0][0] < self.n_rgs
+        )
+
     @cached_property
     @abstractmethod
     def oars_likely_on_target_size(self) -> NDArray:
@@ -572,16 +594,28 @@ class OARMergeSplitStrategy(ABC):
         """
         raise NotImplementedError("Subclasses must implement this property")
 
-    def partition_merge_regions(
+    def compute_merge_sequences(
         self,
+        max_n_off_target_rgs: Optional[int] = None,
     ) -> List[Tuple[int, NDArray]]:
         """
-        Partition merge regions (MRs) into optimally sized chunks for writing.
+        Compute merge sequences.
 
-        This method is a wrapper to child 'specialized_partition_merge_regions'.
-        It removes row group indices listed in
-        'rg_idx_ends_excl_not_to_use_as_split_points' from the output returned
-        by child 'specialized_partition_merge_regions'.
+        This method is a wrapper to the chain of methods:
+        - 'compute_merge_regions_start_ends_excl'
+        - 'specialized_partition_merge_regions'
+        Additionally, row group indices listed in
+        'rg_idx_ends_excl_not_to_use_as_split_points' are filtered out from the
+        output returned by child 'specialized_partition_merge_regions'. This
+        filtering ensures that in case 'drop_duplicates' is True, prior
+        existing row groups with a max 'ordered_on' value equals to next row
+        group's min 'ordered_on' value are merged. This approach guarantees that
+        duplicate search is made over all relevant priorly existing row groups.
+
+        Parameters
+        ----------
+        max_n_off_target_rgs : Optional[int], default None
+            Maximum number of off target row groups to merge.
 
         Returns
         -------
@@ -594,9 +628,9 @@ class OARMergeSplitStrategy(ABC):
               sequence.
 
         """
-        merge_sequences = self.specialized_partition_merge_regions()
-        return (
-            merge_sequences
+        self.compute_merge_regions_start_ends_excl(max_n_off_target_rgs=max_n_off_target_rgs)
+        self.filtered_merge_sequences = (
+            self.specialized_partition_merge_regions()
             if self.rg_idx_ends_excl_not_to_use_as_split_points is None
             else [
                 (
@@ -609,9 +643,10 @@ class OARMergeSplitStrategy(ABC):
                         )
                     ],
                 )
-                for rg_idx_start, cmpt_ends_excl in merge_sequences
+                for rg_idx_start, cmpt_ends_excl in self.specialized_partition_merge_regions()
             ]
         )
+        return self.filtered_merge_sequences
 
     @abstractmethod
     def specialized_partition_merge_regions(
@@ -623,7 +658,8 @@ class OARMergeSplitStrategy(ABC):
         Returns
         -------
         List[Tuple[int, NDArray]]
-            List of tuples, where each tuple contains for each merge sequence:
+            Merge sequences, a list of tuples, where each tuple contains for
+            each merge sequence:
             - First element: Start index of the first row group in the merge
               sequence.
             - Second element: Array of shape (m, 2) containing end indices
@@ -648,7 +684,7 @@ class OARMergeSplitStrategy(ABC):
 
         Returns
         -------
-        Union[int, List[int]]
+        List[int]
             A list of indices with the explicit index values to start new row
             groups.
 
@@ -853,7 +889,8 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
         Returns
         -------
         List[Tuple[int, NDArray]]
-            List of tuples, where each tuple contains for each merge sequence:
+            Merge sequences, a list of tuples, where each tuple contains for
+            each merge sequence:
             - First element: Start index of the first row group in the merge
               sequence.
             - Second element: Array of shape (m, 2) containing end indices
@@ -941,7 +978,7 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
 
         Returns
         -------
-        Union[int, List[int]]
+        List[int]
             A list of indices with the explicit index values to start new row
             groups.
 
@@ -1158,7 +1195,8 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
         Returns
         -------
         List[Tuple[int, NDArray]]
-            List of tuples, where each tuple contains for each merge sequence:
+            Merge sequences, a list of tuples, where each tuple contains for
+            each merge sequence:
             - First element: Start index of the first row group in the merge
               sequence.
             - Second element: Array of shape (m, 2) containing end indices
@@ -1223,7 +1261,7 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
 
         Returns
         -------
-        Union[int, List[int]]
+        List[int]
             A list of indices with the explicit index values to start new row
             groups.
 

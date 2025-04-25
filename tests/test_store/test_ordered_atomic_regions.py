@@ -1004,7 +1004,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
     "test_id, rg_mins, rg_maxs, df_ordered_on, row_group_target_size, drop_duplicates, rgs_n_rows, max_n_off_target, expected",
     [
         (
-            "with_drop_duplicates",
+            "complex_case_with_drop_duplicates",
             # row_group_target_size : 3
             # rg_idx        :     0,  1,  2,  3,  4,  5,  6,          7
             # rg_mins       :  [  1,  3,  8, 11, 12  14, 14,     19]
@@ -1015,9 +1015,9 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             #
             # rg_idx_ends_excl_not_to_use_as_split_points :  [5, 6]
             # merge regions :  [(3, [[7, 2], [8, 5]])]
-            array([1, 3, 8, 11, 12, 14, 14, 19]),
-            array([3, 6, 10, 11, 14, 14, 14, 22]),
-            Series([14, 18, 19, 20, 26]),
+            array([1, 3, 8, 11, 12, 14, 14, 19]),  # rg_mins
+            array([3, 6, 10, 11, 14, 14, 14, 22]),  # rg_maxs
+            Series([14, 18, 19, 20, 26]),  # df_ordered_on
             3,  # row_group_target_size
             True,  # drop_duplicates
             [3, 3, 3, 1, 3, 3, 1, 2],  # rgs_n_rows
@@ -1027,6 +1027,26 @@ def test_NRowsSplitStrategy_partition_merge_regions(
                 "oars_merge_sequences": [
                     (3, array([[7, 2], [8, 5]])),
                 ],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Writing after pf data, no off target size row group.
+            # rg:  0      1
+            # pf: [0,1], [2,3]
+            # df:               [3]
+            "new_rg_simple_append_int",
+            array([0, 2]),  # rg_mins
+            array([1, 3]),  # rg_maxs
+            Series([3]),  # df_ordered_on
+            2,  # row_group_target_size | no irgs to merge with
+            False,  # drop_duplicates | should not merge with preceding rg
+            [2, 2],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | no irgs to rewrite
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
             },
         ),
     ],
@@ -1083,11 +1103,11 @@ def test_NRowsSplitStrategy_integration_partition_merge_regions(
         )
     else:
         assert strategy.rg_idx_ends_excl_not_to_use_as_split_points is None
-    # Test partition_merge_regions.
-    strategy.compute_merge_regions_start_ends_excl(max_n_off_target_rgs=max_n_off_target)
-    result = strategy.partition_merge_regions()
+    # Compute merge sequences.
+    result = strategy.compute_merge_sequences(max_n_off_target_rgs=max_n_off_target)
     # Check.
     assert len(result) == len(expected["oars_merge_sequences"])
+    assert strategy.sort_rgs_after_write() == expected["sort_rgs_after_write"]
     for (result_rg_idx_start, result_cmpt_ends_excl), (
         expected_rg_idx_start,
         expected_cmpt_ends_excl,
@@ -1731,24 +1751,6 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
     [
         # 1/ Adding data at complete tail, testing 'drop_duplicates'.
         # 'max_n_off_target_rgs' is never triggered.
-        (
-            # Max row group size as int.
-            # Writing after pf data, no off target size row group.
-            # rg:  0      1
-            # pf: [0,1], [2,3]
-            # df:               [3]
-            "new_rg_simple_append_int",
-            [3],
-            [0, 1, 2, 3],
-            [0, 2],  # row_group_offsets
-            2,  # row_group_size | no irgs to merge with
-            False,  # drop_duplicates | should not merge with preceding rg
-            2,  # max_n_off_target_rgs | no irgs to rewrite
-            {
-                "merge_plan": [(2, array([[2, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
         (
             # Max row group size as freqstr.
             # Writing after pf data, no off target size row group.
