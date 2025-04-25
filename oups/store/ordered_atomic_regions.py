@@ -536,10 +536,15 @@ class OARMergeSplitStrategy(ABC):
             Whether to sort row groups after writing.
 
         """
+        print()
+        print("filtered_merge_sequences")
+        print(self.filtered_merge_sequences)
         return (
             (
                 len(self.filtered_merge_sequences) > 1
-                or self.filtered_merge_sequences[0][0] < self.n_rgs - 1
+                # 'filtered_merge_sequences[0][1][-1,0]' is 'rg_idx_ends_excl'
+                # of the last row group in the first merge sequence.
+                or self.filtered_merge_sequences[0][1][-1, 0] < self.n_rgs
             )
             if hasattr(self, "filtered_merge_sequences")
             else AttributeError(

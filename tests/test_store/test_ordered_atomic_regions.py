@@ -715,9 +715,9 @@ def test_compute_merge_regions_start_ends_excl(
     assert array_equal(split_strat.oar_idx_mrs_starts_ends_excl, expected)
 
 
-def test_NRowsSplitStrategy_oars_likely_on_target_size():
+def test_nrows_oars_likely_on_target_size():
     """
-    Test NRowsSplitStrategy strategy and oars_likely_on_target_size.
+    Test initialization and 'oars_likely_on_target_size' method.
     """
     target_size = 100  # min size: 80
     # Create mock oars_desc with 5 regions:
@@ -939,7 +939,7 @@ def test_NRowsSplitStrategy_oars_likely_on_target_size():
         ),
     ],
 )
-def test_NRowsSplitStrategy_partition_merge_regions(
+def test_nrows_specialized_compute_merge_sequences(
     test_id: str,
     drop_duplicates: bool,
     oars_desc_dict: Dict[str, NDArray],
@@ -949,7 +949,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
     expected: Dict,
 ) -> None:
     """
-    Test NRowsSplitStrategy.partition_merge_regions method.
+    Test 'specialized_compute_merge_sequences' method.
 
     Parameters
     ----------
@@ -987,7 +987,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
         row_group_target_size=row_group_target_size,
     )
     assert_array_equal(strategy.oars_min_n_rows, expected["oars_min_n_rows"])
-    # Test partition_merge_regions.
+    # Test specialized_compute_merge_sequences.
     strategy.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl
     result = strategy.specialized_compute_merge_sequences()
     # Check.
@@ -1027,7 +1027,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
                 "oars_merge_sequences": [
                     (3, array([[7, 2], [8, 5]])),
                 ],
-                "sort_rgs_after_write": True,
+                "sort_rgs_after_write": False,
             },
         ),
         (
@@ -1035,14 +1035,14 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             # rg:  0      1
             # pf: [0,1], [2,3]
             # df:               [3]
-            "new_rg_simple_append_int",
+            "new_rg_simple_append",
             array([0, 2]),  # rg_mins
             array([1, 3]),  # rg_maxs
             Series([3]),  # df_ordered_on
-            2,  # row_group_target_size | no irgs to merge with
+            2,  # row_group_target_size | no incomplete rgs to merge with
             False,  # drop_duplicates | should not merge with preceding rg
             [2, 2],  # rgs_n_rows
-            2,  # max_n_off_target_rgs | no irgs to rewrite
+            2,  # max_n_off_target_rgs | no incomplete rgs to rewrite
             {
                 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
                 "oars_merge_sequences": [(2, array([[2, 1]]))],
@@ -1054,14 +1054,14 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             # rg:  0        1        2
             # pf: [0,1,2], [6,7,8], [9]
             # df:                   [9]
-            "drop_duplicates_merge_tail_int",
+            "drop_duplicates_merge_tail",
             array([0, 6, 9]),  # rg_mins
             array([2, 8, 9]),  # rg_maxs
             Series([9]),  # df_ordered_on
-            3,  # row_group_target_size | should not merge irg
-            True,  # drop_duplicates | should merge with irg
+            3,  # row_group_target_size | should not merge incomplete rg
+            True,  # drop_duplicates | should merge with incomplete rg
             [3, 3, 1],  # rgs_n_rows
-            2,  # max_n_off_target_rgs | should not rewrite irg
+            2,  # max_n_off_target_rgs | should not rewrite incomplete rg
             {
                 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
                 "oars_merge_sequences": [(2, array([[3, 1]]))],
@@ -1089,12 +1089,255 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             {
                 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
                 "oars_merge_sequences": [(2, array([[4, 2]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Writing after pf data, off target size row group to merge.
+            # rg:  0        1        2    3
+            # pf: [0,1,2], [3,4,5], [6], [7],
+            # df:                             [8]
+            "last_row_group_exceeded_merge_tail",
+            array([0, 3, 6, 7]),  # rg_mins
+            array([2, 5, 6, 7]),  # rg_maxs
+            Series([8]),  # df_ordered_on
+            3,  # row_group_size | should merge irgs
+            False,  # drop_duplicates | should not merge with preceding rg
+            [3, 3, 1, 1],  # rgs_n_rows
+            4,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(4, array([[4, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # df at the start of pf data.
+            # rg:         0       1       2    3
+            # pf:        [2, 6], [7, 8], [9], [10]
+            # df: [0,1]
+            "no_duplicates_insert_at_start_new_rg",
+            array([2, 7, 9, 10]),  # rg_mins
+            array([6, 8, 9, 10]),  # rg_maxs
+            Series([0, 1]),  # df_ordered_on
+            2,  # row_group_size | df enough to make on target size rg, should merge.
+            True,  # no duplicates to drop
+            [2, 2, 1, 1],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | not triggered
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[0, 2]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # df at the start of pf data.
+            # rg:       0       1       2    3
+            # pf:      [2, 6], [7, 8], [9], [10]
+            # df: [0]
+            "no_duplicates_insert_at_start_no_new_rg",
+            array([2, 7, 9, 10]),  # rg_mins
+            array([6, 8, 9, 10]),  # rg_maxs
+            Series([0]),  # df_ordered_on
+            2,  # row_group_size | df not enough to make on target size rg, should not merge.
+            True,  # no duplicates to drop
+            [2, 2, 1, 1],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | not triggered
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[0, 1]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
+            # rg:  0          1           2     3
+            # pf: [0,1,2,6], [7,8,9,10], [11], [12]
+            # df:                                   [12]
+            "max_n_off_target_rgs_not_reached_simple_append",
+            array([0, 7, 11, 12]),  # rg_mins
+            array([6, 10, 11, 12]),  # rg_maxs
+            Series([12]),  # df_ordered_on
+            4,  # row_group_size | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            [4, 4, 1, 1],  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(4, array([[4, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # df within pf data.
+            # Writing in-between pf data, with off target size row groups at
+            # the end of pf data.
+            # rg:  0      1            2       3    4
+            # pf: [0,1], [2,      6], [7, 8], [9], [10]
+            # df:        [2, 3, 4]
+            "insert_middle_with_off_target_rgs",
+            array([0, 2, 7, 9, 10]),  # rg_mins
+            array([1, 6, 8, 9, 10]),  # rg_maxs
+            Series([2, 3, 4]),  # df_ordered_on
+            2,  # row_group_size | should rewrite tail
+            True,  # drop_duplicates
+            [2, 2, 2, 1, 1],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | should rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[2, 3]]))],
+                "sort_rgs_after_write": True,  # bool: need to sort rgs after write
+            },
+        ),
+        (
+            # df within pf data.
+            # Writing in-between pf data, with off target size row groups at
+            # the end of pf data.
+            # rg:  0           1        2
+            # pf: [0,1,2],    [6,7,8],[9]
+            # df:         [3]
+            "insert_middle_single_value",
+            array([0, 6, 9]),  # rg_mins
+            array([2, 8, 9]),  # rg_maxs
+            Series([3]),  # df_ordered_on
+            3,  # row_group_size | should not rewrite tail
+            False,  # drop_duplicates
+            [3, 3, 1],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[1, 1]]))],
+                "sort_rgs_after_write": True,  # bool: need to sort rgs after write
+            },
+        ),
+        (
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
+            # rg:  0          1           2     3
+            # pf: [0,1,2,6], [7,8,9,10], [11], [12]
+            # df:                                   [12]
+            "max_n_off_target_rgs_reached_tail_rewrite",
+            array([0, 7, 11, 12]),  # rg_mins
+            array([6, 10, 11, 12]),  # rg_maxs
+            Series([12]),  # df_ordered_on
+            4,  # row_group_size | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            [4, 4, 1, 1],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | should rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[4, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups.
+            # rg:  0        1                    2
+            # pf: [0,1,2], [6,7,8],             [11]
+            # df:                   [8, 9, 10]
+            "insert_before_incomplete_rgs_simple_append",
+            array([0, 6, 11]),  # rg_mins
+            array([2, 8, 11]),  # rg_maxs
+            Series([8, 9, 10]),  # df_ordered_on
+            3,  # row_group_size | full df written, triggers tail rwrite
+            False,  # drop_duplicates | should not merge with preceding rg
+            [3, 3, 1],  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[3, 3]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups
+            # rg:  0        1                2
+            # pf: [0,1,2], [6,7,8],         [11]
+            # df:                   [8, 9]
+            "insert_before_incomplete_rgs_tail_rewrite",
+            array([0, 6, 11]),  # rg_mins
+            array([2, 8, 11]),  # rg_maxs
+            Series([8, 9]),  # df_ordered_on
+            3,  # row_group_target_size | df remainder to merge with next rg
+            False,  # drop_duplicates | should not merge with preceding rg
+            [3, 3, 1],  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[3, 2]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # df connected to off target size rgs.
+            # Incomplete row groups at the end of pf data.
+            # rg:  0        1           2
+            # pf: [0,1,2], [6,7,8],    [10]
+            # df:              [8, 9]
+            "insert_before_incomplete_rgs_drop_duplicates_no_tail_rewrite",
+            array([0, 6, 10]),  # rg_mins
+            array([2, 8, 10]),  # rg_maxs
+            Series([8, 9]),  # df_ordered_on
+            3,  # row_group_size | because df merge with previous rg,
+            # df remainder should not merge with next rg
+            True,  # drop_duplicates | merge with preceding rg
+            [3, 3, 1],  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[2, 1], [3, 2]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # df connected to off target size rgs.
+            # Writing at end of pf data, with off target size row groups at
+            # the end of pf data.
+            # Tail is rewritten because with df, 'max_n_off_target_rgs' is reached.
+            # rg:  0        1        2
+            # pf: [0,1,2], [6,7,8], [10]
+            # df:              [8]
+            "insert_before_incomplete_rgs_drop_duplicates_tail_rewrite",
+            array([0, 6, 10]),  # rg_mins
+            array([2, 8, 10]),  # rg_maxs
+            Series([8]),  # df_ordered_on
+            3,  # row_group_size | should not rewrite tail
+            True,  # drop_duplicates | merge with preceding rg
+            [3, 3, 1],  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[2, 1]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # df connected to off target size rgs.
+            # Incomplete row groups at the end of pf data.
+            # Write of last row group is triggered
+            # rg:  0         1                  2
+            # pf: [0,1,2,3],[6,7,8,8],         [10]
+            # df:                      [8, 9]
+            "insert_before_incomplete_rgs_tail_rewrite",
+            array([0, 6, 10]),  # rg_mins
+            array([3, 8, 10]),  # rg_maxs
+            Series([8, 9]),  # df_ordered_on
+            4,  # row_group_size | should not merge with next rg.
+            False,  # drop_duplicates
+            [4, 4, 1],  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 2]]))],
                 "sort_rgs_after_write": True,
             },
         ),
     ],
 )
-def test_NRowsSplitStrategy_integration_partition_merge_regions(
+def test_nrows_integration_compute_merge_sequences(
     test_id: str,
     rg_mins: NDArray,
     rg_maxs: NDArray,
@@ -1106,7 +1349,7 @@ def test_NRowsSplitStrategy_integration_partition_merge_regions(
     expected: Dict,
 ) -> None:
     """
-    Integration test for NRowsSplitStrategy method.
+    Integration test for 'compute_merge_sequences' method.
 
     Parameters
     ----------
@@ -1174,7 +1417,7 @@ def test_NRowsSplitStrategy_integration_partition_merge_regions(
         (1, 20, [0]),
     ],
 )
-def test_row_group_offsets(df_size, target_size, expected_offsets):
+def test_nrows_row_group_offsets(df_size, target_size, expected_offsets):
     # Create test data
     # Initialize strategy
     strategy = NRowsMergeSplitStrategy(
@@ -1519,7 +1762,7 @@ def test_row_group_offsets(df_size, target_size, expected_offsets):
         ),
     ],
 )
-def test_TimePeriodSplitStrategy_oars_likely_on_target_size(
+def test_time_period_oars_likely_on_target_size(
     test_id,
     rg_mins,
     rg_maxs,
@@ -1527,7 +1770,7 @@ def test_TimePeriodSplitStrategy_oars_likely_on_target_size(
     expected,
 ):
     """
-    Test TimePeriodSplitStrategy initialization and oars_likely_on_target_size.
+    Test initialization and oars_likely_on_target_size.
     """
     time_period = "MS"
     # Initialize strategy
@@ -1664,7 +1907,7 @@ def test_TimePeriodSplitStrategy_oars_likely_on_target_size(
         ),
     ],
 )
-def test_TimePeriodSplitStrategy_partition_merge_regions(
+def test_time_period_specialized_compute_merge_sequences(
     test_id: str,
     rg_mins: NDArray,
     rg_maxs: NDArray,
@@ -1674,7 +1917,7 @@ def test_TimePeriodSplitStrategy_partition_merge_regions(
     expected: Dict,
 ) -> None:
     """
-    Test TimePeriodSplitStrategy.partition_merge_regions method.
+    Test 'specialized_compute_merge_sequences' method.
 
     Parameters
     ----------
@@ -1705,7 +1948,7 @@ def test_TimePeriodSplitStrategy_partition_merge_regions(
         drop_duplicates=False,
         row_group_time_period=time_period,
     )
-    # Test partition_merge_regions.
+    # Test specialized_compute_merge_sequences.
     strategy.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl
     result = strategy.specialized_compute_merge_sequences()
     # Check
@@ -1891,24 +2134,6 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             },
         ),
         (
-            # Max row group size as int.
-            # Writing after pf data, off target size row group to merge.
-            # rg:  0        1        2    3
-            # pf: [0,1,2], [3,4,5], [6], [7],
-            # df:                             [8]
-            "last_row_group_exceeded_merge_tail_int",
-            [8],
-            range(8),
-            [0, 3, 6, 7],  # row_group_offsets
-            3,  # row_group_size | should merge irgs
-            False,  # drop_duplicates | should not merge with preceding rg
-            4,  # max_n_off_target_rgs | should not rewrite irg
-            {
-                "merge_plan": [0, 0, 0, 1],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (
             # Max row group size as freqstr.
             # Writing after pf data, off target size row group should be merged.
             # rg:  0            1        2
@@ -1927,42 +2152,6 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             },
         ),
         # 2/ Adding data right at the start.
-        (
-            # Max row group size as int.
-            # df at the start of pf data.
-            # rg:         0       1       2    3
-            # pf:        [2, 6], [7, 8], [9], [10]
-            # df: [0,1]
-            "no_duplicates_insert_at_start_new_rg_int",
-            [0, 1],
-            [2, 6, 7, 8, 9, 10],
-            [0, 2, 4, 5],  # row_group_offsets
-            2,  # row_group_size | df enough to make on target size rg, should merge.
-            True,  # no duplicates to drop
-            2,  # max_n_off_target_rgs | not triggered
-            {
-                "merge_plan": [2],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (
-            # Max row group size as int.
-            # df at the start of pf data.
-            # rg:       0       1       2    3
-            # pf:      [2, 6], [7, 8], [9], [10]
-            # df: [0]
-            "no_duplicates_insert_at_start_no_new_rg_int",
-            [0],
-            [2, 6, 7, 8, 9, 10],
-            [0, 2, 4, 5],  # row_group_offsets
-            2,  # row_group_size | df not enough to make on target size rg, should not merge.
-            True,  # no duplicates to drop
-            2,  # max_n_off_target_rgs | not triggered
-            {
-                "merge_plan": [0, 1],
-                "sort_rgs_after_write": True,
-            },
-        ),
         (
             # Max row group size as freqstr.
             # df at the start of pf data.
@@ -2012,44 +2201,6 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             },
         ),
         # 3/ Adding data at complete end, testing 'max_n_off_target_rgs'.
-        (
-            # Max row group size as int
-            # df connected to off target size rgs.
-            # Writing at end of pf data, with off target size row groups.
-            # rg:  0          1           2     3
-            # pf: [0,1,2,6], [7,8,9,10], [11], [12]
-            # df:                                   [12]
-            "max_n_off_target_rgs_not_reached_simple_append_int",
-            [12],
-            [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
-            [0, 4, 8, 9],  # row_group_offsets
-            4,  # row_group_size | should not rewrite tail
-            False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_off_target_rgs | should not rewrite tail
-            {
-                "merge_plan": [1],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (
-            # Max row group size as int
-            # df connected to off target size rgs.
-            # Writing at end of pf data, with off target size row groups.
-            # rg:  0          1           2     3
-            # pf: [0,1,2,6], [7,8,9,10], [11], [12]
-            # df:                                   [12]
-            "max_n_off_target_rgs_reached_tail_rewrite_int",
-            [12],
-            [0, 1, 2, 6, 7, 8, 9, 10, 11, 12],
-            [0, 4, 8, 9],  # row_group_offsets
-            4,  # row_group_size | should not rewrite tail
-            False,  # drop_duplicates | should not merge with preceding rg
-            2,  # max_n_off_target_rgs | should rewrite tail
-            {
-                "merge_plan": [0, 0, 0, 1],
-                "sort_rgs_after_write": True,
-            },
-        ),
         (
             # Max row group size as freqstr.
             # df connected to off target size rgs.
@@ -2130,108 +2281,6 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             },
         ),
         # 4/ Adding data just before last off target size row groups.
-        (
-            # Max row group size as int.
-            # df connected to off target size rgs.
-            # Writing at end of pf data, with off target size row groups.
-            # rg:  0        1                    2
-            # pf: [0,1,2], [6,7,8],             [11]
-            # df:                   [8, 9, 10]
-            "insert_before_irgs_simple_append_int",
-            [8, 9, 10],
-            [0, 1, 2, 6, 7, 8, 11],
-            [0, 3, 6],
-            3,  # row_group_size | no df remainder to merge with next rg
-            False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_off_target_rgs | should not rewrite tail
-            {
-                "merge_plan": [3],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (
-            # Max row group size as int.
-            # df connected to off target size rgs.
-            # Writing at end of pf data, with off target size row groups
-            # rg:  0        1                2
-            # pf: [0,1,2], [6,7,8],         [11]
-            # df:                   [8, 9]
-            "insert_before_irgs_tail_rewrite_int",
-            [8, 9],
-            [0, 1, 2, 6, 7, 8, 11],
-            [0, 3, 6],
-            3,  # row_group_size | df remainder to merge with next rg
-            False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_off_target_rgs | should not rewrite tail
-            {
-                "merge_plan": [0, 2],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (
-            # Max row group size as int.
-            # df connected to off target size rgs.
-            # Incomplete row groups at the end of pf data.
-            # rg:  0        1           2
-            # pf: [0,1,2], [6,7,8],    [10]
-            # df:              [8, 9]
-            "insert_before_irgs_drop_duplicates_no_tail_rewrite_int",
-            [8, 9],
-            [0, 1, 2, 6, 7, 8, 10],
-            [0, 3, 6],
-            3,  # row_group_size | because df merge with previous df,
-            # df remainder should not merge with next rg
-            True,  # drop_duplicates | merge with preceding rg
-            3,  # max_n_off_target_rgs | should not rewrite tail
-            {
-                # Other acceptable solution:
-                # [0, 1, 1, 2]
-                "merge_plan": [0, 2],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (
-            # Test  11 (3.c) /
-            # Max row group size as int.
-            # df connected to off target size rgs.
-            # Writing at end of pf data, with off target size row groups at
-            # the end of pf data.
-            # Tail is rewritten because with df, 'max_n_off_target_rgs' is reached.
-            # rg:  0        1        2
-            # pf: [0,1,2], [6,7,8], [10]
-            # df:              [8]
-            "insert_before_irgs_drop_duplicates_tail_rewrite_int",
-            [8],
-            [0, 1, 2, 6, 7, 8, 10],
-            [0, 3, 6],
-            3,  # row_group_size | should not rewrite tail
-            True,  # drop_duplicates | merge with preceding rg
-            3,  # max_n_off_target_rgs | should not rewrite tail
-            {
-                "merge_plan": [0, 1],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (
-            # Max row group size as int.
-            # df connected to off target size rgs.
-            # Incomplete row groups at the end of pf data.
-            # Write of last row group is triggered
-            # rg:  0         1                  2
-            # pf: [0,1,2,3],[6,7,8,8],         [10]
-            # df:                      [8, 9]
-            "insert_before_irgs_tail_rewrite_int",
-            [8, 9],
-            [0, 1, 2, 3, 6, 7, 8, 8, 10],
-            [0, 4, 8],
-            4,  # row_group_size | should merge with next rg.
-            False,  # drop_duplicates
-            3,  # max_n_off_target_rgs | should not rewrite tail
-            {
-                "merge_plan": [0, 2],
-                "sort_rgs_after_write": True,
-            },
-        ),
         (
             # Test  13 (3.c) /
             # Max row group size as int | df connected to off target size rgs.
@@ -2317,40 +2366,6 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
         ),
         # 5/ Adding data in the middle of pf data.
         (
-            # Test  16 (4.a) /
-            # Max row group size as int | df within pf data.
-            # Writing in-between pf data, with off target size row groups at
-            # the end of pf data.
-            # row grps:  0      1            2       3    4
-            # pf: [0,1], [2,      6], [7, 8], [9], [10]
-            # df:        [2, 3, 4]
-            "insert_middle_with_off_target_rgs",
-            DataFrame({"ordered_on": [2, 3, 4]}),
-            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9, 10]}),
-            [0, 2, 4, 6, 7],
-            2,  # row_group_size | should rewrite tail
-            True,  # drop_duplicates
-            2,  # max_n_off_target_rgs | should rewrite tail
-            (1, 2, True),  # bool: need to sort rgs after write
-        ),
-        (
-            # Test  17 (4.b) /
-            # Max row group size as int | df within pf data.
-            # Writing in-between pf data, with off target size row groups at
-            # the end of pf data.
-            # row grps:  0           1        2
-            # pf: [0,1,2],    [6,7,8],[9]
-            # df:         [3]
-            "insert_middle_single_value",
-            DataFrame({"ordered_on": [3]}),
-            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 9]}),
-            [0, 3, 6],
-            3,  # row_group_size | should not rewrite tail
-            False,  # drop_duplicates
-            2,  # max_n_off_target_rgs | should not rewrite tail
-            (None, None, True),  # bool: need to sort rgs after write
-        ),
-        (
             # Test  19 (4.d) /
             # Max row group size as pandas freqstr | df within pf data.
             # Writing in-between pf data, with off target size row groups at
@@ -2392,25 +2407,8 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
         # df4                       [4, 5]   # here df not to be merged with following row group
         # df5                       [4, 5, 6]   # here, should be merged
         # df6                                         + same with row_group_size as str
-        # plenty of test with max_n_off_target_rgs set to 0 to check merging of last row groups
-        # up to reach 4 x row_group_size
-        # Do case when it is not possible to reach it, but showing all available
-        # row groups are merge together nonetheless.
-        # max_n_off_target_rgs
-        # test with impossibility to have on target size row groups with subset to merge
-        # then check left, right, and all available row groups to merge
-        #   pf:  rg1, rg2, rg3, rg4, rg5
-        #   df:            df1
-        #   will merge with only right or only left
-        #
-        #   pf:  rg1, rg2, rg3
-        #   df:       df1
-        #   will merge with right and left
         # test with freqstr, with several empty periods, to make sure the empty periods are
-        #  not in the output
-        # test with max_n_off_target_rgs set to 0, to make sure the last chunk is
-        #  large enough to ensure on target size row groups (calculation of "min_size"
-        #  in "consolidate_merge_plan")
+        # not in the output
     ],
 )
 def test_compute_ordered_merge_plan(
