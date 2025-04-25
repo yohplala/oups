@@ -53,7 +53,7 @@ class TestOARMergeSplitStrategy(OARMergeSplitStrategy):
     def specialized_init(self, **kwargs):
         raise NotImplementedError("Test implementation only")
 
-    def specialized_partition_merge_regions(self):
+    def specialized_compute_merge_sequences(self):
         raise NotImplementedError("Test implementation only")
 
     def row_group_offsets(self, chunk: DataFrame, is_last_chunk: bool):
@@ -989,7 +989,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
     assert_array_equal(strategy.oars_min_n_rows, expected["oars_min_n_rows"])
     # Test partition_merge_regions.
     strategy.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl
-    result = strategy.partition_merge_regions()
+    result = strategy.specialized_compute_merge_sequences()
     # Check.
     assert len(result) == len(expected["oars_merge_sequences"])
     for (result_rg_start, result_cmpt_ends_excl), (
@@ -1049,6 +1049,25 @@ def test_NRowsSplitStrategy_partition_merge_regions(
                 "sort_rgs_after_write": False,
             },
         ),
+        (
+            # Writing at end of pf data, merging with off target size row group.
+            # rg:  0        1        2
+            # pf: [0,1,2], [6,7,8], [9]
+            # df:                   [9]
+            "drop_duplicates_merge_tail_int",
+            array([0, 6, 9]),  # rg_mins
+            array([2, 8, 9]),  # rg_maxs
+            Series([9]),  # df_ordered_on
+            3,  # row_group_size | should not merge irg
+            True,  # drop_duplicates | should merge with irg
+            [3, 3, 1],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | should not rewrite irg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[3, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
     ],
 )
 def test_NRowsSplitStrategy_integration_partition_merge_regions(
@@ -1104,14 +1123,16 @@ def test_NRowsSplitStrategy_integration_partition_merge_regions(
     else:
         assert strategy.rg_idx_ends_excl_not_to_use_as_split_points is None
     # Compute merge sequences.
-    result = strategy.compute_merge_sequences(max_n_off_target_rgs=max_n_off_target)
+    strategy.compute_merge_sequences(
+        max_n_off_target_rgs=max_n_off_target,
+    )
     # Check.
-    assert len(result) == len(expected["oars_merge_sequences"])
-    assert strategy.sort_rgs_after_write() == expected["sort_rgs_after_write"]
+    assert strategy.sort_rgs_after_write == expected["sort_rgs_after_write"]
+    assert len(strategy.filtered_merge_sequences) == len(expected["oars_merge_sequences"])
     for (result_rg_idx_start, result_cmpt_ends_excl), (
         expected_rg_idx_start,
         expected_cmpt_ends_excl,
-    ) in zip(result, expected["oars_merge_sequences"]):
+    ) in zip(strategy.filtered_merge_sequences, expected["oars_merge_sequences"]):
         assert result_rg_idx_start == expected_rg_idx_start
         assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
 
@@ -1662,7 +1683,7 @@ def test_TimePeriodSplitStrategy_partition_merge_regions(
     )
     # Test partition_merge_regions.
     strategy.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl
-    result = strategy.partition_merge_regions()
+    result = strategy.specialized_compute_merge_sequences()
     # Check
     for (result_rg_start, result_cmpt_ends_excl), (
         expected_rg_start,
@@ -1767,24 +1788,6 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             {
                 "merge_plan": [1],
                 "sort_rgs_after_write": False,
-            },
-        ),
-        (
-            # Max row group size as int.
-            # Writing at end of pf data, merging with off target size row group.
-            # rg:  0        1        2
-            # pf: [0,1,2], [6,7,8], [9]
-            # df:                   [9]
-            "drop_duplicates_merge_tail_int",
-            [9],
-            [0, 1, 2, 6, 7, 8, 9],
-            [0, 3, 6],  # row_group_offsets
-            3,  # row_group_size | should not merge irg
-            True,  # drop_duplicates | should merge with irg
-            2,  # max_n_off_target_rgs | should not rewrite irg
-            {
-                "merge_plan": [0, 1],
-                "sort_rgs_after_write": True,
             },
         ),
         (

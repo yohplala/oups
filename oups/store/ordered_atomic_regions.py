@@ -358,7 +358,8 @@ class OARMergeSplitStrategy(ABC):
         Initialize specialized attributes.
 
         This method initializes attributes specific to strategy concrete
-        implementation.
+        implementation. It is kept apart from class constructor to allow for
+        reuse by 'self.from_oars_desc' class method.
 
         Parameters
         ----------
@@ -520,6 +521,7 @@ class OARMergeSplitStrategy(ABC):
         instance.specialized_init(**kwargs)
         return instance
 
+    @property
     def sort_rgs_after_write(self) -> bool:
         """
         Whether to sort row groups after writing.
@@ -534,9 +536,16 @@ class OARMergeSplitStrategy(ABC):
             Whether to sort row groups after writing.
 
         """
+        print()
+        print("self.filtered_merge_sequences")
+        print(self.filtered_merge_sequences)
         return (
-            len(self.filtered_merge_sequences) > 1
-            or self.filtered_merge_sequences[0][0] < self.n_rgs
+            (
+                len(self.filtered_merge_sequences) > 1
+                or self.filtered_merge_sequences[0][0] < self.n_rgs - 1
+            )
+            if hasattr(self, "filtered_merge_sequences")
+            else None
         )
 
     @cached_property
@@ -603,10 +612,10 @@ class OARMergeSplitStrategy(ABC):
 
         This method is a wrapper to the chain of methods:
         - 'compute_merge_regions_start_ends_excl'
-        - 'specialized_partition_merge_regions'
+        - 'specialized_compute_merge_sequences'
         Additionally, row group indices listed in
         'rg_idx_ends_excl_not_to_use_as_split_points' are filtered out from the
-        output returned by child 'specialized_partition_merge_regions'. This
+        output returned by child 'specialized_compute_merge_sequences'. This
         filtering ensures that in case 'drop_duplicates' is True, prior
         existing row groups with a max 'ordered_on' value equals to next row
         group's min 'ordered_on' value are merged. This approach guarantees that
@@ -630,7 +639,7 @@ class OARMergeSplitStrategy(ABC):
         """
         self.compute_merge_regions_start_ends_excl(max_n_off_target_rgs=max_n_off_target_rgs)
         self.filtered_merge_sequences = (
-            self.specialized_partition_merge_regions()
+            self.specialized_compute_merge_sequences()
             if self.rg_idx_ends_excl_not_to_use_as_split_points is None
             else [
                 (
@@ -643,17 +652,17 @@ class OARMergeSplitStrategy(ABC):
                         )
                     ],
                 )
-                for rg_idx_start, cmpt_ends_excl in self.specialized_partition_merge_regions()
+                for rg_idx_start, cmpt_ends_excl in self.specialized_compute_merge_sequences()
             ]
         )
         return self.filtered_merge_sequences
 
     @abstractmethod
-    def specialized_partition_merge_regions(
+    def specialized_compute_merge_sequences(
         self,
     ) -> List[Tuple[int, NDArray]]:
         """
-        Partition merge regions (MRs) into optimally sized chunks for writing.
+        Sequence merge regions (MRs) into optimally sized chunks for writing.
 
         Returns
         -------
@@ -869,11 +878,11 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
             & (self.oars_max_n_rows <= self.row_group_target_size)
         )
 
-    def specialized_partition_merge_regions(
+    def specialized_compute_merge_sequences(
         self,
     ) -> List[Tuple[int, NDArray]]:
         """
-        Partition merge regions (MRs) into optimally sized chunks for writing.
+        Sequence merge regions (MRs) into optimally sized chunks for writing.
 
         For each merge region (MR) defined in 'oar_idx_mrs_starts_ends_excl',
         this method:
@@ -1175,11 +1184,11 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
             & (bincount(self.oars_period_idx.ravel())[self.oars_period_idx[:, 0]] == 2)
         )
 
-    def specialized_partition_merge_regions(
+    def specialized_compute_merge_sequences(
         self,
     ) -> List[Tuple[int, NDArray]]:
         """
-        Partition merge regions (MRs) into optimally sized chunks for writing.
+        Sequence merge regions (MRs) into optimally sized chunks for writing.
 
         For each merge region (MR) defined in 'oar_idx_mrs_starts_ends_excl',
         this method:
