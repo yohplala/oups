@@ -1058,7 +1058,7 @@ def test_NRowsSplitStrategy_partition_merge_regions(
             array([0, 6, 9]),  # rg_mins
             array([2, 8, 9]),  # rg_maxs
             Series([9]),  # df_ordered_on
-            3,  # row_group_size | should not merge irg
+            3,  # row_group_target_size | should not merge irg
             True,  # drop_duplicates | should merge with irg
             [3, 3, 1],  # rgs_n_rows
             2,  # max_n_off_target_rgs | should not rewrite irg
@@ -1066,6 +1066,30 @@ def test_NRowsSplitStrategy_partition_merge_regions(
                 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
                 "oars_merge_sequences": [(2, array([[3, 1]]))],
                 "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # df within pf data.
+            # Writing at end of pf data, with off target size row groups at
+            # the end of pf data.
+            # One-but last row group is on target size, but because df is
+            # overlapping with it, it has to be rewritten.
+            # By choice, the rewrite does not propagate till the end.
+            # rg:  0        1          2             3
+            # pf: [0,1,2], [6,7,8],   [10, 11, 12], [13]
+            # df:                  [9, 10]
+            "insert_middle_partial_rewrite",
+            array([0, 6, 10, 13]),  # rg_mins
+            array([2, 8, 12, 13]),  # rg_maxs
+            Series([9, 10]),  # df_ordered_on
+            3,  # row_group_target_size | should not rewrite tail
+            True,  # drop_duplicates
+            [3, 3, 3, 1],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[4, 2]]))],
+                "sort_rgs_after_write": True,
             },
         ),
     ],
@@ -2325,26 +2349,6 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             False,  # drop_duplicates
             2,  # max_n_off_target_rgs | should not rewrite tail
             (None, None, True),  # bool: need to sort rgs after write
-        ),
-        (
-            # Test  18 (4.c) /
-            # Max row group size as int | df within pf data.
-            # Writing at end of pf data, with off target size row groups at
-            # the end of pf data.
-            # One-but last row group is on target size, but because df is
-            # overlapping with it, it has to be rewritten.
-            # By choice, the rewrite does not propagate till the end.
-            # row grps:  0        1              2             3
-            # pf: [0,1,2], [6,7,8],       [10, 11, 12], [13]
-            # df:                  [9, 10]
-            "insert_middle_partial_rewrite",
-            DataFrame({"ordered_on": [9, 10]}),
-            DataFrame({"ordered_on": [0, 1, 2, 6, 7, 8, 10, 11, 12, 13]}),
-            [0, 3, 6, 9],
-            3,  # row_group_size | should not rewrite tail
-            True,  # drop_duplicates
-            2,  # max_n_off_target_rgs | should not rewrite tail
-            (2, 3, True),
         ),
         (
             # Test  19 (4.d) /

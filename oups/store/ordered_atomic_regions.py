@@ -195,7 +195,7 @@ class OARMergeSplitStrategy(ABC):
         continues with start and end indices excluded enlarged merge regions.
     rg_idx_ends_excl_not_to_use_as_split_points : NDArray[int_]
         Array containing indices of row group which should not be used as split
-        points in 'partition_merge_regions'. This ensures these row groups will
+        points in 'filtered_merge_sequences'. This ensures these row groups will
         be loaded all together so that duplicate search can be made over all
         relevant row groups.
     n_rgs : int
@@ -496,7 +496,7 @@ class OARMergeSplitStrategy(ABC):
             Boolean array indicating if OAR overlaps with a DataFrame chunk.
         rg_idx_ends_excl_not_to_use_as_split_points : Union[NDArray, None]
             Array of indices for row group not to use as split points. There are
-            filtered out from results in 'partition_merge_regions'.
+            filtered out from 'filtered_merge_sequences'.
         drop_duplicates : bool
             Whether to drop duplicates between row groups and DataFrame.
         **kwargs
@@ -536,16 +536,16 @@ class OARMergeSplitStrategy(ABC):
             Whether to sort row groups after writing.
 
         """
-        print()
-        print("self.filtered_merge_sequences")
-        print(self.filtered_merge_sequences)
         return (
             (
                 len(self.filtered_merge_sequences) > 1
                 or self.filtered_merge_sequences[0][0] < self.n_rgs - 1
             )
             if hasattr(self, "filtered_merge_sequences")
-            else None
+            else AttributeError(
+                "not possible to return 'sort_rgs_after_write' value if "
+                "'compute_merge_sequences()' has not been run beforehand.",
+            )
         )
 
     @cached_property
