@@ -2159,7 +2159,67 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             "new_rg_simple_append_timestamp_not_on_boundary",
             array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
             array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
-            Series([Timestamp(f"{REF_D}12:10")]),  # df_oredered_on
+            Series([Timestamp(f"{REF_D}12:10")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge incomplete rg
+            False,  # drop_duplicates | should not merge with preceding rg
+            array([2, 1]),  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Values not on boundary to check 'floor()'.
+            # Writing after pf data, not merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h10,9h10], [10h10]
+            # df:                      [10h10]
+            "no_drop_duplicates_simple_append_timestamp_not_on_boundary",
+            array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}10:10")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge incomplete rg
+            False,  # drop_duplicates | should not merge with preceding rg
+            array([2, 1]),  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Values not on boundary to check 'floor()'.
+            # Writing after pf data, merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h10,9h10], [10h10]
+            # df:              [10h10]
+            "drop_duplicates_merge_tail_timestamp_not_on_boundary",
+            array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}10:10")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge incomplete rg
+            True,  # drop_duplicates | should merge with incomplete rg
+            array([2, 1]),  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Values on boundary.
+            # Writing after pf data, not merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h00,9h00], [10h00]
+            # df:                      [10h00]
+            "no_drop_duplicates_simple_append_timestamp_on_boundary",
+            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}10:00")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:00"), Timestamp(f"{REF_D}10:00")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}10:00")]),  # df_ordered_on
             "2h",  # row_group_time_period | should not merge incomplete rg
             False,  # drop_duplicates | should not merge with preceding rg
             array([2, 1]),  # rgs_n_rows
@@ -2241,63 +2301,7 @@ def test_time_period_integration_compute_merge_sequences(
 
 
 """
-        (
-            # Max row group size as freqstr.
-            # Values not on boundary to check 'floor()'.
-            # Writing after pf data, not merging with off target size row group.
-            # rg:  0            1
-            # pf: [8h10,9h10], [10h10]
-            # df:                      [10h10]
-            "no_drop_duplicates_simple_append_timestamp_not_on_boundary",
-            [Timestamp(f"{REF_D}10:10")],
-            date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
-            [0, 2],
-            "2h",  # row_group_size | should not merge irg
-            False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_off_target_rgs | should not rewrite irg
-            {
-                "merge_plan": [1],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (
-            # Max row group size as freqstr.
-            # Values not on boundary to check 'floor()'.
-            # Writing after pf data, merging with off target size row group.
-            # rg:  0            1
-            # pf: [8h10,9h10], [10h10]
-            # df:              [10h10]
-            "drop_duplicates_merge_tail_timestamp_not_on_boundary",
-            [Timestamp(f"{REF_D}10:10")],
-            date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
-            [0, 2],
-            "2h",  # row_group_size | should not merge irg
-            True,  # drop_duplicates | should merge with irg
-            3,  # max_n_off_target_rgs | should not rewrite irg
-            {
-                "merge_plan": [0, 1],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (
-            # Max row group size as freqstr.
-            # Values on boundary.
-            # Writing after pf data, not merging with off target size row group.
-            # rg:  0            1
-            # pf: [8h00,9h00], [10h00]
-            # df:                      [10h00]
-            "no_drop_duplicates_simple_append_timestamp_on_boundary",
-            [Timestamp(f"{REF_D}10:00")],
-            date_range(Timestamp(f"{REF_D}08:00"), freq="1h", periods=3),
-            [0, 2],  # row_group_offsets
-            "2h",  # row_group_size | should not merge irg
-            False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_off_target_rgs | should not rewrite irg
-            {
-                "merge_plan": [1],
-                "sort_rgs_after_write": False,
-            },
-        ),
+
         (
             # Max row group size as freqstr.
             # Values on boundary.
