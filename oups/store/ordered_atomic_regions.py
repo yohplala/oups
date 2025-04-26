@@ -416,6 +416,9 @@ class OARMergeSplitStrategy(ABC):
             self.oar_idx_mrs_starts_ends_excl = simple_mrs_starts_ends_excl
             return
 
+        print()
+        print("self.oars_likely_on_target_size")
+        print(self.oars_likely_on_target_size)
         # If 'max_n_off_target_rgs' is not None, then we need to compute the
         # merge regions.
         # Step 1: assess start indices (included) and end indices (excluded) of
@@ -430,12 +433,18 @@ class OARMergeSplitStrategy(ABC):
             m_values=cumsum(oars_off_target),
             indices=potential_emrs_starts_ends_excl,
         )
+        print()
+        print("n_off_target_rgs_in_potential_emrs")
+        print(n_off_target_rgs_in_potential_emrs)
         # 2.b Get which enlarged regions into which the merge will likely create
         # on target row groups.
         creates_on_target_rg_in_pemrs = get_region_start_end_delta(
             m_values=cumsum(self.oars_likely_on_target_size),
             indices=potential_emrs_starts_ends_excl,
         ).astype(bool_)
+        print()
+        print("creates_on_target_rg_in_pemrs")
+        print(creates_on_target_rg_in_pemrs)
         # Keep enlarged merge regions with too many off target atomic regions or
         # with likely creation of on target row groups.
         confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
@@ -876,6 +885,25 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
           such *full* rewrite is triggered.
 
         """
+        print()
+        print("row_group_min_size")
+        print(self.row_group_min_size)
+        print("self.oars_has_df_overlap")
+        print(
+            self.oars_has_df_overlap
+            & (  # OAR containing a DataFrame chunk.
+                self.oars_max_n_rows >= self.row_group_min_size
+            ),
+        )
+        print()
+        print("~self.oars_has_df_overlap")
+        print(
+            ~self.oars_has_df_overlap
+            & (  # OAR containing only row groups.
+                (self.oars_max_n_rows >= self.row_group_min_size)
+                & (self.oars_max_n_rows <= self.row_group_target_size)
+            ),
+        )
         return self.oars_has_df_overlap & (  # OAR containing a DataFrame chunk.
             self.oars_max_n_rows >= self.row_group_min_size
         ) | ~self.oars_has_df_overlap & (  # OAR containing only row groups.
@@ -949,6 +977,35 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
         #            ],
         #        ),
         #    )
+        print()
+        print("cumrows")
+        print(cum_rows := cumsum(self.oars_min_n_rows[1:3]))
+        print("linspace")
+        print(
+            linspace(
+                self.row_group_target_size,
+                self.row_group_target_size
+                * (n_multiples := cum_rows[-1] // self.row_group_target_size),
+                n_multiples,
+                endpoint=True,
+                dtype=int_,
+            ),
+        )
+        print("searchsorted")
+        print(
+            searchsorted(
+                cum_rows := cumsum(self.oars_min_n_rows[1:3]),
+                linspace(
+                    self.row_group_target_size,
+                    self.row_group_target_size
+                    * (n_multiples := cum_rows[-1] // self.row_group_target_size),
+                    n_multiples,
+                    endpoint=True,
+                    dtype=int_,
+                ),
+                side=LEFT,
+            ),
+        )
         return [
             (
                 self.oars_rg_idx_starts[oar_idx_start],
@@ -967,6 +1024,7 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
                                     * (n_multiples := cum_rows[-1] // self.row_group_target_size),
                                     n_multiples,
                                     endpoint=True,
+                                    dtype=int_,
                                 ),
                                 side=LEFT,
                             ),
