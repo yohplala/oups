@@ -373,7 +373,7 @@ def test_get_region_start_end_delta(
                 DF_IDX_END_EXCL: array([1, 2, 3, 3, 4, 6]),
                 HAS_ROW_GROUP: array([False, True, False, True, True, False]),
                 HAS_DF_OVERLAP: array([True, True, True, False, True, True]),
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: array([2]),
             },
         ),
         (
@@ -612,7 +612,7 @@ def test_OARSplitStrategy_validation(
             array([True, False, False, True, False, False, False, True, False]),
             array([False, False, False, False, True, False, True, False, False]),
             3,  # max_n_off_target_rgs
-            array([[7, 8], [0, 4]]),  # Two regions: [0-1) and [2-4)
+            array([[0, 4], [7, 8]]),  # Two regions: [0-1) and [2-4)
         ),
         (  # Confirm EMR because of likely on target OAR with DataFrame chunk.
             "enlarging_because_adding_likely_on_target_oar_with_dfc",
@@ -658,7 +658,7 @@ def test_OARSplitStrategy_validation(
             array([True, False, False, False, True, False]),  # DataFrame chunks at 0, 4
             array([True, False, True, False, False, True]),  # Likely on target
             2,  # max_n_off_target_rgs
-            array([[4, 5], [0, 2]]),
+            array([[0, 2], [4, 5]]),
         ),
         (  # 'max_n_off_target' is None
             "max_n_off_target_is_none",
@@ -668,10 +668,10 @@ def test_OARSplitStrategy_validation(
             array([[0, 1], [4, 5]]),
         ),
         (  # 'max_n_off_target' is 0
-            "max_n_off_target_is_0",
+            "max_n_off_target_is_1",
             array([True, False, False, False, True]),  # DataFrame chunks at 0, 4
             array([False, False, True, False, False]),  # Likely on target
-            0,  # max_n_off_target_rgs
+            1,  # max_n_off_target_rgs
             array([[0, 2], [3, 5]]),
         ),
     ],
@@ -1028,6 +1028,64 @@ def test_nrows_specialized_compute_merge_sequences(
                     (3, array([[7, 2], [8, 5]])),
                 ],
                 "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # Islands case 1.
+            # rg:  0         1          2           3
+            # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
+            # df:   [3,4],                         [13, 14]
+            "islands_case_with_drop_duplicates_1",
+            array([0, 6, 11, 13]),  # rg_mins
+            array([6, 10, 12, 13]),  # rg_maxs
+            Series([3, 4, 13, 14]),  # df_ordered_on
+            4,  # row_group_size | should not rewrite tail
+            True,  # drop_duplicates | should not merge with preceding rg
+            [4, 4, 4, 1],  # rgs_n_rows
+            1,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[1, 2]])), (3, array([[4, 4]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Islands case 2.
+            # rg:  0         1          2           3
+            # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
+            # df:    [3,6],                        [13, 14]
+            "islands_case_with_drop_duplicates_2",
+            array([0, 6, 11, 13]),  # rg_mins
+            array([6, 10, 12, 13]),  # rg_maxs
+            Series([3, 6, 13, 14]),  # df_ordered_on
+            4,  # row_group_size | should not rewrite tail
+            True,  # drop_duplicates | should not merge with preceding rg
+            [4, 4, 4, 1],  # rgs_n_rows
+            1,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: array([1]),
+                "oars_merge_sequences": [(0, array([[2, 2]])), (3, array([[4, 4]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
+            # Islands case 3.
+            # Need to load rgs à & 1 at same time to sort data.
+            # rg:  0         1          2           3
+            # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
+            # df:    [3,6],                        [13, 14]
+            "islands_case_no_drop_duplicates_3",
+            array([0, 6, 11, 13]),  # rg_mins
+            array([6, 10, 12, 13]),  # rg_maxs
+            Series([3, 6, 13, 14]),  # df_ordered_on
+            4,  # row_group_size | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            [4, 4, 4, 1],  # rgs_n_rows
+            1,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: array([1]),
+                "oars_merge_sequences": [(0, array([[2, 2]])), (3, array([[4, 4]]))],
+                "sort_rgs_after_write": True,
             },
         ),
         (

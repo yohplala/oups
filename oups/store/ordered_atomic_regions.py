@@ -189,12 +189,10 @@ class OARMergeSplitStrategy(ABC):
     oars_likely_on_target_size : NDArray[bool_]
         Boolean array indicating if OAR is likely to be on target size.
     oar_idx_mrs_starts_ends_excl : NDArray[int_]
-        Array of shape (e, 2) containing the list of the start and end indices
-        for each merge regions. This list is unsorted. It starts with start and
-        end indices excluded simple (not enlarged) merge regions, and then
-        continues with start and end indices excluded enlarged merge regions.
+        Array of shape (e, 2) containing the list of the OARs start and end
+        indices for each merge regions.
     rg_idx_ends_excl_not_to_use_as_split_points : NDArray[int_]
-        Array containing indices of row group which should not be used as split
+        Array containing indices of row groups which should not be used as split
         points in 'filtered_merge_sequences'. This ensures these row groups will
         be loaded all together so that duplicate search can be made over all
         relevant row groups.
@@ -293,9 +291,9 @@ class OARMergeSplitStrategy(ABC):
         # 'rg_idx_ends_excl_not_to_use_as_split_points' keeps track of row group
         # indices which should not be used as split points.
         self.rg_idx_ends_excl_not_to_use_as_split_points = None
-        if drop_duplicates and any(
+        if any(
             rgs_min_equ_max := (rg_ordered_on_mins[1:] == rg_ordered_on_maxs[:-1])
-            & rgs_has_df_overlap[:-1],
+            & rgs_has_df_overlap[1:],
         ):
             # In case rg_maxs[i] is a duplicate of rg_mins[i+1],
             # then df_idx_rg_ends_excl for rg[i] should be set to
@@ -344,6 +342,9 @@ class OARMergeSplitStrategy(ABC):
                 True,
             )
 
+        print()
+        print("self.rg_idx_ends_excl_not_to_use_as_split_points ")
+        print(self.rg_idx_ends_excl_not_to_use_as_split_points)
         self.oars_rg_idx_starts = rg_idxs_template[:-1]
         self.oars_cmpt_idx_ends_excl = column_stack((rg_idxs_template[1:], df_idx_rgs_ends_excl))
         self.oars_has_row_group = rg_idxs_template[:-1] != rg_idxs_template[1:]
@@ -386,21 +387,19 @@ class OARMergeSplitStrategy(ABC):
 
         Parameters
         ----------
-        max_n_off_target_rgs : Optional[int_]
+        max_n_off_target_rgs : Optional[int_], default None
             Maximum number of off-target size row groups allowed in a contiguous
-            set of row groups. This parameter helps limiting fragmentation by
-            limiting number of contiguous row groups off target size.
+            set of row groups. It cannot be set to 0. This parameter helps
+            limiting fragmentation by limiting number of contiguous row groups
+            off target size.
             A ``None`` value induces no merging of off target size row groups
             neighbor to a newly added row groups.
 
         Returns
         -------
         NDArray[np_int]
-            A numpy array of shape (e, 2) containing the list of the start and
-            end indices for each merge regions. This list is unsorted. It starts
-            with start and end indices excluded simple (not enlarged) merge
-            regions, and then continues with start and end indices excluded
-            enlarged merge regions.
+            A numpy array of shape (e, 2) containing the list of the OARs start
+            and end indices for each merge regions.
 
         Notes
         -----
@@ -415,6 +414,8 @@ class OARMergeSplitStrategy(ABC):
         if max_n_off_target_rgs is None:
             self.oar_idx_mrs_starts_ends_excl = simple_mrs_starts_ends_excl
             return
+        elif max_n_off_target_rgs == 0:
+            raise ValueError("'max_n_off_target_rgs' cannot be 0.")
 
         print()
         print("self.oars_likely_on_target_size")
@@ -451,29 +452,41 @@ class OARMergeSplitStrategy(ABC):
             (n_off_target_rgs_in_potential_emrs > max_n_off_target_rgs)
             | creates_on_target_rg_in_pemrs
         ]
-        # Step 3: Retrieve indices of merge regions which have DataFrame chunks but
-        # are not in retained enlarged merge regions.
+        # Step 3: Retrieve indices of merge regions which have DataFrame chunks
+        # but are not in retained enlarged merge regions.
         confirmed_emrs = set_true_in_regions(
             length=self.n_oars,
             regions=confirmed_emrs_starts_ends_excl,
         )
-        # Create an array of length the number of simple merge regions, with value
-        # 1 if the simple merge region is within an enlarged merge regions.
+        # Create an array of length the number of simple merge regions, with
+        # value 1 if the simple merge region is within an enlarged merge
+        # regions.
         overlaps_with_confirmed_emrs = get_region_start_end_delta(
             m_values=cumsum(confirmed_emrs),
             indices=simple_mrs_starts_ends_excl,
         ).astype(bool_)
 
-        self.oar_idx_mrs_starts_ends_excl = vstack(
-            (
-                simple_mrs_starts_ends_excl[~overlaps_with_confirmed_emrs],
-                confirmed_emrs_starts_ends_excl,
-            ),
-        )
-        # Sort along 1st column.
-        # self.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl[
-        #    oar_idx_mrs_starts_ends_excl[:, 0].argsort()
-        # ]
+        if all(overlaps_with_confirmed_emrs):
+            # Case there are only enlarged merge regions.
+            self.oar_idx_mrs_starts_ends_excl = confirmed_emrs_starts_ends_excl
+        elif not any(overlaps_with_confirmed_emrs):
+            # Case there are only simple merge regions.
+            self.oar_idx_mrs_starts_ends_excl = simple_mrs_starts_ends_excl
+        else:
+            # Case there are both simple and enlarged merge regions.
+            self.oar_idx_mrs_starts_ends_excl = vstack(
+                (
+                    simple_mrs_starts_ends_excl[~overlaps_with_confirmed_emrs],
+                    confirmed_emrs_starts_ends_excl,
+                ),
+            )
+            # Sort along 1st column.
+            # Sorting is required to ensure that DataFrame chunks are enumerated
+            # correctly (end indices excluded of a Dataframe chunk is the start
+            # index of the next Dataframe chunk).
+            self.oar_idx_mrs_starts_ends_excl = self.oar_idx_mrs_starts_ends_excl[
+                self.oar_idx_mrs_starts_ends_excl[:, 0].argsort()
+            ]
 
     @classmethod
     def from_oars_desc(
