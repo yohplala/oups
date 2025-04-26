@@ -1106,6 +1106,24 @@ def test_nrows_specialized_compute_merge_sequences(
             },
         ),
         (
+            # rg:  0     1     2     3     4     5     6     7
+            # pf: [0,1],[1,1],[2,3],[4,5],[5,6],[6,7],[8,9],[10,11]
+            # df:           [1                             9,      13,14]
+            "many_only_off_target_rgs",
+            array([0, 1, 2, 4, 5, 6, 8, 10]),  # rg_mins
+            array([1, 1, 3, 5, 6, 7, 9, 11]),  # rg_maxs
+            Series([1, 9, 13, 14]),  # df_ordered_on
+            4,  # row_group_size | should rewrite all rgs
+            False,  # drop_duplicates | should not merge with preceding rg
+            [2, 2, 2, 2, 2, 2, 2, 2],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | should rewrite all rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[2, 0], [4, 1], [6, 1], [7, 2], [8, 4]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
             # Writing after pf data, no off target size row group.
             # rg:  0      1
             # pf: [0,1], [2,3]

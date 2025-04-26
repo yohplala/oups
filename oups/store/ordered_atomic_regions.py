@@ -465,13 +465,13 @@ class OARMergeSplitStrategy(ABC):
             m_values=cumsum(confirmed_emrs),
             indices=simple_mrs_starts_ends_excl,
         ).astype(bool_)
-
-        if all(overlaps_with_confirmed_emrs):
-            # Case there are only enlarged merge regions.
-            self.oar_idx_mrs_starts_ends_excl = confirmed_emrs_starts_ends_excl
-        elif not any(overlaps_with_confirmed_emrs):
+        n_simple_mrs_in_enlarged_mrs = sum(overlaps_with_confirmed_emrs)
+        if n_simple_mrs_in_enlarged_mrs == 0:
             # Case there are only simple merge regions.
             self.oar_idx_mrs_starts_ends_excl = simple_mrs_starts_ends_excl
+        elif n_simple_mrs_in_enlarged_mrs == len(simple_mrs_starts_ends_excl):
+            # Case there are only enlarged merge regions.
+            self.oar_idx_mrs_starts_ends_excl = confirmed_emrs_starts_ends_excl
         else:
             # Case there are both simple and enlarged merge regions.
             self.oar_idx_mrs_starts_ends_excl = vstack(
