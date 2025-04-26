@@ -1031,7 +1031,7 @@ def test_nrows_specialized_compute_merge_sequences(
             # Islands case 1.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
-            # df:   [3,4],                         [13, 14]
+            # df:   [3,4,                           13,14]
             "islands_case_with_drop_duplicates_1",
             array([0, 6, 11, 13]),  # rg_mins
             array([6, 10, 12, 13]),  # rg_maxs
@@ -1050,7 +1050,7 @@ def test_nrows_specialized_compute_merge_sequences(
             # Islands case 2.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
-            # df:    [3,6],                        [13, 14]
+            # df:    [3,     6,                        13, 14]
             "islands_case_with_drop_duplicates_2",
             array([0, 6, 11, 13]),  # rg_mins
             array([6, 10, 12, 13]),  # rg_maxs
@@ -1070,7 +1070,7 @@ def test_nrows_specialized_compute_merge_sequences(
             # Need to load rgs 0 & 1 at same time to sort data.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
-            # df:    [3,6],                        [13, 14]
+            # df:    [3,      6,                       13, 14]
             "islands_case_no_drop_duplicates_3",
             array([0, 6, 11, 13]),  # rg_mins
             array([6, 10, 12, 13]),  # rg_maxs
@@ -1090,7 +1090,7 @@ def test_nrows_specialized_compute_merge_sequences(
             # Need to load rg 1 only, df data coming after.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
-            # df:           [6,7],                 [13, 14]
+            # df:            [6,7,                     13, 14]
             "islands_case_no_drop_duplicates_4",
             array([0, 6, 11, 13]),  # rg_mins
             array([6, 10, 12, 13]),  # rg_maxs
@@ -1109,7 +1109,7 @@ def test_nrows_specialized_compute_merge_sequences(
             # rg:  0     1     2     3     4     5     6     7
             # pf: [0,1],[1,1],[2,3],[4,5],[5,6],[6,7],[8,9],[10,11]
             # df:           [1                             9,      13,14]
-            "many_only_off_target_rgs",
+            "many_only_off_target_rgs_no_drop_duplicates",
             array([0, 1, 2, 4, 5, 6, 8, 10]),  # rg_mins
             array([1, 1, 3, 5, 6, 7, 9, 11]),  # rg_maxs
             Series([1, 9, 13, 14]),  # df_ordered_on
@@ -1120,6 +1120,24 @@ def test_nrows_specialized_compute_merge_sequences(
             {
                 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
                 "oars_merge_sequences": [(0, array([[2, 0], [4, 1], [6, 1], [7, 2], [8, 4]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            # rg:  0     1     2     3     4     5     6     7
+            # pf: [0,1],[1,1],[2,3],[4,5],[5,6],[6,7],[8,9],[10,11]
+            # df: [0,      1,                            9,       13,14]
+            "many_only_off_target_rgs_with_drop_duplicates",
+            array([0, 1, 2, 4, 5, 6, 8, 10]),  # rg_mins
+            array([1, 1, 3, 5, 6, 7, 9, 11]),  # rg_maxs
+            Series([1, 9, 13, 14]),  # df_ordered_on
+            4,  # row_group_size | should rewrite all rgs
+            True,  # drop_duplicates | should not merge with preceding rg
+            [2, 2, 2, 2, 2, 2, 2, 2],  # rgs_n_rows
+            2,  # max_n_off_target_rgs | should rewrite all rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: array([1]),
+                "oars_merge_sequences": [(0, array([[2, 1], [4, 1], [6, 1], [8, 4]]))],
                 "sort_rgs_after_write": False,
             },
         ),
