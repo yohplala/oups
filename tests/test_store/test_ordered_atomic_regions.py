@@ -1067,7 +1067,7 @@ def test_nrows_specialized_compute_merge_sequences(
         ),
         (
             # Islands case 3.
-            # Need to load rgs à & 1 at same time to sort data.
+            # Need to load rgs 0 & 1 at same time to sort data.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
             # df:    [3,6],                        [13, 14]
@@ -1087,7 +1087,7 @@ def test_nrows_specialized_compute_merge_sequences(
         ),
         (
             # Islands case 4.
-            # Need to load rgs à & 1 at same time to sort data.
+            # Need to load rg 1 only, df data coming after.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
             # df:           [6,7],                 [13, 14]
