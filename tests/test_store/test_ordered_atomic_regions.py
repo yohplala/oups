@@ -31,11 +31,8 @@ from oups.store.ordered_atomic_regions import get_region_indices_of_same_values
 from oups.store.ordered_atomic_regions import get_region_indices_of_true_values
 from oups.store.ordered_atomic_regions import get_region_start_end_delta
 from oups.store.ordered_atomic_regions import set_true_in_regions
-from tests.test_store.conftest import create_parquet_file
 
 
-MIN = "min"
-MAX = "max"
 RG_IDX_START = "rg_idx_start"
 RG_IDX_END_EXCL = "rg_idx_end_excl"
 DF_IDX_END_EXCL = "df_idx_end_excl"
@@ -1089,6 +1086,26 @@ def test_nrows_specialized_compute_merge_sequences(
             },
         ),
         (
+            # Islands case 4.
+            # Need to load rgs à & 1 at same time to sort data.
+            # rg:  0         1          2           3
+            # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
+            # df:           [6,7],                 [13, 14]
+            "islands_case_no_drop_duplicates_4",
+            array([0, 6, 11, 13]),  # rg_mins
+            array([6, 10, 12, 13]),  # rg_maxs
+            Series([6, 7, 13, 14]),  # df_ordered_on
+            4,  # row_group_size | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            [4, 4, 4, 1],  # rgs_n_rows
+            1,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: array([1]),
+                "oars_merge_sequences": [(1, array([[2, 2]])), (3, array([[4, 4]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (
             # Writing after pf data, no off target size row group.
             # rg:  0      1
             # pf: [0,1], [2,3]
@@ -2114,30 +2131,98 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
 
 
 @pytest.mark.parametrize(
-    (
-        "test_id, df_data, pf_data, row_group_offsets, row_group_size, drop_duplicates, max_n_off_target_rgs, expected"
-    ),
+    "test_id, rg_mins, rg_maxs, df_ordered_on, row_group_time_period, drop_duplicates, rgs_n_rows, max_n_off_target, expected",
     [
-        # 1/ Adding data at complete tail, testing 'drop_duplicates'.
-        # 'max_n_off_target_rgs' is never triggered.
         (
-            # Max row group size as freqstr.
             # Writing after pf data, no off target size row group.
             # rg:  0            1
             # pf: [8h10,9h10], [10h10]
             # df:                      [12h10]
             "new_rg_simple_append_timestamp_not_on_boundary",
-            [Timestamp(f"{REF_D}12:10")],
-            date_range(Timestamp(f"{REF_D}08:10"), freq="1h", periods=3),
-            [0, 2],
-            "2h",  # row_group_size | should not merge irg
+            array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}12:10")]),  # df_oredered_on
+            "2h",  # row_group_time_period | should not merge incomplete rg
             False,  # drop_duplicates | should not merge with preceding rg
-            3,  # max_n_off_target_rgs | should not rewrite irg
+            array([2, 1]),  # rgs_n_rows
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
             {
-                "merge_plan": [1],
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
                 "sort_rgs_after_write": False,
             },
         ),
+        # test with freqstr, with several empty periods, to make sure the empty periods are
+        # not in the output
+    ],
+)
+def test_time_period_integration_compute_merge_sequences(
+    test_id: str,
+    rg_mins: NDArray,
+    rg_maxs: NDArray,
+    df_ordered_on: NDArray,
+    row_group_time_period: str,
+    drop_duplicates: bool,
+    rgs_n_rows: NDArray,
+    max_n_off_target: int,
+    expected: Dict,
+) -> None:
+    """
+    Integration test for 'compute_merge_sequences' method.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    rg_mins : NDArray
+        Array of shape (n) containing the minimum values of the row groups.
+    rg_maxs : NDArray
+        Array of shape (n) containing the maximum values of the row groups.
+    df_ordered_on : NDArray
+        Array of shape (m) containing the values of the DataFrame to be ordered on.
+    row_group_time_period : str
+        Time period for row groups.
+    drop_duplicates : bool
+        Whether to drop duplicates between row groups and DataFrame.
+    rgs_n_rows : NDArray
+        Array of shape (n) containing the number of rows in each row group.
+    max_n_off_target : int
+        Maximum number of off-target row groups allowed.
+    expected : Dict
+        Dictionary containing the expected results.
+
+    """
+    # Initialize strategy.
+    strategy = TimePeriodMergeSplitStrategy(
+        rg_ordered_on_mins=rg_mins,
+        rg_ordered_on_maxs=rg_maxs,
+        df_ordered_on=df_ordered_on,
+        row_group_time_period=row_group_time_period,
+        drop_duplicates=drop_duplicates,
+    )
+    if expected[RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS] is not None:
+        assert_array_equal(
+            strategy.rg_idx_ends_excl_not_to_use_as_split_points,
+            expected[RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS],
+        )
+    else:
+        assert strategy.rg_idx_ends_excl_not_to_use_as_split_points is None
+    # Compute merge sequences.
+    strategy.compute_merge_sequences(
+        max_n_off_target_rgs=max_n_off_target,
+    )
+    # Check.
+    assert strategy.sort_rgs_after_write == expected["sort_rgs_after_write"]
+    assert len(strategy.filtered_merge_sequences) == len(expected["oars_merge_sequences"])
+    for (result_rg_idx_start, result_cmpt_ends_excl), (
+        expected_rg_idx_start,
+        expected_cmpt_ends_excl,
+    ) in zip(strategy.filtered_merge_sequences, expected["oars_merge_sequences"]):
+        assert result_rg_idx_start == expected_rg_idx_start
+        assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
+
+
+"""
         (
             # Max row group size as freqstr.
             # Values not on boundary to check 'floor()'.
@@ -2461,63 +2546,4 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             2,  # max_n_off_target_rgs
             (None, None, True),
         ),
-        # Do "island" cases
-        # pf:         [0, 1]                [7, 9]                [ 15, 16]
-        # df1                       [4, 5            11, 12]  # should have df_head, df_tail, no merge?
-        # df2                                [ 8, 11, 12]     # should have merge + df_tail?
-        # df3                       [4, 5      8]             # should have df_head + merge?
-        # df4                       [4, 5]   # here df not to be merged with following row group
-        # df5                       [4, 5, 6]   # here, should be merged
-        # df6                                         + same with row_group_size as str
-        # test with freqstr, with several empty periods, to make sure the empty periods are
-        # not in the output
-    ],
-)
-def test_compute_ordered_merge_plan(
-    test_id,
-    df_data,
-    pf_data,
-    row_group_offsets,
-    row_group_size,
-    drop_duplicates,
-    max_n_off_target_rgs,
-    expected,
-    tmp_path,
-):
-    df = DataFrame({"ordered_on": df_data})
-    pf_data = DataFrame({"ordered_on": pf_data})
-    pf = create_parquet_file(tmp_path, pf_data, row_group_offsets=row_group_offsets)
-    pf_statistics = pf.statistics
-    rg_ordered_on_mins = array(pf_statistics[MIN]["ordered_on"])
-    rg_ordered_on_maxs = array(pf_statistics[MAX]["ordered_on"])
-    df_ordered_on = df.loc[:, "ordered_on"]
-    if isinstance(row_group_size, str):
-        split_strat = TimePeriodMergeSplitStrategy(
-            rg_ordered_on_mins=rg_ordered_on_mins,
-            rg_ordered_on_maxs=rg_ordered_on_maxs,
-            df_ordered_on=df_ordered_on,
-            row_group_time_period=row_group_size,
-        )
-    else:
-        split_strat = NRowsMergeSplitStrategy(
-            rg_ordered_on_mins=rg_ordered_on_mins,
-            rg_ordered_on_maxs=rg_ordered_on_maxs,
-            df_ordered_on=df_ordered_on,
-            rgs_n_rows=[rg.num_rows for rg in pf.row_groups],
-            row_group_target_size=row_group_size,
-            drop_duplicates=drop_duplicates,
-        )
-    split_strat.compute_merge_regions_start_ends_excl(
-        max_n_off_target_rgs=max_n_off_target_rgs,
-    )
-    merge_plan = split_strat.partition_merge_regions()
-
-    print("merge_plan")
-    print(merge_plan)
-    print("len(pf)")
-    print(len(pf))
-    for ms_idx, expected_merge_sequence in enumerate(expected["merge_plan"]):
-        assert merge_plan[ms_idx][0] == expected_merge_sequence[0]
-        assert array_equal(merge_plan[ms_idx][1], expected_merge_sequence[1])
-    sort_rgs_after_write = len(merge_plan) > 1 or merge_plan[0][0] < len(pf)
-    assert sort_rgs_after_write == expected["sort_rgs_after_write"]
+"""
