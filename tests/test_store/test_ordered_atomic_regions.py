@@ -5,7 +5,7 @@ Created on Thu Nov 14 18:00:00 2024.
 @author: yoh
 
 """
-from typing import Dict
+from typing import Dict, List
 
 import pytest
 from numpy import array
@@ -47,13 +47,13 @@ class TestOARMergeSplitStrategy(OARMergeSplitStrategy):
     Concrete implementation for testing purposes.
     """
 
-    def specialized_init(self, **kwargs):
+    def _specialized_init(self, **kwargs):
         raise NotImplementedError("Test implementation only")
 
-    def specialized_compute_merge_sequences(self):
+    def _specialized_compute_merge_sequences(self):
         raise NotImplementedError("Test implementation only")
 
-    def row_group_offsets(self, chunk: DataFrame, is_last_chunk: bool):
+    def compute_split_sequence(self, df_ordered_on: Series) -> List[int]:
         raise NotImplementedError("Test implementation only")
 
 
@@ -499,7 +499,7 @@ def test_get_region_start_end_delta(
         ),
     ],
 )
-def test_OARSplitStrategy_init(
+def test_OARMergeSplitStrategy_init(
     test_id: str,
     rg_mins: NDArray,
     rg_maxs: NDArray,
@@ -508,7 +508,7 @@ def test_OARSplitStrategy_init(
     expected: NDArray,
 ) -> None:
     """
-    Test OARSplitStrategy with various scenarios.
+    Test OARMergeSplitStrategy with various scenarios.
     """
     oars_prop = TestOARMergeSplitStrategy(
         rg_mins,
@@ -556,7 +556,7 @@ def test_OARSplitStrategy_init(
         ),
     ],
 )
-def test_OARSplitStrategy_validation(
+def test_OARMergeSplitStrategy_validation(
     test_id: str,
     rg_ordered_on_mins: array,
     rg_ordered_on_maxs: array,
@@ -564,7 +564,7 @@ def test_OARSplitStrategy_validation(
     expected_error: Exception,
 ) -> None:
     """
-    Test input validation in OARSplitStrategy.
+    Test input validation in OARMergeSplitStrategy.
 
     Parameters
     ----------
@@ -713,7 +713,7 @@ def test_compute_merge_regions_start_ends_excl(
     split_strat.oars_has_df_overlap = oars_has_df_overlap
     split_strat.oars_likely_on_target_size = oars_likely_on_target_size
     split_strat.n_oars = len(oars_has_df_overlap)
-    split_strat.compute_merge_regions_start_ends_excl(
+    split_strat._compute_merge_regions_start_ends_excl(
         max_n_off_target_rgs=max_n_off_target_rgs,
     )
     assert array_equal(split_strat.oar_idx_mrs_starts_ends_excl, expected)
@@ -992,7 +992,7 @@ def test_nrows_specialized_compute_merge_sequences(
     assert_array_equal(strategy.oars_min_n_rows, expected["oars_min_n_rows"])
     # Test specialized_compute_merge_sequences.
     strategy.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl
-    result = strategy.specialized_compute_merge_sequences()
+    result = strategy._specialized_compute_merge_sequences()
     # Check.
     assert len(result) == len(expected["oars_merge_sequences"])
     for (result_rg_start, result_cmpt_ends_excl), (
@@ -1537,7 +1537,7 @@ def test_nrows_integration_compute_merge_sequences(
         (1, 20, [0]),
     ],
 )
-def test_nrows_row_group_offsets(df_size, target_size, expected_offsets):
+def test_nrows_compute_split_sequence(df_size, target_size, expected_offsets):
     # Create test data
     # Initialize strategy
     strategy = NRowsMergeSplitStrategy(
@@ -1548,7 +1548,7 @@ def test_nrows_row_group_offsets(df_size, target_size, expected_offsets):
         row_group_target_size=target_size,
     )
     # Get offsets
-    offsets = strategy.row_group_offsets(df_ordered_on=Series(range(df_size)))
+    offsets = strategy.compute_split_sequence(df_ordered_on=Series(range(df_size)))
     # Verify results
     assert offsets == expected_offsets
 
@@ -2070,7 +2070,7 @@ def test_time_period_specialized_compute_merge_sequences(
     )
     # Test specialized_compute_merge_sequences.
     strategy.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl
-    result = strategy.specialized_compute_merge_sequences()
+    result = strategy._specialized_compute_merge_sequences()
     # Check
     for (result_rg_start, result_cmpt_ends_excl), (
         expected_rg_start,
@@ -2138,7 +2138,7 @@ def test_time_period_specialized_compute_merge_sequences(
         ),
     ],
 )
-def test_time_period_row_group_offsets(test_id, df_dates, target_period, expected_offsets):
+def test_time_period_compute_split_sequence(test_id, df_dates, target_period, expected_offsets):
     # Initialize strategy
     strategy = TimePeriodMergeSplitStrategy(
         rg_ordered_on_mins=Series([Timestamp("2024/01/01 04:00:00")]),  # dummy value
@@ -2147,7 +2147,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
         row_group_time_period=target_period,
     )
     # Get offsets
-    offsets = strategy.row_group_offsets(df_ordered_on=Series(df_dates))
+    offsets = strategy.compute_split_sequence(df_ordered_on=Series(df_dates))
     # Verify results
     assert offsets == expected_offsets
 

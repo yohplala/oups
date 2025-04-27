@@ -52,6 +52,7 @@ from oups.store.utils import floor_ts
 
 LEFT = "left"
 RIGHT = "right"
+FILTERED_MERGE_SEQUENCES = "filtered_merge_sequences"
 MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
 # MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
 
@@ -342,9 +343,6 @@ class OARMergeSplitStrategy(ABC):
                 True,
             )
 
-        print()
-        print("self.rg_idx_ends_excl_not_to_use_as_split_points ")
-        print(self.rg_idx_ends_excl_not_to_use_as_split_points)
         self.oars_rg_idx_starts = rg_idxs_template[:-1]
         self.oars_cmpt_idx_ends_excl = column_stack((rg_idxs_template[1:], df_idx_rgs_ends_excl))
         self.oars_has_row_group = rg_idxs_template[:-1] != rg_idxs_template[1:]
@@ -354,7 +352,7 @@ class OARMergeSplitStrategy(ABC):
         self.n_rgs = n_rgs
 
     @abstractmethod
-    def specialized_init(self, **kwargs):
+    def _specialized_init(self, **kwargs):
         """
         Initialize specialized attributes.
 
@@ -370,7 +368,7 @@ class OARMergeSplitStrategy(ABC):
         """
         raise NotImplementedError("Subclasses must implement this method")
 
-    def compute_merge_regions_start_ends_excl(
+    def _compute_merge_regions_start_ends_excl(
         self,
         max_n_off_target_rgs: Optional[int] = None,
     ) -> NDArray[int_]:
@@ -417,9 +415,6 @@ class OARMergeSplitStrategy(ABC):
         elif max_n_off_target_rgs == 0:
             raise ValueError("'max_n_off_target_rgs' cannot be 0.")
 
-        print()
-        print("self.oars_likely_on_target_size")
-        print(self.oars_likely_on_target_size)
         # If 'max_n_off_target_rgs' is not None, then we need to compute the
         # merge regions.
         # Step 1: assess start indices (included) and end indices (excluded) of
@@ -443,18 +438,12 @@ class OARMergeSplitStrategy(ABC):
             m_values=cumsum(oars_off_target),
             indices=potential_emrs_starts_ends_excl,
         )
-        print()
-        print("n_off_target_rgs_in_potential_emrs")
-        print(n_off_target_rgs_in_pemrs)
         # 2.b Get which enlarged regions into which the merge will likely create
         # on target row groups.
         creates_on_target_rg_in_pemrs = get_region_start_end_delta(
             m_values=cumsum(self.oars_likely_on_target_size),
             indices=potential_emrs_starts_ends_excl,
         ).astype(bool_)
-        print()
-        print("creates_on_target_rg_in_pemrs")
-        print(creates_on_target_rg_in_pemrs)
         # Keep enlarged merge regions with too many off target atomic regions or
         # with likely creation of on target row groups.
         confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
@@ -473,9 +462,6 @@ class OARMergeSplitStrategy(ABC):
             m_values=cumsum(oars_confirmed_emrs),
             indices=simple_mrs_starts_ends_excl,
         ).astype(bool_)
-        print()
-        print("overlaps_with_confirmed_emrs")
-        print(smrs_overlaps_with_confirmed_emrs)
         n_simple_mrs_in_enlarged_mrs = sum(smrs_overlaps_with_confirmed_emrs)
         if n_simple_mrs_in_enlarged_mrs == 0:
             # Case there is no simple merge regions in enlarged merge regions.
@@ -553,7 +539,7 @@ class OARMergeSplitStrategy(ABC):
             rg_idx_ends_excl_not_to_use_as_split_points
         )
         instance.n_oars = len(oars_rg_idx_starts)
-        instance.specialized_init(**kwargs)
+        instance._specialized_init(**kwargs)
         return instance
 
     @property
@@ -571,9 +557,6 @@ class OARMergeSplitStrategy(ABC):
             Whether to sort row groups after writing.
 
         """
-        print()
-        print("filtered_merge_sequences")
-        print(self.filtered_merge_sequences)
         return (
             (
                 len(self.filtered_merge_sequences) > 1
@@ -581,7 +564,7 @@ class OARMergeSplitStrategy(ABC):
                 # of the last row group in the first merge sequence.
                 or self.filtered_merge_sequences[0][1][-1, 0] < self.n_rgs
             )
-            if hasattr(self, "filtered_merge_sequences")
+            if hasattr(self, FILTERED_MERGE_SEQUENCES)
             else AttributeError(
                 "not possible to return 'sort_rgs_after_write' value if "
                 "'compute_merge_sequences()' has not been run beforehand.",
@@ -651,11 +634,11 @@ class OARMergeSplitStrategy(ABC):
         Compute merge sequences.
 
         This method is a wrapper to the chain of methods:
-        - 'compute_merge_regions_start_ends_excl'
-        - 'specialized_compute_merge_sequences'
+        - '_compute_merge_regions_start_ends_excl'
+        - '_specialized_compute_merge_sequences'
         Additionally, row group indices listed in
         'rg_idx_ends_excl_not_to_use_as_split_points' are filtered out from the
-        output returned by child 'specialized_compute_merge_sequences'. This
+        output returned by child '_specialized_compute_merge_sequences'. This
         filtering ensures that in case 'drop_duplicates' is True, prior
         existing row groups with a max 'ordered_on' value equals to next row
         group's min 'ordered_on' value are merged. This approach guarantees that
@@ -677,9 +660,9 @@ class OARMergeSplitStrategy(ABC):
               sequence.
 
         """
-        self.compute_merge_regions_start_ends_excl(max_n_off_target_rgs=max_n_off_target_rgs)
+        self._compute_merge_regions_start_ends_excl(max_n_off_target_rgs=max_n_off_target_rgs)
         self.filtered_merge_sequences = (
-            self.specialized_compute_merge_sequences()
+            self._specialized_compute_merge_sequences()
             if self.rg_idx_ends_excl_not_to_use_as_split_points is None
             else [
                 (
@@ -692,13 +675,13 @@ class OARMergeSplitStrategy(ABC):
                         )
                     ],
                 )
-                for rg_idx_start, cmpt_ends_excl in self.specialized_compute_merge_sequences()
+                for rg_idx_start, cmpt_ends_excl in self._specialized_compute_merge_sequences()
             ]
         )
         return self.filtered_merge_sequences
 
     @abstractmethod
-    def specialized_compute_merge_sequences(
+    def _specialized_compute_merge_sequences(
         self,
     ) -> List[Tuple[int, NDArray]]:
         """
@@ -719,9 +702,9 @@ class OARMergeSplitStrategy(ABC):
         raise NotImplementedError("Subclasses must implement this method")
 
     @abstractmethod
-    def row_group_offsets(self, df_ordered_on: Series) -> Union[int, List[int]]:
+    def compute_split_sequence(self, df_ordered_on: Series) -> List[int]:
         """
-        Define the row group offsets for a chunk depending row group target size.
+        Define the split sequence for a chunk depending row group target size.
 
         Result is to be used as `row_group_offsets` parameter in
         `iter_dataframe` method.
@@ -813,13 +796,13 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
             df_ordered_on,
             drop_duplicates,
         )
-        self.specialized_init(
+        self._specialized_init(
             rgs_n_rows=rgs_n_rows,
             row_group_target_size=row_group_target_size,
             drop_duplicates=drop_duplicates,
         )
 
-    def specialized_init(
+    def _specialized_init(
         self,
         rgs_n_rows: NDArray,
         row_group_target_size: int,
@@ -911,25 +894,6 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
           such *full* rewrite is triggered.
 
         """
-        print()
-        print("row_group_min_size")
-        print(self.row_group_min_size)
-        print("self.oars_has_df_overlap")
-        print(
-            self.oars_has_df_overlap
-            & (  # OAR containing a DataFrame chunk.
-                self.oars_max_n_rows >= self.row_group_min_size
-            ),
-        )
-        print()
-        print("~self.oars_has_df_overlap")
-        print(
-            ~self.oars_has_df_overlap
-            & (  # OAR containing only row groups.
-                (self.oars_max_n_rows >= self.row_group_min_size)
-                & (self.oars_max_n_rows <= self.row_group_target_size)
-            ),
-        )
         return self.oars_has_df_overlap & (  # OAR containing a DataFrame chunk.
             self.oars_max_n_rows >= self.row_group_min_size
         ) | ~self.oars_has_df_overlap & (  # OAR containing only row groups.
@@ -937,7 +901,7 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
             & (self.oars_max_n_rows <= self.row_group_target_size)
         )
 
-    def specialized_compute_merge_sequences(
+    def _specialized_compute_merge_sequences(
         self,
     ) -> List[Tuple[int, NDArray]]:
         """
@@ -974,64 +938,13 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
         write process.
 
         """
-        # oars_merge_sequences = []
-        # for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
-        #    rg_idx_start = self.oars_rg_idx_starts[oar_idx_start]
-        #    # Cumulate number of rows.
-        #    cumsum_rows = cumsum(self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl])
-        #    n_target_size_multiples = cumsum_rows[-1] // self.row_group_target_size
-        #    # Get indices where multiples of target size are crossed.
-        #    # Force last index to be length of cumsum_rows
-        #    target_size_crossings = r_[unique(
-        #        searchsorted(
-        #            cumsum_rows,
-        #            # Using linspace instead of arange to include endpoint.
-        #            linspace(
-        #                self.row_group_target_size,
-        #                self.row_group_target_size * n_target_size_multiples,
-        #                n_target_size_multiples,
-        #                endpoint=True,
-        #            ),
-        #            side=LEFT,
-        #        ),
-        #    )[:-1], oar_idx_end_excl - oar_idx_start - 1]
-        #    oars_merge_sequences.append(
-        #        (
-        #            rg_idx_start,
-        #            self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
-        #                target_size_crossings
-        #            ],
-        #        ),
-        #    )
-        print()
-        print("cumrows")
-        print(cum_rows := cumsum(self.oars_min_n_rows[1:3]))
-        print("linspace")
-        print(
-            linspace(
-                self.row_group_target_size,
-                self.row_group_target_size
-                * (n_multiples := cum_rows[-1] // self.row_group_target_size),
-                n_multiples,
-                endpoint=True,
-                dtype=int_,
-            ),
-        )
-        print("searchsorted")
-        print(
-            searchsorted(
-                cum_rows := cumsum(self.oars_min_n_rows[1:3]),
-                linspace(
-                    self.row_group_target_size,
-                    self.row_group_target_size
-                    * (n_multiples := cum_rows[-1] // self.row_group_target_size),
-                    n_multiples,
-                    endpoint=True,
-                    dtype=int_,
-                ),
-                side=LEFT,
-            ),
-        )
+        # Process each merge region to find optimal split points:
+        # 1. For each merge region, accumulate row counts
+        # 2. Find indices where accumulated rows reach multiples of target size
+        # 3. Include the last index of the region
+        # 4. Return a list of tuples with:
+        #    - Starting row group index for each merge sequence
+        #    - Array of component end indices at split points
         return [
             (
                 self.oars_rg_idx_starts[oar_idx_start],
@@ -1062,9 +975,9 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
             for oar_idx_start, oar_idx_end_excl in self.oar_idx_mrs_starts_ends_excl
         ]
 
-    def row_group_offsets(self, df_ordered_on: DataFrame) -> Union[int, List[int]]:
+    def compute_split_sequence(self, df_ordered_on: DataFrame) -> List[int]:
         """
-        Define the row group offsets for a chunk depending row group target size.
+        Define the split sequence for a chunk depending row group target size.
 
         Result is to be used as `row_group_offsets` parameter in
         `iter_dataframe` method.
@@ -1149,14 +1062,14 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
             df_ordered_on,
             drop_duplicates,
         )
-        self.specialized_init(
+        self._specialized_init(
             rg_ordered_on_mins,
             rg_ordered_on_maxs,
             df_ordered_on,
             row_group_time_period,
         )
 
-    def specialized_init(
+    def _specialized_init(
         self,
         rg_ordered_on_mins: NDArray,
         rg_ordered_on_maxs: NDArray,
@@ -1273,7 +1186,7 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
             & (bincount(self.oars_period_idx.ravel())[self.oars_period_idx[:, 0]] == 2)
         )
 
-    def specialized_compute_merge_sequences(
+    def _specialized_compute_merge_sequences(
         self,
     ) -> List[Tuple[int, NDArray]]:
         """
@@ -1310,23 +1223,13 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
         during the write process.
 
         """
-        # oars_merge_sequences = []
-        # for oar_idx_start, oar_idx_end_excl in oar_idx_mrs_starts_ends_excl:
-        #    rg_idx_start = self.oars_rg_idx_starts[oar_idx_start]
-        #    # Find all OARs in this merge region that start a new period
-        #    oar_idx_last_periods = (
-        #        oar_idx_end_excl
-        #        - oar_idx_start
-        #        - 1
-        #        - unique(
-        #            self.oars_period_idx[oar_idx_start:oar_idx_end_excl, 0][::-1],
-        #            return_index=True,
-        #        )[1]
-        #    )
-        #    period_component_ends = self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
-        #        oar_idx_last_periods
-        #    ]
-        #    oars_merge_sequences.append((rg_idx_start, period_component_ends))
+        # Process each merge region to find period-based split points:
+        # 1. For each merge region, identify the starting row group index
+        # 2. Find indices of OARs that are the last in each unique time period
+        # 3. Extract component end indices at these period boundaries
+        # 4. Return a list of tuples with:
+        #    - Starting row group index for each merge sequence
+        #    - Array of component end indices at period boundaries
         return [
             (
                 self.oars_rg_idx_starts[oar_idx_start],
@@ -1345,11 +1248,11 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
             for oar_idx_start, oar_idx_end_excl in self.oar_idx_mrs_starts_ends_excl
         ]
 
-    def row_group_offsets(self, df_ordered_on: Series) -> Union[int, List[int]]:
+    def compute_split_sequence(self, df_ordered_on: Series) -> List[int]:
         """
-        Define the row group offsets for a chunk depending row group target size.
+        Define the split sequence for a chunk depending row group target size.
 
-        Result is to be used as `row_group_offsets` parameter in
+        Result is to be used as `compute_split_sequence` parameter in
         `iter_dataframe` method.
 
         Parameters
