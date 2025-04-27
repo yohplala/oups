@@ -13,8 +13,8 @@ from numpy import searchsorted
 from pandas import DataFrame
 from pandas import concat
 
-from oups.store.ordered_atomic_regions import NRowsMergeSplitStrategy
-from oups.store.ordered_atomic_regions import TimePeriodMergeSplitStrategy
+from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
+from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
 
 
 MIN = "min"

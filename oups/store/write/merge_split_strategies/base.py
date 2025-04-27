@@ -21,7 +21,6 @@ from functools import cached_property
 from typing import List, Optional, Tuple, Union
 
 from numpy import arange
-from numpy import bincount
 from numpy import bool_
 from numpy import column_stack
 from numpy import cumsum
@@ -32,33 +31,17 @@ from numpy import insert
 from numpy import int8
 from numpy import int_
 from numpy import isin
-from numpy import linspace
-from numpy import maximum
-from numpy import ones
 from numpy import r_
 from numpy import searchsorted
-from numpy import unique
 from numpy import vstack
 from numpy import zeros
 from numpy.typing import NDArray
-from pandas import DataFrame
 from pandas import Series
-from pandas import Timestamp
-from pandas import date_range
-
-from oups.store.utils import ceil_ts
-from oups.store.utils import floor_ts
 
 
 LEFT = "left"
 RIGHT = "right"
 FILTERED_MERGE_SEQUENCES = "filtered_merge_sequences"
-MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
-# MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
-
-
-MIN = "min"
-MAX = "max"
 
 
 def get_region_indices_of_true_values(mask: NDArray[bool_]) -> NDArray[int_]:
@@ -80,26 +63,6 @@ def get_region_indices_of_true_values(mask: NDArray[bool_]) -> NDArray[int_]:
 
     """
     return flatnonzero(diff(r_[int8(0), mask.astype(int8), int8(0)])).reshape(-1, 2)
-
-
-def get_region_indices_of_same_values(ints: NDArray[int_]) -> NDArray[int_]:
-    """
-    Compute the start and end indices of regions made of same values in `ints`.
-
-    Parameters
-    ----------
-    ints : NDArray[np_int]
-        A 1d numpy array of dtype `int`.
-
-    Returns
-    -------
-    NDArray[np_int]
-        A numpy array containing the list of the start and end indices of
-        regions made of same values in `ints`.
-
-    """
-    boundaries = r_[0, flatnonzero(diff(ints)) + 1, len(ints)]
-    return column_stack((boundaries[:-1], boundaries[1:]))
 
 
 def set_true_in_regions(length: int, regions: NDArray[int_]) -> NDArray[bool_]:
@@ -135,6 +98,9 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
     """
     Get difference between values at end and start of each region.
 
+    For regions where the start index is 0, the start value is considered 0.
+    For all other regions, the start value is m_values[start_index - 1].
+
     Parameters
     ----------
     m_values : NDArray
@@ -147,7 +113,8 @@ def get_region_start_end_delta(m_values: NDArray, indices: NDArray) -> NDArray:
     -------
     NDArray
         Array of length 'n' containing the difference between values at end and
-        start of each region.
+        start of each region, with special handling for regions starting at
+        index 0.
 
     """
     if not indices.size:
@@ -192,7 +159,7 @@ class OARMergeSplitStrategy(ABC):
     oar_idx_mrs_starts_ends_excl : NDArray[int_]
         Array of shape (e, 2) containing the list of the OARs start and end
         indices for each merge regions.
-    rg_idx_ends_excl_not_to_use_as_split_points : NDArray[int_]
+    rg_idx_ends_excl_not_to_use_as_split_points : Union[NDArray, None]
         Array containing indices of row groups which should not be used as split
         points in 'filtered_merge_sequences'. This ensures these row groups will
         be loaded all together so that duplicate search can be made over all
@@ -237,6 +204,14 @@ class OARMergeSplitStrategy(ABC):
             value in DataFrame chunk, then
             - If True, at this index, overlap starts
             - If False, no overlap at this index
+
+        Attributes
+        ----------
+        rg_idx_ends_excl_not_to_use_as_split_points : Union[NDArray, None]
+            Array containing indices of row groups which should not be used as
+            split points in 'filtered_merge_sequences'. This ensures these row
+            groups will be loaded all together so that duplicate search can be
+            made over all relevant row groups.
 
         Raises
         ------
@@ -407,6 +382,10 @@ class OARMergeSplitStrategy(ABC):
         target size row groups. This most notably applies when new data is
         appended at the tail of the DataFrame.
 
+        This method relies on the abstract property
+        'oars_likely_on_target_size' which must be implemented by concrete
+        subclasses before calling this method.
+
         """
         simple_mrs_starts_ends_excl = get_region_indices_of_true_values(self.oars_has_df_overlap)
         if max_n_off_target_rgs is None:
@@ -518,10 +497,13 @@ class OARMergeSplitStrategy(ABC):
         rg_idx_ends_excl_not_to_use_as_split_points : Union[NDArray, None]
             Array of indices for row group not to use as split points. There are
             filtered out from 'filtered_merge_sequences'.
-        drop_duplicates : bool
-            Whether to drop duplicates between row groups and DataFrame.
         **kwargs
             Additional arguments needed by specific strategy implementations.
+            For NRowsMergeSplitStrategy, this should include 'rgs_n_rows',
+            'row_group_target_size', and optionally 'drop_duplicates'.
+            For TimePeriodMergeSplitStrategy, this should include
+            'rg_ordered_on_mins', 'rg_ordered_on_maxs', 'df_ordered_on', and
+            'row_group_time_period'.
 
         Returns
         -------
@@ -659,6 +641,10 @@ class OARMergeSplitStrategy(ABC):
               (excluded) for row groups and DataFrame chunks in the merge
               sequence.
 
+        Notes
+        -----
+        The return value is also stored in 'self.filtered_merge_sequences'.
+
         """
         self._compute_merge_regions_start_ends_excl(max_n_off_target_rgs=max_n_off_target_rgs)
         self.filtered_merge_sequences = (
@@ -722,564 +708,3 @@ class OARMergeSplitStrategy(ABC):
 
         """
         raise NotImplementedError("Subclasses must implement this method")
-
-
-class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
-    """
-    OAR merge and split strategy based on a target number of rows per row group.
-
-    This strategy ensures that row groups are split when they exceed a target
-    size, while maintaining a minimum size to prevent too small row groups. It
-    also handles off target size row groups through the 'max_n_off_target_rgs'
-    parameter.
-
-    Attributes
-    ----------
-    row_group_target_size : int
-        Target number of rows above which a new row group should be created.
-    row_group_min_size : int
-        Minimum number of rows in an ordered atomic region, computed as
-        ``MAX_ROW_GROUP_SIZE_SCALE_FACTOR * row_group_target_size``.
-    oars_max_n_rows : NDArray
-        Array of shape (e) containing the maximum number of rows in each ordered
-        atomic region, obtained by summing the number of rows in a row group
-        (if present) and the number of rows in its corresponding DataFrame chunk
-        (if present).
-    oars_min_n_rows : NDArray
-        Array of shape (e) containing the likely  minimum number of rows in each
-        ordered atomic region. It is equal to ``oars_max_n_rows`` if
-        ``drop_duplicates`` is False.
-
-    Notes
-    -----
-    The maximum number of rows in an OAR is calculated as the sum of:
-    - The number of rows in the row group (if present)
-    - The number of rows in the DataFrame chunk (if present)
-    This represents the worst-case scenario where there are no duplicates.
-
-    """
-
-    def __init__(
-        self,
-        rg_ordered_on_mins: NDArray,
-        rg_ordered_on_maxs: NDArray,
-        df_ordered_on: Series,
-        rgs_n_rows: NDArray,
-        row_group_target_size: int,
-        drop_duplicates: Optional[bool] = False,
-    ):
-        """
-        Initialize scheme with target size.
-
-        Parameters
-        ----------
-        rg_ordered_on_mins : NDArray
-            Array of shape (r) containing the minimum values of the ordered
-            row groups.
-        rg_ordered_on_maxs : NDArray
-            Array of shape (r) containing the maximum values of the ordered
-            row groups.
-        df_ordered_on : Series
-            Series of shape (d) containing the ordered DataFrame.
-        rgs_n_rows : NDArray
-            Array of shape (r) containing the number of rows in each row group
-            in existing ParquetFile.
-        row_group_target_size : int
-            Target number of rows above which a new row group should be created.
-        drop_duplicates : Optional[bool], default False
-            Whether to drop duplicates between row groups and DataFrame.
-
-        """
-        super().__init__(
-            rg_ordered_on_mins,
-            rg_ordered_on_maxs,
-            df_ordered_on,
-            drop_duplicates,
-        )
-        self._specialized_init(
-            rgs_n_rows=rgs_n_rows,
-            row_group_target_size=row_group_target_size,
-            drop_duplicates=drop_duplicates,
-        )
-
-    def _specialized_init(
-        self,
-        rgs_n_rows: NDArray,
-        row_group_target_size: int,
-        drop_duplicates: Optional[bool] = False,
-    ):
-        """
-        Initialize scheme with target size.
-
-        Parameters
-        ----------
-        rgs_n_rows : NDArray
-            Array of shape (r) containing the number of rows in each row group
-            in existing ParquetFile.
-        row_group_target_size : int
-            Target number of rows above which a new row group should be created.
-        drop_duplicates : Optional[bool], default False
-            Whether to drop duplicates between row groups and DataFrame.
-
-        """
-        self.row_group_target_size = row_group_target_size
-        self.row_group_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
-        # Max number of rows in each ordered atomic region. This is a max in case
-        # there are duplicates between row groups and DataFrame that will be
-        # dropped.
-        self.oars_max_n_rows = zeros(self.n_oars, dtype=int)
-        self.oars_max_n_rows[self.oars_has_row_group] = rgs_n_rows
-        if drop_duplicates:
-            # Assuming each DataFrame chunk and each row group have no
-            # duplicates within themselves, 'oars_min_n_rows' is set assuming
-            # that all rows in the smallest component are duplicates of rows
-            # in the largest component.
-            self.oars_min_n_rows = maximum(self.oars_max_n_rows, self.oars_df_n_rows)
-        else:
-            self.oars_min_n_rows = self.oars_max_n_rows
-        self.oars_max_n_rows += self.oars_df_n_rows
-
-    @cached_property
-    def oars_likely_on_target_size(self) -> NDArray:
-        """
-        Return boolean array indicating which OARs are likely to be on target size.
-
-        An OAR is considered likely to be on target size if:
-        - for OARs containing a DataFrame chunk, its maximum possible size is
-          above the minimum size. This is an estimate since the actual size
-          after deduplication could be smaller.
-        - for OARs containing only row groups, their maximum possible size is
-          between the minimum and target sizes.
-
-        Returns
-        -------
-        NDArray
-            Boolean array of length equal to the number of ordered atomic
-            regions, where True indicates the OAR is likely to be on target
-            size.
-
-        Notes
-        -----
-        The logic implements an asymmetric treatment of OARs with and without
-        DataFrame chunks to prevent fragmentation and ensure proper compliance
-        with split strategy, including off target existing row groups.
-
-        1. For OARs containing a DataFrame chunk:
-            - Writing is always triggered (systematic).
-            - If oversized, considered on target to force rewrite of neighbor
-              already existing off target row groups.
-            - If undersized, considered off target to be properly accounted for
-              when comparing to 'max_n_off_target_rgs'.
-           This ensures that writing a new on target row group will trigger
-           the rewrite of adjacent off target row groups when
-           'max_n_off_target_rgs' is set.
-
-        2. For OARs containing only row groups:
-            - Writing is triggered only if:
-               * The OAR is within a set of contiguous off target OARs
-                 (under or over sized) and neighbors an OAR with a DataFrame
-                 chunk.
-               * Either the number of off target OARs exceeds
-                 'max_n_off_target_rgs',
-               * or an OAR to be written (with DataFrame chunk) will induce
-                 writing of a row group likely to be on target.
-            - Considered off target if either under or over sized to ensure
-              proper accounting when comparing to 'max_n_off_target_rgs'.
-
-        This approach ensures:
-        - All off target row groups are captured for potential rewrite.
-        - Writing an on target new row group forces rewrite of all adjacent
-          already existing off target row groups (under or over sized).
-        - Fragmentation is prevented by consolidating off target regions when
-          such *full* rewrite is triggered.
-
-        """
-        return self.oars_has_df_overlap & (  # OAR containing a DataFrame chunk.
-            self.oars_max_n_rows >= self.row_group_min_size
-        ) | ~self.oars_has_df_overlap & (  # OAR containing only row groups.
-            (self.oars_max_n_rows >= self.row_group_min_size)
-            & (self.oars_max_n_rows <= self.row_group_target_size)
-        )
-
-    def _specialized_compute_merge_sequences(
-        self,
-    ) -> List[Tuple[int, NDArray]]:
-        """
-        Sequence merge regions (MRs) into optimally sized chunks for writing.
-
-        For each merge region (MR) defined in 'oar_idx_mrs_starts_ends_excl',
-        this method:
-        1. Accumulates row counts using self.oars_min_n_rows
-        2. Determines split points where accumulated rows reach
-           'self.row_group_target_size'
-        3. Creates consolidated chunks by filtering the original OARs indices to
-           ensure optimal row group loading.
-
-        This ensures each consolidated chunk approaches the target row size
-        while minimizing the number of row groups loaded into memory at once.
-
-        Returns
-        -------
-        List[Tuple[int, NDArray]]
-            Merge sequences, a list of tuples, where each tuple contains for
-            each merge sequence:
-            - First element: Start index of the first row group in the merge
-              sequence.
-            - Second element: Array of shape (m, 2) containing end indices
-              (excluded) for row groups and DataFrame chunks in the merge
-              sequence.
-
-        Notes
-        -----
-        The partitioning optimizes memory usage by loading only the minimum
-        number of row groups needed to create complete chunks of approximately
-        target size rows. The returned indices may be a subset of the original
-        OARs indices, filtered to ensure efficient memory usage during the
-        write process.
-
-        """
-        # Process each merge region to find optimal split points:
-        # 1. For each merge region, accumulate row counts
-        # 2. Find indices where accumulated rows reach multiples of target size
-        # 3. Include the last index of the region
-        # 4. Return a list of tuples with:
-        #    - Starting row group index for each merge sequence
-        #    - Array of component end indices at split points
-        return [
-            (
-                self.oars_rg_idx_starts[oar_idx_start],
-                self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
-                    r_[
-                        unique(
-                            searchsorted(
-                                (
-                                    cum_rows := cumsum(
-                                        self.oars_min_n_rows[oar_idx_start:oar_idx_end_excl],
-                                    )
-                                ),
-                                linspace(
-                                    self.row_group_target_size,
-                                    self.row_group_target_size
-                                    * (n_multiples := cum_rows[-1] // self.row_group_target_size),
-                                    n_multiples,
-                                    endpoint=True,
-                                    dtype=int_,
-                                ),
-                                side=LEFT,
-                            ),
-                        )[:-1],
-                        oar_idx_end_excl - oar_idx_start - 1,
-                    ]
-                ],
-            )
-            for oar_idx_start, oar_idx_end_excl in self.oar_idx_mrs_starts_ends_excl
-        ]
-
-    def compute_split_sequence(self, df_ordered_on: DataFrame) -> List[int]:
-        """
-        Define the split sequence for a chunk depending row group target size.
-
-        Result is to be used as `row_group_offsets` parameter in
-        `iter_dataframe` method.
-
-        Parameters
-        ----------
-        df_ordered_on : Series
-            Series by which the DataFrame to be written is ordered.
-
-        Returns
-        -------
-        List[int]
-            A list of indices with the explicit index values to start new row
-            groups.
-
-        """
-        return list(range(0, len(df_ordered_on), self.row_group_target_size))
-
-
-class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
-    """
-    OAR merge and split strategy based on a time period target per row group.
-
-    This strategy ensures that row groups are split based on time periods. Each
-    resulting row group will ideally contain data from a single time period
-    (e.g., a month, day, etc.).
-
-    Attributes
-    ----------
-    row_group_time_period : str
-        Time period for a row group to be on target size (e.g., 'MS' for month
-        start).
-    oars_mins_maxs : NDArray
-        Array of shape (e, 2) containing the start and end bounds of each
-        ordered atomic region.
-    period_bounds : DatetimeIndex
-        Period bounds over the total time span of the dataset, considering both
-        row groups and DataFrame.
-    oars_period_idx : NDArray
-        Array of shape (e, 2) containing the start and end indices of each
-        ordered atomic region in the period bounds.
-
-    Notes
-    -----
-    - A row group is considered meeting the target size if it contains data from
-      exactly one time period.
-    - A point in time is within a time period if it is greater than or equal to
-      period start and strictly less than period end.
-
-    """
-
-    def __init__(
-        self,
-        rg_ordered_on_mins: NDArray,
-        rg_ordered_on_maxs: NDArray,
-        df_ordered_on: Series,
-        row_group_time_period: str,
-        drop_duplicates: Optional[bool] = False,
-    ):
-        """
-        Initialize scheme with time size.
-
-        Parameters
-        ----------
-        rg_ordered_on_mins : NDArray
-            Array of shape (r) containing the minimum values of the ordered
-            row groups.
-        rg_ordered_on_maxs : NDArray
-            Array of shape (r) containing the maximum values of the ordered
-            row groups.
-        df_ordered_on : Series
-            Series of shape (d) containing the ordered DataFrame.
-        drop_duplicates : Optional[bool], default False
-            Whether to drop duplicates between row groups and DataFrame.
-        row_group_time_period : str
-            Target period for each row group (pandas freqstr).
-
-        """
-        super().__init__(
-            rg_ordered_on_mins,
-            rg_ordered_on_maxs,
-            df_ordered_on,
-            drop_duplicates,
-        )
-        self._specialized_init(
-            rg_ordered_on_mins,
-            rg_ordered_on_maxs,
-            df_ordered_on,
-            row_group_time_period,
-        )
-
-    def _specialized_init(
-        self,
-        rg_ordered_on_mins: NDArray,
-        rg_ordered_on_maxs: NDArray,
-        df_ordered_on: Series,
-        row_group_time_period: str,
-    ):
-        """
-        Initialize scheme with target period.
-
-        Parameters
-        ----------
-        rg_ordered_on_mins : NDArray
-            Minimum value of 'ordered_on' in each row group.
-        rg_ordered_on_maxs : NDArray
-            Maximum value of 'ordered_on' in each row group.
-        df_ordered_on : Series
-            Values of 'ordered_on' column in DataFrame.
-        row_group_time_period : str
-            Expected time period for each row group (pandas freqstr).
-
-        """
-        self.row_group_time_period = row_group_time_period
-        df_ordered_on_np = df_ordered_on.to_numpy()
-        self.oars_mins_maxs = ones((self.n_oars, 2)).astype(df_ordered_on_np.dtype)
-        # Row groups encompasses Dataframe chunks in an OAR.
-        # Hence, start with Dataframe chunks starts and ends.
-        oar_idx_df_chunk = flatnonzero(self.oars_has_df_overlap)
-        df_idx_chunk_starts = zeros(len(oar_idx_df_chunk), dtype=int)
-        df_idx_chunk_starts[1:] = self.oars_cmpt_idx_ends_excl[oar_idx_df_chunk[:-1], 1]
-        self.oars_mins_maxs[oar_idx_df_chunk, 0] = df_ordered_on_np[df_idx_chunk_starts]
-        self.oars_mins_maxs[oar_idx_df_chunk, 1] = df_ordered_on_np[
-            self.oars_cmpt_idx_ends_excl[oar_idx_df_chunk, 1] - 1
-        ]
-        # Only then add row groups starts and ends. They will overwrite where
-        # Dataframe chunks are present.
-        oar_idx_row_groups = flatnonzero(self.oars_has_row_group)
-        self.oars_mins_maxs[oar_idx_row_groups, 0] = rg_ordered_on_mins
-        self.oars_mins_maxs[oar_idx_row_groups, 1] = rg_ordered_on_maxs
-        # Generate period bounds.
-        start_ts = floor_ts(Timestamp(self.oars_mins_maxs[0, 0]), row_group_time_period)
-        end_ts = ceil_ts(Timestamp(self.oars_mins_maxs[-1, 1]), row_group_time_period)
-        self.period_bounds = date_range(start=start_ts, end=end_ts, freq=row_group_time_period)
-        # Find period indices for each OAR.
-        self.oars_period_idx = searchsorted(
-            self.period_bounds,
-            self.oars_mins_maxs,
-            side=RIGHT,
-        )
-
-    @cached_property
-    def oars_likely_on_target_size(self) -> NDArray:
-        """
-        Return boolean array indicating which OARs are likely to be on target size.
-
-        An OAR meets target size if and only if:
-         - It contains exactly one row group OR one DataFrame chunk (not both)
-         - That component fits entirely within a single period bound
-
-        Returns
-        -------
-        NDArray
-            Boolean array of length equal to the number of ordered atomic
-            regions, where True indicates the OAR is likely to be on target
-            size.
-
-        Notes
-        -----
-        The logic implements an asymmetric treatment of OARs with and without
-        DataFrame chunks to prevent fragmentation and ensure proper compliance
-        with split strategy, including off target existing row groups.
-
-        1. For OARs containing a DataFrame chunk:
-            - Writing is always triggered (systematic).
-            - If oversized, considered on target to force rewrite of neighbor
-              already existing off target row groups.
-            - If undersized, considered off target to be properly accounted for
-              when comparing to 'max_n_off_target_rgs'.
-           This ensures that writing a new on target row group will trigger
-           the rewrite of adjacent off target row groups when
-           'max_n_off_target_rgs' is set.
-
-        2. For OARs containing only row groups:
-            - Writing is triggered only if:
-               * The OAR is within a set of contiguous off target OARs
-                 (under or over sized) and neighbors an OAR with a DataFrame
-                 chunk.
-               * Either the number of off target OARs exceeds
-                 'max_n_off_target_rgs',
-               * or an OAR to be written (with DataFrame chunk) will induce
-                 writing of a row group likely to be on target size.
-            - Considered off target if either under or over sized to ensure
-              proper accounting when comparing to 'max_n_off_target_rgs'.
-
-        This approach ensures:
-        - All off target row groups are captured for potential rewrite.
-        - Writing an on target new row group forces rewrite of all adjacent
-          already existing off target row groups (under or over sized).
-        - Fragmentation is prevented by consolidating off target regions when
-          such *full* rewrite is triggered.
-
-        """
-        # Check if OAR fits in a single period
-        single_period_oars = self.oars_period_idx[:, 0] == self.oars_period_idx[:, 1]
-        # Check if OAR is the only one in its period
-        # period_counts = bincount(period_idx_oars.ravel())
-        # Each period index has to appear only twice (oncee for start, once for end).
-        # Since we already checked OARs don't span multiple periods (start == end),
-        # the check is then only made on the period start.
-        # oars_single_in_period = period_counts[period_idx_oars[:, 0]] == 2
-        return (  # Over-sized OAR containing a DataFrame chunk.
-            self.oars_has_df_overlap & ~single_period_oars
-        ) | (  # OAR with or wo DataFrame chunk, single in period and within a single period.
-            single_period_oars
-            & (bincount(self.oars_period_idx.ravel())[self.oars_period_idx[:, 0]] == 2)
-        )
-
-    def _specialized_compute_merge_sequences(
-        self,
-    ) -> List[Tuple[int, NDArray]]:
-        """
-        Sequence merge regions (MRs) into optimally sized chunks for writing.
-
-        For each merge region (MR) defined in 'oar_idx_mrs_starts_ends_excl',
-        this method:
-        1. Determines split points where 'ordered_on' valuee is equal or larfer
-           than corresponding time period lower bound and strictly lower than
-           time period lower bound.
-        2. Creates consolidated chunks by filtering the original OARs indices to
-           ensure optimal row group loading.
-
-        This ensures each consolidated chunk approaches row group time period
-        while minimizing the number of row groups loaded into memory at once.
-
-        Returns
-        -------
-        List[Tuple[int, NDArray]]
-            Merge sequences, a list of tuples, where each tuple contains for
-            each merge sequence:
-            - First element: Start index of the first row group in the merge
-              sequence.
-            - Second element: Array of shape (m, 2) containing end indices
-              (excluded) for row groups and DataFrame chunks in the merge
-              sequence.
-
-        Notes
-        -----
-        The partitioning optimizes memory usage by loading only the minimum
-        number of row groups needed to create complete chunks of approximately
-        row group time period. The returned indices may be a subset of the
-        original OARs indices, filtered to ensure efficient memory usage
-        during the write process.
-
-        """
-        # Process each merge region to find period-based split points:
-        # 1. For each merge region, identify the starting row group index
-        # 2. Find indices of OARs that are the last in each unique time period
-        # 3. Extract component end indices at these period boundaries
-        # 4. Return a list of tuples with:
-        #    - Starting row group index for each merge sequence
-        #    - Array of component end indices at period boundaries
-        return [
-            (
-                self.oars_rg_idx_starts[oar_idx_start],
-                self.oars_cmpt_idx_ends_excl[oar_idx_start:oar_idx_end_excl][
-                    (
-                        oar_idx_end_excl
-                        - oar_idx_start
-                        - 1
-                        - unique(
-                            self.oars_period_idx[oar_idx_start:oar_idx_end_excl, 0][::-1],
-                            return_index=True,
-                        )
-                    )[1]
-                ],
-            )
-            for oar_idx_start, oar_idx_end_excl in self.oar_idx_mrs_starts_ends_excl
-        ]
-
-    def compute_split_sequence(self, df_ordered_on: Series) -> List[int]:
-        """
-        Define the split sequence for a chunk depending row group target size.
-
-        Result is to be used as `compute_split_sequence` parameter in
-        `iter_dataframe` method.
-
-        Parameters
-        ----------
-        df_ordered_on : Series
-            Series by which the DataFrame to be written is ordered.
-
-        Returns
-        -------
-        List[int]
-            A list of indices with the explicit index values to start new row
-            groups.
-
-        """
-        # Generate period bounds for the chunk.
-        # start_ts = floor_ts(Timestamp(df_ordered_on.iloc[0]), self.row_group_time_period)
-        # end_ts = ceil_ts(Timestamp(df_ordered_on.iloc[-1]), self.row_group_time_period)
-        # period_bounds = date_range(start=start_ts, end=end_ts, freq=self.row_group_time_period)[:-1]
-        # Find where each period boundary falls in 'df_ordered_on'.
-        return unique(
-            searchsorted(
-                df_ordered_on,
-                date_range(
-                    start=floor_ts(Timestamp(df_ordered_on.iloc[0]), self.row_group_time_period),
-                    end=ceil_ts(Timestamp(df_ordered_on.iloc[-1]), self.row_group_time_period),
-                    freq=self.row_group_time_period,
-                )[:-1],
-                side=LEFT,
-            ),
-        ).tolist()
