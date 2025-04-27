@@ -427,22 +427,25 @@ class OARMergeSplitStrategy(ABC):
         oars_off_target = ~self.oars_likely_on_target_size
         potential_enlarged_mrs = self.oars_has_df_overlap | oars_off_target
         potential_emrs_starts_ends_excl = get_region_indices_of_true_values(potential_enlarged_mrs)
-        #
-        #
-        # TODO: here, filter out enlarged merge regions which have no overlap
-        # with a DataFrame chunk.
-        #
-        #
+        # Filter out emrs without overlap with a DataFrame chunk.
+        # As of this point, potential enlarge merge regions are those which
+        # have an overlap with a simple merge region (has a DataFrame chunk).
+        potential_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
+            get_region_start_end_delta(
+                m_values=cumsum(self.oars_has_df_overlap),
+                indices=potential_emrs_starts_ends_excl,
+            ).astype(bool_)
+        ]
         # Step 2: Filter out enlarged candidates based on multiple criteria.
         # 2.a - Get number of off target size OARs per enlarged merged region.
         # Those where 'max_n_off_target_rgs' is not reached will be filtered out
-        n_off_target_rgs_in_potential_emrs = get_region_start_end_delta(
+        n_off_target_rgs_in_pemrs = get_region_start_end_delta(
             m_values=cumsum(oars_off_target),
             indices=potential_emrs_starts_ends_excl,
         )
         print()
         print("n_off_target_rgs_in_potential_emrs")
-        print(n_off_target_rgs_in_potential_emrs)
+        print(n_off_target_rgs_in_pemrs)
         # 2.b Get which enlarged regions into which the merge will likely create
         # on target row groups.
         creates_on_target_rg_in_pemrs = get_region_start_end_delta(
@@ -455,47 +458,48 @@ class OARMergeSplitStrategy(ABC):
         # Keep enlarged merge regions with too many off target atomic regions or
         # with likely creation of on target row groups.
         confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
-            (n_off_target_rgs_in_potential_emrs > max_n_off_target_rgs)
-            | creates_on_target_rg_in_pemrs
+            (n_off_target_rgs_in_pemrs > max_n_off_target_rgs) | creates_on_target_rg_in_pemrs
         ]
         # Step 3: Retrieve indices of merge regions which have overlap with a
         # DataFrame chunk but are not in retained enlarged merge regions.
-        confirmed_emrs = set_true_in_regions(
+        oars_confirmed_emrs = set_true_in_regions(
             length=self.n_oars,
             regions=confirmed_emrs_starts_ends_excl,
         )
         # Create an array of length the number of simple merge regions, with
         # value 1 if the simple merge region is within an enlarged merge
         # regions.
-        overlaps_with_confirmed_emrs = get_region_start_end_delta(
-            m_values=cumsum(confirmed_emrs),
+        smrs_overlaps_with_confirmed_emrs = get_region_start_end_delta(
+            m_values=cumsum(oars_confirmed_emrs),
             indices=simple_mrs_starts_ends_excl,
         ).astype(bool_)
         print()
         print("overlaps_with_confirmed_emrs")
-        print(overlaps_with_confirmed_emrs)
-        #        n_simple_mrs_in_enlarged_mrs = sum(overlaps_with_confirmed_emrs)
-        #        if n_simple_mrs_in_enlarged_mrs == 0:
-        # Case there are only simple merge regions.
-        #            self.oar_idx_mrs_starts_ends_excl = simple_mrs_starts_ends_excl
-        #        elif n_simple_mrs_in_enlarged_mrs == len(simple_mrs_starts_ends_excl):
-        # Case there are only enlarged merge regions.
-        #            self.oar_idx_mrs_starts_ends_excl = confirmed_emrs_starts_ends_excl
-        #        else:
-        # Case there are both simple and enlarged merge regions.
-        self.oar_idx_mrs_starts_ends_excl = vstack(
-            (
-                simple_mrs_starts_ends_excl[~overlaps_with_confirmed_emrs],
-                confirmed_emrs_starts_ends_excl,
-            ),
-        )
-        # Sort along 1st column.
-        # Sorting is required to ensure that DataFrame chunks are enumerated
-        # correctly (end indices excluded of a Dataframe chunk is the start
-        # index of the next Dataframe chunk).
-        self.oar_idx_mrs_starts_ends_excl = self.oar_idx_mrs_starts_ends_excl[
-            self.oar_idx_mrs_starts_ends_excl[:, 0].argsort()
-        ]
+        print(smrs_overlaps_with_confirmed_emrs)
+        n_simple_mrs_in_enlarged_mrs = sum(smrs_overlaps_with_confirmed_emrs)
+        if n_simple_mrs_in_enlarged_mrs == 0:
+            # Case there is no simple merge regions in enlarged merge regions.
+            # This means there is no enlarged merge regions.
+            self.oar_idx_mrs_starts_ends_excl = simple_mrs_starts_ends_excl
+        elif n_simple_mrs_in_enlarged_mrs == len(simple_mrs_starts_ends_excl):
+            # Case all simple merge regions are encompassed in enlarged merge
+            # regions.
+            self.oar_idx_mrs_starts_ends_excl = confirmed_emrs_starts_ends_excl
+        else:
+            # Case in-between.
+            self.oar_idx_mrs_starts_ends_excl = vstack(
+                (
+                    simple_mrs_starts_ends_excl[~smrs_overlaps_with_confirmed_emrs],
+                    confirmed_emrs_starts_ends_excl,
+                ),
+            )
+            # Sort along 1st column.
+            # Sorting is required to ensure that DataFrame chunks are enumerated
+            # correctly (end indices excluded of a Dataframe chunk is the start
+            # index of the next Dataframe chunk).
+            self.oar_idx_mrs_starts_ends_excl = self.oar_idx_mrs_starts_ends_excl[
+                self.oar_idx_mrs_starts_ends_excl[:, 0].argsort()
+            ]
 
     @classmethod
     def from_oars_desc(

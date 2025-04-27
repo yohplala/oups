@@ -793,10 +793,9 @@ def test_nrows_oars_likely_on_target_size():
                 ],
             },
         ),
-        (
-            "single_sequence_encompassing_all_oars_wo_drop_duplicates",
-            # This test case check that last row group in sequence is correctly
+        (  # This test case check that last row group in sequence is correctly
             # added to merge region.
+            "single_sequence_encompassing_all_oars_wo_drop_duplicates",
             # row_group_target_size : 100
             # rgs_n_rows    :  [  50,   50,      ,   50,    50]
             # has_row_group :  [True, True, False, True,  True]
@@ -1034,8 +1033,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # Islands case 1.
+        (  # Islands case 1.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
             # df:   [3,4,                           13,14]
@@ -1053,8 +1051,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # Islands case 2.
+        (  # Islands case 2.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
             # df:    [3,     6,                        13, 14]
@@ -1072,8 +1069,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # Islands case 3.
+        (  # Islands case 3.
             # Need to load rgs 0 & 1 at same time to sort data.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
@@ -1092,8 +1088,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # Islands case 4.
+        (  # Islands case 4.
             # Need to load rg 1 only, df data coming after.
             # rg:  0         1          2           3
             # pf: [0,xx,6], [6,xx,10], [11,xx,12], [13]
@@ -1148,8 +1143,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # Writing after pf data, no off target size row group.
+        (  # Writing after pf data, no off target size row group.
             # rg:  0      1
             # pf: [0,1], [2,3]
             # df:               [3]
@@ -1167,8 +1161,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # Writing at end of pf data, merging with off target size row group.
+        (  # Writing at end of pf data, merging with off target size row group.
             # rg:  0        1        2
             # pf: [0,1,2], [6,7,8], [9]
             # df:                   [9]
@@ -1186,8 +1179,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df within pf data.
+        (  # df within pf data.
             # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
             # One-but last row group is on target size, but because df is
@@ -1210,8 +1202,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # Writing after pf data, off target size row group to merge.
+        (  # Writing after pf data, off target size row group to merge.
             # rg:  0        1        2    3
             # pf: [0,1,2], [3,4,5], [6], [7],
             # df:                             [8]
@@ -1229,8 +1220,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df at the start of pf data.
+        (  # df at the start of pf data.
             # rg:         0       1       2    3
             # pf:        [2, 6], [7, 8], [9], [10]
             # df: [0,1]
@@ -1248,8 +1238,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # df at the start of pf data.
+        (  # df at the start of pf data.
             # rg:       0       1       2    3
             # pf:      [2, 6], [7, 8], [9], [10]
             # df: [0]
@@ -1267,8 +1256,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # df connected to off target size rgs.
+        (  # df connected to off target size rgs.
             # Writing at end of pf data, with off target size row groups.
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
@@ -1287,8 +1275,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df within pf data.
+        (  # df within pf data.
             # Writing in-between pf data, with off target size row groups at
             # the end of pf data.
             # rg:  0      1            2       3    4
@@ -1308,8 +1295,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": True,  # bool: need to sort rgs after write
             },
         ),
-        (
-            # df within pf data.
+        (  # df within pf data.
             # Writing in-between pf data, with off target size row groups at
             # the end of pf data.
             # rg:  0           1        2
@@ -1329,8 +1315,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": True,  # bool: need to sort rgs after write
             },
         ),
-        (
-            # df connected to off target size rgs.
+        (  # df connected to off target size rgs.
             # Writing at end of pf data, with off target size row groups.
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
@@ -1349,8 +1334,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df connected to off target size rgs.
+        (  # df connected to off target size rgs.
             # Writing at end of pf data, with off target size row groups.
             # rg:  0        1                    2
             # pf: [0,1,2], [6,7,8],             [11]
@@ -1369,8 +1353,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df connected to off target size rgs.
+        (  # df connected to off target size rgs.
             # Writing at end of pf data, with off target size row groups
             # rg:  0          1               2
             # pf: [0,1,2,2], [6,7,8,8],      [11]
@@ -1389,8 +1372,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # df connected to off target size rgs.
+        (  # df connected to off target size rgs.
             # A rg reaching target size is written, this triggers a full rewrite.
             # Because what remains to be written does not reach target size, a
             # single load is planned, to load row groups 1 and 2
@@ -1413,8 +1395,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df connected to off target size rgs.
+        (  # df connected to off target size rgs.
             # Writing at end of pf data, with off target size row groups at
             # the end of pf data.
             # Tail is rewritten because a 'full' row group is written.
@@ -1435,8 +1416,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df connected to off target size rgs.
+        (  # df connected to off target size rgs.
             # Incomplete row groups at the end of pf data.
             # Write of last row group is triggered
             # rg:  0         1                  2
@@ -1456,8 +1436,7 @@ def test_nrows_specialized_compute_merge_sequences(
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # df connected to off target size rgs.
+        (  # df connected to off target size rgs.
             # Writing at end of pf data, with off target size row groups.
             # rg:  0          1           2     3
             # pf: [0,1,2,6], [7,8,9,10], [11], [12]
@@ -2176,8 +2155,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
 @pytest.mark.parametrize(
     "test_id, rg_mins, rg_maxs, df_ordered_on, row_group_time_period, drop_duplicates, rgs_n_rows, max_n_off_target, expected",
     [
-        (
-            # Values not on boundary to check 'floor()'.
+        (  # Values not on boundary to check 'floor()'.
             # Writing after pf data, no off target size row group.
             # rg:  0            1
             # pf: [8h10,9h10], [10h10]
@@ -2196,8 +2174,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # Values not on boundary to check 'floor()'.
+        (  # Values not on boundary to check 'floor()'.
             # Writing after pf data, not merging with off target size row group.
             # rg:  0            1
             # pf: [8h10,9h10], [10h10]
@@ -2216,8 +2193,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # Values not on boundary to check 'floor()'.
+        (  # Values not on boundary to check 'floor()'.
             # Writing after pf data, merging with off target size row group.
             # rg:  0            1
             # pf: [8h10,9h10], [10h10]
@@ -2236,8 +2212,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # Values on boundary.
+        (  # Values on boundary.
             # Writing after pf data, not merging with off target size row group.
             # rg:  0            1
             # pf: [8h00,9h00], [10h00]
@@ -2256,8 +2231,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # Values on boundary.
+        (  # Values on boundary.
             # Writing after pf data, merging with off target size row group.
             # rg:  0            1
             # pf: [8h00,9h00], [10h00]
@@ -2276,8 +2250,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # Writing after pf data, off target size row group should be merged.
+        (  # Writing after pf data, off target size row group should be merged.
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
             # df:                               [13h00]
@@ -2307,8 +2280,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df at the start of pf data.
+        (  # df at the start of pf data.
             # df is not overlapping with existing row groups.
             # rg:           0            1        2
             # pf:          [8h00,9h00], [12h00], [13h00]
@@ -2339,8 +2311,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # df at the start of pf data.
+        (  # df at the start of pf data.
             # df is overlapping with time period of existing row groups.
             # rg:            0            1        2
             # pf:           [8h10,9h10], [12h10], [13h10]
@@ -2371,8 +2342,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df connected to off target size rgs. Values on boundary.
+        (  # df connected to off target size rgs. Values on boundary.
             # Writing after pf data, off target size row groups.
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
@@ -2403,8 +2373,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df connected to off target size rgs. Values on boundary.
+        (  # df connected to off target size rgs. Values on boundary.
             # Writing after pf data, off target size row groups.
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
@@ -2435,8 +2404,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # df connected to off target size rgs. Values on boundary.
+        (  # df connected to off target size rgs. Values on boundary.
             # Writing after pf data, off target size row groups.
             # rg:  0            1        2
             # pf: [8h00,9h00], [10h00], [11h00]
@@ -2467,8 +2435,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": False,
             },
         ),
-        (
-            # 'max_n_off_target_rgs' not reached.
+        (  # 'max_n_off_target_rgs' not reached.
             # rg:  0            1                 2
             # pf: [8h00,9h00], [10h00],          [13h00]
             # df:                       [12h00]
@@ -2498,8 +2465,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # df is not overlapping with existing row groups. It should be added.
+        (  # df is not overlapping with existing row groups. It should be added.
             # rg:  0                   1        2
             # pf: [8h00,9h00],        [12h00], [14h00]
             # df:             [10h30]
@@ -2529,8 +2495,7 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
                 "sort_rgs_after_write": True,
             },
         ),
-        (
-            # Writing in-between pf data, with off target size row groups at
+        (  # Writing in-between pf data, with off target size row groups at
             # the end of pf data.
             # rg:  0        1           2           3      4
             # pf: [8h,9h], [10h, 11h], [12h, 13h], [14h], [15h]
@@ -2561,12 +2526,65 @@ def test_time_period_row_group_offsets(test_id, df_dates, target_period, expecte
             1,  # max_n_off_target_rgs | should rewrite tail
             {
                 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(1, array([[2, 1]])), (3, array([[5, 1]]))],
+                "oars_merge_sequences": [(1, array([[2, 1]]))],
                 "sort_rgs_after_write": True,
             },
         ),
-        # test with freqstr, with several empty periods, to make sure the empty periods are
-        # not in the output
+        (  # df within pf data.
+            # Writing in-between pf data, with off target size row groups at
+            # the end of pf data.
+            # rg:  0          1           2           3      4
+            # pf: [8h,9h],   [10h, 11h], [12h, 13h], [14h], [15h]
+            # df:        [9h]
+            "insert_timestamp_middle_no_rewrite",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}12:00"),
+                    Timestamp(f"{REF_D}14:00"),
+                    Timestamp(f"{REF_D}15:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                    Timestamp(f"{REF_D}13:00"),
+                    Timestamp(f"{REF_D}14:00"),
+                    Timestamp(f"{REF_D}15:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}09:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period
+            False,  # drop_duplicates
+            array([2, 2, 2, 1, 1]),  # rgs_n_rows
+            2,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[1, 1]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (  # Several empty periods, to make sure the empty periods are not in
+            # the output
+            # rg:  0            1
+            # pf: [8h00,9h00], [10h00]
+            # df:                      [23h00]
+            "insert_timestamp_several_empty_periods",
+            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}10:00")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:00"), Timestamp(f"{REF_D}10:00")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}23:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not specifically rewrite tail
+            True,  # drop_duplicates
+            array([2, 1]),  # rgs_n_rows
+            2,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
     ],
 )
 def test_time_period_integration_compute_merge_sequences(
@@ -2633,34 +2651,3 @@ def test_time_period_integration_compute_merge_sequences(
     ) in zip(strategy.filtered_merge_sequences, expected["oars_merge_sequences"]):
         assert result_rg_idx_start == expected_rg_idx_start
         assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
-
-
-"""
-        # 3/ Adding data at complete end, testing 'max_n_off_target_rgs'.
-
-
-
-        # 4/ Adding data just before last off target size row groups.
-
-
-
-        # 5/ Adding data in the middle of pf data.
-
-        (
-            # Test  20 (4.e) /
-            # Max row group size as pandas freqstr | df within pf data.
-            # Writing in-between pf data, with off target size row groups at
-            # the end of pf data.
-            # row grps:  0          1           2           3      4
-            # pf: [8h,9h],   [10h, 11h], [12h, 13h], [14h], [15h]
-            # df:        [9h]
-            "insert_timestamp_middle_no_rewrite",
-            DataFrame({"ordered_on": [Timestamp(f"{REF_D}9:00")]}),
-            DataFrame({"ordered_on": date_range(Timestamp(f"{REF_D}8:00"), freq="1h", periods=8)}),
-            [0, 2, 4, 6, 7],
-            "2h",  # row_group_size
-            False,  # drop_duplicates
-            2,  # max_n_off_target_rgs
-            (None, None, True),
-        ),
-"""
