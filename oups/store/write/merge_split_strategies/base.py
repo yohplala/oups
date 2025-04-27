@@ -399,8 +399,9 @@ class OARMergeSplitStrategy(ABC):
         # Step 1: assess start indices (included) and end indices (excluded) of
         # enlarged merge regions.
         oars_off_target = ~self.oars_likely_on_target_size
-        potential_enlarged_mrs = self.oars_has_df_overlap | oars_off_target
-        potential_emrs_starts_ends_excl = get_region_indices_of_true_values(potential_enlarged_mrs)
+        potential_emrs_starts_ends_excl = get_region_indices_of_true_values(
+            self.oars_has_df_overlap | oars_off_target,
+        )
         # Filter out emrs without overlap with a DataFrame chunk.
         # As of this point, potential enlarge merge regions are those which
         # have an overlap with a simple merge region (has a DataFrame chunk).
@@ -413,7 +414,7 @@ class OARMergeSplitStrategy(ABC):
         # Step 2: Filter out enlarged candidates based on multiple criteria.
         # 2.a - Get number of off target size OARs per enlarged merged region.
         # Those where 'max_n_off_target_rgs' is not reached will be filtered out
-        n_off_target_rgs_in_pemrs = get_region_start_end_delta(
+        n_off_target_oars_in_pemrs = get_region_start_end_delta(
             m_values=cumsum(oars_off_target),
             indices=potential_emrs_starts_ends_excl,
         )
@@ -426,7 +427,7 @@ class OARMergeSplitStrategy(ABC):
         # Keep enlarged merge regions with too many off target atomic regions or
         # with likely creation of on target row groups.
         confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
-            (n_off_target_rgs_in_pemrs > max_n_off_target_rgs) | creates_on_target_rg_in_pemrs
+            (n_off_target_oars_in_pemrs > max_n_off_target_rgs) | creates_on_target_rg_in_pemrs
         ]
         # Step 3: Retrieve indices of merge regions which have overlap with a
         # DataFrame chunk but are not in retained enlarged merge regions.
