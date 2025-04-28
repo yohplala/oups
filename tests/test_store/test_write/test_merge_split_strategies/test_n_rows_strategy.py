@@ -97,6 +97,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (0, array([[2, 25], [4, 75]])),  # single sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(0, 4)],
             },
         ),
         (  # This test case check that last row group in sequence is correctly
@@ -122,6 +123,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (0, array([[2, 25], [4, 75]])),  # single sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(0, 4)],
             },
         ),
         (
@@ -146,6 +148,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (1, array([[2, 60], [3, 75]])),  # single sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(1, 3)],
             },
         ),
         (
@@ -170,6 +173,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(1, 3)],
             },
         ),
         (
@@ -195,6 +199,7 @@ def test_nrows_oars_likely_on_target_size():
                     (1, array([[2, 25], [3, 75]])),
                     (4, array([[6, 120], [6, 190]])),
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(1, 3), (4, 6)],
             },
         ),
         (
@@ -220,6 +225,7 @@ def test_nrows_oars_likely_on_target_size():
                     (1, array([[2, 25], [2, 60], [3, 75]])),
                     (4, array([[6, 120], [6, 165], [6, 210]])),
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(1, 3), (4, 6)],
             },
         ),
         (
@@ -244,6 +250,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(1, 3)],
             },
         ),
     ],
@@ -301,6 +308,7 @@ def test_nrows_specialized_compute_merge_sequences(
     result = strategy._specialized_compute_merge_sequences()
     # Check.
     assert len(result) == len(expected["oars_merge_sequences"])
+    assert strategy.rg_idx_mrs_starts_ends_excl == expected["rg_idx_mrs_starts_ends_excl"]
     for (result_rg_start, result_cmpt_ends_excl), (
         expected_rg_start,
         expected_cmpt_ends_excl,

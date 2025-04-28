@@ -368,9 +368,9 @@ class OARMergeSplitStrategy(ABC):
             A ``None`` value induces no merging of off target size row groups
             neighbor to a newly added row groups.
 
-        Returns
-        -------
-        NDArray[np_int]
+        Attributes
+        ----------
+        oar_idx_mrs_starts_ends_excl : NDArray[int_]
             A numpy array of shape (e, 2) containing the list of the OARs start
             and end indices for each merge regions.
 
@@ -525,7 +525,7 @@ class OARMergeSplitStrategy(ABC):
         instance._specialized_init(**kwargs)
         return instance
 
-    @property
+    @cached_property
     def sort_rgs_after_write(self) -> bool:
         """
         Whether to sort row groups after writing.
@@ -709,3 +709,22 @@ class OARMergeSplitStrategy(ABC):
 
         """
         raise NotImplementedError("Subclasses must implement this method")
+
+    @cached_property
+    def rg_idx_mrs_starts_ends_excl(self) -> List[Tuple[int, int]]:
+        """
+        Get the start and end indices of row groups for each merge regions.
+        """
+        if not hasattr(self, "oar_idx_mrs_starts_ends_excl"):
+            raise AttributeError(
+                "not possible to return 'rg_idx_mrs_starts_ends_excl' value if "
+                "'compute_merge_sequences()' has not been run beforehand.",
+            )
+        return [
+            (rg_idx_start, rg_idx_end_excl)
+            for oar_idx_start, oar_idx_end_excl in self.oar_idx_mrs_starts_ends_excl
+            if (
+                (rg_idx_start := self.oars_rg_idx_starts[oar_idx_start])
+                != (rg_idx_end_excl := self.oars_cmpt_idx_ends_excl[oar_idx_end_excl - 1, 0])
+            )
+        ]

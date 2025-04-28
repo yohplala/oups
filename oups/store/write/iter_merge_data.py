@@ -9,7 +9,6 @@ from typing import Iterable, List, Optional, Tuple, Union
 
 from fastparquet import ParquetFile
 from numpy import array
-from numpy import searchsorted
 from pandas import DataFrame
 from pandas import concat
 
@@ -24,8 +23,7 @@ MAX = "max"
 def _validate_duplicate_on_param(
     duplicates_on: Union[str, List[str]],
     ordered_on: str,
-    distinct_bounds: bool,
-    columns: Iterable[str],
+    columns: List[str],
 ) -> List[str]:
     """
     Validate and normalize duplicate parameters.
@@ -36,8 +34,6 @@ def _validate_duplicate_on_param(
         Column(s) to check for duplicates. If empty list, all columns are used.
     ordered_on : str
         Column name by which data is ordered.
-    distinct_bounds : bool
-        If True, ensures row group boundaries do not split duplicate rows.
     columns : List[str]
         Available columns in the DataFrame.
 
@@ -53,10 +49,6 @@ def _validate_duplicate_on_param(
 
     """
     if duplicates_on is not None:
-        if not distinct_bounds:
-            raise ValueError(
-                "distinct bounds must be enabled when setting 'duplicates_on'.",
-            )
         if isinstance(duplicates_on, list):
             if duplicates_on == []:
                 return list(columns)
@@ -77,11 +69,10 @@ def _get_next_chunk(
     df: DataFrame,
     start_idx: int,
     size: int,
-    distinct_bounds: Optional[bool] = False,
     ordered_on: Optional[str] = None,
 ) -> Tuple[DataFrame, int]:
     """
-    Get the next chunk of data, optionally respecting distinct boundaries.
+    Get the next chunk of data.
 
     Parameters
     ----------
@@ -91,10 +82,8 @@ def _get_next_chunk(
         Starting index for the chunk.
     size : int
         Maximum number of rows in the chunk.
-    distinct_bounds : Optional[bool]
-        If True, ensures that the chunk does not split duplicates in the 'ordered_on' column.
     ordered_on : Optional[str]
-        Column name by which data is ordered. Required if distinct_bounds is True.
+        Column name by which data is ordered.
 
     Returns
     -------
@@ -104,15 +93,6 @@ def _get_next_chunk(
     """
     df_n_rows = len(df)
     end_idx = min(start_idx + size, df_n_rows)
-    if distinct_bounds and end_idx < df_n_rows:
-        val_at_end = df[ordered_on].iloc[end_idx]
-        # Find the leftmost index to not split duplicates.
-        end_idx = searchsorted(df[ordered_on].to_numpy(), val_at_end)
-        if end_idx == start_idx:
-            # All values in chunk are duplicates.
-            # Return chunk of data that will be larger than 'size', but complies
-            # with distinct bounds.
-            end_idx = searchsorted(df[ordered_on].to_numpy(), val_at_end, side="right")
     return df.iloc[start_idx:end_idx], end_idx
 
 
@@ -120,7 +100,6 @@ def _iter_df(
     ordered_on: str,
     row_group_size_target: int,
     df: Union[DataFrame, List[DataFrame]],
-    distinct_bounds: bool = False,
     duplicates_on: Optional[Union[str, List[str]]] = None,
     yield_remainder: bool = False,
 ) -> Iterable[DataFrame]:
@@ -136,8 +115,6 @@ def _iter_df(
     df : Union[DataFrame, List[DataFrame]]
         Pandas DataFrame to split. If a list, they are merged and sorted back by
         'ordered_on' column.
-    distinct_bounds : bool, default False
-        If True, ensures that row group boundaries do not split duplicate rows.
     duplicates_on : Optional[Union[str, List[str]]], default None
         Column(s) to check for duplicates. If provided, duplicates will be
         removed keeping last occurrence.
@@ -148,9 +125,7 @@ def _iter_df(
     Yields
     ------
     DataFrame
-        Chunks of the DataFrame, each with size <= row_group_size_target, except
-        if distinct_bounds is True and there are more duplicates in the
-        'ordered_on' column than row_group_size_target.
+        Chunks of the DataFrame, each with size <= row_group_size_target.
 
     Returns
     -------
@@ -172,7 +147,6 @@ def _iter_df(
             df=df,
             start_idx=start_idx,
             size=row_group_size_target,
-            distinct_bounds=distinct_bounds,
             ordered_on=ordered_on,
         )
         yield chunk
@@ -187,12 +161,11 @@ def _iter_df(
             return chunk
 
 
-def iter_merged_pf_df(
+def iter_merge_data(
     df: DataFrame,
     pf: ParquetFile,
     ordered_on: str,
     row_group_size_target: int,
-    distinct_bounds: Optional[bool] = False,
     duplicates_on: Optional[Union[str, Iterable[str]]] = None,
 ):
     """
@@ -209,8 +182,6 @@ def iter_merged_pf_df(
         column.
     pf : ParquetFile
         ParquetFile to merge with data. Must be ordered by 'ordered_on' column.
-    distinct_bounds : Optional[bool], default False
-        If True, ensures that row group boundaries do not split duplicate rows.
     duplicates_on : Optional[Union[str, Iterable[str]]]
         Column(s) to check for duplicates. If empty list, all columns are used.
         If duplicates are found, only the last occurrence is kept.
@@ -224,7 +195,6 @@ def iter_merged_pf_df(
     ------
     ValueError
         If ordered_on column is not in data.
-        If distinct_bounds is False while duplicates_on is set.
 
     Notes
     -----
@@ -248,7 +218,6 @@ def iter_merged_pf_df(
     if duplicates_on is not None:
         duplicates_on = _validate_duplicate_on_param(
             duplicates_on=duplicates_on,
-            distinct_bounds=distinct_bounds,
             ordered_on=ordered_on,
             columns=list(df.columns),
         )
@@ -262,7 +231,7 @@ def iter_merged_pf_df(
     rg_ordered_on_maxs = array(pf_statistics[MAX][ordered_on])
     df_ordered_on = df.loc[:, ordered_on]
     if isinstance(row_group_size_target, int):
-        oar_split_strategy = NRowsMergeSplitStrategy(
+        ms_strategy = NRowsMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
@@ -272,17 +241,17 @@ def iter_merged_pf_df(
             row_group_target_size=row_group_size_target,
         )
     else:
-        oar_split_strategy = TimePeriodMergeSplitStrategy(
+        ms_strategy = TimePeriodMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
             drop_duplicates=duplicates_on is not None,
             row_group_period=row_group_size_target,
         )
-    merge_plan = (
-        oar_split_strategy.compute_merge_regions_starts_ends_excl().partition_merge_regions()
-    )
-    row_group_sizer = oar_split_strategy.row_group_offsets
+
+    max_n_off_target_rgs = 0
+    merge_sequences = ms_strategy.compute_merge_sequences(max_n_off_target_rgs=max_n_off_target_rgs)
+    merge_plan = merge_sequences
     # Compute enlarged merge regions start and end indices.
     # Enlarged merge regions are set of contiguous atomic merge regions,
     # possibly extended with neighbor off target size row groups depending on
@@ -370,8 +339,7 @@ def iter_merged_pf_df(
             # row_group_size_target=list(range(len(chunk), step=row_group_size_target))
             # if max_n_irgs or chunk_countdown
             # else row_group_size_target,
-            row_group_size_target=row_group_sizer(chunk, chunk_countdown),
-            distinct_bounds=distinct_bounds,
+            row_group_size_target=ms_strategy.compute_split_sequence(chunk.loc[:, ordered_on]),
             duplicates_on=duplicates_on,
             yield_remainder=not chunk_countdown,  # yield last chunk
         )

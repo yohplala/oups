@@ -14,9 +14,9 @@ from pandas import DataFrame
 from pandas import concat
 from pandas.testing import assert_frame_equal
 
-from oups.store.iter_data import _get_next_chunk
-from oups.store.iter_data import _iter_df
-from oups.store.iter_data import iter_merged_pf_df
+from oups.store.write.iter_merge_data import _get_next_chunk
+from oups.store.write.iter_merge_data import _iter_df
+from oups.store.write.iter_merge_data import iter_merge_data
 from tests.test_store.conftest import create_parquet_file
 
 
@@ -306,17 +306,17 @@ def test_iter_df(
         ),
     ],
 )
-def test_iter_merged_pf_df(
+def test_iter_merge_data(
     df_data,
     pf_data,
     expected_chunks,
     max_row_group_size,
     distinct_bounds,
     duplicates_on,
-    create_parquet_file,
+    create_parquet_file=create_parquet_file,
 ):
     """
-    Test iter_merged_pf_df with various overlap scenarios.
+    Test iter_merge_data with various overlap scenarios.
 
     Parameters
     ----------
@@ -336,7 +336,7 @@ def test_iter_merged_pf_df(
     pf = create_parquet_file(DataFrame(pf_data), row_group_offsets=max_row_group_size)
 
     chunks = list(
-        iter_merged_pf_df(
+        iter_merge_data(
             ordered_on="ordered",
             df=df,
             pf=pf,
@@ -360,14 +360,14 @@ def test_iter_merged_pf_df(
         ("invalid_col", True, True),  # Invalid column name
     ],
 )
-def test_iter_merged_pf_df_exceptions(
+def test_iter_merge_data_exceptions(
     duplicates_on,
     distinct_bounds,
     error_expected,
-    create_parquet_file,
+    create_parquet_file=create_parquet_file,
 ):
     """
-    Test validation in iter_merged_pf_df.
+    Test validation in iter_merge_data.
 
     Parameters
     ----------
@@ -390,7 +390,7 @@ def test_iter_merged_pf_df_exceptions(
     if error_expected:
         with pytest.raises(ValueError):
             list(
-                iter_merged_pf_df(
+                iter_merge_data(
                     df,
                     pf,
                     ordered_on="ordered",
@@ -401,7 +401,7 @@ def test_iter_merged_pf_df_exceptions(
             )
     else:
         chunks = list(
-            iter_merged_pf_df(
+            iter_merge_data(
                 df,
                 pf,
                 ordered_on="ordered",
@@ -413,7 +413,7 @@ def test_iter_merged_pf_df_exceptions(
         assert len(chunks) > 0
 
 
-def test_iter_merged_pf_df_empty_df(create_parquet_file):
+def test_iter_merge_data_empty_df(create_parquet_file=create_parquet_file):
     """
     Test handling of empty DataFrame input.
     """
@@ -424,7 +424,7 @@ def test_iter_merged_pf_df_empty_df(create_parquet_file):
     )
 
     chunks = list(
-        iter_merged_pf_df(
+        iter_merge_data(
             df,
             pf,
             ordered_on="ordered",

@@ -396,6 +396,7 @@ def test_time_period_oars_likely_on_target_size(
                 "oars_merge_sequences": [
                     (0, array([[1, 2]])),  # single sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(0, 1)],
             },
         ),
         (
@@ -412,6 +413,7 @@ def test_time_period_oars_likely_on_target_size(
                 "oars_merge_sequences": [
                     (0, array([[1, 0], [1, 2]])),  # single sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(0, 1)],
             },
         ),
         (
@@ -445,6 +447,7 @@ def test_time_period_oars_likely_on_target_size(
                     (0, array([[1, 0], [1, 2]])),  # first sequence
                     (2, array([[2, 4], [3, 6]])),  # second sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(0, 1), (2, 3)],
             },
         ),
         (
@@ -476,6 +479,7 @@ def test_time_period_oars_likely_on_target_size(
                 "oars_merge_sequences": [
                     (0, array([[1, 0], [1, 2], [2, 3]])),  # single sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(0, 2)],
             },
         ),
         (
@@ -493,6 +497,7 @@ def test_time_period_oars_likely_on_target_size(
                 "oars_merge_sequences": [
                     (0, array([[1, 0], [1, 2]])),  # single sequence
                 ],
+                "rg_idx_mrs_starts_ends_excl": [(0, 1)],
             },
         ),
     ],
@@ -542,6 +547,7 @@ def test_time_period_specialized_compute_merge_sequences(
     strategy.oar_idx_mrs_starts_ends_excl = oar_idx_mrs_starts_ends_excl
     result = strategy._specialized_compute_merge_sequences()
     # Check
+    assert strategy.rg_idx_mrs_starts_ends_excl == expected["rg_idx_mrs_starts_ends_excl"]
     for (result_rg_start, result_cmpt_ends_excl), (
         expected_rg_start,
         expected_cmpt_ends_excl,
