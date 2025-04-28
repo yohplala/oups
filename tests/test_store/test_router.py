@@ -13,6 +13,7 @@ import zipfile
 from os import path as os_path
 
 import numpy as np
+from fastparquet import ParquetFile
 from pandas import DataFrame as pDataFrame
 from pandas import date_range
 from vaex.dataframe import DataFrame as vDataFrame
@@ -87,3 +88,9 @@ def test_min_max(tmp_path):
     min_ref = df_ref[col].min()
     max_ref = df_ref[col].max()
     assert min_max == (min_ref, max_ref)
+
+
+def test_parquet_handle_not_existing(tmp_path):
+    ph = ParquetHandle(str(tmp_path))
+    assert isinstance(ph, ParquetFile)
+    assert ph.pdf.empty

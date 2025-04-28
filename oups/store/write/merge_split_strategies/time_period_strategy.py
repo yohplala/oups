@@ -11,6 +11,7 @@ from functools import cached_property
 from typing import List, Optional, Tuple
 
 from numpy import bincount
+from numpy import dtype
 from numpy import flatnonzero
 from numpy import ones
 from numpy import searchsorted
@@ -28,6 +29,7 @@ from oups.store.write.merge_split_strategies.base import OARMergeSplitStrategy
 
 LEFT = "left"
 RIGHT = "right"
+DTYPE_DATETIME64 = dtype("datetime64[ns]")
 
 
 class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
@@ -124,6 +126,11 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
             Expected time period for each row group (pandas freqstr).
 
         """
+        if not df_ordered_on.empty and df_ordered_on.dtype != DTYPE_DATETIME64:
+            raise TypeError(
+                "if 'row_group_target_size' is a pandas 'freqstr', dtype"
+                f" of column {df_ordered_on.name} has to be 'datetime64[ns]'.",
+            )
         self.row_group_time_period = row_group_time_period
         df_ordered_on_np = df_ordered_on.to_numpy()
         self.oars_mins_maxs = ones((self.n_oars, 2)).astype(df_ordered_on_np.dtype)

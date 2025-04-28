@@ -7,16 +7,18 @@ Created on Wed Dec 26 22:30:00 2021.
 """
 from functools import cached_property
 from os import scandir
+from pickle import loads
 
-from cloudpickle import loads
 from fastparquet import ParquetFile
+from fastparquet import write
+from pandas import DataFrame
 from vaex import open_many
 
 from oups.store.defines import DIR_SEP
-from oups.store.writer import OUPS_METADATA_KEY
+from oups.store.defines import OUPS_METADATA_KEY
 
 
-class ParquetHandle:
+class ParquetHandle(ParquetFile):
     """
     Handle to parquet dataset and statistics on disk.
 
@@ -40,7 +42,9 @@ class ParquetHandle:
 
     def __init__(self, dirpath: str):
         """
-        Instantiate parquet handle.
+        Instantiate parquet handle (ParquetFile instance).
+
+        If not existing, create a new one from an empty DataFrame.
 
         Parameters
         ----------
@@ -48,6 +52,11 @@ class ParquetHandle:
             Directory path from where to load data.
 
         """
+        try:
+            super().__init__(dirpath)
+        except ValueError:
+            write(dirpath, DataFrame(), file_scheme="hive")
+            super().__init__(dirpath)
         self._dirpath = dirpath
 
     @property
@@ -62,7 +71,7 @@ class ParquetHandle:
         """
         Return handle to data through a parquet file.
         """
-        return ParquetFile(self._dirpath)
+        return self
 
     @property
     def pdf(self):

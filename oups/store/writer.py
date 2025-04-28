@@ -17,17 +17,27 @@ from fastparquet import write as fp_write
 from fastparquet.api import filter_row_groups
 from fastparquet.api import statistics
 from fastparquet.util import update_custom_metadata
+from numpy import array
 from numpy import dtype
 from numpy import searchsorted
 from numpy import unique
 from pandas import DataFrame
 from pandas import Index
 from pandas import MultiIndex
+from pandas import Series
 from pandas import Timestamp
 from pandas import concat
 from pandas import date_range
 
+from oups.store.defines import OUPS_METADATA_KEY
+from oups.store.router import ParquetHandle
+from oups.store.write.iter_merge_data import iter_merge_data
+from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
+from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
 
+
+MIN = "min"
+MAX = "max"
 DTYPE_DATETIME64 = dtype("datetime64[ns]")
 COMPRESSION = "SNAPPY"
 MAX_ROW_GROUP_SIZE = 6_345_000
@@ -44,9 +54,6 @@ KEY_DUPLICATES_ON = "duplicates_on"
 # By use of a `md_key`, management in parallel of metadata for several keys is
 # possible (i.e. several dataset in difference `ParquetFile`).
 OUPS_METADATA = {}
-# In a fastparquet `ParquetFile`, oups-specific metadata is stored as value for
-# key `OUPS_METADATA_KEY`.
-OUPS_METADATA_KEY = "oups"
 
 
 def iter_dataframe(
@@ -741,3 +748,170 @@ def write_ordered(
 #      last recorded row group which should get merged
 #    - new data starting in a new period, with a single row group in last
 #      recorded row group: this one should not get updated. (check timestamp of writing)
+
+
+def write_ordered2(
+    dirpath: str,
+    data: DataFrame,
+    ordered_on: Union[str, Tuple[str]],
+    row_group_target_size: Optional[Union[int, str]] = MAX_ROW_GROUP_SIZE,
+    compression: str = COMPRESSION,
+    cmidx_expand: bool = False,
+    cmidx_levels: List[str] = None,
+    duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
+    max_n_off_target_rgs: int = None,
+    metadata: Dict[str, str] = None,
+    md_key: Hashable = None,
+):
+    """
+    Write data to disk at location specified by path.
+
+    Parameters
+    ----------
+    dirpath : str
+        Directory where writing pandas dataframe.
+    data : DataFrame
+        Data to write.
+    ordered_on : Union[str, Tuple[str]]
+        Name of the column with respect to which dataset is in ascending order.
+        If column multi-index, name of the column is a tuple.
+        It has two effects:
+
+          - it allows knowing 'where' to insert new data into existing data,
+            i.e. completing or correcting past records (but it does not allow
+            to remove prior data).
+          - along with 'sharp_on', it ensures that two consecutive row groups do
+            not have duplicate values in column defined by ``ordered_on`` (only
+            in row groups to be written). This implies that all possible
+            duplicates in ``ordered_on`` column will lie in the same row group.
+
+    row_group_target_size : Optional[Union[int, str]]
+        Target size of row groups. If not set, default to ``6_345_000``, which
+        for a dataframe with 6 columns of ``float64`` or ``int64`` results in a
+        memory footprint (RAM) of about 290MB.
+        It can be a pandas `freqstr` as well, to gather data by timestamp over a
+        defined period.
+    compression : str, default SNAPPY
+        Algorithm to use for compressing data. This parameter is fastparquet
+        specific. Please see fastparquet documentation for more information.
+    cmidx_expand : bool, default False
+        If `True`, expand column index into a column multi-index.
+        This parameter is only used at creation of the dataset. Once column
+        names are set, they cannot be modified by use of this parameter.
+    cmidx_levels : List[str], optional
+        Names of levels to be used when expanding column names into a
+        multi-index. If not provided, levels are given names 'l1', 'l2', ...
+    duplicates_on : Union[str, List[str], List[Tuple[str]]], optional
+        Column names according which 'row duplicates' can be identified (i.e.
+        rows sharing same values on these specific columns) so as to drop
+        them. Duplicates are only identified in new data, and existing
+        recorded row groups that overlap with new data.
+        If duplicates are dropped, only last is kept.
+        To identify row duplicates using all columns, empty list ``[]`` can be
+        used instead of all columns names.
+        If not set, default to ``None``, meaning no row is dropped.
+    max_n_off_target_rgs : int, optional
+        Max expected number of 'off target' row groups.
+        If 'max_row_group_size' is an ``int``, then a 'complete' row group
+        is one which size is 'close to' ``max_row_group_size`` (>=80%).
+        If 'max_row_group_size' is a pandas `freqstr`, and if there are several
+        row groups in the last period defined by the `freqstr`, then these row
+        groups are considered incomplete.
+        To evaluate number of 'incomplete' row groups, only those at the end of
+        an existing dataset are accounted for. 'Incomplete' row groups in the
+        middle of 'complete' row groups are not accounted for (they can be
+        created by insertion of new data in the middle of existing data).
+        If not set, default to ``None``.
+
+          - ``None`` value induces no coalescing of row groups. If there is no
+            drop of duplicates, new data is systematically appended.
+          - A value of ``0`` or ``1`` means that new data should systematically
+            be merged to the last existing one to 'complete' it (if it is not
+            'complete' already).
+    metadata : Dict[str, str], optional
+        Key-value metadata to write, or update in dataset. Please see
+        fastparquet for updating logic in case of `None` value being used.
+    md_key: Hashable, optional
+        Key to retrieve data in ``OUPS_METADATA`` dict, and write it as
+        specific oups metadata in parquet file. If not provided, all data
+        in ``OUPS_METADATA`` dict are retrieved to be written.
+
+    Notes
+    -----
+    - When writing a dataframe with this function,
+
+      - index of dataframe is not written to disk.
+      - parquet file scheme is 'hive' (one row group per parquet file).
+
+    - Coalescing off target size row groups is triggered if actual number of off
+      target row groups is larger than ``max_n_off_target_rgs``.
+      This assessment is however only triggered if ``max_n_off_target_rgs`` is
+      set. Otherwise, new data is simply appended, without prior check.
+    - When ``duplicates_on`` is set, 'ordered_on' column is added to
+      ``duplicates_on`` list, if not already part of it. Purpose is to enable a
+      first approximate search for duplicates, to load data of interest only.
+    - For simple data appending, i.e. without need to drop duplicates, it is
+      advised to keep ``ordered_on`` and ``duplicates_on`` parameters set to
+      ``None`` as this parameter will trigger unnecessary evaluations.
+    - Off target size row groups are row groups:
+
+      - either not reaching the maximum number of rows if 'max_row_group_size'
+        is an ``int``,
+      - or several row groups lying in tge same time period if
+        'max_row_group_size' is a pandas 'freqstr'.
+
+    - When incorporating new data within recorded data, existing off target size
+      row groups will only be resized if there is intersection with new data.
+      Otherwise, new data is only added, without merging with existing off
+      target size row groups.
+
+    """
+    if not data.empty:
+        if cmidx_expand:
+            data.columns = to_midx(data.columns, cmidx_levels)
+        if ordered_on not in data.columns:
+            # Check 'ordered_on' column is within input dataframe.
+            raise ValueError(f"column '{ordered_on}' does not exist in input data.")
+        df_ordered_on = data.loc[:, ordered_on]
+    else:
+        df_ordered_on = Series()
+    ph = ParquetHandle(dirpath)
+    ph_statistics = ph.statistics
+    if isinstance(row_group_target_size, int):
+        ms_strategy = NRowsMergeSplitStrategy(
+            rg_ordered_on_mins=array(ph_statistics[MIN][ordered_on]),
+            rg_ordered_on_maxs=array(ph_statistics[MAX][ordered_on]),
+            df_ordered_on=df_ordered_on,
+            drop_duplicates=duplicates_on is not None,
+            rgs_n_rows=array([rg.num_rows for rg in ph], dtype=int),
+            row_group_target_size=row_group_target_size,
+        )
+    else:
+        ms_strategy = TimePeriodMergeSplitStrategy(
+            rg_ordered_on_mins=array(ph_statistics[MIN][ordered_on]),
+            rg_ordered_on_maxs=array(ph_statistics[MAX][ordered_on]),
+            df_ordered_on=df_ordered_on,
+            drop_duplicates=duplicates_on is not None,
+            row_group_time_period=row_group_target_size,
+        )
+    for df_chunk in iter_merge_data(
+        data=data,
+        pf=ph,
+        merge_split_strategy=ms_strategy,
+        duplicates_on=duplicates_on,
+    ):
+        ph.write_row_groups(
+            data=df_chunk,
+            row_group_offsets=None,
+            sort_pnames=False,
+            compression=compression,
+            write_fmd=False,
+        )
+    # Remove row groups of data that is overlapping.
+    for rg_idx_mrs_start, rg_idx_mrs_end_excl in ms_strategy.rg_idx_mrs_starts_ends_excl:
+        ph.remove_row_groups(ph[rg_idx_mrs_start:rg_idx_mrs_end_excl].row_groups, write_fmd=False)
+    # Rename partition files.
+    if ms_strategy.sort_rgs_after_write:
+        ph._sort_part_names(write_fmd=False)
+    # Manage and write metadata.
+    write_metadata(pf=ph, metadata=metadata, md_key=md_key)
