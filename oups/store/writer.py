@@ -866,15 +866,16 @@ def write_ordered2(
       target size row groups.
 
     """
-    if not data.empty:
+    if data.empty:
+        df_ordered_on = Series()
+    else:
         if cmidx_expand:
             data.columns = to_midx(data.columns, cmidx_levels)
         if ordered_on not in data.columns:
             # Check 'ordered_on' column is within input dataframe.
             raise ValueError(f"column '{ordered_on}' does not exist in input data.")
         df_ordered_on = data.loc[:, ordered_on]
-    else:
-        df_ordered_on = Series()
+
     ph = ParquetHandle(dirpath)
     ph_statistics = ph.statistics
     if isinstance(row_group_target_size, int):
