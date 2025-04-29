@@ -24,7 +24,6 @@ from numpy import unique
 from pandas import DataFrame
 from pandas import Index
 from pandas import MultiIndex
-from pandas import Series
 from pandas import Timestamp
 from pandas import concat
 from pandas import date_range
@@ -38,7 +37,6 @@ from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
 
 COMPRESSION = "SNAPPY"
 DTYPE_DATETIME64 = dtype("datetime64[ns]")
-EMPTY_DATAFRAME = DataFrame()
 MIN = "min"
 MAX = "max"
 MAX_ROW_GROUP_SIZE = 6_345_000
@@ -767,6 +765,7 @@ def _validate_duplicate_on_param(
         Column name by which data is ordered.
     columns : List[str]
         Available columns in the DataFrame.
+        If an emlpty list, related check is not performed.
 
     Returns
     -------
@@ -782,13 +781,22 @@ def _validate_duplicate_on_param(
     """
     if isinstance(duplicates_on, list):
         if duplicates_on == []:
-            return list(columns)
-        if not all(col in columns for col in duplicates_on):
+            if not columns:
+                raise ValueError(
+                    "not possible to set 'duplicates_on' to '[]' when not "
+                    "providing a DataFrame.",
+                )
+            else:
+                return list(columns)
+        if columns and not all(col in columns for col in duplicates_on):
+            # If columns is an empty list, it means Dataframe is empty.
+            # Don't proceed with the check.
             raise ValueError("one or more duplicate columns not found in input DataFrame.")
         if ordered_on not in duplicates_on:
             duplicates_on.append(ordered_on)
     else:
-        if duplicates_on not in columns:
+        # 'duplicates_on' is a single column name.
+        if columns and duplicates_on not in columns:
             raise ValueError(f"column '{duplicates_on}' not found in input DataFrame.")
         if duplicates_on != ordered_on:
             return [duplicates_on, ordered_on]
@@ -798,7 +806,7 @@ def _validate_duplicate_on_param(
 def write_ordered2(
     dirpath: str,
     ordered_on: Union[str, Tuple[str]],
-    df: DataFrame = EMPTY_DATAFRAME,
+    df: Optional[DataFrame] = None,
     row_group_target_size: Optional[Union[int, str]] = MAX_ROW_GROUP_SIZE,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_n_off_target_rgs: int = None,
@@ -814,7 +822,7 @@ def write_ordered2(
     ----------
     dirpath : str
         Directory where writing pandas dataframe.
-    df : Optional[DataFrame], default empty DataFrame
+    df : Optional[DataFrame], default None
         Data to write. If not provided, empty dataframe is created.
     ordered_on : Union[str, Tuple[str]]
         Name of the column with respect to which dataset is in ascending order.
@@ -910,21 +918,20 @@ def write_ordered2(
       target size row groups.
 
     """
-    if df.empty:
-        df_ordered_on = Series()
-    else:
-        if to_cmidx is not None:
-            df.columns = to_midx(df.columns, to_cmidx)
-        if ordered_on not in df.columns:
-            # Check 'ordered_on' column is within input dataframe.
-            raise ValueError(f"column '{ordered_on}' does not exist in input data.")
-        df_ordered_on = df.loc[:, ordered_on]
-
+    if df is None:
+        # At least, start with an empty DataFrame containing 'ordered_on'
+        # column.
+        df = DataFrame({ordered_on: []})
+    if to_cmidx is not None:
+        df.columns = to_midx(df.columns, to_cmidx)
+    if ordered_on not in df.columns:
+        # Check 'ordered_on' column is within input dataframe.
+        raise ValueError(f"column '{ordered_on}' does not exist in input data.")
     if duplicates_on is not None:
         duplicates_on = _validate_duplicate_on_param(
             duplicates_on=duplicates_on,
             ordered_on=ordered_on,
-            columns=list(df.columns),
+            columns=list(df.columns) if not df.empty else [],
         )
         drop_duplicates = True
     else:
@@ -936,12 +943,12 @@ def write_ordered2(
         if drop_duplicates:
             # Duplicates are dropped a first time in the DataFrame, so that the
             # calculation of merge and split strategy is made with the most
-            # correct approximate number of rows.
+            # correct approximate number of rows in DataFrame.
             df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
         ms_strategy = NRowsMergeSplitStrategy(
             rg_ordered_on_mins=array(opd_statistics[MIN][ordered_on]),
             rg_ordered_on_maxs=array(opd_statistics[MAX][ordered_on]),
-            df_ordered_on=df_ordered_on,
+            df_ordered_on=df.loc[:, ordered_on],
             drop_duplicates=drop_duplicates,
             rgs_n_rows=array([rg.num_rows for rg in opd], dtype=int),
             row_group_target_size=row_group_target_size,
@@ -950,7 +957,7 @@ def write_ordered2(
         ms_strategy = TimePeriodMergeSplitStrategy(
             rg_ordered_on_mins=array(opd_statistics[MIN][ordered_on]),
             rg_ordered_on_maxs=array(opd_statistics[MAX][ordered_on]),
-            df_ordered_on=df_ordered_on,
+            df_ordered_on=df.loc[:, ordered_on],
             drop_duplicates=drop_duplicates,
             row_group_time_period=row_group_target_size,
         )
