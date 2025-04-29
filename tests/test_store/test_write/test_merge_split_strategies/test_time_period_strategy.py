@@ -396,7 +396,7 @@ def test_time_period_oars_likely_on_target_size(
                 "oars_merge_sequences": [
                     (0, array([[1, 2]])),  # single sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(0, 1)],
+                "rg_idx_mrs_starts_ends_excl": [slice(0, 1)],
             },
         ),
         (
@@ -413,7 +413,7 @@ def test_time_period_oars_likely_on_target_size(
                 "oars_merge_sequences": [
                     (0, array([[1, 0], [1, 2]])),  # single sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(0, 1)],
+                "rg_idx_mrs_starts_ends_excl": [slice(0, 1)],
             },
         ),
         (
@@ -447,7 +447,7 @@ def test_time_period_oars_likely_on_target_size(
                     (0, array([[1, 0], [1, 2]])),  # first sequence
                     (2, array([[2, 4], [3, 6]])),  # second sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(0, 1), (2, 3)],
+                "rg_idx_mrs_starts_ends_excl": [slice(0, 1), slice(2, 3)],
             },
         ),
         (
@@ -479,7 +479,7 @@ def test_time_period_oars_likely_on_target_size(
                 "oars_merge_sequences": [
                     (0, array([[1, 0], [1, 2], [2, 3]])),  # single sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(0, 2)],
+                "rg_idx_mrs_starts_ends_excl": [slice(0, 2)],
             },
         ),
         (
@@ -497,7 +497,7 @@ def test_time_period_oars_likely_on_target_size(
                 "oars_merge_sequences": [
                     (0, array([[1, 0], [1, 2]])),  # single sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(0, 1)],
+                "rg_idx_mrs_starts_ends_excl": [slice(0, 1)],
             },
         ),
     ],

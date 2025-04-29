@@ -36,10 +36,11 @@ from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
 from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
 
 
+COMPRESSION = "SNAPPY"
+DTYPE_DATETIME64 = dtype("datetime64[ns]")
+EMPTY_DATAFRAME = DataFrame()
 MIN = "min"
 MAX = "max"
-DTYPE_DATETIME64 = dtype("datetime64[ns]")
-COMPRESSION = "SNAPPY"
 MAX_ROW_GROUP_SIZE = 6_345_000
 MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.9
 KEY_MAX_ROW_GROUP_SIZE = "max_row_group_size"
@@ -750,16 +751,59 @@ def write_ordered(
 #      recorded row group: this one should not get updated. (check timestamp of writing)
 
 
+def _validate_duplicate_on_param(
+    duplicates_on: Union[str, List[str]],
+    ordered_on: str,
+    columns: List[str],
+) -> List[str]:
+    """
+    Validate and normalize duplicate parameters.
+
+    Parameters
+    ----------
+    duplicates_on : Union[str, List[str]]
+        Column(s) to check for duplicates. If empty list, all columns are used.
+    ordered_on : str
+        Column name by which data is ordered.
+    columns : List[str]
+        Available columns in the DataFrame.
+
+    Returns
+    -------
+    List[str]
+        Normalized list of columns to check for duplicates, including
+        'ordered_on' column.
+
+    Raises
+    ------
+    ValueError
+        If distinct_bounds is not set while duplicates_on is provided.
+
+    """
+    if isinstance(duplicates_on, list):
+        if duplicates_on == []:
+            return list(columns)
+        if not all(col in columns for col in duplicates_on):
+            raise ValueError("one or more duplicate columns not found in input DataFrame.")
+        if ordered_on not in duplicates_on:
+            duplicates_on.append(ordered_on)
+    else:
+        if duplicates_on not in columns:
+            raise ValueError(f"column '{duplicates_on}' not found in input DataFrame.")
+        if duplicates_on != ordered_on:
+            return [duplicates_on, ordered_on]
+        return [ordered_on]
+
+
 def write_ordered2(
     dirpath: str,
-    data: DataFrame,
     ordered_on: Union[str, Tuple[str]],
+    df: DataFrame = EMPTY_DATAFRAME,
     row_group_target_size: Optional[Union[int, str]] = MAX_ROW_GROUP_SIZE,
-    compression: str = COMPRESSION,
-    cmidx_expand: bool = False,
-    cmidx_levels: List[str] = None,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_n_off_target_rgs: int = None,
+    compression: str = COMPRESSION,
+    to_cmidx: Optional[List[str]] = None,
     metadata: Dict[str, str] = None,
     md_key: Hashable = None,
 ):
@@ -770,8 +814,8 @@ def write_ordered2(
     ----------
     dirpath : str
         Directory where writing pandas dataframe.
-    data : DataFrame
-        Data to write.
+    df : Optional[DataFrame], default empty DataFrame
+        Data to write. If not provided, empty dataframe is created.
     ordered_on : Union[str, Tuple[str]]
         Name of the column with respect to which dataset is in ascending order.
         If column multi-index, name of the column is a tuple.
@@ -791,16 +835,6 @@ def write_ordered2(
         memory footprint (RAM) of about 290MB.
         It can be a pandas `freqstr` as well, to gather data by timestamp over a
         defined period.
-    compression : str, default SNAPPY
-        Algorithm to use for compressing data. This parameter is fastparquet
-        specific. Please see fastparquet documentation for more information.
-    cmidx_expand : bool, default False
-        If `True`, expand column index into a column multi-index.
-        This parameter is only used at creation of the dataset. Once column
-        names are set, they cannot be modified by use of this parameter.
-    cmidx_levels : List[str], optional
-        Names of levels to be used when expanding column names into a
-        multi-index. If not provided, levels are given names 'l1', 'l2', ...
     duplicates_on : Union[str, List[str], List[Tuple[str]]], optional
         Column names according which 'row duplicates' can be identified (i.e.
         rows sharing same values on these specific columns) so as to drop
@@ -828,6 +862,16 @@ def write_ordered2(
           - A value of ``0`` or ``1`` means that new data should systematically
             be merged to the last existing one to 'complete' it (if it is not
             'complete' already).
+    compression : str, default SNAPPY
+        Algorithm to use for compressing data. This parameter is fastparquet
+        specific. Please see fastparquet documentation for more information.
+    to_cmidx : Optional[List[str]], default None
+        If set, expand column index into a column multi-index.
+        This parameter is only used at creation of the dataset. Once column
+        names are set, they cannot be modified by use of this parameter.
+        The list has then to contain the names of levels to be used when
+        expanding column names into a multi-index. If not provided (empty list),
+        levels are given names 'l1', 'l2', ...
     metadata : Dict[str, str], optional
         Key-value metadata to write, or update in dataset. Please see
         fastparquet for updating logic in case of `None` value being used.
@@ -866,53 +910,72 @@ def write_ordered2(
       target size row groups.
 
     """
-    if data.empty:
+    if df.empty:
         df_ordered_on = Series()
     else:
-        if cmidx_expand:
-            data.columns = to_midx(data.columns, cmidx_levels)
-        if ordered_on not in data.columns:
+        if to_cmidx is not None:
+            df.columns = to_midx(df.columns, to_cmidx)
+        if ordered_on not in df.columns:
             # Check 'ordered_on' column is within input dataframe.
             raise ValueError(f"column '{ordered_on}' does not exist in input data.")
-        df_ordered_on = data.loc[:, ordered_on]
+        df_ordered_on = df.loc[:, ordered_on]
 
-    ph = ParquetHandle(dirpath)
-    ph_statistics = ph.statistics
+    if duplicates_on is not None:
+        duplicates_on = _validate_duplicate_on_param(
+            duplicates_on=duplicates_on,
+            ordered_on=ordered_on,
+            columns=list(df.columns),
+        )
+        drop_duplicates = True
+    else:
+        drop_duplicates = False
+
+    opd = ParquetHandle(dirpath)
+    opd_statistics = opd.statistics
     if isinstance(row_group_target_size, int):
+        if drop_duplicates:
+            # Duplicates are dropped a first time in the DataFrame, so that the
+            # calculation of merge and split strategy is made with the most
+            # correct approximate number of rows.
+            df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
         ms_strategy = NRowsMergeSplitStrategy(
-            rg_ordered_on_mins=array(ph_statistics[MIN][ordered_on]),
-            rg_ordered_on_maxs=array(ph_statistics[MAX][ordered_on]),
+            rg_ordered_on_mins=array(opd_statistics[MIN][ordered_on]),
+            rg_ordered_on_maxs=array(opd_statistics[MAX][ordered_on]),
             df_ordered_on=df_ordered_on,
-            drop_duplicates=duplicates_on is not None,
-            rgs_n_rows=array([rg.num_rows for rg in ph], dtype=int),
+            drop_duplicates=drop_duplicates,
+            rgs_n_rows=array([rg.num_rows for rg in opd], dtype=int),
             row_group_target_size=row_group_target_size,
         )
     else:
         ms_strategy = TimePeriodMergeSplitStrategy(
-            rg_ordered_on_mins=array(ph_statistics[MIN][ordered_on]),
-            rg_ordered_on_maxs=array(ph_statistics[MAX][ordered_on]),
+            rg_ordered_on_mins=array(opd_statistics[MIN][ordered_on]),
+            rg_ordered_on_maxs=array(opd_statistics[MAX][ordered_on]),
             df_ordered_on=df_ordered_on,
-            drop_duplicates=duplicates_on is not None,
+            drop_duplicates=drop_duplicates,
             row_group_time_period=row_group_target_size,
         )
-    for df_chunk in iter_merge_data(
-        data=data,
-        pf=ph,
-        merge_split_strategy=ms_strategy,
-        duplicates_on=duplicates_on,
-    ):
-        ph.write_row_groups(
-            data=df_chunk,
-            row_group_offsets=None,
-            sort_pnames=False,
-            compression=compression,
-            write_fmd=False,
-        )
+    opd.write_row_groups(
+        data=iter_merge_data(
+            data=df,
+            opd=opd,
+            merge_sequence=ms_strategy.compute_merge_sequence(
+                max_n_off_target_rgs=max_n_off_target_rgs,
+            ),
+            split_sequence=ms_strategy.compute_split_sequence,
+            duplicates_on=duplicates_on,
+        ),
+        row_group_offsets=None,
+        sort_pnames=False,
+        compression=compression,
+        write_fmd=False,
+    )
     # Remove row groups of data that is overlapping.
-    for rg_idx_mrs_start, rg_idx_mrs_end_excl in ms_strategy.rg_idx_mrs_starts_ends_excl:
-        ph.remove_row_groups(ph[rg_idx_mrs_start:rg_idx_mrs_end_excl].row_groups, write_fmd=False)
+    for rg_idx_start_end_excl in ms_strategy.rg_idx_mrs_starts_ends_excl:
+        opd.remove_row_groups(opd[rg_idx_start_end_excl].row_groups, write_fmd=False)
     # Rename partition files.
     if ms_strategy.sort_rgs_after_write:
-        ph._sort_part_names(write_fmd=False)
+        opd._sort_part_names(write_fmd=False)
     # Manage and write metadata.
-    write_metadata(pf=ph, metadata=metadata, md_key=md_key)
+    # TODO: when refactoring metadata writing, use straight away
+    # 'update_common_metadata' from fastparquet.
+    write_metadata(pf=opd, metadata=metadata, md_key=md_key)

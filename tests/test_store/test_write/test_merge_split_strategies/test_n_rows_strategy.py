@@ -76,6 +76,31 @@ def test_nrows_oars_likely_on_target_size():
     "test_id, drop_duplicates, oars_desc_dict, rgs_n_rows, row_group_target_size, oar_idx_mrs_starts_ends_excl, expected",
     [
         (
+            "simple_append_wo_drop_duplicates",
+            # row_group_target_size : 10
+            # rgs_n_rows    :  [   10,    10,      ]
+            # has_row_group :  [ True,  True, False]
+            # dfc_ends_excl :  [    0,     0,    10]
+            # has_df_overlap:  [False, False,  True]
+            False,  # drop_duplicates
+            {
+                RG_IDX_START: array([0, 1, 2]),
+                RG_IDX_END_EXCL: array([1, 2, 2]),
+                DF_IDX_END_EXCL: array([0, 0, 10]),
+                HAS_ROW_GROUP: array([True, True, False]),
+            },
+            array([10, 10]),  # rg_n_rows
+            10,  # row_group_target_size
+            array([[2, 3]]),  # merge region with all OARs
+            {
+                "oars_min_n_rows": array([10, 10, 10]),
+                "oars_merge_sequences": [
+                    (2, array([[2, 10]])),  # single sequence
+                ],
+                "rg_idx_mrs_starts_ends_excl": [],
+            },
+        ),
+        (
             "single_sequence_encompassing_all_oars_drop_duplicates",
             # row_group_target_size : 100
             # rgs_n_rows    :  [  50,   50,      ,   50,    50]
@@ -97,7 +122,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (0, array([[2, 25], [4, 75]])),  # single sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(0, 4)],
+                "rg_idx_mrs_starts_ends_excl": [slice(0, 4)],
             },
         ),
         (  # This test case check that last row group in sequence is correctly
@@ -123,7 +148,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (0, array([[2, 25], [4, 75]])),  # single sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(0, 4)],
+                "rg_idx_mrs_starts_ends_excl": [slice(0, 4)],
             },
         ),
         (
@@ -148,7 +173,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (1, array([[2, 60], [3, 75]])),  # single sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(1, 3)],
+                "rg_idx_mrs_starts_ends_excl": [slice(1, 3)],
             },
         ),
         (
@@ -173,7 +198,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(1, 3)],
+                "rg_idx_mrs_starts_ends_excl": [slice(1, 3)],
             },
         ),
         (
@@ -199,7 +224,7 @@ def test_nrows_oars_likely_on_target_size():
                     (1, array([[2, 25], [3, 75]])),
                     (4, array([[6, 120], [6, 190]])),
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(1, 3), (4, 6)],
+                "rg_idx_mrs_starts_ends_excl": [slice(1, 3), slice(4, 6)],
             },
         ),
         (
@@ -225,7 +250,7 @@ def test_nrows_oars_likely_on_target_size():
                     (1, array([[2, 25], [2, 60], [3, 75]])),
                     (4, array([[6, 120], [6, 165], [6, 210]])),
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(1, 3), (4, 6)],
+                "rg_idx_mrs_starts_ends_excl": [slice(1, 3), slice(4, 6)],
             },
         ),
         (
@@ -250,7 +275,7 @@ def test_nrows_oars_likely_on_target_size():
                 "oars_merge_sequences": [
                     (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
                 ],
-                "rg_idx_mrs_starts_ends_excl": [(1, 3)],
+                "rg_idx_mrs_starts_ends_excl": [slice(1, 3)],
             },
         ),
     ],

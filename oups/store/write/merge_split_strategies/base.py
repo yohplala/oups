@@ -711,9 +711,16 @@ class OARMergeSplitStrategy(ABC):
         raise NotImplementedError("Subclasses must implement this method")
 
     @cached_property
-    def rg_idx_mrs_starts_ends_excl(self) -> List[Tuple[int, int]]:
+    def rg_idx_mrs_starts_ends_excl(self) -> List[slice]:
         """
         Get the start and end indices of row groups for each merge regions.
+
+        Returns
+        -------
+        List[slice]
+            List of slices, where each slice contains the start (included) and
+            end (excluded) indices of row groups for each merge region.
+
         """
         if not hasattr(self, "oar_idx_mrs_starts_ends_excl"):
             raise AttributeError(
@@ -721,7 +728,7 @@ class OARMergeSplitStrategy(ABC):
                 "'compute_merge_sequences()' has not been run beforehand.",
             )
         return [
-            (rg_idx_start, rg_idx_end_excl)
+            slice(rg_idx_start, rg_idx_end_excl)
             for oar_idx_start, oar_idx_end_excl in self.oar_idx_mrs_starts_ends_excl
             if (
                 (rg_idx_start := self.oars_rg_idx_starts[oar_idx_start])
