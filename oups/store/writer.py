@@ -37,6 +37,7 @@ from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
 
 COMPRESSION = "SNAPPY"
 DTYPE_DATETIME64 = dtype("datetime64[ns]")
+EMPTY_DATAFRAME = DataFrame()
 MIN = "min"
 MAX = "max"
 MAX_ROW_GROUP_SIZE = 6_345_000
@@ -806,7 +807,7 @@ def _validate_duplicate_on_param(
 def write_ordered2(
     dirpath: str,
     ordered_on: Union[str, Tuple[str]],
-    df: Optional[DataFrame] = None,
+    df: Optional[DataFrame] = EMPTY_DATAFRAME,
     row_group_target_size: Optional[Union[int, str]] = MAX_ROW_GROUP_SIZE,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_n_off_target_rgs: int = None,
@@ -822,8 +823,6 @@ def write_ordered2(
     ----------
     dirpath : str
         Directory where writing pandas dataframe.
-    df : Optional[DataFrame], default None
-        Data to write. If not provided, empty dataframe is created.
     ordered_on : Union[str, Tuple[str]]
         Name of the column with respect to which dataset is in ascending order.
         If column multi-index, name of the column is a tuple.
@@ -837,6 +836,9 @@ def write_ordered2(
             in row groups to be written). This implies that all possible
             duplicates in ``ordered_on`` column will lie in the same row group.
 
+    df : Optional[DataFrame], default empty DataFrame
+        Data to write. If not provided, an empty dataframe is created with a
+        single 'ordered_on' column.
     row_group_target_size : Optional[Union[int, str]]
         Target size of row groups. If not set, default to ``6_345_000``, which
         for a dataframe with 6 columns of ``float64`` or ``int64`` results in a
@@ -918,24 +920,24 @@ def write_ordered2(
       target size row groups.
 
     """
-    if df is None:
-        # At least, start with an empty DataFrame containing 'ordered_on'
-        # column.
-        df = DataFrame({ordered_on: []})
-    if to_cmidx is not None:
-        df.columns = to_midx(df.columns, to_cmidx)
-    if ordered_on not in df.columns:
-        # Check 'ordered_on' column is within input dataframe.
-        raise ValueError(f"column '{ordered_on}' does not exist in input data.")
     if duplicates_on is not None:
         duplicates_on = _validate_duplicate_on_param(
             duplicates_on=duplicates_on,
             ordered_on=ordered_on,
-            columns=list(df.columns) if not df.empty else [],
+            columns=list(df.columns),
         )
         drop_duplicates = True
     else:
         drop_duplicates = False
+    if df.empty:
+        # At least, start with an empty DataFrame containing 'ordered_on'
+        # column.
+        df = DataFrame({ordered_on: []})
+    if ordered_on not in df.columns:
+        # Check 'ordered_on' column is within input dataframe.
+        raise ValueError(f"column '{ordered_on}' does not exist in input data.")
+    if to_cmidx is not None:
+        df.columns = to_midx(df.columns, to_cmidx)
 
     opd = ParquetHandle(dirpath)
     opd_statistics = opd.statistics

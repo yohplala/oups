@@ -70,12 +70,24 @@ def iter_merge_data(
         # 1st loop over merge sequences.
         # Between each merge sequence, remainder is reset.
         remainder = None
-        for chunk_countdown, rg_idx_end_excl, df_idx_end_excl in enumerate(
+        for chunk_countdown, (rg_idx_end_excl, df_idx_end_excl) in enumerate(
             cmpt_ends_excl,
-            start=-len(cmpt_ends_excl),
+            start=-len(cmpt_ends_excl) + 1,
         ):
             # 2nd loop over row group to merge, with overlapping Dataframe
             # chunks.
+            print()
+            print("rg_idx_start: ", rg_idx_start)
+            print("rg_idx_end_excl: ", rg_idx_end_excl)
+            print("df_idx_start: ", df_idx_start)
+            print("df_idx_end_excl: ", df_idx_end_excl)
+            print()
+            print("remainder")
+            print(remainder)
+            print("opd[rg_idx_start:rg_idx_end_excl].to_pandas()")
+            print(opd[rg_idx_start:rg_idx_end_excl].to_pandas())
+            print("df.iloc[df_idx_start:df_idx_end_excl]")
+            print(df.iloc[df_idx_start:df_idx_end_excl])
             chunk = concat(
                 [
                     remainder,
@@ -84,11 +96,18 @@ def iter_merge_data(
                 ],
                 ignore_index=True,
             ).sort_values(ordered_on, ignore_index=True)
+            print()
+            print("chunk")
+            print(chunk)
             if duplicates_on:
                 chunk.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
-            row_group_starts = split_sequence(chunk.loc[:, ordered_on])
+            row_group_ends_excl = split_sequence(chunk.loc[:, ordered_on])[1:]
+            print()
+            print("row_group_ends_excl")
+            print(row_group_ends_excl)
+            print()
             row_idx_start = 0
-            for row_idx_end_excl in row_group_starts:
+            for row_idx_end_excl in row_group_ends_excl:
                 # 3rd loop over merged data to split into row groups.
                 yield chunk.iloc[row_idx_start:row_idx_end_excl]
                 row_idx_start = row_idx_end_excl
