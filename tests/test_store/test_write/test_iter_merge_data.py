@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """
+Created on Tue Apr 29 22:00:00 2025.
+
 Test cases for iter_data functions.
 
-Tests cover chunk extraction, pandas DataFrame iteration, and parquet file iteration
-with various configurations of distinct bounds and duplicate handling.
+Tests cover chunk extraction, pandas DataFrame iteration, and parquet file
+iteration with various configurations of distinct bounds and duplicate handling.
+
+@author: yoh
 
 """
 import pytest
