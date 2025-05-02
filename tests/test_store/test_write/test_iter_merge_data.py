@@ -40,53 +40,53 @@ def compute_split_sequence(series, max_size=2):
 
 
 @pytest.mark.parametrize(
-    "test_id,pf_data,df_data,max_row_group_size,duplicates_on,merge_sequences,expected_chunks",
+    "test_id,pf_data,df_data,row_group_target_size,duplicates_on,merge_sequences,expected_chunks",
     [
-        (  # Case 1: DataFrame before ParquetFile (no overlap),
-            # only 1 DataFrame row group.
-            "df_before_pf_single_row_group",
-            {"ordered": [3, 4, 5], "values": ["c", "d", "e"]},
-            {"ordered": [1, 2], "values": ["a", "b"]},
-            2,
-            None,
-            [(0, array([[0, 2]]))],
+        (  # DataFrame before OrderedParquetDataset, no overlap, wo duplicates_on.
+            "df_before_pf_wo_duplicates_on",
+            {"ordered": [3, 4, 5], "values": ["c", "d", "e"]},  # pf_data
+            {"ordered": [1, 2, 2], "values": ["a", "b", "c"]},  # df_data
+            2,  # row_group_target_size
+            None,  # duplicates_on
+            [(0, array([[0, 3]]))],  # merge_sequences - no pf row group
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
+                DataFrame({"ordered": [2], "values": ["c"]}),
             ],
         ),
-        (  # Case 2: DataFrame after ParquetFile (no overlap)
-            "df_after_pf",
-            {"ordered": [1, 2, 3], "values": ["a", "b", "c"]},
-            {"ordered": [4, 5], "values": ["d", "e"]},
-            2,
-            None,
-            [(0, array([[2, 3]]))],
+        (  # DataFrame after OrderedParquetDataset, no overlap, wo duplicates_on.
+            "df_after_pf_wo_duplicates_on",
+            {"ordered": [1, 2, 3], "values": ["a", "b", "c"]},  # pf_data
+            {"ordered": [4, 5, 6, 7], "values": ["d", "e", "f", "g"]},  # df_data
+            2,  # row_group_target_size
+            None,  # duplicates_on
+            [(1, array([[2, 4]]))],  # merge_sequences - incl. last pf row group
             [
-                DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
                 DataFrame({"ordered": [3, 4], "values": ["c", "d"]}),
-                DataFrame({"ordered": [5], "values": ["e"]}),
+                DataFrame({"ordered": [5, 6], "values": ["e", "f"]}),
+                DataFrame({"ordered": [7], "values": ["g"]}),
             ],
         ),
-        (  # Case 3: DataFrame spans over ParquetFile
-            "df_spans_pf",
-            {"ordered": [2, 3, 4], "values": ["x", "c", "y"]},
-            {"ordered": [1, 2, 4, 5], "values": ["a", "b", "d", "e"]},
-            3,
-            None,
-            [(0, array([[2, 3]]))],
+        (  # DataFrame spans over OrderedParquetDataset, wo duplicates_on.
+            "df_spans_pf_wo_duplicates_on",
+            {"ordered": [2, 3, 4], "values": ["x", "c", "y"]},  # pf_data
+            {"ordered": [1, 2, 4, 5], "values": ["a", "b", "d", "e"]},  # df_data
+            3,  # row_group_target_size
+            None,  # duplicates_on
+            [(0, array([[1, 3], [1, 4]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [1, 2, 2], "values": ["a", "x", "b"]}),
                 DataFrame({"ordered": [3, 4, 4], "values": ["c", "y", "d"]}),
                 DataFrame({"ordered": [5], "values": ["e"]}),
             ],
         ),
-        (  # Case 4: ParquetFile spans over DataFrame
-            "pf_spans_df",
-            {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},
-            {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
-            2,
-            None,
-            [(0, array([[2, 3], [4, 5]]))],
+        (  # OrderedParquetDataset spans over DataFrame, wo duplicates_on.
+            "pf_spans_df_wo_duplicates_on",
+            {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},  # pf_data
+            {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},  # df_data
+            2,  # row_group_target_size
+            None,  # duplicates_on
+            [(0, array([[1, 0], [2, 2], [3, 3]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "x"]}),
                 DataFrame({"ordered": [2, 3], "values": ["b", "y"]}),
@@ -94,62 +94,68 @@ def compute_split_sequence(series, max_size=2):
                 DataFrame({"ordered": [4, 5], "values": ["d", "e"]}),
             ],
         ),
-        (  # Case 5: Multiple merge sequences
-            "multiple_merge_sequences",
-            {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},
-            {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
-            2,
-            None,
-            [(0, array([[1, 2]])), (1, array([[3, 4]])), (2, array([[5, 6]]))],
+        (  # Multiple merge sequences, with duplicates_on.
+            "multiple_merge_sequences_w_duplicates_on",
+            {
+                "ordered": [1, 2, 3, 4, 5, 7, 8, 9, 10],
+                "values": ["a", "x", "y", "z", "e", "f", "g", "h", "i"],
+            },  # pf_data
+            {"ordered": [2, 6, 7, 11, 12], "values": ["b", "c", "d", "i", "j"]},  # df_data
+            2,  # row_group_target_size
+            "ordered",  # duplicates_on
+            [(0, array([[1, 1]])), (2, array([[3, 3]])), (4, array([[5, 5]]))],
             [
-                DataFrame({"ordered": [1], "values": ["a"]}),
-                DataFrame({"ordered": [2, 2], "values": ["x", "b"]}),
-                DataFrame({"ordered": [3, 3], "values": ["y", "c"]}),
-                DataFrame({"ordered": [4, 4], "values": ["z", "d"]}),
-                DataFrame({"ordered": [5], "values": ["e"]}),
+                DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
+                DataFrame({"ordered": [5, 6], "values": ["e", "c"]}),
+                DataFrame({"ordered": [7], "values": ["d"]}),
+                DataFrame({"ordered": [10, 11], "values": ["i", "i"]}),
+                DataFrame({"ordered": [12], "values": ["j"]}),
             ],
         ),
-        (  # Case 6: Remainder from dataframe, wo distinct bounds.
-            "remainder_from_df",
-            {"ordered": [1, 2, 3, 4], "values": ["a", "x", "y", "z"]},
-            {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
-            2,
-            None,
-            [(0, array([[2, 3], [4, 5]]))],
-            [
-                DataFrame({"ordered": [1, 2], "values": ["a", "x"]}),
-                DataFrame({"ordered": [2, 3], "values": ["b", "y"]}),
-                DataFrame({"ordered": [3, 4], "values": ["c", "z"]}),
-                DataFrame({"ordered": [4], "values": ["d"]}),
-            ],
-        ),
-        (  # Case 7: ParquetFile spans over DataFrame, drop duplicates
-            "pf_spans_df_drop_duplicates",
+        (  # OrderedParquetDataset spans over DataFrame, with duplicates_on.
+            "pf_spans_df_w_duplicates_on",
             {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},
             {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
-            2,
-            "ordered",
-            [(0, array([[2, 3], [4, 5]]))],
+            2,  # row_group_target_size
+            "ordered",  # duplicates_on
+            [(0, array([[1, 1], [2, 3], [3, 3]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
                 DataFrame({"ordered": [3, 4], "values": ["c", "d"]}),
                 DataFrame({"ordered": [5], "values": ["e"]}),
             ],
         ),
-        (  # Case 8: DataFrame with long chunk between 2 row groups
-            "df_long_chunk",
+        (  # DataFrame with long chunk between 2 row groups.
+            "df_long_intermediate_chunk",
             {"ordered": [1, 2, 6], "values": ["a", "x", "y"]},
             {"ordered": [2, 3, 4, 5, 6, 7, 8], "values": ["b", "c", "d", "e", "f", "g", "h"]},
-            2,
-            None,
-            [(0, array([[2, 3]])), (1, array([[4, 5]]))],
+            2,  # row_group_target_size
+            None,  # duplicates_on
+            [(1, array([[1, 2], [1, 4]])), (2, array([[2, 6], [2, 7]]))],  # merge_sequences
             [
-                DataFrame({"ordered": [1, 2], "values": ["a", "x"]}),
                 DataFrame({"ordered": [2, 3], "values": ["b", "c"]}),
                 DataFrame({"ordered": [4, 5], "values": ["d", "e"]}),
-                DataFrame({"ordered": [6, 6], "values": ["y", "f"]}),
-                DataFrame({"ordered": [7, 8], "values": ["g", "h"]}),
+                DataFrame({"ordered": [6, 7], "values": ["f", "g"]}),
+                DataFrame({"ordered": [8], "values": ["h"]}),
             ],
+        ),
+        (  # Empty DataFrame test case
+            "empty_dataframe",
+            {"ordered": [1, 2], "values": ["a", "b"]},  # pf_data
+            {"ordered": [], "values": []},  # df_data
+            2,  # row_group_target_size
+            None,  # duplicates_on
+            [(0, array([[1, 0]]))],  # merge_sequences
+            [DataFrame({"ordered": [1, 2], "values": ["a", "b"]})],  # expected_chunks
+        ),
+        (  # Empty OrderedParquetDataset test case
+            "empty_parquetfile",
+            {"ordered": [], "values": []},  # pf_data
+            {"ordered": [1, 2], "values": ["a", "b"]},  # df_data
+            2,  # row_group_target_size
+            None,  # duplicates_on
+            [(0, array([[0, 2]]))],  # merge_sequences
+            [DataFrame({"ordered": [1, 2], "values": ["a", "b"]})],  # expected_chunks
         ),
     ],
 )
@@ -157,7 +163,7 @@ def test_iter_merge_data(
     test_id,
     pf_data,
     df_data,
-    max_row_group_size,
+    row_group_target_size,
     duplicates_on,
     merge_sequences,
     expected_chunks,
@@ -172,10 +178,10 @@ def test_iter_merge_data(
     test_id : str
         Identifier for the test case.
     pf_data : dict
-        Data for ParquetFile.
+        Data for OrderedParquetDataset.
     df_data : dict
         Data for input DataFrame.
-    max_row_group_size : int
+    row_group_target_size : int
         Maximum size for each chunk.
     duplicates_on : str or None
         Column to check for duplicates.
@@ -192,10 +198,11 @@ def test_iter_merge_data(
 
     """
     df = DataFrame(df_data)
+    pf_data = DataFrame(pf_data)
     opd = create_parquet_file(
         tmp_path=tmp_path,
-        df=DataFrame(pf_data),
-        row_group_offsets=max_row_group_size,
+        df=pf_data,
+        row_group_offsets=compute_split_sequence(pf_data.loc[:, "ordered"], row_group_target_size),
     )
 
     chunks = list(
@@ -204,7 +211,7 @@ def test_iter_merge_data(
             df=df,
             ordered_on="ordered",
             merge_sequences=merge_sequences,
-            split_sequence=lambda x: compute_split_sequence(x, max_row_group_size),
+            split_sequence=lambda x: compute_split_sequence(x, row_group_target_size),
             duplicates_on=duplicates_on,
         ),
     )
@@ -212,47 +219,3 @@ def test_iter_merge_data(
     assert len(chunks) == len(expected_chunks)
     for chunk, expected in zip(chunks, expected_chunks):
         assert_frame_equal(chunk.reset_index(drop=True), expected.reset_index(drop=True))
-
-
-def test_iter_merge_data_empty_df(create_parquet_file=create_parquet_file):
-    """
-    Test handling of empty DataFrame input.
-    """
-    df = DataFrame({"ordered": [], "values": []})
-    opd = create_parquet_file(
-        DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
-        row_group_offsets=2,
-    )
-
-    chunks = list(
-        iter_merge_data(
-            opd=opd,
-            df=df,
-            ordered_on="ordered",
-            merge_sequences=[(0, array([2]))],
-            split_sequence=lambda x: compute_split_sequence(x, 2),
-        ),
-    )
-    assert len(chunks) == 0
-
-
-def test_iter_merge_data_empty_opd(create_parquet_file=create_parquet_file):
-    """
-    Test handling of empty ParquetFile input.
-    """
-    df = DataFrame({"ordered": [1, 2], "values": ["a", "b"]})
-    opd = create_parquet_file(
-        DataFrame({"ordered": [], "values": []}),
-        row_group_offsets=2,
-    )
-
-    chunks = list(
-        iter_merge_data(
-            opd=opd,
-            df=df,
-            ordered_on="ordered",
-            merge_sequences=[(0, array([]))],
-            split_sequence=lambda x: compute_split_sequence(x, 2),
-        ),
-    )
-    assert len(chunks) == 0

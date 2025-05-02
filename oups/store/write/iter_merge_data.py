@@ -52,6 +52,13 @@ def iter_merge_data(
         Chunks of merged and ordered data according 'merge_sequences' and
         'split_sequence'.
 
+    Raises
+    ------
+    ValueError
+        If second item in first merge sequence is not a 2D numpy array.
+        This format applies to all merge sequences, but check is managed
+        only on first merge sequence.
+
     Notes
     -----
     If 'duplicates_on' is set, duplicates are removed from both the pandas
@@ -66,6 +73,12 @@ def iter_merge_data(
 
     """
     df_idx_start = 0
+    # Check shape of 'cmpt_ends_excl'array of 1st merge sequence.
+    if merge_sequences[0][1].ndim != 2:
+        raise ValueError(
+            "2nd item in merge sequences should be 2D numpy array, got ndim "
+            f"{merge_sequences[0][1].ndim}.",
+        )
     for rg_idx_start, cmpt_ends_excl in merge_sequences:
         # 1st loop over merge sequences.
         # Between each merge sequence, remainder is reset.
@@ -76,36 +89,25 @@ def iter_merge_data(
         ):
             # 2nd loop over row group to merge, with overlapping Dataframe
             # chunks.
-            print()
-            print("rg_idx_start: ", rg_idx_start)
-            print("rg_idx_end_excl: ", rg_idx_end_excl)
-            print("df_idx_start: ", df_idx_start)
-            print("df_idx_end_excl: ", df_idx_end_excl)
-            print()
-            print("remainder")
-            print(remainder)
-            print("opd[rg_idx_start:rg_idx_end_excl].to_pandas()")
-            print(opd[rg_idx_start:rg_idx_end_excl].to_pandas())
-            print("df.iloc[df_idx_start:df_idx_end_excl]")
-            print(df.iloc[df_idx_start:df_idx_end_excl])
+            opd_chunk = (
+                None
+                if rg_idx_start == rg_idx_end_excl
+                else opd[rg_idx_start:rg_idx_end_excl].to_pandas()
+            )
+            df_chunk = (
+                None if df_idx_start == df_idx_end_excl else df.iloc[df_idx_start:df_idx_end_excl]
+            )
             chunk = concat(
                 [
                     remainder,
-                    opd[rg_idx_start:rg_idx_end_excl].to_pandas(),
-                    df.iloc[df_idx_start:df_idx_end_excl],
+                    opd_chunk,
+                    df_chunk,
                 ],
                 ignore_index=True,
             ).sort_values(ordered_on, ignore_index=True)
-            print()
-            print("chunk")
-            print(chunk)
             if duplicates_on:
                 chunk.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
             row_group_ends_excl = split_sequence(chunk.loc[:, ordered_on])[1:]
-            print()
-            print("row_group_ends_excl")
-            print(row_group_ends_excl)
-            print()
             row_idx_start = 0
             for row_idx_end_excl in row_group_ends_excl:
                 # 3rd loop over merged data to split into row groups.
