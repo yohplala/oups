@@ -590,7 +590,7 @@ def test_OARMergeSplitStrategy_validation(
         (  # Contiguous OARs with DataFrame chunk.
             # No need to enlarge since neighbors OARs are on target size.
             "contiguous_dfcs_no_off_target",
-            array([False, True, True, False]),  # Has DataFrame chunk
+            array([False, True, True, False]),  # Has DataFrame overlap
             array([True, False, True, True]),  # On target size
             3,  # max_n_off_target_rgs - is not triggered
             array([[1, 3]]),  # Single region
@@ -608,7 +608,7 @@ def test_OARMergeSplitStrategy_validation(
         ),
         (  # Confirm EMR because of likely on target OAR with DataFrame chunk.
             "enlarging_because_adding_likely_on_target_oar_with_dfc",
-            array([False, True, False, False]),  # Has DataFrame chunk
+            array([False, True, False, False]),  # Has DataFrame overlap
             array([True, True, False, True]),  # On target size
             3,  # max_n_off_target_rgs
             array([[1, 3]]),  # Adding 3rd OAR in EMR.
@@ -629,17 +629,10 @@ def test_OARMergeSplitStrategy_validation(
             1,  # max_n_off_target_rgs
             array([[0, 4]]),  # Single region covering all
         ),
-        (  # No regions with DataFrame chunks. Should return empty array
-            "no_df_chunks",
-            array([False, False, False]),  # No DataFrame chunks
-            array([True, True, True]),  # All on target size
-            1,  # max_n_off_target_rgs
-            array([], dtype=int).reshape(0, 2),  # Empty array
-        ),
         (  # Single off-target region with DataFrame chunk
             # Should return single region
             "single_off_target_with_df_chunk",
-            array([True]),  # Has DataFrame chunk
+            array([True]),  # Has DataFrame overlap
             array([False]),  # Off target
             1,  # max_n_off_target_rgs
             array([[0, 1]]),  # Single region
@@ -672,6 +665,27 @@ def test_OARMergeSplitStrategy_validation(
             array([False, True, False, False, True, False]),  # Likely on target
             1,  # max_n_off_target_rgs
             array([[0, 1], [5, 6]]),
+        ),
+        (  # Special case without row groups.
+            "no_row_groups",
+            array([True]),  # Has DataFrame overlap
+            array([False]),  # Likely on target
+            1,  # max_n_off_target_rgs
+            array([[0, 1]]),  # Single region
+        ),
+        (  # Special case without DataFrame.
+            "no_df_rows",
+            array([False, False]),  # Has DataFrame overlap
+            array([False, False]),  # Likely on target
+            1,  # max_n_off_target_rgs
+            array([[0, 2]]),  # Single region
+        ),
+        (  # Special case without DataFrame.
+            "no_df_chunks",
+            array([False, False, False]),  # No DataFrame chunks
+            array([True, True, True]),  # All on target size
+            1,  # max_n_off_target_rgs
+            array([], dtype=int).reshape(0, 2),  # Empty array
         ),
     ],
 )

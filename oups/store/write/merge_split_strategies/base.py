@@ -417,15 +417,18 @@ class OARMergeSplitStrategy(ABC):
         potential_emrs_starts_ends_excl = get_region_indices_of_true_values(
             self.oars_has_df_overlap | oars_off_target,
         )
-        # Filter out emrs without overlap with a DataFrame chunk.
-        # As of this point, potential enlarge merge regions are those which
-        # have an overlap with a simple merge region (has a DataFrame chunk).
-        potential_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
-            get_region_start_end_delta(
-                m_values=cumsum(self.oars_has_df_overlap),
-                indices=potential_emrs_starts_ends_excl,
-            ).astype(bool_)
-        ]
+        if has_df_overlap := self.oars_has_df_overlap.any():
+            # Filter out emrs without overlap with a DataFrame chunk.
+            # If there is no DataFrame overlap, then all enlarge merge regions
+            # are accepted. This allows for resize of row groups if desired.
+            # As of this point, potential enlarge merge regions are those which
+            # have an overlap with a simple merge region (has a DataFrame chunk).
+            potential_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
+                get_region_start_end_delta(
+                    m_values=cumsum(self.oars_has_df_overlap),
+                    indices=potential_emrs_starts_ends_excl,
+                ).astype(bool_)
+            ]
         # Step 2: Filter out enlarged candidates based on multiple criteria.
         # 2.a - Get number of off target size OARs per enlarged merged region.
         # Those where 'max_n_off_target_rgs' is not reached will be filtered out
@@ -444,6 +447,11 @@ class OARMergeSplitStrategy(ABC):
         confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
             (n_off_target_oars_in_pemrs > max_n_off_target_rgs) | creates_on_target_rg_in_pemrs
         ]
+        if not has_df_overlap:
+            # If there is no DataFrame overlap, no need for subsequent steps.
+            self.oar_idx_mrs_starts_ends_excl = confirmed_emrs_starts_ends_excl
+            return
+
         # Step 3: Retrieve indices of merge regions which have overlap with a
         # DataFrame chunk but are not in retained enlarged merge regions.
         oars_confirmed_emrs = set_true_in_regions(
