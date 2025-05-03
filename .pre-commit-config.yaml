@@ -89,7 +89,6 @@ repos:
                 oups/store/__init__.py:F401
                 oups/store/router.py:S403 S301
                 oups/store/write/write.py:C901 S403 S301
-                oups/store/write/iter_merge_data.py:C901
                 oups/aggstream/__init__.py:F401
                 oups/aggstream/jcumsegagg.py:C901
                 oups/aggstream/segmentby.py:C901
