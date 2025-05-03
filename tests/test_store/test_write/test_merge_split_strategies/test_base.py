@@ -462,6 +462,36 @@ def test_get_region_start_end_delta(
                 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
             },
         ),
+        (
+            "no_row_groups",
+            empty(0),  # rg_mins
+            empty(0),  # rg_maxs
+            Series([1, 2, 3]),  # df_ordered_on
+            False,
+            {
+                RG_IDX_START: array([0]),
+                RG_IDX_END_EXCL: array([0]),
+                DF_IDX_END_EXCL: array([3]),
+                HAS_ROW_GROUP: array([False]),
+                HAS_DF_OVERLAP: array([True]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+            },
+        ),
+        (
+            "no_df_rows",
+            array([1]),  # rg_mins
+            array([4]),  # rg_maxs
+            Series([]),  # df_ordered_on
+            False,
+            {
+                RG_IDX_START: array([0]),
+                RG_IDX_END_EXCL: array([1]),
+                DF_IDX_END_EXCL: array([0]),
+                HAS_ROW_GROUP: array([True]),
+                HAS_DF_OVERLAP: array([False]),
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+            },
+        ),
     ],
 )
 def test_OARMergeSplitStrategy_init(

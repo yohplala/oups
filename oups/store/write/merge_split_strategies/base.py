@@ -21,6 +21,7 @@ from functools import cached_property
 from typing import List, Optional, Tuple, Union
 
 from numpy import arange
+from numpy import array
 from numpy import bool_
 from numpy import column_stack
 from numpy import cumsum
@@ -31,6 +32,7 @@ from numpy import insert
 from numpy import int8
 from numpy import int_
 from numpy import isin
+from numpy import ones
 from numpy import r_
 from numpy import searchsorted
 from numpy import vstack
@@ -251,6 +253,17 @@ class OARMergeSplitStrategy(ABC):
         # Check that df_ordered_on is sorted.
         if not df_ordered_on.is_monotonic_increasing:
             raise ValueError("'df_ordered_on' must be sorted in ascending order.")
+        # Check use of OARSplitStrategy with no row groups.
+        if n_df_rows and not n_rgs:
+            self.oars_rg_idx_starts = zeros(1, dtype=int_)
+            self.oars_cmpt_idx_ends_excl = array([[0, n_df_rows]], dtype=int_)
+            self.oars_has_row_group = zeros(1).astype(bool_)
+            self.oars_df_n_rows = array([n_df_rows], dtype=int_)
+            self.oars_has_df_overlap = ones(1).astype(bool_)
+            self.n_oars = 1
+            self.rg_idx_ends_excl_not_to_use_as_split_points = None
+            self.n_rgs = 0
+            return
 
         if drop_duplicates:
             # Determine overlap start/end indices in row groups
@@ -284,16 +297,12 @@ class OARMergeSplitStrategy(ABC):
             self.rg_idx_ends_excl_not_to_use_as_split_points = rg_idx_maxs_to_correct + 1
         # DataFrame orphans are regions in DataFrame that do not overlap with
         # any row group. Find indices in row groups of DataFrame orphans.
-        rg_idx_df_orphans = (
-            flatnonzero(
-                r_[
-                    df_idx_rgs_starts[0],  # gap at start (0 to first start)
-                    df_idx_rgs_ends_excl[:-1] - df_idx_rgs_starts[1:],
-                    n_df_rows - df_idx_rgs_ends_excl[-1],  # gap at end
-                ],
-            )
-            if n_rgs
-            else empty(0, dtype=int_)
+        rg_idx_df_orphans = flatnonzero(
+            r_[
+                df_idx_rgs_starts[0],  # gap at start (0 to first start)
+                df_idx_rgs_ends_excl[:-1] - df_idx_rgs_starts[1:],
+                n_df_rows - df_idx_rgs_ends_excl[-1],  # gap at end
+            ],
         )
         n_df_orphans = len(rg_idx_df_orphans)
         rg_idxs_template = arange(n_rgs + 1)
@@ -322,7 +331,9 @@ class OARMergeSplitStrategy(ABC):
                 True,
             )
 
-        self.oars_rg_idx_starts = rg_idxs_template[:-1]
+        self.oars_rg_idx_starts = (
+            rg_idxs_template[:-1] if len(rg_idxs_template) > 1 else zeros(1, dtype=int_)
+        )
         self.oars_cmpt_idx_ends_excl = column_stack((rg_idxs_template[1:], df_idx_rgs_ends_excl))
         self.oars_has_row_group = rg_idxs_template[:-1] != rg_idxs_template[1:]
         self.oars_df_n_rows = diff(df_idx_rgs_ends_excl, prepend=0)
