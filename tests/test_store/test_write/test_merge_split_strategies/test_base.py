@@ -674,14 +674,14 @@ def test_OARMergeSplitStrategy_validation(
             array([[0, 1]]),  # Single region
         ),
         (  # Special case without DataFrame.
-            "no_df_rows",
+            "no_df_chunks_but_one_merge_region",
             array([False, False]),  # Has DataFrame overlap
             array([False, False]),  # Likely on target
             1,  # max_n_off_target_rgs
             array([[0, 2]]),  # Single region
         ),
         (  # Special case without DataFrame.
-            "no_df_chunks",
+            "no_df_chunks_and_no_merge_regions",
             array([False, False, False]),  # No DataFrame chunks
             array([True, True, True]),  # All on target size
             1,  # max_n_off_target_rgs
