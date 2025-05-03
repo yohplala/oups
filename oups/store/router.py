@@ -40,7 +40,7 @@ class ParquetHandle(ParquetFile):
 
     """
 
-    def __init__(self, dirpath: str):
+    def __init__(self, dirpath: str, ordered_on: str):
         """
         Instantiate parquet handle (ParquetFile instance).
 
@@ -50,12 +50,14 @@ class ParquetHandle(ParquetFile):
         ----------
         dirpath : str
             Directory path from where to load data.
+        ordered_on : str
+            Column name according which data is ordered.
 
         """
         try:
             super().__init__(dirpath)
         except ValueError:
-            write(dirpath, DataFrame(), file_scheme="hive")
+            write(dirpath, DataFrame({ordered_on: []}), file_scheme="hive")
             super().__init__(dirpath)
         self._dirpath = dirpath
 

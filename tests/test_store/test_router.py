@@ -26,7 +26,7 @@ from .. import TEST_DATA
 
 df_ref = pDataFrame(
     {
-        "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+        "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
         "temperature": [8.4, 5.3, 4.9, 2.3],
     },
 )

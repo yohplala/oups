@@ -136,7 +136,7 @@ def iter_dataframe(
             yield data.iloc[start:end]
 
 
-def to_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
+def to_pandas_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
     """
     Expand a pandas index into a multi-index.
 
@@ -474,7 +474,7 @@ def _indexes_of_overlapping_rrgs(
     )
 
 
-def write_ordered(
+def write_ordered_old(
     dirpath: str,
     data: DataFrame,
     ordered_on: Union[str, Tuple[str]],
@@ -603,7 +603,7 @@ def write_ordered(
     """
     if not data.empty:
         if cmidx_expand:
-            data.columns = to_midx(data.columns, cmidx_levels)
+            data.columns = to_pandas_midx(data.columns, cmidx_levels)
         if ordered_on not in data.columns:
             # Check 'ordered_on' column is within input dataframe.
             raise ValueError(f"column '{ordered_on}' does not exist in input data.")
@@ -804,7 +804,7 @@ def _validate_duplicate_on_param(
         return [ordered_on]
 
 
-def write_ordered2(
+def write_ordered(
     dirpath: str,
     ordered_on: Union[str, Tuple[str]],
     df: Optional[DataFrame] = EMPTY_DATAFRAME,
@@ -937,9 +937,9 @@ def write_ordered2(
         # Check 'ordered_on' column is within input dataframe.
         raise ValueError(f"column '{ordered_on}' does not exist in input data.")
     if to_cmidx is not None:
-        df.columns = to_midx(df.columns, to_cmidx)
+        df.columns = to_pandas_midx(df.columns, to_cmidx)
 
-    opd = ParquetHandle(dirpath)
+    opd = ParquetHandle(dirpath, ordered_on=ordered_on)
     opd_statistics = opd.statistics
     if isinstance(row_group_target_size, int):
         if drop_duplicates:
@@ -965,9 +965,10 @@ def write_ordered2(
         )
     opd.write_row_groups(
         data=iter_merge_data(
-            data=df,
             opd=opd,
-            merge_sequence=ms_strategy.compute_merge_sequence(
+            ordered_on=ordered_on,
+            df=df,
+            merge_sequences=ms_strategy.compute_merge_sequences(
                 max_n_off_target_rgs=max_n_off_target_rgs,
             ),
             split_sequence=ms_strategy.compute_split_sequence,

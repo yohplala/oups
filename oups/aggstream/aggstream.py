@@ -38,12 +38,12 @@ from oups.aggstream.segmentby import setup_segmentby
 from oups.aggstream.utils import dataframe_filter
 from oups.store import ParquetSet
 from oups.store.router import ParquetHandle
-from oups.store.writer import KEY_DUPLICATES_ON
-from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
-from oups.store.writer import OUPS_METADATA
-from oups.store.writer import OUPS_METADATA_KEY
-from oups.store.writer import write_metadata
-from oups.store.writer import write_ordered
+from oups.store.write.write import KEY_DUPLICATES_ON
+from oups.store.write.write import KEY_MAX_ROW_GROUP_SIZE
+from oups.store.write.write import OUPS_METADATA
+from oups.store.write.write import OUPS_METADATA_KEY
+from oups.store.write.write import write_metadata
+from oups.store.write.write import write_ordered
 
 
 # Aggregation functions.

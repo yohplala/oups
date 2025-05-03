@@ -55,7 +55,7 @@ from oups.aggstream.aggstream import NO_FILTER_ID
 from oups.aggstream.aggstream import SUM
 from oups.aggstream.aggstream import AggResType
 from oups.aggstream.aggstream import FilterApp
-from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
+from oups.store.write.write import KEY_MAX_ROW_GROUP_SIZE
 
 
 @toplevel
@@ -93,7 +93,7 @@ def always_false(**kwargs):
                 KEY_MAX_ROW_GROUP_SIZE: 6,
                 KEY_ORDERED_ON: "ts",
                 "keys": Indexer("key1"),
-                KEY_BIN_BY: TimeGrouper(key="ts", freq="1H", closed="left", label="left"),
+                KEY_BIN_BY: TimeGrouper(key="ts", freq="1h", closed="left", label="left"),
                 KEY_AGG: {"agg_out": ("val", SUM)},
             },
             # ref_seed_config
@@ -146,7 +146,7 @@ def always_false(**kwargs):
                 "keys": {
                     Indexer("key1_some_default"): {
                         KEY_AGG: {"out_spec": ("in_spec", FIRST)},
-                        KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
+                        KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1h"),
                         KEY_POST: always_false,
                         KEY_MAX_IN_MEMORY_SIZE_MB: 1,
                     },
@@ -162,7 +162,7 @@ def always_false(**kwargs):
                         KEY_BIN_ON: ("bin_on_spec", "bin_out_spec"),
                     },
                     Indexer("key4_most_default"): {
-                        KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
+                        KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1h"),
                         KEY_ORDERED_ON: "ts_spec",
                     },
                 },
@@ -259,13 +259,13 @@ def always_false(**kwargs):
                 KEY_PRE: always_true,
                 KEY_AGG: {"out_dflt": ("in_dflt", LAST)},
                 KEY_POST: always_true,
-                KEY_SNAP_BY: TimeGrouper(key="ts_dflt", freq="30T"),
+                KEY_SNAP_BY: TimeGrouper(key="ts_dflt", freq="30min"),
                 KEY_MAX_IN_MEMORY_SIZE_MB: 10,
                 "keys": {
                     "filter1": {
                         Indexer("key1_some_default"): {
                             KEY_AGG: {"out_spec": ("in_spec", FIRST)},
-                            KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
+                            KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1h"),
                             KEY_POST: always_false,
                         },
                         Indexer("key2_only_specific"): {
@@ -283,7 +283,7 @@ def always_false(**kwargs):
                     },
                     "filter2": {
                         Indexer("key4_most_default"): {
-                            KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1H"),
+                            KEY_BIN_BY: TimeGrouper(key="ts_dflt", freq="1h"),
                             KEY_ORDERED_ON: "ts_spec",
                         },
                     },
@@ -450,7 +450,7 @@ def test_exception_not_key_of_streamagg_results(store):
     seed_pdf = DataFrame({ordered_on: ts, "val": val})
     store[key] = {KEY_ORDERED_ON: ordered_on}, seed_pdf
     # Setup aggregation.
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     with pytest.raises(ValueError, match="^provided 'agg_res'"):
         AggStream(

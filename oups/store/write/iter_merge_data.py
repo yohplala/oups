@@ -16,8 +16,8 @@ from pandas import concat
 
 def iter_merge_data(
     opd: ParquetFile,
-    df: DataFrame,
     ordered_on: Union[str, Tuple[str]],
+    df: DataFrame,
     merge_sequences: List[Tuple[int, NDArray]],
     split_sequence: Callable[[Series], List[int]],
     duplicates_on: Optional[Union[str, Iterable[str]]] = None,
@@ -30,10 +30,10 @@ def iter_merge_data(
     opd : ParquetFile
         Ordered parquet dataset to merge with dataframe. Must be ordered by
         'ordered_on' column.
-    df : DataFrame
-        DataFrame (pandas) ordered by 'ordered_on' column.
     ordered_on : Union[str, Tuple[str]]
         Column name by which data is ordered. Data must be in ascending order.
+    df : DataFrame
+        DataFrame (pandas) ordered by 'ordered_on' column.
     merge_sequences : List[Tuple[int, NDArray]]
         Merge sequences defining how to merge data from parquet and dataframe,
         as produced by 'NRowsMergeSplitStrategy' or

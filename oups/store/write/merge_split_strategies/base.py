@@ -284,12 +284,16 @@ class OARMergeSplitStrategy(ABC):
             self.rg_idx_ends_excl_not_to_use_as_split_points = rg_idx_maxs_to_correct + 1
         # DataFrame orphans are regions in DataFrame that do not overlap with
         # any row group. Find indices in row groups of DataFrame orphans.
-        rg_idx_df_orphans = flatnonzero(
-            r_[
-                df_idx_rgs_starts[0],  # gap at start (0 to first start)
-                df_idx_rgs_ends_excl[:-1] - df_idx_rgs_starts[1:],
-                n_df_rows - df_idx_rgs_ends_excl[-1],  # gap at end
-            ],
+        rg_idx_df_orphans = (
+            flatnonzero(
+                r_[
+                    df_idx_rgs_starts[0],  # gap at start (0 to first start)
+                    df_idx_rgs_ends_excl[:-1] - df_idx_rgs_starts[1:],
+                    n_df_rows - df_idx_rgs_ends_excl[-1],  # gap at end
+                ],
+            )
+            if n_rgs
+            else empty(0, dtype=int_)
         )
         n_df_orphans = len(rg_idx_df_orphans)
         rg_idxs_template = arange(n_rgs + 1)

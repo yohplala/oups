@@ -34,7 +34,7 @@ HAS_DF_OVERLAP = "has_df_overlap"
 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS = "rg_idx_ends_excl_not_to_use_as_split_points"
 
 
-class TestOARMergeSplitStrategy(OARMergeSplitStrategy):
+class ConcreteOARMergeSplitStrategy(OARMergeSplitStrategy):
     """
     Concrete implementation for testing purposes.
     """
@@ -475,7 +475,7 @@ def test_OARMergeSplitStrategy_init(
     """
     Test OARMergeSplitStrategy with various scenarios.
     """
-    oars_prop = TestOARMergeSplitStrategy(
+    oars_prop = ConcreteOARMergeSplitStrategy(
         rg_mins,
         rg_maxs,
         df_ordered_on,
@@ -546,7 +546,7 @@ def test_OARMergeSplitStrategy_validation(
 
     """
     with pytest.raises(ValueError, match=expected_error):
-        TestOARMergeSplitStrategy(
+        ConcreteOARMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
@@ -669,7 +669,7 @@ def test_compute_merge_regions_start_ends_excl(
         Expected output containing start and end indices for enlarged merge regions.
 
     """
-    split_strat = TestOARMergeSplitStrategy(
+    split_strat = ConcreteOARMergeSplitStrategy(
         rg_ordered_on_mins=zeros(1, dtype=int_),
         rg_ordered_on_maxs=zeros(1, dtype=int_),
         df_ordered_on=Series([1]),

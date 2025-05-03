@@ -18,9 +18,9 @@ from pandas import DataFrame as pDataFrame
 from oups import ParquetSet
 from oups import toplevel
 from oups.aggstream.segmentby import KEY_ORDERED_ON
-from oups.store.writer import OUPS_METADATA
-from oups.store.writer import OUPS_METADATA_KEY
-from oups.store.writer import write_metadata
+from oups.store.write.write import OUPS_METADATA
+from oups.store.write.write import OUPS_METADATA_KEY
+from oups.store.write.write import write_metadata
 
 
 @toplevel
