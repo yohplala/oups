@@ -587,7 +587,7 @@ def test_OARMergeSplitStrategy_validation(
 @pytest.mark.parametrize(
     "test_id, oars_has_df_overlap, oars_likely_on_target_size, max_n_off_target_rgs, expected",
     [
-        (  # Contiguous OARs with DataFrame chunk.
+        (  # Contiguous OARs with DataFrame overlap.
             # No need to enlarge since neighbors OARs are on target size.
             "contiguous_dfcs_no_off_target",
             array([False, True, True, False]),  # Has DataFrame overlap
@@ -596,7 +596,7 @@ def test_OARMergeSplitStrategy_validation(
             array([[1, 3]]),  # Single region
         ),
         (  # First EMR has enough neighbor off-target OARs.
-            # There is a second one potential EMR without DataFrame chunk.
+            # There is a second one potential EMR without DataFrame overlap.
             # The 3rd has not enough neighbor off-target OARs to be enlarged.
             "enlarging_based_on_off_target_oars",
             # OARS:   0,     1,     2,    3,     4,     5,     6,    7,     8
@@ -606,32 +606,32 @@ def test_OARMergeSplitStrategy_validation(
             3,  # max_n_off_target_rgs
             array([[0, 4], [7, 8]]),  # Two regions: [0-1) and [2-4)
         ),
-        (  # Confirm EMR because of likely on target OAR with DataFrame chunk.
+        (  # Confirm EMR because of likely on target OAR with DataFrame overlap.
             "enlarging_because_adding_likely_on_target_oar_with_dfc",
             array([False, True, False, False]),  # Has DataFrame overlap
             array([True, True, False, True]),  # On target size
             3,  # max_n_off_target_rgs
             array([[1, 3]]),  # Adding 3rd OAR in EMR.
         ),
-        (  # Alternating regions with and without DataFrame chunks.
-            # Should only merge regions with DataFrame chunks.
+        (  # Alternating regions with and without DataFrame overlaps.
+            # Should only merge regions with DataFrame overlaps.
             "alternating_regions",
-            array([True, False, True, False]),  # Alternating DataFrame chunks
+            array([True, False, True, False]),  # Alternating DataFrame overlaps
             array([True, True, True, True]),  # All on target size
             2,  # max_n_off_target_rgs
             array([[0, 1], [2, 3]]),  # Two separate regions
         ),
-        (  # Multiple off-target regions between DataFrame chunks
+        (  # Multiple off-target regions between DataFrame overlaps
             # Should merge if number of off-target regions exceeds max_n_off_target_rgs
             "multiple_off_target_between_chunks",
-            array([False, False, False, True]),  # DataFrame chunks at ends
+            array([False, False, False, True]),  # DataFrame overlaps at ends
             array([False, False, False, False]),  # All off target
             1,  # max_n_off_target_rgs
             array([[0, 4]]),  # Single region covering all
         ),
-        (  # Single off-target region with DataFrame chunk
+        (  # Single off-target region with DataFrame overlap
             # Should return single region
-            "single_off_target_with_df_chunk",
+            "single_off_target_with_df_overlap",
             array([True]),  # Has DataFrame overlap
             array([False]),  # Off target
             1,  # max_n_off_target_rgs
@@ -640,28 +640,28 @@ def test_OARMergeSplitStrategy_validation(
         (  # Complex pattern with varying conditions
             # Tests multiple conditions in one test
             "mixed_pattern",
-            array([True, False, False, False, True, False]),  # DataFrame chunks at 0, 4
+            array([True, False, False, False, True, False]),  # DataFrame overlaps at 0, 4
             array([True, False, True, False, False, True]),  # Likely on target
             2,  # max_n_off_target_rgs
             array([[0, 2], [4, 5]]),
         ),
         (  # 'max_n_off_target' is None
             "max_n_off_target_is_none",
-            array([True, False, False, False, True]),  # DataFrame chunks at 0, 4
+            array([True, False, False, False, True]),  # DataFrame overlaps at 0, 4
             array([True, False, True, False, False]),  # Likely on target
             None,  # max_n_off_target_rgs
             array([[0, 1], [4, 5]]),
         ),
         (  # 'max_n_off_target' is 1
-            "max_n_off_target_is_1",
-            array([True, False, False, False, True]),  # DataFrame chunks at 0, 4
+            "max_n_off_target_is_one",
+            array([True, False, False, False, True]),  # DataFrame overlaps at 0, 4
             array([False, False, True, False, False]),  # Likely on target
             1,  # max_n_off_target_rgs
             array([[0, 2], [3, 5]]),
         ),
         (  # 'max_n_off_target' is 1
-            "max_n_off_target_reached_where_no_df_chunk_overlap",
-            array([True, False, False, False, False, True]),  # DataFrame chunks at 0, 4
+            "max_n_off_target_reached_where_no_df_overlaps_overlap",
+            array([True, False, False, False, False, True]),  # DataFrame overlaps at 0, 4
             array([False, True, False, False, True, False]),  # Likely on target
             1,  # max_n_off_target_rgs
             array([[0, 1], [5, 6]]),
@@ -674,15 +674,15 @@ def test_OARMergeSplitStrategy_validation(
             array([[0, 1]]),  # Single region
         ),
         (  # Special case without DataFrame.
-            "no_df_chunks_but_one_merge_region",
+            "no_df_overlap_but_one_merge_region",
             array([False, False]),  # Has DataFrame overlap
             array([False, False]),  # Likely on target
             1,  # max_n_off_target_rgs
             array([[0, 2]]),  # Single region
         ),
         (  # Special case without DataFrame.
-            "no_df_chunks_and_no_merge_regions",
-            array([False, False, False]),  # No DataFrame chunks
+            "no_df_overlap_and_no_merge_regions",
+            array([False, False, False]),  # No DataFrame overlap
             array([True, True, True]),  # All on target size
             1,  # max_n_off_target_rgs
             array([], dtype=int).reshape(0, 2),  # Empty array
@@ -704,7 +704,7 @@ def test_compute_merge_regions_start_ends_excl(
     test_id : str
         Identifier for the test case.
     oars_has_df_overlap : NDArray[bool_]
-        Boolean array indicating if each atomic region has a DataFrame chunk.
+        Boolean array indicating if each atomic region has a DataFrame overlaps.
     oars_likely_on_target_size : NDArray[bool_]
         Boolean array indicating if each atomic region is likely to be on target size.
     max_n_off_target_rgs : int

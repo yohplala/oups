@@ -133,7 +133,7 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
             )
         self.row_group_time_period = row_group_time_period
         df_ordered_on_np = df_ordered_on.to_numpy()
-        self.oars_mins_maxs = ones((self.n_oars, 2)).astype(df_ordered_on_np.dtype)
+        self.oars_mins_maxs = ones((self.n_oars, 2)).astype(DTYPE_DATETIME64)
         # Row groups encompasses Dataframe chunks in an OAR.
         # Hence, start with Dataframe chunks starts and ends.
         oar_idx_df_chunk = flatnonzero(self.oars_has_df_overlap)

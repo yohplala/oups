@@ -11,6 +11,8 @@ import pytest
 from numpy import array
 from numpy import column_stack
 from numpy import diff
+from numpy import empty
+from numpy import int_
 from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
 from pandas import Series
@@ -25,51 +27,94 @@ HAS_ROW_GROUP = "has_row_group"
 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS = "rg_idx_ends_excl_not_to_use_as_split_points"
 
 
-def test_nrows_oars_likely_on_target_size():
+@pytest.mark.parametrize(
+    "test_id, oars_rg_idx_starts, oars_rg_idx_ends_excl, oars_has_row_group, oars_df_idx_ends_excl, drop_duplicates, rgs_n_rows, expected",
+    [
+        (
+            # 1. RG only (90 rows) - on target
+            # 2. DF only (85 rows) - on target
+            # 3. Both RG (50) and DF (40) - on target
+            # 4. Both RG (30) and DF (30) - too small
+            # 5. Both RG (120) and DF (0) - too large and only row group.
+            # 6. Both RG (30) and DF (80) - too large but accepted since it has a dfc.
+            "many_situations",
+            array([0, 1, 1, 3, 4, 5]),  # oars_rg_idx_starts
+            array([1, 1, 3, 4, 5, 6]),  # oars_rg_idx_ends_excl
+            array([True, False, True, True, True, True]),  # oars_has_row_group
+            array([0, 85, 125, 155, 155, 235]),  # oars_df_idx_ends_excl
+            True,  # drop_duplicates
+            array([90, 50, 30, 120, 30]),  # rgs_n_rows
+            {
+                # Expected results for oars_max_n_rows:
+                # rg_n_rows:       [90,  0, 50, 30, 120,  30]
+                # df_n_rows:       [ 0, 85, 40, 30,   0,  80]
+                # oars_max_n_rows: [90, 85, 90, 60, 120, 110]
+                "oars_max_n_rows": array([90, 85, 90, 60, 120, 110]),
+                # Expected results for likely_on_target_size:
+                # 1. True  - RG only with 90 rows (between min_size and target_size)
+                # 2. True  - DF only with 85 rows (between min_size and target_size)
+                # 3. True  - Combined RG(50) + DF(40) could be on target
+                # 4. False - Combined RG(30) + DF(30) too small
+                # 5. False - RG only with 120 rows (above target_size)
+                # 6. True - Combined RG(30) + DF(80) oversized but with a RG
+                "oars_likely_on_target_size": array([True, True, True, False, False, True]),
+            },
+        ),
+        (
+            "no_row_groups_but_df_overlap",
+            array([0]),  # oars_rg_idx_starts
+            array([0]),  # oars_rg_idx_ends_excl
+            array([False]),  # oars_has_row_group
+            array([10]),  # oars_df_idx_ends_excl
+            True,  # drop_duplicates
+            empty(0, dtype=int_),  # rgs_n_rows
+            {
+                "oars_max_n_rows": array([10]),
+                "oars_likely_on_target_size": array([False]),
+            },
+        ),
+        (
+            "row_groups_but_no_df_overlap",
+            array([0]),  # oars_rg_idx_starts
+            array([2]),  # oars_rg_idx_ends_excl
+            array([True]),  # oars_has_row_group
+            array([0]),  # oars_df_idx_ends_excl
+            True,  # drop_duplicates
+            array([10]),  # rgs_n_rows
+            {
+                "oars_max_n_rows": array([10]),
+                "oars_likely_on_target_size": array([False]),
+            },
+        ),
+    ],
+)
+def test_nrows_oars_likely_on_target_size(
+    test_id: str,
+    oars_rg_idx_starts: NDArray,
+    oars_rg_idx_ends_excl: NDArray,
+    oars_has_row_group: NDArray,
+    oars_df_idx_ends_excl: NDArray,
+    drop_duplicates: bool,
+    rgs_n_rows: NDArray,
+    expected: Dict,
+):
     """
     Test initialization and 'oars_likely_on_target_size' method.
     """
     target_size = 100  # min size: 80
-    # Create mock oars_desc with 5 regions:
-    # 1. RG only (90 rows) - on target
-    # 2. DF only (85 rows) - on target
-    # 3. Both RG (50) and DF (40) - on target
-    # 4. Both RG (30) and DF (30) - too small
-    # 5. Both RG (120) and DF (0) - too large and only row group.
-    # 6. Both RG (30) and DF (80) - too large but accepted since it has a dfc.
-    # Set which regions have row groups and DataFrame chunks
-    dummy_rg_idx = array([0, 1, 2, 3, 4, 5])
-    oars_has_row_group = array([True, False, True, True, True, True])
-    # Set up DataFrame chunk sizes through df_idx_end_excl
-    oars_df_idx_ends_excl = array([0, 85, 125, 155, 155, 235])
-    # Create row group sizes array
-    rgs_n_rows = array([90, 50, 30, 120, 30])
     # Initialize strategy
     strategy = NRowsMergeSplitStrategy.from_oars_desc(
-        oars_rg_idx_starts=dummy_rg_idx,
-        oars_cmpt_idx_ends_excl=column_stack((dummy_rg_idx, oars_df_idx_ends_excl)),
+        oars_rg_idx_starts=oars_rg_idx_starts,
+        oars_cmpt_idx_ends_excl=column_stack((oars_rg_idx_ends_excl, oars_df_idx_ends_excl)),
         oars_has_row_group=oars_has_row_group,
         oars_has_df_overlap=diff(oars_df_idx_ends_excl, prepend=0).astype(bool),
         rg_idx_ends_excl_not_to_use_as_split_points=None,
-        drop_duplicates=True,
+        drop_duplicates=drop_duplicates,
         rgs_n_rows=rgs_n_rows,
         row_group_target_size=target_size,
     )
-    # Expected results for oars_max_n_rows:
-    # rg_n_rows:       [90,  0, 50, 30, 120,  30]
-    # df_n_rows:       [ 0, 85, 40, 30,   0,  80]
-    # oars_max_n_rows: [90, 85, 90, 60, 120, 110]
-    assert_array_equal(strategy.oars_max_n_rows, array([90, 85, 90, 60, 120, 110]))
-    # Expected results for likely_on_target_size:
-    # 1. True  - RG only with 90 rows (between min_size and target_size)
-    # 2. True  - DF only with 85 rows (between min_size and target_size)
-    # 3. True  - Combined RG(50) + DF(40) could be on target
-    # 4. False - Combined RG(30) + DF(30) too small
-    # 5. False - RG only with 120 rows (above target_size)
-    # 6. True - Combined RG(30) + DF(80) oversized but with a RG
-    result = strategy.oars_likely_on_target_size
-    expected = array([True, True, True, False, False, True])
-    assert_array_equal(result, expected)
+    assert_array_equal(strategy.oars_max_n_rows, expected["oars_max_n_rows"])
+    assert_array_equal(strategy.oars_likely_on_target_size, expected["oars_likely_on_target_size"])
 
 
 @pytest.mark.parametrize(
@@ -269,13 +314,86 @@ def test_nrows_oars_likely_on_target_size():
             },
             array([50, 50, 50, 50]),  # rg_n_rows
             10,  # row_group_target_size
-            array([[1, 4]]),  # merge region with all OARs
+            array([[1, 4]]),  # merge region
             {
                 "oars_min_n_rows": array([50, 50, 35, 50, 50]),
                 "oars_merge_sequences": [
                     (1, array([[2, 25], [2, 60], [3, 75]])),  # single sequence
                 ],
                 "rg_idx_mrs_starts_ends_excl": [slice(1, 3)],
+            },
+        ),
+        (
+            "no_row_group_but_df_overlap",
+            # row_group_target_size : 10
+            # rgs_n_rows    :  []
+            # has_row_group :  [False]
+            # dfc_ends_excl :  [   25]
+            # has_df_overlap:  [ True]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0]),
+                RG_IDX_END_EXCL: array([0]),
+                DF_IDX_END_EXCL: array([25]),
+                HAS_ROW_GROUP: array([False]),
+            },
+            array([]),  # rg_n_rows
+            10,  # row_group_target_size
+            array([[0, 1]]),  # merge region with all OARs
+            {
+                "oars_min_n_rows": array([25]),
+                "oars_merge_sequences": [
+                    (0, array([[0, 25]])),  # single sequence
+                ],
+                "rg_idx_mrs_starts_ends_excl": [],
+            },
+        ),
+        (
+            "row_group_off_target_size_but_no_df_overlap",
+            # row_group_target_size : 10
+            # rgs_n_rows    :  [25]
+            # has_row_group :  [ True]
+            # dfc_ends_excl :  [    0]
+            # has_df_overlap:  [False]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0]),
+                RG_IDX_END_EXCL: array([1]),
+                DF_IDX_END_EXCL: array([0]),
+                HAS_ROW_GROUP: array([True]),
+            },
+            array([25]),  # rg_n_rows
+            10,  # row_group_target_size
+            array([[0, 1]]),  # merge region with all OARs
+            {
+                "oars_min_n_rows": array([25]),
+                "oars_merge_sequences": [
+                    (0, array([[1, 0]])),  # single sequence
+                ],
+                "rg_idx_mrs_starts_ends_excl": [slice(0, 1)],
+            },
+        ),
+        (
+            "row_group_on_target_size_but_no_df_overlap",
+            # row_group_target_size : 10
+            # rgs_n_rows    :  [10]
+            # has_row_group :  [ True]
+            # dfc_ends_excl :  [    0]
+            # has_df_overlap:  [False]
+            True,  # drop_duplicates
+            {
+                RG_IDX_START: array([0]),
+                RG_IDX_END_EXCL: array([1]),
+                DF_IDX_END_EXCL: array([0]),
+                HAS_ROW_GROUP: array([True]),
+            },
+            array([10]),  # rg_n_rows
+            10,  # row_group_target_size
+            array([], dtype=int).reshape(0, 2),  # empty array
+            {
+                "oars_min_n_rows": array([10]),
+                "oars_merge_sequences": [],
+                "rg_idx_mrs_starts_ends_excl": [],
             },
         ),
     ],
@@ -791,6 +909,51 @@ def test_nrows_specialized_compute_merge_sequences(
             {
                 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
                 "oars_merge_sequences": [(4, array([[4, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            "no_row_groups_but_df_overlap",
+            array([]),  # rg_mins
+            array([]),  # rg_maxs
+            Series([4, 8, 12]),  # df_ordered_on
+            4,  # row_group_size
+            False,  # drop_duplicates
+            [],  # rgs_n_rows
+            None,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[0, 3]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            "row_groups_off_target_size_but_no_df_overlap",
+            array([1, 4]),  # rg_mins
+            array([2, 6]),  # rg_maxs
+            Series([]),  # df_ordered_on
+            4,  # row_group_size
+            False,  # drop_duplicates
+            [8, 10],  # rgs_n_rows
+            1,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[1, 0], [2, 0]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            "row_groups_on_target_size_but_no_df_overlap",
+            array([1, 4]),  # rg_mins
+            array([2, 6]),  # rg_maxs
+            Series([]),  # df_ordered_on
+            4,  # row_group_size
+            False,  # drop_duplicates
+            [4, 4],  # rgs_n_rows
+            1,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [],
                 "sort_rgs_after_write": False,
             },
         ),

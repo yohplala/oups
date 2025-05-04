@@ -563,19 +563,22 @@ class OARMergeSplitStrategy(ABC):
             Whether to sort row groups after writing.
 
         """
-        return (
-            (
-                len(self.filtered_merge_sequences) > 1
-                # 'filtered_merge_sequences[0][1][-1,0]' is 'rg_idx_ends_excl'
-                # of the last row group in the first merge sequence.
-                or self.filtered_merge_sequences[0][1][-1, 0] < self.n_rgs
+        try:
+            return (
+                (
+                    len(self.filtered_merge_sequences) > 1
+                    # 'filtered_merge_sequences[0][1][-1,0]' is 'rg_idx_ends_excl'
+                    # of the last row group in the first merge sequence.
+                    or self.filtered_merge_sequences[0][1][-1, 0] < self.n_rgs
+                )
+                if self.filtered_merge_sequences
+                else False
             )
-            if hasattr(self, FILTERED_MERGE_SEQUENCES)
-            else AttributeError(
+        except AttributeError:
+            raise AttributeError(
                 "not possible to return 'sort_rgs_after_write' value if "
                 "'compute_merge_sequences()' has not been run beforehand.",
             )
-        )
 
     @cached_property
     @abstractmethod

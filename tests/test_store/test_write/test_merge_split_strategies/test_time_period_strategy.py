@@ -9,6 +9,8 @@ from typing import Dict
 
 import pytest
 from numpy import array
+from numpy import empty
+from numpy import int_
 from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
 from pandas import DataFrame
@@ -350,6 +352,76 @@ REF_D = "2020/01/01 "
                 "likely_on_target": array([False, True]),
             },
         ),
+        (
+            "no_row_groups_but_df_overlap_oversized",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         May,                     18/05,        , False (dfc spans 2 periods)
+            #   1,         Jun,                              01/06,
+            empty(0, dtype=int_),  # rg_mins
+            empty(0, dtype=int_),  # rg_maxs
+            Series([Timestamp("2024-05-18"), Timestamp("2024-06-01")]),  # df_ordered_on
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-05-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-07-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-05-18")],
+                        "maxs": [Timestamp("2024-06-01")],
+                    },
+                ).to_numpy(),
+                "likely_on_target": array(
+                    [True],
+                ),  # is True because has df overlap and is oversized
+            },
+        ),
+        (
+            "no_row_groups_but_df_overlap_on_target_size",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         May,                     18/05,   21/05, True
+            empty(0, dtype=int_),  # rg_mins
+            empty(0, dtype=int_),  # rg_maxs
+            Series([Timestamp("2024-05-18"), Timestamp("2024-05-21")]),  # df_ordered_on
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-05-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-06-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-05-18")],
+                        "maxs": [Timestamp("2024-05-21")],
+                    },
+                ).to_numpy(),
+                "likely_on_target": array([True]),
+            },
+        ),
+        (
+            "row_group_but_no_df_overlap",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max, meets target size
+            #   1,         Apr,   01/04,                          , False (rg spans 2 periods)
+            #   1,         May,            15/05,
+            array([Timestamp("2024-04-01")]),  # rg_mins
+            array([Timestamp("2024-05-15")]),  # rg_maxs
+            Series([]),  # df_ordered_on
+            {
+                "period_bounds": date_range(
+                    start=Timestamp("2024-04-01"),  # Floor of earliest timestamp
+                    end=Timestamp("2024-06-01"),  # Ceil of latest timestamp
+                    freq="MS",
+                ),
+                "oars_mins_maxs": DataFrame(
+                    {
+                        "mins": [Timestamp("2024-04-01")],
+                        "maxs": [Timestamp("2024-05-15")],
+                    },
+                ).to_numpy(),
+                "likely_on_target": array([False]),
+            },
+        ),
     ],
 )
 def test_time_period_oars_likely_on_target_size(
@@ -500,6 +572,40 @@ def test_time_period_oars_likely_on_target_size(
                 "rg_idx_mrs_starts_ends_excl": [slice(0, 1)],
             },
         ),
+        (
+            "no_row_groups_but_df_overlap",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max
+            #   1,         Feb,                    01/02,         , spans Feb-Mar
+            #   1,         Mar,                            15/03,
+            empty(0, dtype=int_),  # rg_mins
+            empty(0, dtype=int_),  # rg_maxs
+            Series([Timestamp("2024-02-01"), Timestamp("2024-03-15")]),  # df_ordered_on
+            "MS",  # monthly periods
+            array([[0, 1]]),  # merge region with all OARs
+            {
+                "oars_merge_sequences": [
+                    (0, array([[0, 2]])),  # single sequence
+                ],
+                "rg_idx_mrs_starts_ends_excl": [],
+            },
+        ),
+        (
+            "row_group_but_no_df_overlap",
+            # OAR, Time period, RGs min, RGs max, DFc min, DFc max
+            #   1,         Jan,   01/01,                          , spans Jan-Feb
+            #   1,         Feb,            15/02,
+            array([Timestamp("2024-01-01")]),  # rg_mins
+            array([Timestamp("2024-02-15")]),  # rg_maxs
+            Series([]),  # df_ordered_on
+            "MS",  # monthly periods
+            array([[0, 1]]),  # merge region with all OARs
+            {
+                "oars_merge_sequences": [
+                    (0, array([[1, 0]])),  # single sequence
+                ],
+                "rg_idx_mrs_starts_ends_excl": [slice(0, 1)],
+            },
+        ),
     ],
 )
 def test_time_period_specialized_compute_merge_sequences(
@@ -553,6 +659,530 @@ def test_time_period_specialized_compute_merge_sequences(
         expected_cmpt_ends_excl,
     ) in zip(result, expected["oars_merge_sequences"]):
         assert result_rg_start == expected_rg_start
+        assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
+
+
+@pytest.mark.parametrize(
+    "test_id, rg_mins, rg_maxs, df_ordered_on, row_group_time_period, drop_duplicates, max_n_off_target, expected",
+    [
+        (  # Values not on boundary to check 'floor()'.
+            # Writing after pf data, no off target size row group.
+            # rg:  0            1
+            # pf: [8h10,9h10], [10h10]
+            # df:                      [12h10]
+            "new_rg_simple_append_timestamp_not_on_boundary",
+            array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}12:10")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge incomplete rg
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # Values not on boundary to check 'floor()'.
+            # Writing after pf data, not merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h10,9h10], [10h10]
+            # df:                      [10h10]
+            "no_drop_duplicates_simple_append_timestamp_not_on_boundary",
+            array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}10:10")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge incomplete rg
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # Values not on boundary to check 'floor()'.
+            # Writing after pf data, merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h10,9h10], [10h10]
+            # df:              [10h10]
+            "drop_duplicates_merge_tail_timestamp_not_on_boundary",
+            array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}10:10")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge incomplete rg
+            True,  # drop_duplicates | should merge with incomplete rg
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # Values on boundary.
+            # Writing after pf data, not merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h00,9h00], [10h00]
+            # df:                      [10h00]
+            "no_drop_duplicates_simple_append_timestamp_on_boundary",
+            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}10:00")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:00"), Timestamp(f"{REF_D}10:00")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}10:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge incomplete rg
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # Values on boundary.
+            # Writing after pf data, merging with off target size row group.
+            # rg:  0            1
+            # pf: [8h00,9h00], [10h00]
+            # df:              [10h00]
+            "drop_duplicates_merge_tail_timestamp_on_boundary",
+            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}10:00")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:00"), Timestamp(f"{REF_D}10:00")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}10:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge incomplete rg
+            True,  # drop_duplicates | should merge with incomplete rg
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # Writing after pf data, off target size row group should be merged.
+            # rg:  0            1        2
+            # pf: [8h00,9h00], [10h00], [11h00]
+            # df:                               [13h00]
+            "last_row_group_exceeded_merge_tail",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}13:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | new period, should merge incomplete rgs
+            True,  # drop_duplicates | no duplicates to drop
+            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[3, 0], [3, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # df at the start of pf data.
+            # df is not overlapping with existing row groups.
+            # rg:           0            1        2
+            # pf:          [8h00,9h00], [12h00], [13h00]
+            # df:  [7h30]
+            "no_duplicates_insert_at_start_new_rg_timestamp_not_on_boundary",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}12:00"),
+                    Timestamp(f"{REF_D}13:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}12:00"),
+                    Timestamp(f"{REF_D}13:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}07:30")]),  # df_ordered_on
+            "2h",  # row_group_time_period | no rg in same period to merge with
+            True,  # drop_duplicates | no duplicates to drop
+            2,  # max_n_off_target_rgs | should rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[0, 1]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (  # df at the start of pf data.
+            # df is overlapping with time period of existing row groups.
+            # rg:            0            1        2
+            # pf:           [8h10,9h10], [12h10], [13h10]
+            # df:           [8h00]
+            "no_duplicates_insert_at_start_no_new_rg_timestamp_on_boundary",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:10"),
+                    Timestamp(f"{REF_D}12:10"),
+                    Timestamp(f"{REF_D}13:10"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:10"),
+                    Timestamp(f"{REF_D}12:10"),
+                    Timestamp(f"{REF_D}13:10"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}08:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should merge with rg in same period
+            True,  # drop_duplicates | no duplicates to drop
+            2,  # max_n_off_target_rgs | should rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[1, 1], [3, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # df connected to off target size rgs. Values on boundary.
+            # Writing after pf data, off target size row groups.
+            # rg:  0            1        2
+            # pf: [8h00,9h00], [10h00], [11h00]
+            # df:                               [11h00]
+            "max_n_off_target_rgs_not_reached_simple_append",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}11:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not rewrite tail
+            False,  # drop_duplicates | should not merge with preceding rg
+            3,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(3, array([[3, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # df connected to off target size rgs. Values on boundary.
+            # Writing after pf data, off target size row groups.
+            # rg:  0            1        2
+            # pf: [8h00,9h00], [10h00], [11h00]
+            # df:                               [11h00]
+            "max_n_off_target_rgs_reached_tail_rewrite",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}11:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge with incomplete rg.
+            False,  # drop_duplicates | should not merge with preceding rg
+            2,  # max_n_off_target_rgs | should rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[3, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # df connected to off target size rgs. Values on boundary.
+            # Writing after pf data, off target size row groups.
+            # rg:  0            1        2
+            # pf: [8h00,9h00], [10h00], [11h00]
+            # df:                               [11h00]
+            "max_n_off_target_rgs_none_simple_append",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}11:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not merge with incomplete rg.
+            False,  # drop_duplicates
+            None,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(3, array([[3, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (  # 'max_n_off_target_rgs' not reached.
+            # rg:  0            1                 2
+            # pf: [8h00,9h00], [10h00],          [13h00]
+            # df:                       [12h00]
+            "insert_timestamp_max_n_off_target_rgs_tail_rewrite",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}13:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}13:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}12:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not specifically rewrite tail
+            True,  # drop_duplicates
+            2,  # max_n_off_target_rgs | should not rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (  # df is not overlapping with existing row groups. It should be added.
+            # rg:  0                   1        2
+            # pf: [8h00,9h00],        [12h00], [14h00]
+            # df:             [10h30]
+            "insert_timestamp_non_overlapping",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}12:00"),
+                    Timestamp(f"{REF_D}14:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}12:00"),
+                    Timestamp(f"{REF_D}14:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}10:30")]),  # df_ordered_on
+            "2h",  # row_group_time_period
+            True,  # drop_duplicates
+            2,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[1, 1]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (  # Writing in-between pf data, with off target size row groups at
+            # the end of pf data.
+            # rg:  0        1           2           3      4
+            # pf: [8h,9h], [10h, 11h], [12h, 13h], [14h], [15h]
+            # df:               [11h]
+            "insert_timestamp_middle_with_off_target_rgs",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}12:00"),
+                    Timestamp(f"{REF_D}14:00"),
+                    Timestamp(f"{REF_D}15:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                    Timestamp(f"{REF_D}13:00"),
+                    Timestamp(f"{REF_D}14:00"),
+                    Timestamp(f"{REF_D}15:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}11:00")]),  # df_ordered_on
+            "2h",  # row_group_size
+            True,  # drop_duplicates
+            1,  # max_n_off_target_rgs | should rewrite tail
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[2, 1]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (  # df within pf data.
+            # Writing in-between pf data, with off target size row groups at
+            # the end of pf data.
+            # rg:  0          1           2           3      4
+            # pf: [8h,9h],   [10h, 11h], [12h, 13h], [14h], [15h]
+            # df:        [9h]
+            "insert_timestamp_middle_no_rewrite",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}12:00"),
+                    Timestamp(f"{REF_D}14:00"),
+                    Timestamp(f"{REF_D}15:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}09:00"),
+                    Timestamp(f"{REF_D}11:00"),
+                    Timestamp(f"{REF_D}13:00"),
+                    Timestamp(f"{REF_D}14:00"),
+                    Timestamp(f"{REF_D}15:00"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}09:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period
+            False,  # drop_duplicates
+            2,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(1, array([[1, 1]]))],
+                "sort_rgs_after_write": True,
+            },
+        ),
+        (  # Several empty periods, to make sure the empty periods are not in
+            # the output
+            # rg:  0            1
+            # pf: [8h00,9h00], [10h00]
+            # df:                      [23h00]
+            "insert_timestamp_several_empty_periods",
+            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}10:00")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:00"), Timestamp(f"{REF_D}10:00")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}23:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period | should not specifically rewrite tail
+            True,  # drop_duplicates
+            2,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(2, array([[2, 1]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            "no_row_groups_but_df_overlap",
+            array([]),  # rg_mins
+            array([]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}8:00"), Timestamp(f"{REF_D}23:00")]),  # df_ordered_on
+            "2h",  # row_group_time_period
+            True,  # drop_duplicates
+            None,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[0, 2]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            "row_groups_off_target_size_but_no_df_overlap",
+            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}13:00")]),  # rg_mins
+            array([Timestamp(f"{REF_D}11:00"), Timestamp(f"{REF_D}19:00")]),  # rg_maxs
+            Series([]),  # df_ordered_on
+            "2h",  # row_group_time_period
+            True,  # drop_duplicates
+            1,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [(0, array([[1, 0], [2, 0]]))],
+                "sort_rgs_after_write": False,
+            },
+        ),
+        (
+            "row_groups_on_target_size_but_no_df_overlap",
+            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}13:00")]),  # rg_mins
+            array([Timestamp(f"{REF_D}09:59"), Timestamp(f"{REF_D}13:59")]),  # rg_maxs
+            Series([]),  # df_ordered_on
+            "2h",  # row_group_time_period
+            True,  # drop_duplicates
+            1,  # max_n_off_target_rgs
+            {
+                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
+                "oars_merge_sequences": [],
+                "sort_rgs_after_write": False,
+            },
+        ),
+    ],
+)
+def test_time_period_integration_compute_merge_sequences(
+    test_id: str,
+    rg_mins: NDArray,
+    rg_maxs: NDArray,
+    df_ordered_on: NDArray,
+    row_group_time_period: str,
+    drop_duplicates: bool,
+    max_n_off_target: int,
+    expected: Dict,
+) -> None:
+    """
+    Integration test for 'compute_merge_sequences' method.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    rg_mins : NDArray
+        Array of shape (n) containing the minimum values of the row groups.
+    rg_maxs : NDArray
+        Array of shape (n) containing the maximum values of the row groups.
+    df_ordered_on : NDArray
+        Array of shape (m) containing the values of the DataFrame to be ordered on.
+    row_group_time_period : str
+        Time period for row groups.
+    drop_duplicates : bool
+        Whether to drop duplicates between row groups and DataFrame.
+    max_n_off_target : int
+        Maximum number of off-target row groups allowed.
+    expected : Dict
+        Dictionary containing the expected results.
+
+    """
+    # Initialize strategy.
+    strategy = TimePeriodMergeSplitStrategy(
+        rg_ordered_on_mins=rg_mins,
+        rg_ordered_on_maxs=rg_maxs,
+        df_ordered_on=df_ordered_on,
+        row_group_time_period=row_group_time_period,
+        drop_duplicates=drop_duplicates,
+    )
+    if expected[RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS] is not None:
+        assert_array_equal(
+            strategy.rg_idx_ends_excl_not_to_use_as_split_points,
+            expected[RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS],
+        )
+    else:
+        assert strategy.rg_idx_ends_excl_not_to_use_as_split_points is None
+    # Compute merge sequences.
+    strategy.compute_merge_sequences(
+        max_n_off_target_rgs=max_n_off_target,
+    )
+    # Check.
+    assert strategy.sort_rgs_after_write == expected["sort_rgs_after_write"]
+    assert len(strategy.filtered_merge_sequences) == len(expected["oars_merge_sequences"])
+    for (result_rg_idx_start, result_cmpt_ends_excl), (
+        expected_rg_idx_start,
+        expected_cmpt_ends_excl,
+    ) in zip(strategy.filtered_merge_sequences, expected["oars_merge_sequences"]):
+        assert result_rg_idx_start == expected_rg_idx_start
         assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
 
 
@@ -626,504 +1256,3 @@ def test_time_period_compute_split_sequence(test_id, df_dates, target_period, ex
     offsets = strategy.compute_split_sequence(df_ordered_on=Series(df_dates))
     # Verify results
     assert offsets == expected_offsets
-
-
-@pytest.mark.parametrize(
-    "test_id, rg_mins, rg_maxs, df_ordered_on, row_group_time_period, drop_duplicates, rgs_n_rows, max_n_off_target, expected",
-    [
-        (  # Values not on boundary to check 'floor()'.
-            # Writing after pf data, no off target size row group.
-            # rg:  0            1
-            # pf: [8h10,9h10], [10h10]
-            # df:                      [12h10]
-            "new_rg_simple_append_timestamp_not_on_boundary",
-            array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
-            array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
-            Series([Timestamp(f"{REF_D}12:10")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not merge incomplete rg
-            False,  # drop_duplicates | should not merge with preceding rg
-            array([2, 1]),  # rgs_n_rows
-            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(2, array([[2, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # Values not on boundary to check 'floor()'.
-            # Writing after pf data, not merging with off target size row group.
-            # rg:  0            1
-            # pf: [8h10,9h10], [10h10]
-            # df:                      [10h10]
-            "no_drop_duplicates_simple_append_timestamp_not_on_boundary",
-            array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
-            array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
-            Series([Timestamp(f"{REF_D}10:10")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not merge incomplete rg
-            False,  # drop_duplicates | should not merge with preceding rg
-            array([2, 1]),  # rgs_n_rows
-            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(2, array([[2, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # Values not on boundary to check 'floor()'.
-            # Writing after pf data, merging with off target size row group.
-            # rg:  0            1
-            # pf: [8h10,9h10], [10h10]
-            # df:              [10h10]
-            "drop_duplicates_merge_tail_timestamp_not_on_boundary",
-            array([Timestamp(f"{REF_D}08:10"), Timestamp(f"{REF_D}10:10")]),  # rg_mins
-            array([Timestamp(f"{REF_D}09:10"), Timestamp(f"{REF_D}10:10")]),  # rg_maxs
-            Series([Timestamp(f"{REF_D}10:10")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not merge incomplete rg
-            True,  # drop_duplicates | should merge with incomplete rg
-            array([2, 1]),  # rgs_n_rows
-            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(1, array([[2, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # Values on boundary.
-            # Writing after pf data, not merging with off target size row group.
-            # rg:  0            1
-            # pf: [8h00,9h00], [10h00]
-            # df:                      [10h00]
-            "no_drop_duplicates_simple_append_timestamp_on_boundary",
-            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}10:00")]),  # rg_mins
-            array([Timestamp(f"{REF_D}09:00"), Timestamp(f"{REF_D}10:00")]),  # rg_maxs
-            Series([Timestamp(f"{REF_D}10:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not merge incomplete rg
-            False,  # drop_duplicates | should not merge with preceding rg
-            array([2, 1]),  # rgs_n_rows
-            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(2, array([[2, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # Values on boundary.
-            # Writing after pf data, merging with off target size row group.
-            # rg:  0            1
-            # pf: [8h00,9h00], [10h00]
-            # df:              [10h00]
-            "drop_duplicates_merge_tail_timestamp_on_boundary",
-            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}10:00")]),  # rg_mins
-            array([Timestamp(f"{REF_D}09:00"), Timestamp(f"{REF_D}10:00")]),  # rg_maxs
-            Series([Timestamp(f"{REF_D}10:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not merge incomplete rg
-            True,  # drop_duplicates | should merge with incomplete rg
-            array([2, 1]),  # rgs_n_rows
-            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(1, array([[2, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # Writing after pf data, off target size row group should be merged.
-            # rg:  0            1        2
-            # pf: [8h00,9h00], [10h00], [11h00]
-            # df:                               [13h00]
-            "last_row_group_exceeded_merge_tail",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}13:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period | new period, should merge incomplete rgs
-            True,  # drop_duplicates | no duplicates to drop
-            array([2, 1, 1]),  # rgs_n_rows
-            3,  # max_n_off_target_rgs | should not rewrite incomplete rg
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(1, array([[3, 0], [3, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # df at the start of pf data.
-            # df is not overlapping with existing row groups.
-            # rg:           0            1        2
-            # pf:          [8h00,9h00], [12h00], [13h00]
-            # df:  [7h30]
-            "no_duplicates_insert_at_start_new_rg_timestamp_not_on_boundary",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:00"),
-                    Timestamp(f"{REF_D}12:00"),
-                    Timestamp(f"{REF_D}13:00"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:00"),
-                    Timestamp(f"{REF_D}12:00"),
-                    Timestamp(f"{REF_D}13:00"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}07:30")]),  # df_ordered_on
-            "2h",  # row_group_time_period | no rg in same period to merge with
-            True,  # drop_duplicates | no duplicates to drop
-            array([2, 1, 1]),  # rgs_n_rows
-            2,  # max_n_off_target_rgs | should rewrite tail
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(0, array([[0, 1]]))],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (  # df at the start of pf data.
-            # df is overlapping with time period of existing row groups.
-            # rg:            0            1        2
-            # pf:           [8h10,9h10], [12h10], [13h10]
-            # df:           [8h00]
-            "no_duplicates_insert_at_start_no_new_rg_timestamp_on_boundary",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:10"),
-                    Timestamp(f"{REF_D}12:10"),
-                    Timestamp(f"{REF_D}13:10"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:10"),
-                    Timestamp(f"{REF_D}12:10"),
-                    Timestamp(f"{REF_D}13:10"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}08:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should merge with rg in same period
-            True,  # drop_duplicates | no duplicates to drop
-            array([2, 1, 1]),  # rgs_n_rows
-            2,  # max_n_off_target_rgs | should rewrite tail
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(0, array([[1, 1], [3, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # df connected to off target size rgs. Values on boundary.
-            # Writing after pf data, off target size row groups.
-            # rg:  0            1        2
-            # pf: [8h00,9h00], [10h00], [11h00]
-            # df:                               [11h00]
-            "max_n_off_target_rgs_not_reached_simple_append",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}11:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not rewrite tail
-            False,  # drop_duplicates | should not merge with preceding rg
-            array([2, 1, 1]),  # rgs_n_rows
-            3,  # max_n_off_target_rgs | should not rewrite tail
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(3, array([[3, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # df connected to off target size rgs. Values on boundary.
-            # Writing after pf data, off target size row groups.
-            # rg:  0            1        2
-            # pf: [8h00,9h00], [10h00], [11h00]
-            # df:                               [11h00]
-            "max_n_off_target_rgs_reached_tail_rewrite",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}11:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not merge with incomplete rg.
-            False,  # drop_duplicates | should not merge with preceding rg
-            array([2, 1, 1]),  # rgs_n_rows
-            2,  # max_n_off_target_rgs | should rewrite tail
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(1, array([[3, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # df connected to off target size rgs. Values on boundary.
-            # Writing after pf data, off target size row groups.
-            # rg:  0            1        2
-            # pf: [8h00,9h00], [10h00], [11h00]
-            # df:                               [11h00]
-            "max_n_off_target_rgs_none_simple_append",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}11:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not merge with incomplete rg.
-            False,  # drop_duplicates
-            array([2, 1, 1]),  # rgs_n_rows
-            None,  # max_n_off_target_rgs
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(3, array([[3, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-        (  # 'max_n_off_target_rgs' not reached.
-            # rg:  0            1                 2
-            # pf: [8h00,9h00], [10h00],          [13h00]
-            # df:                       [12h00]
-            "insert_timestamp_max_n_off_target_rgs_tail_rewrite",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}13:00"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}13:00"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}12:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not specifically rewrite tail
-            True,  # drop_duplicates
-            array([2, 1, 1]),  # rgs_n_rows
-            2,  # max_n_off_target_rgs | should not rewrite tail
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(2, array([[2, 1]]))],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (  # df is not overlapping with existing row groups. It should be added.
-            # rg:  0                   1        2
-            # pf: [8h00,9h00],        [12h00], [14h00]
-            # df:             [10h30]
-            "insert_timestamp_non_overlapping",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:00"),
-                    Timestamp(f"{REF_D}12:00"),
-                    Timestamp(f"{REF_D}14:00"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:00"),
-                    Timestamp(f"{REF_D}12:00"),
-                    Timestamp(f"{REF_D}14:00"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}10:30")]),  # df_ordered_on
-            "2h",  # row_group_time_period
-            True,  # drop_duplicates
-            array([2, 1, 1]),  # rgs_n_rows
-            2,  # max_n_off_target_rgs
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(1, array([[1, 1]]))],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (  # Writing in-between pf data, with off target size row groups at
-            # the end of pf data.
-            # rg:  0        1           2           3      4
-            # pf: [8h,9h], [10h, 11h], [12h, 13h], [14h], [15h]
-            # df:               [11h]
-            "insert_timestamp_middle_with_off_target_rgs",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}12:00"),
-                    Timestamp(f"{REF_D}14:00"),
-                    Timestamp(f"{REF_D}15:00"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                    Timestamp(f"{REF_D}13:00"),
-                    Timestamp(f"{REF_D}14:00"),
-                    Timestamp(f"{REF_D}15:00"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}11:00")]),  # df_ordered_on
-            "2h",  # row_group_size
-            True,  # drop_duplicates
-            array([2, 2, 2, 1, 1]),  # rgs_n_rows
-            1,  # max_n_off_target_rgs | should rewrite tail
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(1, array([[2, 1]]))],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (  # df within pf data.
-            # Writing in-between pf data, with off target size row groups at
-            # the end of pf data.
-            # rg:  0          1           2           3      4
-            # pf: [8h,9h],   [10h, 11h], [12h, 13h], [14h], [15h]
-            # df:        [9h]
-            "insert_timestamp_middle_no_rewrite",
-            array(
-                [
-                    Timestamp(f"{REF_D}08:00"),
-                    Timestamp(f"{REF_D}10:00"),
-                    Timestamp(f"{REF_D}12:00"),
-                    Timestamp(f"{REF_D}14:00"),
-                    Timestamp(f"{REF_D}15:00"),
-                ],
-            ),  # rg_mins
-            array(
-                [
-                    Timestamp(f"{REF_D}09:00"),
-                    Timestamp(f"{REF_D}11:00"),
-                    Timestamp(f"{REF_D}13:00"),
-                    Timestamp(f"{REF_D}14:00"),
-                    Timestamp(f"{REF_D}15:00"),
-                ],
-            ),  # rg_maxs
-            Series([Timestamp(f"{REF_D}09:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period
-            False,  # drop_duplicates
-            array([2, 2, 2, 1, 1]),  # rgs_n_rows
-            2,  # max_n_off_target_rgs
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(1, array([[1, 1]]))],
-                "sort_rgs_after_write": True,
-            },
-        ),
-        (  # Several empty periods, to make sure the empty periods are not in
-            # the output
-            # rg:  0            1
-            # pf: [8h00,9h00], [10h00]
-            # df:                      [23h00]
-            "insert_timestamp_several_empty_periods",
-            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}10:00")]),  # rg_mins
-            array([Timestamp(f"{REF_D}09:00"), Timestamp(f"{REF_D}10:00")]),  # rg_maxs
-            Series([Timestamp(f"{REF_D}23:00")]),  # df_ordered_on
-            "2h",  # row_group_time_period | should not specifically rewrite tail
-            True,  # drop_duplicates
-            array([2, 1]),  # rgs_n_rows
-            2,  # max_n_off_target_rgs
-            {
-                RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(2, array([[2, 1]]))],
-                "sort_rgs_after_write": False,
-            },
-        ),
-    ],
-)
-def test_time_period_integration_compute_merge_sequences(
-    test_id: str,
-    rg_mins: NDArray,
-    rg_maxs: NDArray,
-    df_ordered_on: NDArray,
-    row_group_time_period: str,
-    drop_duplicates: bool,
-    rgs_n_rows: NDArray,
-    max_n_off_target: int,
-    expected: Dict,
-) -> None:
-    """
-    Integration test for 'compute_merge_sequences' method.
-
-    Parameters
-    ----------
-    test_id : str
-        Identifier for the test case.
-    rg_mins : NDArray
-        Array of shape (n) containing the minimum values of the row groups.
-    rg_maxs : NDArray
-        Array of shape (n) containing the maximum values of the row groups.
-    df_ordered_on : NDArray
-        Array of shape (m) containing the values of the DataFrame to be ordered on.
-    row_group_time_period : str
-        Time period for row groups.
-    drop_duplicates : bool
-        Whether to drop duplicates between row groups and DataFrame.
-    rgs_n_rows : NDArray
-        Array of shape (n) containing the number of rows in each row group.
-    max_n_off_target : int
-        Maximum number of off-target row groups allowed.
-    expected : Dict
-        Dictionary containing the expected results.
-
-    """
-    # Initialize strategy.
-    strategy = TimePeriodMergeSplitStrategy(
-        rg_ordered_on_mins=rg_mins,
-        rg_ordered_on_maxs=rg_maxs,
-        df_ordered_on=df_ordered_on,
-        row_group_time_period=row_group_time_period,
-        drop_duplicates=drop_duplicates,
-    )
-    if expected[RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS] is not None:
-        assert_array_equal(
-            strategy.rg_idx_ends_excl_not_to_use_as_split_points,
-            expected[RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS],
-        )
-    else:
-        assert strategy.rg_idx_ends_excl_not_to_use_as_split_points is None
-    # Compute merge sequences.
-    strategy.compute_merge_sequences(
-        max_n_off_target_rgs=max_n_off_target,
-    )
-    # Check.
-    assert strategy.sort_rgs_after_write == expected["sort_rgs_after_write"]
-    assert len(strategy.filtered_merge_sequences) == len(expected["oars_merge_sequences"])
-    for (result_rg_idx_start, result_cmpt_ends_excl), (
-        expected_rg_idx_start,
-        expected_cmpt_ends_excl,
-    ) in zip(strategy.filtered_merge_sequences, expected["oars_merge_sequences"]):
-        assert result_rg_idx_start == expected_rg_idx_start
-        assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
