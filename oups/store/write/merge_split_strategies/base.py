@@ -168,6 +168,15 @@ class OARMergeSplitStrategy(ABC):
         relevant row groups.
     n_rgs : int
         Number of existing row groups.
+    rg_idx_mrs_starts_ends_excl : List[slice]
+        List of slices, each containing the start (included) and end (excluded)
+        indices of the row groups in a merge sequence.
+    filtered_merge_sequences : List[Tuple[int, NDArray]]
+        List of merge sequences, each containing a tuple of two items:
+        - the first item is the row group index starting the merge sequence,
+        - the second item is a numpy array of shape (n, 2) containing the
+          successive end (excluded) indices of row groups and DataFrame row of
+          the merge sequence.
 
     """
 
@@ -358,6 +367,119 @@ class OARMergeSplitStrategy(ABC):
         """
         raise NotImplementedError("Subclasses must implement this method")
 
+    @classmethod
+    def from_oars_desc(
+        cls,
+        oars_rg_idx_starts: NDArray,
+        oars_cmpt_idx_ends_excl: NDArray,
+        oars_has_row_group: NDArray,
+        oars_has_df_overlap: NDArray,
+        rg_idx_ends_excl_not_to_use_as_split_points: Union[NDArray, None],
+        **kwargs,
+    ) -> "OARMergeSplitStrategy":
+        """
+        Create a strategy instance with a given OARs description.
+
+        This is primarily for testing purposes, allowing tests to directly set
+        the 'OARMergeSplitStrategy' base attributes without having to compute it
+        from row groups and DataFrame.
+
+        Parameters
+        ----------
+        oars_rg_idx_starts : NDArray
+            Start indices of row groups in each OAR.
+        oars_cmpt_idx_ends_excl : NDArray
+            End indices (excluded) of row groups and DataFrame chunks in each
+            OAR.
+        oars_has_row_group : NDArray
+            Boolean array indicating if OAR contains a row group.
+        oars_has_df_overlap : NDArray
+            Boolean array indicating if OAR overlaps with a DataFrame chunk.
+        rg_idx_ends_excl_not_to_use_as_split_points : Union[NDArray, None]
+            Array of indices for row group not to use as split points. There are
+            filtered out from 'filtered_merge_sequences'.
+        **kwargs
+            Additional arguments needed by specific strategy implementations.
+            For NRowsMergeSplitStrategy, this should include 'rgs_n_rows',
+            'row_group_target_size', and optionally 'drop_duplicates'.
+            For TimePeriodMergeSplitStrategy, this should include
+            'rg_ordered_on_mins', 'rg_ordered_on_maxs', 'df_ordered_on', and
+            'row_group_time_period'.
+
+        Returns
+        -------
+        OARMergeSplitStrategy
+            An instance of the strategy with the given OARs description.
+
+        """
+        instance = cls.__new__(cls)
+        instance.oars_rg_idx_starts = oars_rg_idx_starts
+        instance.oars_cmpt_idx_ends_excl = oars_cmpt_idx_ends_excl
+        instance.oars_has_row_group = oars_has_row_group
+        instance.oars_df_n_rows = diff(oars_cmpt_idx_ends_excl[:, 1], prepend=0)
+        instance.oars_has_df_overlap = oars_has_df_overlap
+        instance.rg_idx_ends_excl_not_to_use_as_split_points = (
+            rg_idx_ends_excl_not_to_use_as_split_points
+        )
+        instance.n_oars = len(oars_rg_idx_starts)
+        instance._specialized_init(**kwargs)
+        return instance
+
+    @cached_property
+    @abstractmethod
+    def oars_likely_on_target_size(self) -> NDArray:
+        """
+        Return boolean array indicating which OARs are likely to be on target size.
+
+        This can be the result of 2 conditions:
+        - either a single DataFrame chunk or the merge of a Dataframe chunk and
+          a row group, with a (resulting) size that is on target size
+          (not under-sized, but over-sized is accepted).
+        - or if there is only a row group, it is on target size on its own.
+
+        Returns
+        -------
+        NDArray
+            Boolean array of length the number of ordered atomic regions.
+
+        Notes
+        -----
+        The logic implements an asymmetric treatment of OARs with and without
+        DataFrame chunks to prevent fragmentation and ensure proper compliance
+        with split strategy, including off target existing row groups.
+
+        1. For OARs containing a DataFrame chunk:
+            - Writing is always triggered (systematic).
+            - If oversized, considered on target to force rewrite of neighbor
+              already existing off target row groups.
+            - If undersized, considered off target to be properly accounted for
+              when comparing to 'max_n_off_target_rgs'.
+           This ensures that writing a new on target row group will trigger
+           the rewrite of adjacent off target row groups when
+           'max_n_off_target_rgs' is set.
+
+        2. For OARs containing only row groups:
+            - Writing is triggered only if:
+               * The OAR is within a set of contiguous off target OARs
+                 (under or over sized) and neighbors an OAR with a DataFrame
+                 chunk.
+               * Either the number of off target OARs exceeds
+                 'max_n_off_target_rgs',
+               * or an OAR to be written (with DataFrame chunk) will induce
+                 writing of a row group likely to be on target.
+            - Considered off target if either under or over sized to ensure
+              proper accounting when comparing to 'max_n_off_target_rgs'.
+
+        This approach ensures:
+        - All off target row groups are captured for potential rewrite.
+        - Writing an on target new row group forces rewrite of all adjacent
+          already existing off target row groups (under or over sized).
+        - Fragmentation is prevented by consolidating off target regions when
+          such *full* rewrite is triggered.
+
+        """
+        raise NotImplementedError("Subclasses must implement this property")
+
     def _compute_merge_regions_start_ends_excl(
         self,
         max_n_off_target_rgs: Optional[int] = None,
@@ -490,150 +612,26 @@ class OARMergeSplitStrategy(ABC):
                 self.oar_idx_mrs_starts_ends_excl[:, 0].argsort()
             ]
 
-    @classmethod
-    def from_oars_desc(
-        cls,
-        oars_rg_idx_starts: NDArray,
-        oars_cmpt_idx_ends_excl: NDArray,
-        oars_has_row_group: NDArray,
-        oars_has_df_overlap: NDArray,
-        rg_idx_ends_excl_not_to_use_as_split_points: Union[NDArray, None],
-        **kwargs,
-    ) -> "OARMergeSplitStrategy":
-        """
-        Create a strategy instance with a given OARs description.
-
-        This is primarily for testing purposes, allowing tests to directly set
-        the 'OARMergeSplitStrategy' base attributes without having to compute it
-        from row groups and DataFrame.
-
-        Parameters
-        ----------
-        oars_rg_idx_starts : NDArray
-            Start indices of row groups in each OAR.
-        oars_cmpt_idx_ends_excl : NDArray
-            End indices (excluded) of row groups and DataFrame chunks in each
-            OAR.
-        oars_has_row_group : NDArray
-            Boolean array indicating if OAR contains a row group.
-        oars_has_df_overlap : NDArray
-            Boolean array indicating if OAR overlaps with a DataFrame chunk.
-        rg_idx_ends_excl_not_to_use_as_split_points : Union[NDArray, None]
-            Array of indices for row group not to use as split points. There are
-            filtered out from 'filtered_merge_sequences'.
-        **kwargs
-            Additional arguments needed by specific strategy implementations.
-            For NRowsMergeSplitStrategy, this should include 'rgs_n_rows',
-            'row_group_target_size', and optionally 'drop_duplicates'.
-            For TimePeriodMergeSplitStrategy, this should include
-            'rg_ordered_on_mins', 'rg_ordered_on_maxs', 'df_ordered_on', and
-            'row_group_time_period'.
-
-        Returns
-        -------
-        OARMergeSplitStrategy
-            An instance of the strategy with the given OARs description.
-
-        """
-        instance = cls.__new__(cls)
-        instance.oars_rg_idx_starts = oars_rg_idx_starts
-        instance.oars_cmpt_idx_ends_excl = oars_cmpt_idx_ends_excl
-        instance.oars_has_row_group = oars_has_row_group
-        instance.oars_df_n_rows = diff(oars_cmpt_idx_ends_excl[:, 1], prepend=0)
-        instance.oars_has_df_overlap = oars_has_df_overlap
-        instance.rg_idx_ends_excl_not_to_use_as_split_points = (
-            rg_idx_ends_excl_not_to_use_as_split_points
-        )
-        instance.n_oars = len(oars_rg_idx_starts)
-        instance._specialized_init(**kwargs)
-        return instance
-
-    @cached_property
-    def sort_rgs_after_write(self) -> bool:
-        """
-        Whether to sort row groups after writing.
-
-        Row groups witten may be so in the middle of existing row groups.
-        It is then required to sort them so that order is maintained between
-        row groups.
-
-        Returns
-        -------
-        bool
-            Whether to sort row groups after writing.
-
-        """
-        try:
-            return (
-                (
-                    len(self.filtered_merge_sequences) > 1
-                    # 'filtered_merge_sequences[0][1][-1,0]' is 'rg_idx_ends_excl'
-                    # of the last row group in the first merge sequence.
-                    or self.filtered_merge_sequences[0][1][-1, 0] < self.n_rgs
-                )
-                if self.filtered_merge_sequences
-                else False
-            )
-        except AttributeError:
-            raise AttributeError(
-                "not possible to return 'sort_rgs_after_write' value if "
-                "'compute_merge_sequences()' has not been run beforehand.",
-            )
-
-    @cached_property
     @abstractmethod
-    def oars_likely_on_target_size(self) -> NDArray:
+    def _specialized_compute_merge_sequences(
+        self,
+    ) -> List[Tuple[int, NDArray]]:
         """
-        Return boolean array indicating which OARs are likely to be on target size.
-
-        This can be the result of 2 conditions:
-        - either a single DataFrame chunk or the merge of a Dataframe chunk and
-          a row group, with a (resulting) size that is on target size
-          (not under-sized, but over-sized is accepted).
-        - or if there is only a row group, it is on target size on its own.
+        Sequence merge regions (MRs) into optimally sized chunks for writing.
 
         Returns
         -------
-        NDArray
-            Boolean array of length the number of ordered atomic regions.
-
-        Notes
-        -----
-        The logic implements an asymmetric treatment of OARs with and without
-        DataFrame chunks to prevent fragmentation and ensure proper compliance
-        with split strategy, including off target existing row groups.
-
-        1. For OARs containing a DataFrame chunk:
-            - Writing is always triggered (systematic).
-            - If oversized, considered on target to force rewrite of neighbor
-              already existing off target row groups.
-            - If undersized, considered off target to be properly accounted for
-              when comparing to 'max_n_off_target_rgs'.
-           This ensures that writing a new on target row group will trigger
-           the rewrite of adjacent off target row groups when
-           'max_n_off_target_rgs' is set.
-
-        2. For OARs containing only row groups:
-            - Writing is triggered only if:
-               * The OAR is within a set of contiguous off target OARs
-                 (under or over sized) and neighbors an OAR with a DataFrame
-                 chunk.
-               * Either the number of off target OARs exceeds
-                 'max_n_off_target_rgs',
-               * or an OAR to be written (with DataFrame chunk) will induce
-                 writing of a row group likely to be on target.
-            - Considered off target if either under or over sized to ensure
-              proper accounting when comparing to 'max_n_off_target_rgs'.
-
-        This approach ensures:
-        - All off target row groups are captured for potential rewrite.
-        - Writing an on target new row group forces rewrite of all adjacent
-          already existing off target row groups (under or over sized).
-        - Fragmentation is prevented by consolidating off target regions when
-          such *full* rewrite is triggered.
+        List[Tuple[int, NDArray]]
+            Merge sequences, a list of tuples, where each tuple contains for
+            each merge sequence:
+            - First element: Start index of the first row group in the merge
+              sequence.
+            - Second element: Array of shape (m, 2) containing end indices
+              (excluded) for row groups and DataFrame chunks in the merge
+              sequence.
 
         """
-        raise NotImplementedError("Subclasses must implement this property")
+        raise NotImplementedError("Subclasses must implement this method")
 
     def compute_merge_sequences(
         self,
@@ -693,49 +691,6 @@ class OARMergeSplitStrategy(ABC):
         )
         return self.filtered_merge_sequences
 
-    @abstractmethod
-    def _specialized_compute_merge_sequences(
-        self,
-    ) -> List[Tuple[int, NDArray]]:
-        """
-        Sequence merge regions (MRs) into optimally sized chunks for writing.
-
-        Returns
-        -------
-        List[Tuple[int, NDArray]]
-            Merge sequences, a list of tuples, where each tuple contains for
-            each merge sequence:
-            - First element: Start index of the first row group in the merge
-              sequence.
-            - Second element: Array of shape (m, 2) containing end indices
-              (excluded) for row groups and DataFrame chunks in the merge
-              sequence.
-
-        """
-        raise NotImplementedError("Subclasses must implement this method")
-
-    @abstractmethod
-    def compute_split_sequence(self, df_ordered_on: Series) -> List[int]:
-        """
-        Define the split sequence for a chunk depending row group target size.
-
-        Result is to be used as `row_group_offsets` parameter in
-        `iter_dataframe` method.
-
-        Parameters
-        ----------
-        df_ordered_on : Series
-            Series by which the DataFrame to be written is ordered.
-
-        Returns
-        -------
-        List[int]
-            A list of indices with the explicit index values to start new row
-            groups.
-
-        """
-        raise NotImplementedError("Subclasses must implement this method")
-
     @cached_property
     def rg_idx_mrs_starts_ends_excl(self) -> List[slice]:
         """
@@ -761,3 +716,57 @@ class OARMergeSplitStrategy(ABC):
                 != (rg_idx_end_excl := self.oars_cmpt_idx_ends_excl[oar_idx_end_excl - 1, 0])
             )
         ]
+
+    @cached_property
+    def sort_rgs_after_write(self) -> bool:
+        """
+        Whether to sort row groups after writing.
+
+        Row groups witten may be so in the middle of existing row groups.
+        It is then required to sort them so that order is maintained between
+        row groups.
+
+        Returns
+        -------
+        bool
+            Whether to sort row groups after writing.
+
+        """
+        try:
+            return (
+                (
+                    len(self.filtered_merge_sequences) > 1
+                    # 'filtered_merge_sequences[0][1][-1,0]' is 'rg_idx_ends_excl'
+                    # of the last row group in the first merge sequence.
+                    or self.filtered_merge_sequences[0][1][-1, 0] < self.n_rgs
+                )
+                if self.filtered_merge_sequences
+                else False
+            )
+        except AttributeError:
+            raise AttributeError(
+                "not possible to return 'sort_rgs_after_write' value if "
+                "'compute_merge_sequences()' has not been run beforehand.",
+            )
+
+    @abstractmethod
+    def compute_split_sequence(self, df_ordered_on: Series) -> List[int]:
+        """
+        Define the split sequence for a chunk depending row group target size.
+
+        Result is to be used as `row_group_offsets` parameter in
+        `iter_dataframe` method.
+
+        Parameters
+        ----------
+        df_ordered_on : Series
+            Series by which the DataFrame to be written is ordered.
+
+        Returns
+        -------
+        List[int]
+            A list of indices with the explicit index values to start new row
+            groups.
+
+        """
+        raise NotImplementedError("Subclasses must implement this method")
