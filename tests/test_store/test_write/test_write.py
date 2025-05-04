@@ -105,9 +105,9 @@ def test_init_idx_expansion_sparse_levels(tmp_path):
 def test_coalescing_first_rgs(tmp_path):
     # Initialize a parquet dataset directly with fastparquet.
     # Coalescing reaching first row group. Coalescing triggered because
-    # row_group_target_size reached, & also 'max_nirgs'.
+    # row_group_target_size reached, & also 'max_n_off_target_rgs'.
     # row_group_target_size = 2
-    # max_nirgs = 2
+    # max_n_off_target_rgs = 2
     # rgs                          [ 0, 1]
     # idx                          [ 0, 1]
     # a                            [ 0, 1]
@@ -119,15 +119,15 @@ def test_coalescing_first_rgs(tmp_path):
     pf = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [2]
-    row_group_target_size = 3
-    max_nirgs = 2
+    row_group_target_size = 4  # if setting 3, with rounding, 2 is also on target.
+    max_n_off_target_rgs = 1
     pdf2 = DataFrame({"a": [20]}, index=[0])
     write_ordered(
         dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
-        max_nirgs=max_nirgs,
         ordered_on="a",
+        df=pdf2,
+        row_group_target_size=row_group_target_size,
+        max_n_off_target_rgs=max_n_off_target_rgs,
     )
     pf_rec = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
@@ -140,9 +140,9 @@ def test_coalescing_simple_irgs(tmp_path):
     # Initialize a parquet dataset directly with fastparquet.
     # row_group_target_size = 4
     # (incomplete row group size: 1 to be 'incomplete')
-    # max_nirgs = 3
+    # max_n_off_target_rgs = 3
 
-    # Case 1, 'max_nirgs" not reached yet.
+    # Case 1, 'max_n_off_target_rgs" not reached yet.
     # (size of new data: 1)
     # One incomplete row group in the middle of otherwise complete row groups.
     # Because there is only 1 irgs, +1 with the new data to be added (while max
@@ -160,13 +160,13 @@ def test_coalescing_simple_irgs(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [4, 1, 4, 1]
     row_group_target_size = 4
-    max_nirgs = 3
+    max_n_off_target_rgs = 3
     pdf2 = DataFrame({"a": [20]}, index=[0])
     write_ordered(
         dn,
         pdf2,
         row_group_target_size=row_group_target_size,
-        max_nirgs=max_nirgs,
+        max_n_off_target_rgs=max_n_off_target_rgs,
         ordered_on="a",
     )
     pf_rec1 = ParquetFile(dn)
@@ -175,7 +175,7 @@ def test_coalescing_simple_irgs(tmp_path):
     df_ref1 = concat([pdf1, pdf2]).reset_index(drop=True)
     assert pf_rec1.to_pandas().equals(df_ref1)
 
-    # Case 2, 'max_nirgs" now reached.
+    # Case 2, 'max_n_off_target_rgs" now reached.
     # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3, 4]
     # idx                          [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10]
     # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,20]
@@ -185,7 +185,7 @@ def test_coalescing_simple_irgs(tmp_path):
         dn,
         pdf2,
         row_group_target_size=row_group_target_size,
-        max_nirgs=max_nirgs,
+        max_n_off_target_rgs=max_n_off_target_rgs,
         ordered_on="a",
     )
     pf_rec2 = ParquetFile(dn)
@@ -199,7 +199,7 @@ def test_coalescing_simple_row_group_target_size(tmp_path):
     # Initialize a parquet dataset directly with fastparquet.
     # row_group_target_size = 4
     # (incomplete row group size: 1 to be 'incomplete')
-    # max_nirgs = 5
+    # max_n_off_target_rgs = 5
     # Coalescing occurs because 'row_group_target_size' is reached.
     # In initial dataset, there are 3 row groups with a single row.
     # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3, 4, 5]
@@ -220,14 +220,14 @@ def test_coalescing_simple_row_group_target_size(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [4, 1, 4, 1, 1, 1]
     row_group_target_size = 4
-    max_nirgs = 5
+    max_n_off_target_rgs = 5
     # With additional row of new data, 'row_group_target_size' is reached.
     pdf2 = DataFrame({"a": [20]}, index=[0])
     write_ordered(
         dn,
         pdf2,
         row_group_target_size=row_group_target_size,
-        max_nirgs=max_nirgs,
+        max_n_off_target_rgs=max_n_off_target_rgs,
         ordered_on="a",
     )
     pf_rec1 = ParquetFile(dn)
@@ -649,7 +649,7 @@ def test_appending_as_if_inserting_with_coalesce(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [3, 3, 2]
     row_group_target_size = 3
-    max_nirgs = 2
+    max_n_off_target_rgs = 2
     a2 = [6, 6, 7, 8]
     len_a2 = len(a2)
     b2 = [9, 9, 10, 10]
@@ -662,7 +662,7 @@ def test_appending_as_if_inserting_with_coalesce(tmp_path):
         row_group_target_size=row_group_target_size,
         ordered_on="a",
         duplicates_on=["b"],
-        max_nirgs=max_nirgs,
+        max_n_off_target_rgs=max_n_off_target_rgs,
     )
     pf_rec = ParquetFile(dn)
     len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
@@ -727,7 +727,7 @@ def test_drop_duplicates_wo_coalescing_irgs(tmp_path):
     # Targeted result is that one-but-last row group (incomplete one) is not
     # coalesced.
     # row_group_target_size = 5 (one row per row group for incomplete rgs)
-    # max_nirgs = 4 (4 incomplete rgs, but drop duplicate with new data, so
+    # max_n_off_target_rgs = 4 (4 incomplete rgs, but drop duplicate with new data, so
     # after merging new data, only 2 incomplete row groups will remain)
     # rgs                          [0, , , , ,1,2]
     # idx                          [0,1,2,3,4,5,6]
@@ -750,13 +750,13 @@ def test_drop_duplicates_wo_coalescing_irgs(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [n_val - 2, 1, 1]
     row_group_target_size = 5
-    max_nirgs = 4
+    max_n_off_target_rgs = 4
     pdf2 = DataFrame({"a": [n_val - 1], "b": [1]})
     write_ordered(
         dn,
         pdf2,
         row_group_target_size=row_group_target_size,
-        max_nirgs=max_nirgs,
+        max_n_off_target_rgs=max_n_off_target_rgs,
         ordered_on="a",
         duplicates_on="a",
     )
