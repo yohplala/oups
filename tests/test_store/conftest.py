@@ -27,6 +27,6 @@ def create_parquet_file(tmp_path: str, df: DataFrame, row_group_offsets: int) ->
     named 'test_parquet' within the temporary directory.
 
     """
-    path = f"{tmp_path}/test_parquet"
-    write(path, df, row_group_offsets=row_group_offsets, file_scheme="hive")
-    return ParquetFile(path)
+    tmp_path = str(tmp_path)
+    write(tmp_path, df, row_group_offsets=row_group_offsets, file_scheme="hive")
+    return ParquetFile(tmp_path)

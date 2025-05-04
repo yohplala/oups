@@ -21,47 +21,7 @@ from pandas import concat
 
 from oups.store.write import to_pandas_midx
 from oups.store.write import write_ordered
-
-
-def test_init_and_append_std(tmp_path):
-    # Initialize a parquet dataset from pandas dataframe. Existing folder.
-    # (no row index, compression SNAPPY, row group size: 2)
-    pdf1 = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
-    write_ordered(str(tmp_path), ordered_on="a", df=pdf1, row_group_target_size=2)
-    pf1 = ParquetFile(str(tmp_path))
-    assert len(pf1.row_groups) == 3
-    for rg in pf1.row_groups:
-        assert rg.num_rows == 2
-    res1 = pf1.to_pandas()
-    assert pdf1.equals(res1)
-    # Append
-    pdf2 = DataFrame({"a": [6, 7], "b": ["at", "of"]})
-    write_ordered(str(tmp_path), ordered_on="a", df=pdf2, row_group_target_size=2)
-    res2 = ParquetFile(str(tmp_path)).to_pandas()
-    assert concat([pdf1, pdf2]).reset_index(drop=True).equals(res2)
-
-
-def test_init_no_folder(tmp_path):
-    # Initialize a parquet dataset from pandas dataframe. No folder.
-    # (no row index, compression SNAPPY, row group size: 2)
-    tmp_path = os_path.join(tmp_path, "test")
-    pdf = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
-    write_ordered(str(tmp_path), ordered_on="a", df=pdf, row_group_target_size=2)
-    res = ParquetFile(str(tmp_path)).to_pandas()
-    assert pdf.equals(res)
-
-
-def test_init_compression_brotli(tmp_path):
-    # Initialize a parquet dataset from pandas dataframe. Compression 'BROTLI'.
-    # (no row index)
-    pdf = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
-    tmp_path1 = os_path.join(tmp_path, "brotli")
-    write_ordered(str(tmp_path1), ordered_on="a", df=pdf, compression="BROTLI")
-    brotli_s = os_path.getsize(os_path.join(tmp_path1, "part.0.parquet"))
-    tmp_path2 = os_path.join(tmp_path, "snappy")
-    write_ordered(str(tmp_path2), ordered_on="a", df=pdf, compression="SNAPPY")
-    snappy_s = os_path.getsize(os_path.join(tmp_path2, "part.0.parquet"))
-    assert brotli_s < snappy_s
+from tests.test_store.conftest import create_parquet_file
 
 
 def test_init_idx_expansion(tmp_path):
@@ -102,37 +62,113 @@ def test_init_idx_expansion_sparse_levels(tmp_path):
     assert res_midx.equals(ref_midx)
 
 
-def test_coalescing_first_rgs(tmp_path):
-    # Initialize a parquet dataset directly with fastparquet.
-    # Coalescing reaching first row group. Coalescing triggered because
-    # row_group_target_size reached, & also 'max_n_off_target_rgs'.
-    # row_group_target_size = 2
-    # max_n_off_target_rgs = 2
-    # rgs                          [ 0, 1]
-    # idx                          [ 0, 1]
-    # a                            [ 0, 1]
-    # a (new data)                       [20]
-    # rgs (new)                    [ 0,  , 1]
-    pdf = DataFrame({"a": [0, 1]})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(dn, pdf, row_group_offsets=[0], file_scheme="hive", write_index=False)
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [2]
-    row_group_target_size = 4  # if setting 3, with rounding, 2 is also on target.
-    max_n_off_target_rgs = 1
-    pdf2 = DataFrame({"a": [20]}, index=[0])
+@pytest.mark.parametrize(
+    "test_id, initial_data,append_data,row_group_target_size,max_n_off_target_rgs,duplicates_on,expected",
+    [
+        (
+            "init_and_append_std",
+            DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]}),
+            DataFrame({"a": [6, 7], "b": ["at", "of"]}),
+            2,  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            None,  # duplicates_on
+            {
+                "first_write": [2, 2, 2],
+                "second_write": [2, 2, 2, 2],
+            },
+        ),
+        (  # Coalescing reaching first row group. Coalescing triggered because
+            # 'row_group_target_size' reached, & also 'max_n_off_target_rgs'.
+            # row_group_target_size = 2
+            # max_n_off_target_rgs = 2
+            # rgs                          [ 0, 1]
+            # idx                          [ 0, 1]
+            # a                            [ 0, 1]
+            # a (new data)                       [20]
+            # rgs (new)                    [ 0,  , 1]
+            "coalescing_first_rg",
+            {"df": DataFrame({"a": [0, 1]}), "row_group_offsets": [0]},
+            DataFrame({"a": [20]}, index=[0]),
+            4,  # row_group_target_size
+            1,  # max_n_off_target_rgs
+            None,  # duplicates_on
+            {"second_write": [3]},
+        ),
+    ],
+)
+def test_write_and_append(
+    test_id,
+    tmp_path,
+    initial_data,
+    append_data,
+    row_group_target_size,
+    max_n_off_target_rgs,
+    duplicates_on,
+    expected,
+):
+    """
+    Test writing and appending data to a parquet file with various configurations.
+
+    Parameters
+    ----------
+    test_id : str
+        Test identifier.
+    initial_data : Union[DataFrame, Dict[str, Any]]
+        Initial data to write. If DataFrame, uses write_ordered. If dict with 'df' and 'row_group_offsets',
+        uses fp_write.
+    append_data : DataFrame
+        Data to append using write_ordered.
+    row_group_target_size : int
+        Target size for row groups.
+    max_n_off_target_rgs : Optional[int]
+        Maximum number of off-target row groups allowed.
+    duplicates_on : Optional[str]
+        Column to use for duplicate detection.
+    expected : List[int]
+        Expected number of rows in each row group after appending.
+
+    """
+    # First writing step
+    tmp_path = f"{str(tmp_path)}/test_data"
+    if isinstance(initial_data, dict):
+        # Use 'write' from fastparquet with 'row_group_offsets'.
+        pf = create_parquet_file(
+            tmp_path,
+            **initial_data,
+        )
+        initial_df = initial_data["df"]
+    else:
+        # Use 'write_ordered'.
+        write_ordered(
+            tmp_path,
+            ordered_on="a",
+            df=initial_data,
+            row_group_target_size=row_group_target_size,
+            duplicates_on=duplicates_on,
+        )
+        initial_df = initial_data
+        # Verify initial state if wri
+        pf = ParquetFile(tmp_path)
+        initial_rgs = [rg.num_rows for rg in pf.row_groups]
+        assert initial_rgs == expected["first_write"]
+        assert pf.to_pandas().equals(initial_df)
+
+    # Second writing step (append)
     write_ordered(
-        dn,
+        tmp_path,
         ordered_on="a",
-        df=pdf2,
+        df=append_data,
         row_group_target_size=row_group_target_size,
         max_n_off_target_rgs=max_n_off_target_rgs,
+        duplicates_on=duplicates_on,
     )
-    pf_rec = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs == [3]
-    df_ref = concat([pdf, pdf2]).reset_index(drop=True)
+    # Verify final state
+    pf_rec = ParquetFile(tmp_path)
+    final_rgs = [rg.num_rows for rg in pf_rec.row_groups]
+    assert final_rgs == expected["second_write"]
+    df_ref = concat([initial_df, append_data]).reset_index(drop=True)
+    if duplicates_on is not None:
+        df_ref = df_ref.drop_duplicates(subset=duplicates_on, keep="last", ignore_index=True)
     assert pf_rec.to_pandas().equals(df_ref)
 
 

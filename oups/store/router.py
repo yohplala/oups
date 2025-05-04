@@ -18,6 +18,9 @@ from oups.store.defines import DIR_SEP
 from oups.store.defines import OUPS_METADATA_KEY
 
 
+EMPTY_DATAFRAME = DataFrame()
+
+
 class ParquetHandle(ParquetFile):
     """
     Handle to parquet dataset and statistics on disk.
@@ -40,7 +43,7 @@ class ParquetHandle(ParquetFile):
 
     """
 
-    def __init__(self, dirpath: str, like_df: DataFrame):
+    def __init__(self, dirpath: str, like_df: DataFrame = EMPTY_DATAFRAME):
         """
         Instantiate parquet handle (ParquetFile instance).
 
@@ -50,7 +53,7 @@ class ParquetHandle(ParquetFile):
         ----------
         dirpath : str
             Directory path from where to load data.
-        like_df : DataFrame
+        like_df : Optional[DataFrame], default empty DataFrame
             DataFrame to use as template to create a new ParquetFile.
 
         """

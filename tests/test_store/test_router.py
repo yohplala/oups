@@ -94,3 +94,10 @@ def test_parquet_handle_not_existing(tmp_path):
     ph = ParquetHandle(str(tmp_path))
     assert isinstance(ph, ParquetFile)
     assert ph.pdf.empty
+
+
+def test_parquet_handle_folder_not_existing(tmp_path):
+    tmp_path = os_path.join(tmp_path, "test")
+    ph = ParquetHandle(str(tmp_path))
+    assert isinstance(ph, ParquetFile)
+    assert ph.pdf.empty
