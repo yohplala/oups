@@ -582,22 +582,10 @@ class OARMergeSplitStrategy(ABC):
             m_values=cumsum(oars_off_target),
             indices=potential_emrs_starts_ends_excl,
         )
-        # 2.b Get which enlarged regions into which the merge will likely create
-        # on target row groups (not combining OARs together).
-        # TODO: test if this condition is really needed by commenting it out
-        # and checking if test results are changed?
-        # 'mrs_likely_exceeds_target_size' is probably more restrictive than
-        # this condition, by assessing this on merge regions rather than
-        # individual OARs.
-        creates_on_target_rg_in_pemrs = get_region_start_end_delta(
-            m_values=cumsum(self.oars_likely_on_target_size),
-            indices=potential_emrs_starts_ends_excl,
-        ).astype(bool_)
         # Keep enlarged merge regions with too many off target atomic regions or
-        # with likely creation of on target row groups.
+        # which likely exceed target size if merging row groups together.
         confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
             (n_off_target_oars_in_pemrs > max_n_off_target_rgs)
-            | creates_on_target_rg_in_pemrs
             | self.mrs_likely_exceeds_target_size(
                 mrs_starts_ends_excl=potential_emrs_starts_ends_excl,
             )
