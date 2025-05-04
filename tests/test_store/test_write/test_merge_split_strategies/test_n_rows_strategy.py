@@ -118,6 +118,97 @@ def test_nrows_oars_likely_on_target_size(
 
 
 @pytest.mark.parametrize(
+    "test_id, rg_mins, rg_maxs, df_ordered_on, rgs_n_rows, row_group_target_size, drop_duplicates, mrs_starts_ends_excl, expected",
+    [
+        (
+            "should_enlarge_merge_to_previous_row_groups",
+            array([1, 5]),  # rg_mins
+            array([4, 6]),  # rg_maxs
+            Series([7, 8]),  # df_ordered_on
+            [2, 2],  # rgs_n_rows
+            4,  # row_group_target_size
+            False,  # drop_duplicates
+            array([[0, 3]]),  # mrs_starts_ends_excl
+            array([True]),  # mrs_likely_exceeds_target_size
+        ),
+        (
+            "should_not_enlarge_merge_to_previous_row_groups",
+            array([1, 5]),  # rg_mins
+            array([4, 6]),  # rg_maxs
+            Series([7, 8]),  # df_ordered_on
+            [2, 2],  # rgs_n_rows
+            8,  # row_group_target_size
+            False,  # drop_duplicates
+            array([[0, 3]]),  # mrs_starts_ends_excl
+            array([False]),  # mrs_likely_exceeds_target_size
+        ),
+        (
+            "combining_the_two_previous_situations",
+            array([1, 5, 10, 18, 22]),  # rg_mins
+            array([4, 6, 12, 20, 24]),  # rg_maxs
+            Series([7, 8, 25]),  # df_ordered_on
+            [2, 2, 4, 1, 1],  # rgs_n_rows
+            4,  # row_group_target_size
+            False,  # drop_duplicates
+            array([[0, 3], [4, 6]]),  # mrs_starts_ends_excl
+            array([True, False]),  # mrs_likely_exceeds_target_size
+        ),
+    ],
+)
+def test_nrows_mrs_likely_exceeds_target_size(
+    test_id: str,
+    rg_mins: NDArray,
+    rg_maxs: NDArray,
+    df_ordered_on: NDArray,
+    rgs_n_rows: NDArray,
+    row_group_target_size: int,
+    drop_duplicates: bool,
+    mrs_starts_ends_excl: NDArray,
+    expected: Dict,
+) -> None:
+    """
+    Test 'mrs_likely_exceeds_target_size' method.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    rg_mins : NDArray
+        Array of shape (n) containing the minimum values of the row groups.
+    rg_maxs : NDArray
+        Array of shape (n) containing the maximum values of the row groups.
+    df_ordered_on : NDArray
+        Array of shape (m) containing the values of the DataFrame to be ordered
+        on.
+    rgs_n_rows : NDArray
+        Array of shape (n) containing the number of rows in each row group.
+    row_group_target_size : int
+        Target number of rows above which a new row group should be created.
+    drop_duplicates : bool
+        Whether to drop duplicates between row groups and DataFrame.
+    mrs_starts_ends_excl : NDArray
+        Array of shape (m, 2) containing the start (included) and end
+        (excluded) indices of the merge regions.
+    expected : Dict
+        Dictionary containing the expected results.
+
+    """
+    # Initialize strategy.
+    strategy = NRowsMergeSplitStrategy(
+        rg_ordered_on_mins=rg_mins,
+        rg_ordered_on_maxs=rg_maxs,
+        df_ordered_on=df_ordered_on,
+        rgs_n_rows=rgs_n_rows,
+        row_group_target_size=row_group_target_size,
+        drop_duplicates=drop_duplicates,
+    )
+    assert_array_equal(
+        strategy.mrs_likely_exceeds_target_size(mrs_starts_ends_excl=mrs_starts_ends_excl),
+        expected,
+    )
+
+
+@pytest.mark.parametrize(
     "test_id, drop_duplicates, oars_desc_dict, rgs_n_rows, row_group_target_size, oar_idx_mrs_starts_ends_excl, expected",
     [
         (
@@ -673,7 +764,7 @@ def test_nrows_specialized_compute_merge_sequences(
             4,  # max_n_off_target_rgs | should not rewrite incomplete rg
             {
                 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS: None,
-                "oars_merge_sequences": [(4, array([[4, 1]]))],
+                "oars_merge_sequences": [(2, array([[4, 1]]))],
                 "sort_rgs_after_write": False,
             },
         ),
@@ -982,7 +1073,8 @@ def test_nrows_integration_compute_merge_sequences(
     rg_maxs : NDArray
         Array of shape (n) containing the maximum values of the row groups.
     df_ordered_on : NDArray
-        Array of shape (m) containing the values of the DataFrame to be ordered on.
+        Array of shape (m) containing the values of the DataFrame to be ordered
+        on.
     row_group_target_size : int
         Target number of rows above which a new row group should be created.
     drop_duplicates : bool

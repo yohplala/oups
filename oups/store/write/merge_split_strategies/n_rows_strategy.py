@@ -22,6 +22,7 @@ from numpy.typing import NDArray
 from pandas import Series
 
 from oups.store.write.merge_split_strategies.base import OARMergeSplitStrategy
+from oups.store.write.merge_split_strategies.base import get_region_start_end_delta
 
 
 LEFT = "left"
@@ -174,6 +175,31 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
         ) | ~self.oars_has_df_overlap & (  # OAR containing only row groups.
             (self.oars_max_n_rows >= self.row_group_min_size)
             & (self.oars_max_n_rows <= self.row_group_target_size)
+        )
+
+    def mrs_likely_exceeds_target_size(self, mrs_starts_ends_excl: NDArray) -> NDArray:
+        """
+        Return boolean array indicating which merge regions likely exceed target size.
+
+        Parameters
+        ----------
+        mrs_starts_ends_excl : NDArray
+            Array of shape (m, 2) containing the start (included) and end
+            (excluded) indices of the merge regions.
+
+        Returns
+        -------
+        NDArray
+            Boolean array of length equal to the number of merge regions, where
+            True indicates the merge region is likely to exceed target size.
+
+        """
+        return (
+            get_region_start_end_delta(
+                m_values=cumsum(self.oars_min_n_rows),
+                indices=mrs_starts_ends_excl,
+            )
+            >= self.row_group_target_size
         )
 
     def _specialized_compute_merge_sequences(

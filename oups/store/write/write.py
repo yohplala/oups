@@ -922,6 +922,9 @@ def write_ordered(
       target size row groups.
 
     """
+    # TODO: check if this is still really once vaex library will have been
+    # removed. It initially came because vaex is not able to handle pandas
+    # cmidx.
     if to_cmidx is not None:
         if not isinstance(ordered_on, tuple):
             raise ValueError("'ordered_on' should be a tuple when 'to_cmidx' is set.")

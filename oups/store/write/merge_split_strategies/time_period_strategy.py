@@ -196,6 +196,28 @@ class TimePeriodMergeSplitStrategy(OARMergeSplitStrategy):
             & (bincount(self.oars_period_idx.ravel())[self.oars_period_idx[:, 0]] == 2)
         )
 
+    def mrs_likely_exceeds_target_size(self, mrs_starts_ends_excl: NDArray) -> NDArray:
+        """
+        Return boolean array indicating which merge regions likely exceed target size.
+
+        Parameters
+        ----------
+        mrs_starts_ends_excl : NDArray
+            Array of shape (m, 2) containing the start (included) and end
+            (excluded) indices of the merge regions.
+
+        Returns
+        -------
+        NDArray
+            Boolean array of length equal to the number of merge regions, where
+            True indicates the merge region is likely to exceed target size.
+
+        """
+        return (
+            self.oars_period_idx[mrs_starts_ends_excl[:, 0], 0]
+            != self.oars_period_idx[mrs_starts_ends_excl[:, 1] - 1, 1]
+        )
+
     def _specialized_compute_merge_sequences(
         self,
     ) -> List[Tuple[int, NDArray]]:

@@ -429,7 +429,6 @@ class OARMergeSplitStrategy(ABC):
         instance._specialized_init(**kwargs)
         return instance
 
-    @cached_property
     @abstractmethod
     def oars_likely_on_target_size(self) -> NDArray:
         """
@@ -483,6 +482,26 @@ class OARMergeSplitStrategy(ABC):
 
         """
         raise NotImplementedError("Subclasses must implement this property")
+
+    @abstractmethod
+    def mrs_likely_exceeds_target_size(self, mrs_starts_ends_excl: NDArray) -> NDArray:
+        """
+        Return boolean array indicating which merge regions likely exceed target size.
+
+        Parameters
+        ----------
+        mrs_starts_ends_excl : NDArray
+            Array of shape (m, 2) containing the start (included) and end
+            (excluded) indices of the merge regions.
+
+        Returns
+        -------
+        NDArray
+            Boolean array of length equal to the number of merge regions, where
+            True indicates the merge region is likely to exceed target size.
+
+        """
+        raise NotImplementedError("Subclasses must implement this method")
 
     def _compute_merge_regions_start_ends_excl(
         self,
@@ -545,10 +564,11 @@ class OARMergeSplitStrategy(ABC):
         )
         if self.n_df_rows:
             # Filter out emrs without overlap with a DataFrame chunk.
-            # If there is no DataFrame overlap, then all enlarge merge regions
+            # If there is no DataFrame overlap, then all enlarged merge regions
             # are accepted. This allows for resize of row groups if desired.
-            # As of this point, potential enlarge merge regions are those which
-            # have an overlap with a simple merge region (has a DataFrame chunk).
+            # As of this point, potential enlarged merge regions are those which
+            # have an overlap with a simple merge region (has a DataFrame
+            # chunk).
             potential_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
                 get_region_start_end_delta(
                     m_values=cumsum(self.oars_has_df_overlap),
@@ -563,7 +583,12 @@ class OARMergeSplitStrategy(ABC):
             indices=potential_emrs_starts_ends_excl,
         )
         # 2.b Get which enlarged regions into which the merge will likely create
-        # on target row groups.
+        # on target row groups (not combining OARs together).
+        # TODO: test if this condition is really needed by commenting it out
+        # and checking if test results are changed?
+        # 'mrs_likely_exceeds_target_size' is probably more restrictive than
+        # this condition, by assessing this on merge regions rather than
+        # individual OARs.
         creates_on_target_rg_in_pemrs = get_region_start_end_delta(
             m_values=cumsum(self.oars_likely_on_target_size),
             indices=potential_emrs_starts_ends_excl,
@@ -571,7 +596,11 @@ class OARMergeSplitStrategy(ABC):
         # Keep enlarged merge regions with too many off target atomic regions or
         # with likely creation of on target row groups.
         confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
-            (n_off_target_oars_in_pemrs > max_n_off_target_rgs) | creates_on_target_rg_in_pemrs
+            (n_off_target_oars_in_pemrs > max_n_off_target_rgs)
+            | creates_on_target_rg_in_pemrs
+            | self.mrs_likely_exceeds_target_size(
+                mrs_starts_ends_excl=potential_emrs_starts_ends_excl,
+            )
         ]
         if not self.n_df_rows:
             # If there is no DataFrame overlap, no need for subsequent steps.

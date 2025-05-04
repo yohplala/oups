@@ -452,6 +452,104 @@ def test_time_period_oars_likely_on_target_size(
 
 
 @pytest.mark.parametrize(
+    "test_id, rg_mins, rg_maxs, df_ordered_on, row_group_time_period, drop_duplicates, mrs_starts_ends_excl, expected",
+    [
+        (
+            "should_enlarge_merge_to_previous_row_groups",
+            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}08:55")]),  # rg_mins
+            array([Timestamp(f"{REF_D}08:50"), Timestamp(f"{REF_D}09:15")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}10:20")]),  # df_ordered_on
+            "2h",  # row_group_time_period
+            True,  # drop_duplicates
+            array([[0, 3]]),  # mrs_starts_ends_excl
+            array([True]),  # mrs_likely_exceeds_target_size
+        ),
+        (
+            "should_not_enlarge_merge_to_previous_row_groups",
+            array([Timestamp(f"{REF_D}08:00"), Timestamp(f"{REF_D}08:55")]),  # rg_mins
+            array([Timestamp(f"{REF_D}08:50"), Timestamp(f"{REF_D}09:15")]),  # rg_maxs
+            Series([Timestamp(f"{REF_D}09:20")]),  # df_ordered_on
+            "2h",  # row_group_time_period
+            True,  # drop_duplicates
+            array([[0, 3]]),  # mrs_starts_ends_excl
+            array([False]),  # mrs_likely_exceeds_target_size
+        ),
+        (
+            "combining_the_two_previous_situations",
+            array(
+                [
+                    Timestamp(f"{REF_D}08:00"),
+                    Timestamp(f"{REF_D}08:55"),
+                    Timestamp(f"{REF_D}10:00"),
+                    Timestamp(f"{REF_D}13:00"),
+                ],
+            ),  # rg_mins
+            array(
+                [
+                    Timestamp(f"{REF_D}08:50"),
+                    Timestamp(f"{REF_D}09:15"),
+                    Timestamp(f"{REF_D}10:20"),
+                    Timestamp(f"{REF_D}13:30"),
+                ],
+            ),  # rg_maxs
+            Series([Timestamp(f"{REF_D}09:20"), Timestamp(f"{REF_D}14:40")]),  # df_ordered_on
+            "2h",  # row_group_time_period
+            True,  # drop_duplicates
+            array([[0, 3], [4, 6]]),  # mrs_starts_ends_excl
+            array([False, True]),  # mrs_likely_exceeds_target_size
+        ),
+    ],
+)
+def test_nrows_mrs_likely_exceeds_target_size(
+    test_id: str,
+    rg_mins: NDArray,
+    rg_maxs: NDArray,
+    df_ordered_on: NDArray,
+    row_group_time_period: str,
+    drop_duplicates: bool,
+    mrs_starts_ends_excl: NDArray,
+    expected: Dict,
+) -> None:
+    """
+    Integration test for 'compute_merge_sequences' method.
+
+    Parameters
+    ----------
+    test_id : str
+        Identifier for the test case.
+    rg_mins : NDArray
+        Array of shape (n) containing the minimum values of the row groups.
+    rg_maxs : NDArray
+        Array of shape (n) containing the maximum values of the row groups.
+    df_ordered_on : NDArray
+        Array of shape (m) containing the values of the DataFrame to be ordered
+        on.
+    row_group_time_period : str
+        Time period for row groups.
+    drop_duplicates : bool
+        Whether to drop duplicates between row groups and DataFrame.
+    mrs_starts_ends_excl : NDArray
+        Array of shape (m, 2) containing the start (included) and end
+        (excluded) indices of the merge regions.
+    expected : Dict
+        Dictionary containing the expected results.
+
+    """
+    # Initialize strategy.
+    strategy = TimePeriodMergeSplitStrategy(
+        rg_ordered_on_mins=rg_mins,
+        rg_ordered_on_maxs=rg_maxs,
+        df_ordered_on=df_ordered_on,
+        row_group_time_period=row_group_time_period,
+        drop_duplicates=drop_duplicates,
+    )
+    assert_array_equal(
+        strategy.mrs_likely_exceeds_target_size(mrs_starts_ends_excl=mrs_starts_ends_excl),
+        expected,
+    )
+
+
+@pytest.mark.parametrize(
     "test_id, rg_mins, rg_maxs, df_ordered_on, time_period, oar_idx_mrs_starts_ends_excl, expected",
     [
         (
@@ -1145,7 +1243,8 @@ def test_time_period_integration_compute_merge_sequences(
     rg_maxs : NDArray
         Array of shape (n) containing the maximum values of the row groups.
     df_ordered_on : NDArray
-        Array of shape (m) containing the values of the DataFrame to be ordered on.
+        Array of shape (m) containing the values of the DataFrame to be ordered
+        on.
     row_group_time_period : str
         Time period for row groups.
     drop_duplicates : bool

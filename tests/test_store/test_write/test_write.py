@@ -142,7 +142,7 @@ def test_coalescing_simple_irgs(tmp_path):
     # (incomplete row group size: 1 to be 'incomplete')
     # max_n_off_target_rgs = 3
 
-    # Case 1, 'max_n_off_target_rgs" not reached yet.
+    # Case 1, 'max_n_off_target_rgs' not reached yet.
     # (size of new data: 1)
     # One incomplete row group in the middle of otherwise complete row groups.
     # Because there is only 1 irgs, +1 with the new data to be added (while max
@@ -160,14 +160,14 @@ def test_coalescing_simple_irgs(tmp_path):
     len_rgs = [rg.num_rows for rg in pf.row_groups]
     assert len_rgs == [4, 1, 4, 1]
     row_group_target_size = 4
-    max_n_off_target_rgs = 3
+    max_n_off_target_rgs = 2
     pdf2 = DataFrame({"a": [20]}, index=[0])
     write_ordered(
         dn,
-        pdf2,
+        ordered_on="a",
+        df=pdf2,
         row_group_target_size=row_group_target_size,
         max_n_off_target_rgs=max_n_off_target_rgs,
-        ordered_on="a",
     )
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
@@ -175,7 +175,7 @@ def test_coalescing_simple_irgs(tmp_path):
     df_ref1 = concat([pdf1, pdf2]).reset_index(drop=True)
     assert pf_rec1.to_pandas().equals(df_ref1)
 
-    # Case 2, 'max_n_off_target_rgs" now reached.
+    # Case 2, 'max_n_off_target_rgs' now reached.
     # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3, 4]
     # idx                          [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10]
     # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,20]
@@ -183,10 +183,10 @@ def test_coalescing_simple_irgs(tmp_path):
     # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3,  ,  ]
     write_ordered(
         dn,
-        pdf2,
+        ordered_on="a",
+        df=pdf2,
         row_group_target_size=row_group_target_size,
         max_n_off_target_rgs=max_n_off_target_rgs,
-        ordered_on="a",
     )
     pf_rec2 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec2.row_groups]
@@ -225,10 +225,10 @@ def test_coalescing_simple_row_group_target_size(tmp_path):
     pdf2 = DataFrame({"a": [20]}, index=[0])
     write_ordered(
         dn,
-        pdf2,
+        ordered_on="a",
+        df=pdf2,
         row_group_target_size=row_group_target_size,
         max_n_off_target_rgs=max_n_off_target_rgs,
-        ordered_on="a",
     )
     pf_rec1 = ParquetFile(dn)
     len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]

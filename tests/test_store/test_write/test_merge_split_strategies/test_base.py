@@ -45,6 +45,12 @@ class ConcreteOARMergeSplitStrategy(OARMergeSplitStrategy):
     def _specialized_compute_merge_sequences(self):
         raise NotImplementedError("Test implementation only")
 
+    def oars_likely_on_target_size(self) -> NDArray:
+        raise NotImplementedError("Test implementation only")
+
+    def mrs_likely_exceeds_target_size(self, mrs_starts_ends_excl: NDArray) -> NDArray:
+        raise NotImplementedError("Test implementation only")
+
     def compute_split_sequence(self, df_ordered_on: Series) -> List[int]:
         raise NotImplementedError("Test implementation only")
 
@@ -585,13 +591,15 @@ def test_OARMergeSplitStrategy_validation(
 
 
 @pytest.mark.parametrize(
-    "test_id, oars_has_df_overlap, oars_likely_on_target_size, max_n_off_target_rgs, expected",
+    "test_id, oars_has_df_overlap, oars_likely_on_target_size, mrs_likely_exceeds_target_size, max_n_off_target_rgs, expected",
     [
         (  # Contiguous OARs with DataFrame overlap.
             # No need to enlarge since neighbors OARs are on target size.
             "contiguous_dfcs_no_off_target",
+            # mrs:           1,    1
             array([False, True, True, False]),  # Has DataFrame overlap
             array([True, False, True, True]),  # On target size
+            array([True]),  # mrs_likely_exceed_target_size
             3,  # max_n_off_target_rgs - is not triggered
             array([[1, 3]]),  # Single region
         ),
@@ -603,66 +611,93 @@ def test_OARMergeSplitStrategy_validation(
             # EMRs:  [0,                 4),                     [7,8)
             array([True, False, False, True, False, False, False, True, False]),
             array([False, False, False, False, True, False, True, False, False]),
+            array([False, False]),
             3,  # max_n_off_target_rgs
-            array([[0, 4], [7, 8]]),  # Two regions: [0-1) and [2-4)
+            array([[0, 4], [7, 8]]),
+        ),
+        (  # Enlarging because likely exceeding target size.
+            "enlarging_based_on_likely_exceeding_target_size",
+            # OARS:   0,     1,     2,    3,     4,     5,     6,    7,     8
+            # EMRs:  [0,1)               [3,4),                     [7,8)
+            array([True, False, False, True, False, False, False, True, False]),
+            array([False, False, False, False, True, False, True, False, False]),
+            array([False, True]),
+            10,  # max_n_off_target_rgs
+            array([[0, 1], [3, 4], [7, 9]]),
         ),
         (  # Confirm EMR because of likely on target OAR with DataFrame overlap.
             "enlarging_because_adding_likely_on_target_oar_with_dfc",
+            # mrs:           1,    1
             array([False, True, False, False]),  # Has DataFrame overlap
             array([True, True, False, True]),  # On target size
+            array([True]),  # mrs_likely_exceed_target_size
             3,  # max_n_off_target_rgs
             array([[1, 3]]),  # Adding 3rd OAR in EMR.
         ),
         (  # Alternating regions with and without DataFrame overlaps.
             # Should only merge regions with DataFrame overlaps.
             "alternating_regions",
+            # mrs:                 1
             array([True, False, True, False]),  # Alternating DataFrame overlaps
             array([True, True, True, True]),  # All on target size
+            array([True]),  # mrs_likely_exceed_target_size
             2,  # max_n_off_target_rgs
             array([[0, 1], [2, 3]]),  # Two separate regions
         ),
         (  # Multiple off-target regions between DataFrame overlaps
             # Should merge if number of off-target regions exceeds max_n_off_target_rgs
             "multiple_off_target_between_chunks",
+            # mrs:     1,     1,     1,    1
             array([False, False, False, True]),  # DataFrame overlaps at ends
             array([False, False, False, False]),  # All off target
+            array([False]),  # mrs_likely_exceed_target_size
             1,  # max_n_off_target_rgs
             array([[0, 4]]),  # Single region covering all
         ),
         (  # Single off-target region with DataFrame overlap
             # Should return single region
             "single_off_target_with_df_overlap",
+            # mrs:    1
             array([True]),  # Has DataFrame overlap
             array([False]),  # Off target
+            array([False]),  # mrs_likely_exceed_target_size
             1,  # max_n_off_target_rgs
             array([[0, 1]]),  # Single region
         ),
         (  # Complex pattern with varying conditions
             # Tests multiple conditions in one test
             "mixed_pattern",
+            # mrs:    1,     1,            2,    2
             array([True, False, False, False, True, False]),  # DataFrame overlaps at 0, 4
             array([True, False, True, False, False, True]),  # Likely on target
+            array([True, False]),  # mrs_likely_exceed_target_size
             2,  # max_n_off_target_rgs
             array([[0, 2], [4, 5]]),
         ),
         (  # 'max_n_off_target' is None
             "max_n_off_target_is_none",
+            # mrs:    1,     1,            2,    2
             array([True, False, False, False, True]),  # DataFrame overlaps at 0, 4
             array([True, False, True, False, False]),  # Likely on target
+            array([True, False]),  # mrs_likely_exceed_target_size
             None,  # max_n_off_target_rgs
             array([[0, 1], [4, 5]]),
         ),
         (  # 'max_n_off_target' is 1
             "max_n_off_target_is_one",
+            # mrs:    1,     1,            2,    2
             array([True, False, False, False, True]),  # DataFrame overlaps at 0, 4
             array([False, False, True, False, False]),  # Likely on target
+            array([False, False]),  # mrs_likely_exceed_target_size
             1,  # max_n_off_target_rgs
             array([[0, 2], [3, 5]]),
         ),
         (  # 'max_n_off_target' is 1
+            # mrs:    1,                                2
             "max_n_off_target_reached_where_no_df_overlaps_overlap",
             array([True, False, False, False, False, True]),  # DataFrame overlaps at 0, 4
             array([False, True, False, False, True, False]),  # Likely on target
+            array([False, False]),  # mrs_likely_exceed_target_size
             1,  # max_n_off_target_rgs
             array([[0, 1], [5, 6]]),
         ),
@@ -670,6 +705,7 @@ def test_OARMergeSplitStrategy_validation(
             "no_row_groups",
             array([True]),  # Has DataFrame overlap
             array([False]),  # Likely on target
+            array([False]),  # mrs_likely_exceed_target_size
             1,  # max_n_off_target_rgs
             array([[0, 1]]),  # Single region
         ),
@@ -677,6 +713,7 @@ def test_OARMergeSplitStrategy_validation(
             "no_df_overlap_but_one_merge_region",
             array([False, False]),  # Has DataFrame overlap
             array([False, False]),  # Likely on target
+            array([False]),  # mrs_likely_exceed_target_size
             1,  # max_n_off_target_rgs
             array([[0, 2]]),  # Single region
         ),
@@ -684,6 +721,7 @@ def test_OARMergeSplitStrategy_validation(
             "no_df_overlap_and_no_merge_regions",
             array([False, False, False]),  # No DataFrame overlap
             array([True, True, True]),  # All on target size
+            array([]).astype(bool_),  # mrs_likely_exceed_target_size
             1,  # max_n_off_target_rgs
             array([], dtype=int).reshape(0, 2),  # Empty array
         ),
@@ -693,6 +731,7 @@ def test_compute_merge_regions_start_ends_excl(
     test_id: str,
     oars_has_df_overlap: NDArray[bool_],
     oars_likely_on_target_size: NDArray[bool_],
+    mrs_likely_exceeds_target_size: NDArray[bool_],
     max_n_off_target_rgs: int,
     expected: NDArray[int_],
 ) -> None:
@@ -707,6 +746,8 @@ def test_compute_merge_regions_start_ends_excl(
         Boolean array indicating if each atomic region has a DataFrame overlaps.
     oars_likely_on_target_size : NDArray[bool_]
         Boolean array indicating if each atomic region is likely to be on target size.
+    mrs_likely_exceeds_target_size : NDArray[bool_]
+        Boolean array indicating if each merge region is likely to exceed target size.
     max_n_off_target_rgs : int
         Maximum number of off-target row groups allowed.
     expected : NDArray[int_]
@@ -722,6 +763,9 @@ def test_compute_merge_regions_start_ends_excl(
     split_strat.oars_has_df_overlap = oars_has_df_overlap
     split_strat.oars_likely_on_target_size = oars_likely_on_target_size
     split_strat.n_oars = len(oars_has_df_overlap)
+    split_strat.mrs_likely_exceeds_target_size = (
+        lambda mrs_starts_ends_excl: mrs_likely_exceeds_target_size
+    )
     split_strat._compute_merge_regions_start_ends_excl(
         max_n_off_target_rgs=max_n_off_target_rgs,
     )
