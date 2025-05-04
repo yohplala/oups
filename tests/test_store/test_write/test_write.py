@@ -257,9 +257,9 @@ def test_appending_data_with_drop_duplicates(tmp_path):
     # Dropping duplicates '10', 'ordered_on' with 'a'.
     write_ordered(
         dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
         ordered_on="a",
+        df=pdf2,
+        row_group_target_size=row_group_target_size,
         duplicates_on="a",
     )
     pf_rec = ParquetFile(dn)
@@ -271,12 +271,10 @@ def test_appending_data_with_drop_duplicates(tmp_path):
     assert pf_rec.to_pandas().equals(df_ref)
 
 
-def test_appending_data_with_sharp_starts(tmp_path):
+def test_appending_data_with_duplicates_on_as_list(tmp_path):
     # Validate:
-    # - 'sharp starts' (meaning that bins splitting the dataframe to be written
-    #   are adjusted so as not to fall in the middle of duplicates.)
-    # - is also tested the index 'a' being added to 'duplicates_on', as the 2
-    #   last values in 'pdf2' are not dropped despite being duplicates on 'b'.
+    # - index 'a' being added to 'duplicates_on', as the 2 last values in 'pdf2'
+    #   are not dropped despite being duplicates on 'b'.
     # - drop duplicates, keep 'last.
     # rgs                  [0, , ,1, , ,2, ]
     # idx                  [0, , ,3, , ,6, ]
@@ -308,15 +306,17 @@ def test_appending_data_with_sharp_starts(tmp_path):
     # 'ordered_on' with 'a', duplicates on 'b' ('a' added implicitly)
     write_ordered(
         dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
         ordered_on="a",
+        df=pdf2,
+        row_group_target_size=row_group_target_size,
         duplicates_on="b",
     )
     pf_rec = ParquetFile(dn)
     len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs_rec == [3, 3, 1, 3, 2, 1]
-    df_ref = concat([pdf1.iloc[:-1], pdf2.iloc[1:4], pdf2.iloc[5:]]).reset_index(drop=True)
+    assert len_rgs_rec == [3, 3, 3, 3, 1]
+    df_ref = (
+        concat([pdf1, pdf2]).drop_duplicates(subset=["a", "b"], keep="last").reset_index(drop=True)
+    )
     assert pf_rec.to_pandas().equals(df_ref)
 
 
