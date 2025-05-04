@@ -716,7 +716,7 @@ def test_compute_merge_regions_start_ends_excl(
     split_strat = ConcreteOARMergeSplitStrategy(
         rg_ordered_on_mins=zeros(1, dtype=int_),
         rg_ordered_on_maxs=zeros(1, dtype=int_),
-        df_ordered_on=Series([1]),
+        df_ordered_on=Series([1]) if oars_has_df_overlap.any() else Series([]),
         drop_duplicates=True,
     )
     split_strat.oars_has_df_overlap = oars_has_df_overlap

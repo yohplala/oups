@@ -168,6 +168,8 @@ class OARMergeSplitStrategy(ABC):
         relevant row groups.
     n_rgs : int
         Number of existing row groups.
+    n_df_rows : int
+        Number of rows in DataFrame.
     rg_idx_mrs_starts_ends_excl : List[slice]
         List of slices, each containing the start (included) and end (excluded)
         indices of the row groups in a merge sequence.
@@ -272,6 +274,7 @@ class OARMergeSplitStrategy(ABC):
             self.n_oars = 1
             self.rg_idx_ends_excl_not_to_use_as_split_points = None
             self.n_rgs = 0
+            self.n_df_rows = n_df_rows
             return
 
         if drop_duplicates:
@@ -349,6 +352,7 @@ class OARMergeSplitStrategy(ABC):
         self.oars_has_df_overlap = rgs_has_df_overlap
         self.n_oars = len(self.oars_rg_idx_starts)
         self.n_rgs = n_rgs
+        self.n_df_rows = n_df_rows
 
     @abstractmethod
     def _specialized_init(self, **kwargs):
@@ -539,7 +543,7 @@ class OARMergeSplitStrategy(ABC):
         potential_emrs_starts_ends_excl = get_region_indices_of_true_values(
             self.oars_has_df_overlap | oars_off_target,
         )
-        if has_df_overlap := self.oars_has_df_overlap.any():
+        if self.n_df_rows:
             # Filter out emrs without overlap with a DataFrame chunk.
             # If there is no DataFrame overlap, then all enlarge merge regions
             # are accepted. This allows for resize of row groups if desired.
@@ -569,7 +573,7 @@ class OARMergeSplitStrategy(ABC):
         confirmed_emrs_starts_ends_excl = potential_emrs_starts_ends_excl[
             (n_off_target_oars_in_pemrs > max_n_off_target_rgs) | creates_on_target_rg_in_pemrs
         ]
-        if not has_df_overlap:
+        if not self.n_df_rows:
             # If there is no DataFrame overlap, no need for subsequent steps.
             self.oar_idx_mrs_starts_ends_excl = confirmed_emrs_starts_ends_excl
             return
