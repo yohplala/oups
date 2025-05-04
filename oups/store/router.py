@@ -40,7 +40,7 @@ class ParquetHandle(ParquetFile):
 
     """
 
-    def __init__(self, dirpath: str, ordered_on: str):
+    def __init__(self, dirpath: str, like_df: DataFrame):
         """
         Instantiate parquet handle (ParquetFile instance).
 
@@ -50,14 +50,14 @@ class ParquetHandle(ParquetFile):
         ----------
         dirpath : str
             Directory path from where to load data.
-        ordered_on : str
-            Column name according which data is ordered.
+        like_df : DataFrame
+            DataFrame to use as template to create a new ParquetFile.
 
         """
         try:
             super().__init__(dirpath)
-        except ValueError:
-            write(dirpath, DataFrame({ordered_on: []}), file_scheme="hive")
+        except (ValueError, FileNotFoundError):
+            write(dirpath, like_df.iloc[:0], file_scheme="hive")
             super().__init__(dirpath)
         self._dirpath = dirpath
 

@@ -36,7 +36,7 @@ def test_init_and_append_std(tmp_path):
     assert pdf1.equals(res1)
     # Append
     pdf2 = DataFrame({"a": [6, 7], "b": ["at", "of"]})
-    write_ordered(str(tmp_path), pdf2, row_group_target_size=2, ordered_on="a")
+    write_ordered(str(tmp_path), ordered_on="a", df=pdf2, row_group_target_size=2)
     res2 = ParquetFile(str(tmp_path)).to_pandas()
     assert concat([pdf1, pdf2]).reset_index(drop=True).equals(res2)
 
@@ -46,7 +46,7 @@ def test_init_no_folder(tmp_path):
     # (no row index, compression SNAPPY, row group size: 2)
     tmp_path = os_path.join(tmp_path, "test")
     pdf = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
-    write_ordered(str(tmp_path), pdf, row_group_target_size=2, ordered_on="a")
+    write_ordered(str(tmp_path), ordered_on="a", df=pdf, row_group_target_size=2)
     res = ParquetFile(str(tmp_path)).to_pandas()
     assert pdf.equals(res)
 
@@ -56,10 +56,10 @@ def test_init_compression_brotli(tmp_path):
     # (no row index)
     pdf = DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]})
     tmp_path1 = os_path.join(tmp_path, "brotli")
-    write_ordered(str(tmp_path1), pdf, compression="BROTLI", ordered_on="a")
+    write_ordered(str(tmp_path1), ordered_on="a", df=pdf, compression="BROTLI")
     brotli_s = os_path.getsize(os_path.join(tmp_path1, "part.0.parquet"))
     tmp_path2 = os_path.join(tmp_path, "snappy")
-    write_ordered(str(tmp_path2), pdf, compression="SNAPPY", ordered_on="a")
+    write_ordered(str(tmp_path2), ordered_on="a", df=pdf, compression="SNAPPY")
     snappy_s = os_path.getsize(os_path.join(tmp_path2, "part.0.parquet"))
     assert brotli_s < snappy_s
 
@@ -79,7 +79,7 @@ def test_init_idx_expansion(tmp_path):
         names=["l0", "l1"],
     )
     assert res_midx.equals(ref_midx)
-    write_ordered(str(tmp_path), pdf, cmidx_expand=True, ordered_on=("lev1-col1", "lev2-col1"))
+    write_ordered(str(tmp_path), ordered_on=("lev1-col1", "lev2-col1"), df=pdf, to_cmidx=[])
     res = ParquetFile(str(tmp_path)).to_pandas()
     pdf.columns = ref_midx
     assert res.equals(pdf)

@@ -882,6 +882,8 @@ def write_ordered(
         The list has then to contain the names of levels to be used when
         expanding column names into a multi-index. If not provided (empty list),
         levels are given names 'l1', 'l2', ...
+        If set, 'ordered_on' column name should be a tuple, complying with
+        multi-index format.
     metadata : Dict[str, str], optional
         Key-value metadata to write, or update in dataset. Please see
         fastparquet for updating logic in case of `None` value being used.
@@ -920,6 +922,10 @@ def write_ordered(
       target size row groups.
 
     """
+    if to_cmidx is not None:
+        if not isinstance(ordered_on, tuple):
+            raise ValueError("'ordered_on' should be a tuple when 'to_cmidx' is set.")
+        df.columns = to_pandas_midx(df.columns, to_cmidx)
     if duplicates_on is not None:
         duplicates_on = _validate_duplicate_on_param(
             duplicates_on=duplicates_on,
@@ -936,10 +942,8 @@ def write_ordered(
     if ordered_on not in df.columns:
         # Check 'ordered_on' column is within input dataframe.
         raise ValueError(f"column '{ordered_on}' does not exist in input data.")
-    if to_cmidx is not None:
-        df.columns = to_pandas_midx(df.columns, to_cmidx)
 
-    opd = ParquetHandle(dirpath, ordered_on=ordered_on)
+    opd = ParquetHandle(dirpath, like_df=df)
     opd_statistics = opd.statistics
     if isinstance(row_group_target_size, int):
         if drop_duplicates:
@@ -948,17 +952,17 @@ def write_ordered(
             # correct approximate number of rows in DataFrame.
             df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
         ms_strategy = NRowsMergeSplitStrategy(
-            rg_ordered_on_mins=array(opd_statistics[MIN][ordered_on]),
-            rg_ordered_on_maxs=array(opd_statistics[MAX][ordered_on]),
+            rg_ordered_on_mins=array(opd_statistics[MIN][str(ordered_on)]),
+            rg_ordered_on_maxs=array(opd_statistics[MAX][str(ordered_on)]),
             df_ordered_on=df.loc[:, ordered_on],
             drop_duplicates=drop_duplicates,
-            rgs_n_rows=array([rg.num_rows for rg in opd], dtype=int),
+            rgs_n_rows=array([rg.num_rows for rg in opd.row_groups], dtype=int),
             row_group_target_size=row_group_target_size,
         )
     else:
         ms_strategy = TimePeriodMergeSplitStrategy(
-            rg_ordered_on_mins=array(opd_statistics[MIN][ordered_on]),
-            rg_ordered_on_maxs=array(opd_statistics[MAX][ordered_on]),
+            rg_ordered_on_mins=array(opd_statistics[MIN][str(ordered_on)]),
+            rg_ordered_on_maxs=array(opd_statistics[MAX][str(ordered_on)]),
             df_ordered_on=df.loc[:, ordered_on],
             drop_duplicates=drop_duplicates,
             row_group_time_period=row_group_target_size,
