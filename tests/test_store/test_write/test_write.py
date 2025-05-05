@@ -185,8 +185,7 @@ def test_write_ordered(
         initial_df = initial_data
         # Verify initial state if wri
         pf = ParquetFile(tmp_path)
-        initial_rgs = [rg.num_rows for rg in pf.row_groups]
-        assert initial_rgs == expected["init"]
+        assert [rg.num_rows for rg in pf.row_groups] == expected["init"]
         assert pf.to_pandas().equals(initial_df)
 
     # Append phase.
@@ -202,8 +201,7 @@ def test_write_ordered(
         )
         # Verify state after this append
         pf_rec = ParquetFile(tmp_path)
-        final_rgs = [rg.num_rows for rg in pf_rec.row_groups]
-        assert final_rgs == expected_rgs
+        assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
         current_df = concat([current_df, append_df]).reset_index(drop=True)
         if duplicates_on is not None:
             current_df = current_df.drop_duplicates(
