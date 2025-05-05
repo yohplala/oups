@@ -24,7 +24,7 @@ from oups.store.write import write_ordered
 from tests.test_store.conftest import create_parquet_file
 
 
-def test_init_idx_expansion(tmp_path):
+def test_to_cmidx(tmp_path):
     # Expanding column index into a 2-level column multi-index.
     # No level names.
     pdf = DataFrame(
@@ -45,7 +45,7 @@ def test_init_idx_expansion(tmp_path):
     assert res.equals(pdf)
 
 
-def test_init_idx_expansion_sparse_levels(tmp_path):
+def test_to_cmidx_sparse_levels(tmp_path):
     # Expanding column index into a 2-level column multi-index.
     # Sparse level names.
     pdf = DataFrame(
@@ -770,15 +770,3 @@ def test_exception_ordered_on_not_existing(tmp_path):
     # Append with oups same set of data, pandas dataframe.
     with pytest.raises(ValueError, match="^column 'ts'"):
         write_ordered(dn, pdf, ordered_on="ts")
-
-
-def test_exception_check_cmidx(tmp_path):
-    # Check 1st no column level names.
-    df = DataFrame({("a", 1): [1]})
-    with pytest.raises(ValueError, match="^not possible to have level name"):
-        write_ordered(tmp_path, df, ordered_on="a")
-    # Check with one column name not being a string.
-    # Correcting column names.
-    df.columns.set_names(["1", "2"], level=[0, 1], inplace=True)
-    with pytest.raises(TypeError, match="^name 1 has to be"):
-        write_ordered(tmp_path, df, ordered_on="a")

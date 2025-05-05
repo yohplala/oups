@@ -195,6 +195,7 @@ def to_pandas_midx(idx: Index, levels: List[str] = None) -> MultiIndex:
     return MultiIndex.from_tuples(tuples, names=levels)
 
 
+# TODO: to remove (has been moved into ParquetHandle)
 def check_cmidx(cmidx: MultiIndex):
     """
     Check if column multi-index complies with fastparquet requirements.
@@ -947,7 +948,7 @@ def write_ordered(
         # Check 'ordered_on' column is within input dataframe.
         raise ValueError(f"column '{ordered_on}' does not exist in input data.")
 
-    opd = ParquetHandle(dirpath, like_df=df)
+    opd = ParquetHandle(dirpath, df_like=df)
     opd_statistics = opd.statistics
     if isinstance(row_group_target_size, int):
         if drop_duplicates:

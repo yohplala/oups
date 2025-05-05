@@ -13,8 +13,9 @@ import zipfile
 from os import path as os_path
 
 import numpy as np
+import pytest
 from fastparquet import ParquetFile
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import date_range
 from vaex.dataframe import DataFrame as vDataFrame
 
@@ -24,7 +25,7 @@ from oups.store.router import ParquetHandle
 from .. import TEST_DATA
 
 
-df_ref = pDataFrame(
+df_ref = DataFrame(
     {
         "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
         "temperature": [8.4, 5.3, 4.9, 2.3],
@@ -58,7 +59,7 @@ def test_pandas_dataframe(tmp_path):
         zip_ref.extractall(tmp_path)
     ph = ParquetHandle(str(tmp_path))
     pdf = ph.pdf
-    assert isinstance(pdf, pDataFrame)
+    assert isinstance(pdf, DataFrame)
     assert pdf.equals(df_ref)
 
 
@@ -101,3 +102,16 @@ def test_parquet_handle_folder_not_existing(tmp_path):
     ph = ParquetHandle(str(tmp_path))
     assert isinstance(ph, ParquetFile)
     assert ph.pdf.empty
+
+
+def test_exception_check_cmidx(tmp_path):
+    tmp_path = str(tmp_path)
+    # Check 1st no column level names.
+    df = DataFrame({("a", 1): [1]})
+    with pytest.raises(ValueError, match="^not possible to have level name"):
+        ParquetHandle(tmp_path, df_like=df)
+    # Check with one column name not being a string.
+    # Correcting column names.
+    df.columns.set_names(["1", "2"], level=[0, 1], inplace=True)
+    with pytest.raises(TypeError, match="^name 1 has to be"):
+        ParquetHandle(tmp_path, df_like=df)
