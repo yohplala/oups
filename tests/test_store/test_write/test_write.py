@@ -68,13 +68,13 @@ def test_init_idx_expansion_sparse_levels(tmp_path):
         (
             "init_and_append_std",
             DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]}),
-            DataFrame({"a": [6, 7], "b": ["at", "of"]}),
+            [DataFrame({"a": [6, 7], "b": ["at", "of"]})],  # append_data
             2,  # row_group_target_size
             None,  # max_n_off_target_rgs
             None,  # duplicates_on
             {
-                "first_write": [2, 2, 2],
-                "second_write": [2, 2, 2, 2],
+                "init": [2, 2, 2],
+                "append": [[2, 2, 2, 2]],
             },
         ),
         (  # Coalescing reaching first row group. Coalescing triggered because
@@ -86,17 +86,53 @@ def test_init_idx_expansion_sparse_levels(tmp_path):
             # a                            [ 0, 1]
             # a (new data)                       [20]
             # rgs (new)                    [ 0,  , 1]
-            "coalescing_first_rg",
+            "coalescing_one_rg",
             {"df": DataFrame({"a": [0, 1]}), "row_group_offsets": [0]},
-            DataFrame({"a": [20]}, index=[0]),
+            [DataFrame({"a": [20]}, index=[0])],  # append_data
             4,  # row_group_target_size
             1,  # max_n_off_target_rgs
             None,  # duplicates_on
-            {"second_write": [3]},
+            {"append": [[3]]},
+        ),
+        (
+            "coalescing_multiple_rgs",
+            # incomplete row group size: 1 to be 'incomplete'
+            {"df": DataFrame({"a": range(10)}), "row_group_offsets": [0, 4, 5, 9]},
+            [
+                # Case 1, 'max_n_off_target_rgs' not reached yet.
+                # (size of new data: 1)
+                # One incomplete row group in the middle of otherwise complete
+                # row groups. Because there is only 1 irgs, +1 with the new data
+                # to be added (while max is 3), and 2 rows over all irgs
+                # (including data to be written), coalescing is not activated.
+                # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3]
+                # idx                          [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+                # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+                # a (new data)                                               [20]
+                # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3,4 ]
+                DataFrame({"a": [20]}, index=[0]),  # First append
+                # Case 2, 'max_n_off_target_rgs' now reached.
+                # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3, 4]
+                # idx                          [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10]
+                # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,20]
+                # a (new data)                                                  [20]
+                # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3,  ,  ]
+                DataFrame({"a": [20]}, index=[0]),  # Second append
+            ],
+            4,  # row_group_target_size
+            2,  # max_n_off_target_rgs
+            None,  # duplicates_on
+            {
+                "init": [4, 1, 4, 1],
+                "append": [
+                    [4, 1, 4, 1, 1],  # After first append
+                    [4, 1, 4, 3],  # After second append
+                ],
+            },
         ),
     ],
 )
-def test_write_and_append(
+def test_write_ordered(
     test_id,
     tmp_path,
     initial_data,
@@ -128,8 +164,8 @@ def test_write_and_append(
         Expected number of rows in each row group after appending.
 
     """
-    # First writing step
     tmp_path = f"{str(tmp_path)}/test_data"
+    # Init phase.
     if isinstance(initial_data, dict):
         # Use 'write' from fastparquet with 'row_group_offsets'.
         pf = create_parquet_file(
@@ -150,85 +186,32 @@ def test_write_and_append(
         # Verify initial state if wri
         pf = ParquetFile(tmp_path)
         initial_rgs = [rg.num_rows for rg in pf.row_groups]
-        assert initial_rgs == expected["first_write"]
+        assert initial_rgs == expected["init"]
         assert pf.to_pandas().equals(initial_df)
 
-    # Second writing step (append)
-    write_ordered(
-        tmp_path,
-        ordered_on="a",
-        df=append_data,
-        row_group_target_size=row_group_target_size,
-        max_n_off_target_rgs=max_n_off_target_rgs,
-        duplicates_on=duplicates_on,
-    )
-    # Verify final state
-    pf_rec = ParquetFile(tmp_path)
-    final_rgs = [rg.num_rows for rg in pf_rec.row_groups]
-    assert final_rgs == expected["second_write"]
-    df_ref = concat([initial_df, append_data]).reset_index(drop=True)
-    if duplicates_on is not None:
-        df_ref = df_ref.drop_duplicates(subset=duplicates_on, keep="last", ignore_index=True)
-    assert pf_rec.to_pandas().equals(df_ref)
-
-
-def test_coalescing_simple_irgs(tmp_path):
-    # Initialize a parquet dataset directly with fastparquet.
-    # row_group_target_size = 4
-    # (incomplete row group size: 1 to be 'incomplete')
-    # max_n_off_target_rgs = 3
-
-    # Case 1, 'max_n_off_target_rgs' not reached yet.
-    # (size of new data: 1)
-    # One incomplete row group in the middle of otherwise complete row groups.
-    # Because there is only 1 irgs, +1 with the new data to be added (while max
-    # is 3), and 2 rows over all irgs (including data to be written), coalescing
-    # is not activated.
-    # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3]
-    # idx                          [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-    # a (new data)                                               [20]
-    # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3,4 ]
-    pdf1 = DataFrame({"a": range(10)})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(dn, pdf1, row_group_offsets=[0, 4, 5, 9], file_scheme="hive", write_index=False)
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [4, 1, 4, 1]
-    row_group_target_size = 4
-    max_n_off_target_rgs = 2
-    pdf2 = DataFrame({"a": [20]}, index=[0])
-    write_ordered(
-        dn,
-        ordered_on="a",
-        df=pdf2,
-        row_group_target_size=row_group_target_size,
-        max_n_off_target_rgs=max_n_off_target_rgs,
-    )
-    pf_rec1 = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf_rec1.row_groups]
-    assert len_rgs == [4, 1, 4, 1, 1]
-    df_ref1 = concat([pdf1, pdf2]).reset_index(drop=True)
-    assert pf_rec1.to_pandas().equals(df_ref1)
-
-    # Case 2, 'max_n_off_target_rgs' now reached.
-    # rgs                          [ 0,  ,  ,  , 1, 2,  ,  ,  , 3, 4]
-    # idx                          [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10]
-    # a                            [ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,20]
-    # a (new data)                                                  [20]
-    # rgs (new)                    [ 0,  ,  ,  , 1, 2,  ,  ,  , 3,  ,  ]
-    write_ordered(
-        dn,
-        ordered_on="a",
-        df=pdf2,
-        row_group_target_size=row_group_target_size,
-        max_n_off_target_rgs=max_n_off_target_rgs,
-    )
-    pf_rec2 = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf_rec2.row_groups]
-    assert len_rgs == [4, 1, 4, 3]
-    df_ref2 = concat([df_ref1, pdf2]).reset_index(drop=True)
-    assert pf_rec2.to_pandas().equals(df_ref2)
+    # Append phase.
+    current_df = initial_df
+    for append_df, expected_rgs in zip(append_data, expected["append"]):
+        write_ordered(
+            tmp_path,
+            ordered_on="a",
+            df=append_df,
+            row_group_target_size=row_group_target_size,
+            max_n_off_target_rgs=max_n_off_target_rgs,
+            duplicates_on=duplicates_on,
+        )
+        # Verify state after this append
+        pf_rec = ParquetFile(tmp_path)
+        final_rgs = [rg.num_rows for rg in pf_rec.row_groups]
+        assert final_rgs == expected_rgs
+        current_df = concat([current_df, append_df]).reset_index(drop=True)
+        if duplicates_on is not None:
+            current_df = current_df.drop_duplicates(
+                subset=duplicates_on,
+                keep="last",
+                ignore_index=True,
+            )
+        assert pf_rec.to_pandas().equals(current_df)
 
 
 def test_coalescing_simple_row_group_target_size(tmp_path):
