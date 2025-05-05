@@ -795,6 +795,7 @@ def _validate_duplicate_on_param(
             raise ValueError("one or more duplicate columns not found in input DataFrame.")
         if ordered_on not in duplicates_on:
             duplicates_on.append(ordered_on)
+        return duplicates_on
     else:
         # 'duplicates_on' is a single column name.
         if columns and duplicates_on not in columns:

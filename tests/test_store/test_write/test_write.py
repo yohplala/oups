@@ -86,7 +86,7 @@ def test_init_idx_expansion_sparse_levels(tmp_path):
             # a                            [ 0, 1]
             # a (new data)                       [20]
             # rgs (new)                    [ 0,  , 1]
-            "coalescing_one_rg",
+            "coalescing_first_rg",
             {"df": DataFrame({"a": [0, 1]}), "row_group_offsets": [0]},
             [DataFrame({"a": [20]}, index=[0])],  # append_data
             4,  # row_group_target_size
@@ -189,8 +189,8 @@ def test_init_idx_expansion_sparse_levels(tmp_path):
                 "row_group_offsets": [0, 3, 6],
             },
             # Validate:
-            # - index 'a' being added to 'duplicates_on', as the 2 last values in 'pdf2'
-            #   are not dropped despite being duplicates on 'b'.
+            # - index 'a' being added to 'duplicates_on', as the 2 last values
+            #   in 'pdf2' are not dropped despite being duplicates on 'b'.
             # - drop duplicates, keep 'last.
             # rgs                  [0, , ,1, , ,2, ]
             # idx                  [0, , ,3, , ,6, ]
@@ -220,6 +220,51 @@ def test_init_idx_expansion_sparse_levels(tmp_path):
                 "append": [[3, 3, 3, 3, 1]],  # After append with duplicate drop on [a, b]
             },
         ),
+        (
+            "appending_with_duplicates_on_as_list",
+            {
+                "df": DataFrame(
+                    {
+                        "a": [0, 1, 2, 3, 3, 3, 4, 5],
+                        "b": range(8),
+                        "c": [0] * 8,
+                    },
+                ),
+                "row_group_offsets": [0, 3, 6],
+            },
+            # Validate same as previous test, but 'duplicates_on' is a list:
+            # - is also tested the index 'a' being added to 'duplicates_on', as
+            #   the 2 last values in 'pdf2' are not dropped despite being
+            #   duplicates on 'b'.
+            # - drop duplicates, keep 'last.
+            # rgs                  [0, , ,1, , ,2, ]
+            # idx                  [0, , ,3, , ,6, ]
+            # a (ordered_on)       [0,1,2,3,3,3,4,5]
+            # b (duplicates_on)    [0, , ,3, , ,6, ]
+            # c (duplicate last)   [0,0,0,0,0,0,0,0]
+            # a (new data)                         [5,5,5,5,6,6, 7, 8]
+            # b (new data)                         [7,7,8,9,9,9,10,10]
+            # c (new data)                         [1,2,3,4,5,6, 7, 8]
+            # 3 duplicates (on b)                 x x x,  x x x, x  x
+            # rgs (new)            [0, , ,1, , ,2,x,x,3, , ,x,4,  , 5]
+            # idx                  [0, , ,3, , ,6,    7, , , 10,  ,  ]
+            [
+                DataFrame(
+                    {
+                        "a": [5, 5, 5, 5, 6, 6, 7, 8],
+                        "b": [7, 7, 8, 9, 9, 9, 10, 10],
+                        "c": arange(8) + 1,
+                    },
+                ),
+            ],
+            3,  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            ["b"],  # duplicates_on (a is added implicitly as ordered_on)
+            {
+                "init": [3, 3, 2],
+                "append": [[3, 3, 3, 3, 1]],  # Drop duplicates on [a, b].
+            },
+        ),
     ],
 )
 def test_write_ordered(
@@ -233,7 +278,7 @@ def test_write_ordered(
     expected,
 ):
     """
-    Test writing and appending data to a parquet file with various configurations.
+    Test writing and appending data to a parquet file.
 
     Parameters
     ----------
@@ -307,55 +352,6 @@ def test_write_ordered(
                 ignore_index=True,
             )
         assert pf_rec.to_pandas().equals(current_df)
-
-
-def test_appending_duplicates_on_a_list(tmp_path):
-    # Validate same as previous test, but 'duplicates_on' is a list:
-    # - 'sharp starts' (meaning that bins splitting the dataframe to be written
-    #   are adjusted so as not to fall in the middle of duplicates.)
-    # - is also tested the index 'a' being added to 'duplicates_on', as the 2
-    #   last values in 'pdf2' are not dropped despite being duplicates on 'b'.
-    # - drop duplicates, keep 'last.
-    # rgs                  [0, , ,1, , ,2, ]
-    # idx                  [0, , ,3, , ,6, ]
-    # a (ordered_on)       [0,1,2,3,3,3,4,5]
-    # b (duplicates_on)    [0, , ,3, , ,6, ]
-    # c (duplicate last)   [0,0,0,0,0,0,0,0]
-    # a (new data)                         [5,5,5,5,6,6, 7, 8]
-    # b (new data)                         [7,7,8,9,9,9,10,10]
-    # c (new data)                         [1,2,3,4,5,6, 7, 8]
-    # 3 duplicates (on c)                 x x x   x x x
-    # rgs (new data)       [0, , ,1, , ,2,x,x,3, , ,x,4,  , 5]
-    # idx                  [0, , ,3, , ,6,    7, , , 10,  ,  ]
-    a1 = [0, 1, 2, 3, 3, 3, 4, 5]
-    len_a1 = len(a1)
-    b1 = range(len_a1)
-    c1 = [0] * len_a1
-    pdf1 = DataFrame({"a": a1, "b": b1, "c": c1})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(dn, pdf1, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [3, 3, 2]
-    row_group_target_size = 3
-    a2 = [5, 5, 5, 5, 6, 6, 7, 8]
-    len_a2 = len(a2)
-    b2 = [7, 7, 8, 9, 9, 9, 10, 10]
-    c2 = arange(len_a2) + 1
-    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
-    # ordered on 'a', duplicates on 'b' ('a' added implicitly)
-    write_ordered(
-        dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
-        ordered_on="a",
-        duplicates_on=["b"],
-    )
-    pf_rec = ParquetFile(dn)
-    len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs_rec == [3, 3, 1, 3, 2, 1]
-    df_ref = concat([pdf1.iloc[:-1], pdf2.iloc[1:4], pdf2.iloc[5:]]).reset_index(drop=True)
-    assert pf_rec.to_pandas().equals(df_ref)
 
 
 def test_appending_span_several_rgs(tmp_path):
