@@ -11,6 +11,7 @@ from pickle import loads
 
 from fastparquet import ParquetFile
 from fastparquet import write
+from fastparquet.api import statistics
 from pandas import DataFrame
 from pandas import MultiIndex
 from vaex import open_many
@@ -160,3 +161,19 @@ class ParquetHandle(ParquetFile):
         md = self.pf.key_value_metadata
         if OUPS_METADATA_KEY in md:
             return loads(md[OUPS_METADATA_KEY])
+
+    def sort_rgs(self, ordered_on: str):
+        """
+        Sort row groups by 'ordered_on' column.
+
+        Parameters
+        ----------
+        ordered_on : str
+            Column name to sort row groups by.
+
+        """
+        ordered_on_idx = self.columns.index(ordered_on)
+        self.fmd.row_groups = sorted(
+            self.fmd.row_groups,
+            key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"],
+        )

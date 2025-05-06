@@ -63,18 +63,29 @@ def test_to_cmidx_sparse_levels(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "test_id, initial_data,append_data,row_group_target_size,max_n_off_target_rgs,duplicates_on,expected",
+    "test_id, initial_data,write_ordered_data,row_group_target_size,max_n_off_target_rgs,duplicates_on,expected",
     [
         (
             "init_and_append_std",
-            DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]}),
-            [DataFrame({"a": [6, 7], "b": ["at", "of"]})],  # append_data
+            {},  # init with 'create_parquet_file'
+            [
+                DataFrame({"a": range(6), "b": ["ah", "oh", "uh", "ih", "ai", "oi"]}),
+                DataFrame({"a": [6, 7], "b": ["at", "of"]}),
+            ],  # 'write_ordered'
             2,  # row_group_target_size
             None,  # max_n_off_target_rgs
             None,  # duplicates_on
             {
-                "init": [2, 2, 2],
-                "append": [[2, 2, 2, 2]],
+                "rgs_length": [[2, 2, 2], [2, 2, 2, 2]],
+                "dfs": [
+                    DataFrame({"a": [0, 1, 2, 3, 4, 5], "b": ["ah", "oh", "uh", "ih", "ai", "oi"]}),
+                    DataFrame(
+                        {
+                            "a": [0, 1, 2, 3, 4, 5, 6, 7],
+                            "b": ["ah", "oh", "uh", "ih", "ai", "oi", "at", "of"],
+                        },
+                    ),
+                ],
             },
         ),
         (  # Coalescing reaching first row group. Coalescing triggered because
@@ -88,13 +99,15 @@ def test_to_cmidx_sparse_levels(tmp_path):
             # rgs (new)                    [ 0,  , 1]
             "coalescing_first_rg",
             {"df": DataFrame({"a": [0, 1]}), "row_group_offsets": [0]},
-            [DataFrame({"a": [20]}, index=[0])],  # append_data
+            [DataFrame({"a": [20]}, index=[0])],  # write_ordered_data
             4,  # row_group_target_size
             1,  # max_n_off_target_rgs
             None,  # duplicates_on
             {
-                "init": [2],
-                "append": [[3]],
+                "rgs_length": [[3]],
+                "dfs": [
+                    DataFrame({"a": [0, 1, 20]}),
+                ],
             },
         ),
         (
@@ -126,10 +139,13 @@ def test_to_cmidx_sparse_levels(tmp_path):
             2,  # max_n_off_target_rgs
             None,  # duplicates_on
             {
-                "init": [4, 1, 4, 1],
-                "append": [
-                    [4, 1, 4, 1, 1],  # After first append
-                    [4, 1, 4, 3],  # After second append
+                "rgs_length": [
+                    [4, 1, 4, 1, 1],  # After first write
+                    [4, 1, 4, 3],  # After second write
+                ],
+                "dfs": [
+                    DataFrame({"a": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20]}),
+                    DataFrame({"a": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20, 20]}),
                 ],
             },
         ),
@@ -149,8 +165,10 @@ def test_to_cmidx_sparse_levels(tmp_path):
             5,  # max_n_off_target_rgs
             None,  # duplicates_on
             {
-                "init": [4, 1, 4, 1, 1, 1],
-                "append": [[4, 1, 4, 4]],
+                "rgs_length": [[4, 1, 4, 4]],
+                "dfs": [
+                    DataFrame({"a": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 20]}),
+                ],
             },
         ),
         (
@@ -172,8 +190,15 @@ def test_to_cmidx_sparse_levels(tmp_path):
             None,  # max_n_off_target_rgs
             "a",  # duplicates_on
             {
-                "init": [4, 1, 4, 1, 1],
-                "append": [[4, 1, 4, 1, 2]],  # No coalescing, just append with duplicate drop
+                "rgs_length": [[4, 1, 4, 1, 2]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20],
+                            "b": [10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 31, 31],
+                        },
+                    ),
+                ],
             },
         ),
         (
@@ -216,8 +241,16 @@ def test_to_cmidx_sparse_levels(tmp_path):
             None,  # max_n_off_target_rgs
             "b",  # duplicates_on (a is added implicitly as ordered_on)
             {
-                "init": [3, 3, 2],
-                "append": [[3, 3, 3, 3, 1]],  # After append with duplicate drop on [a, b]
+                "rgs_length": [[3, 3, 3, 3, 1]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 2, 3, 3, 3, 4, 5, 5, 6, 7, 8],
+                            "b": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10],
+                            "c": [0, 0, 0, 0, 0, 0, 0, 3, 4, 6, 7, 8],
+                        },
+                    ),
+                ],
             },
         ),
         (
@@ -261,8 +294,211 @@ def test_to_cmidx_sparse_levels(tmp_path):
             None,  # max_n_off_target_rgs
             ["b"],  # duplicates_on (a is added implicitly as ordered_on)
             {
-                "init": [3, 3, 2],
-                "append": [[3, 3, 3, 3, 1]],  # Drop duplicates on [a, b].
+                "rgs_length": [[3, 3, 3, 3, 1]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 2, 3, 3, 3, 4, 5, 5, 6, 7, 8],
+                            "b": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10],
+                            "c": [0, 0, 0, 0, 0, 0, 0, 3, 4, 6, 7, 8],
+                        },
+                    ),
+                ],
+            },
+        ),
+        (
+            "appending_span_several_rgs",
+            {
+                "df": DataFrame(
+                    {
+                        "a": [0, 1, 2, 3, 3, 3, 4, 5],
+                        "b": range(8),
+                        "c": [0] * 8,
+                    },
+                ),
+                "row_group_offsets": [0, 3, 6],
+            },
+            # - sorting on 'ordered_on' of data which is the concatenation of existing
+            #   data and new data.
+            # rgs                  [0, , ,1, , ,2, ]
+            # idx                  [0, , ,3, , ,6, ]
+            # a                    [0,1,2,3,3,3,4,5]
+            # b                    [0, , ,3, , ,6, ]
+            # c                    [0,0,0,0,0,0,0,0]
+            # a (new data, ordered_on)        [3,  5,5, 5,6, 6, 7, 8]
+            # b (new data, duplicates_on)     [7,  7,8, 9,9, 9,10,10]
+            # c (new data, check last)        [1,  2,3, 4,5, 6, 7, 8]
+            # 2 duplicates (on b)                 xx,   x x  x, x  x
+            # rgs (new)            [0, , ,1, ,,, ,x2, , , x  4, x, 5]
+            # idx                  [0, , ,3, ,,, , 8, , ,   11,  ,13]
+            [
+                DataFrame(
+                    {
+                        "a": [3, 5, 5, 5, 6, 6, 7, 8],
+                        "b": [7, 7, 8, 9, 9, 9, 10, 10],
+                        "c": arange(8) + 1,
+                    },
+                ),
+            ],
+            3,  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            "b",  # duplicates_on
+            {
+                "rgs_length": [[3, 3, 3, 3, 2]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 2, 3, 3, 3, 3, 4, 5, 5, 5, 6, 6, 7, 8],
+                            "b": [0, 1, 2, 3, 4, 5, 7, 6, 7, 8, 9, 9, 9, 10, 10],
+                            "c": [0, 0, 0, 0, 0, 0, 1, 0, 2, 3, 4, 5, 6, 7, 8],
+                        },
+                    ),
+                ],
+            },
+        ),
+        (
+            "inserting_data_with_drop_duplicates",
+            {
+                "df": DataFrame(
+                    {
+                        "a": [0, 1, 3, 3, 5, 7, 7, 8, 9, 11, 12],
+                        "b": range(11),
+                        "c": [0] * 11,
+                    },
+                ),
+                "row_group_offsets": [0, 3, 6, 9],
+            },
+            # - inserting data in the middle of existing one, with row group sorting.
+            #   Row group 3 becomes row group 4.
+            # rgs                  [0, , ,1, , ,2, , , 3,  ]
+            # idx                  [0, , ,3, , ,6, , , 9,  ]
+            # a                    [0,1,3,3,5,7,7,8,9,11,12]
+            # b                    [0, , ,3, , ,6, , , 9,  ]
+            # c                    [0,0,0,0,0,0,0,0,0, 0, 0]
+            # a (new data, ordered_on)    [3,4,5,  8]
+            # b (new data, duplicates_on) [7,7,4,  9]
+            # c (new data, check last)    [1,1,1,  1]
+            # 1 duplicate (on b)            x  x
+            # a (concat)           [11,12,0,1,3,3,3,4,5,5,7,7,8,8, 9] (before rg sorting)
+            # b (concat)           [ 9,10,0,1,2,3,7,7,4,4,5,6,7,9, 8]
+            # c (concat)           [ 0, 0,0,0,0,0,1,1,  1,0,0,0,1, 0]
+            # rgs (not sharp)      [     ,x, , ,x, , ,x, , ,x, , , x]
+            # rgs (sharp)          [ x,  ,0, ,1, , , ,x 2,3, , , , 4]
+            # idx                  [     ,0, ,2, , , ,  6,7, , , ,11]
+            [
+                DataFrame(
+                    {
+                        "a": [3, 4, 5, 8],
+                        "b": [7, 7, 4, 9],
+                        "c": [1] * 4,
+                    },
+                ),
+            ],
+            3,  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            "b",  # duplicates_on
+            {
+                "rgs_length": [[3, 3, 3, 3, 2]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 3, 3, 3, 4, 5, 5, 7, 7, 8, 8, 9, 11, 12],
+                            "b": [0, 1, 2, 3, 7, 7, 4, 4, 5, 6, 7, 9, 8, 9, 10],
+                            "c": [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0],
+                        },
+                    ),
+                ],
+            },
+        ),
+        (
+            "inserting_data_no_drop_duplicate",
+            {
+                "df": DataFrame(
+                    {
+                        "a": [0, 1, 3, 3, 5, 7, 7, 8, 9, 11, 12],
+                        "b": range(11),
+                        "c": [0] * 11,
+                    },
+                ),
+                "row_group_offsets": [0, 3, 6, 9],
+            },
+            [
+                DataFrame(
+                    {
+                        "a": [3, 4, 5, 8],
+                        "b": [7, 7, 4, 9],
+                        "c": [1] * 4,
+                    },
+                ),
+            ],
+            3,  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            None,  # duplicates_on
+            {
+                "rgs_length": [[3, 3, 3, 3, 1, 2]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 3, 3, 3, 3, 4, 5, 5, 7, 7, 8, 8, 9, 11, 12],
+                            "b": [0, 1, 2, 3, 7, 7, 7, 4, 4, 5, 6, 9, 9, 8, 9, 10],
+                            "c": [0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0],
+                        },
+                    ),
+                ],
+            },
+        ),
+        (
+            "appending_as_if_inserting_no_coalesce",
+            {
+                "df": DataFrame(
+                    {
+                        "a": [0, 1, 2, 3, 3, 3, 4, 5],
+                        "b": range(8),
+                        "c": [0] * 8,
+                    },
+                ),
+                "row_group_offsets": [0, 3, 6],
+            },
+            # Append data as if it is insertion (no overlap with existing data).
+            # Special case:
+            # - while duplicate drop is requested, none is performed because data is
+            #   not merged with existing one before being appended.
+            # - the way number of rows are distributed per row group, the input data
+            #   (4 rows) is split into 2 row groups of 2 rows.
+            # rgs                  [0, , ,1, , ,2, ]
+            # idx                  [0, , ,3, , ,6, ]
+            # a (ordered_on)       [0,1,2,3,3,3,4,5]
+            # b (duplicates_on)    [0, , ,3, , ,6, ]
+            # c (duplicate last)   [0,0,0,0,0,0,0,0]
+            # a (new data)                         [6,6, 7, 8]
+            # b (new data)                         [9,9,10,10]
+            # c (new data)                         [5,6, 7, 8]
+            # 3 duplicates (on c)                   x x
+            # rgs (new data)       [0, , ,1, , ,2, ,3, , 4,  ]
+            # idx                  [0, , ,3, , ,6, ,8, ,10,  ]
+            [
+                DataFrame(
+                    {
+                        "a": [6, 6, 7, 8],
+                        "b": [9, 9, 10, 10],
+                        "c": arange(4) + 5,
+                    },
+                ),
+            ],
+            3,  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            ["b"],  # duplicates_on
+            {
+                "rgs_length": [[3, 3, 2, 2, 2]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 2, 3, 3, 3, 4, 5, 6, 6, 7, 8],
+                            "b": [0, 1, 2, 3, 4, 5, 6, 7, 9, 9, 10, 10],
+                            "c": [0, 0, 0, 0, 0, 0, 0, 0, 5, 6, 7, 8],
+                        },
+                    ),
+                ],
             },
         ),
     ],
@@ -271,7 +507,7 @@ def test_write_ordered(
     test_id,
     tmp_path,
     initial_data,
-    append_data,
+    write_ordered_data,
     row_group_target_size,
     max_n_off_target_rgs,
     duplicates_on,
@@ -287,8 +523,8 @@ def test_write_ordered(
     initial_data : Union[DataFrame, Dict[str, Any]]
         Initial data to write. If DataFrame, uses write_ordered. If dict with 'df' and 'row_group_offsets',
         uses fp_write.
-    append_data : DataFrame
-        Data to append using write_ordered.
+    write_ordered_data : DataFrame
+        Data to write using write_ordered.
     row_group_target_size : int
         Target size for row groups.
     max_n_off_target_rgs : Optional[int]
@@ -302,35 +538,23 @@ def test_write_ordered(
     ordered_on = "a"
     tmp_path = f"{str(tmp_path)}/test_data"
     # Init phase.
-    if isinstance(initial_data, dict):
+    if initial_data:
         # Use 'write' from fastparquet with 'row_group_offsets'.
-        pf = create_parquet_file(
+        create_parquet_file(
             tmp_path,
             **initial_data,
         )
-        initial_df = initial_data["df"]
-    else:
-        # Use 'write_ordered'.
-        write_ordered(
-            tmp_path,
-            ordered_on=ordered_on,
-            df=initial_data,
-            row_group_target_size=row_group_target_size,
-            duplicates_on=duplicates_on,
-        )
-        initial_df = initial_data
-        # Verify initial state if wri
-        pf = ParquetFile(tmp_path)
-    assert [rg.num_rows for rg in pf.row_groups] == expected["init"]
-    assert pf.to_pandas().equals(initial_df)
 
-    # Append phase.
-    current_df = initial_df
-    for append_df, expected_rgs in zip(append_data, expected["append"]):
+    # Phase 'write_ordered()'.
+    for write_ordered_df, expected_rgs, expected_df in zip(
+        write_ordered_data,
+        expected["rgs_length"],
+        expected["dfs"],
+    ):
         write_ordered(
             tmp_path,
             ordered_on=ordered_on,
-            df=append_df,
+            df=write_ordered_df,
             row_group_target_size=row_group_target_size,
             max_n_off_target_rgs=max_n_off_target_rgs,
             duplicates_on=duplicates_on,
@@ -338,222 +562,9 @@ def test_write_ordered(
         # Verify state after this append
         pf_rec = ParquetFile(tmp_path)
         assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
-        current_df = concat([current_df, append_df]).reset_index(drop=True)
-        if duplicates_on is not None:
-            if isinstance(duplicates_on, list) and ordered_on not in duplicates_on:
-                duplicates_on_tmp = duplicates_on + [ordered_on]
-            elif isinstance(duplicates_on, str) and ordered_on != duplicates_on:
-                duplicates_on_tmp = [ordered_on, duplicates_on]
-            else:
-                duplicates_on_tmp = duplicates_on
-            current_df = current_df.drop_duplicates(
-                subset=duplicates_on_tmp,
-                keep="last",
-                ignore_index=True,
-            )
-        assert pf_rec.to_pandas().equals(current_df)
-
-
-def test_appending_span_several_rgs(tmp_path):
-    # Validate:
-    # - sorting on 'ordered_on' of data which is the concatenation of existing
-    #   data and new data.
-    # rgs                  [0, , ,1, , ,2, ]
-    # idx                  [0, , ,3, , ,6, ]
-    # a                    [0,1,2,3,3,3,4,5]
-    # b                    [0, , ,3, , ,6, ]
-    # c                    [0,0,0,0,0,0,0,0]
-    # a (new data, ordered_on)        [3,  5,5, 5,6, 6, 7, 8]
-    # b (new data, duplicates_on)     [7,  7,8, 9,9, 9,10,10]
-    # c (new data, check last)        [1,  2,3, 4,5, 6, 7, 8]
-    # 2 duplicates (on b)                 xx,   x x  x, x  x
-    # rgs (new)            [0, , ,1, ,,, ,x2, , , x  4, x, 5]
-    # idx                  [0, , ,3, ,,, , 8, , ,   11,  ,13]
-    a1 = [0, 1, 2, 3, 3, 3, 4, 5]
-    len_a1 = len(a1)
-    b1 = range(len_a1)
-    c1 = [0] * len_a1
-    pdf1 = DataFrame({"a": a1, "b": b1, "c": c1})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(dn, pdf1, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [3, 3, 2]
-    row_group_target_size = 3
-    a2 = [3, 5, 5, 5, 6, 6, 7, 8]
-    len_a2 = len(a2)
-    b2 = [7, 7, 8, 9, 9, 9, 10, 10]
-    c2 = arange(len_a2) + 1
-    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
-    # ordered on 'a', duplicates on 'b' ('a' added implicitly)
-    write_ordered(
-        dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
-        ordered_on="a",
-        duplicates_on="b",
-    )
-    pf_rec = ParquetFile(dn)
-    len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs_rec == [3, 5, 3, 2, 1]
-    a_ref = [0, 1, 2, 3, 3, 3, 3, 4, 5, 5, 5, 6, 7, 8]
-    b_ref = [0, 1, 2, 3, 4, 5, 7, 6, 7, 8, 9, 9, 10, 10]
-    c_ref = [0, 0, 0, 0, 0, 0, 1, 0, 2, 3, 4, 6, 7, 8]
-    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
-    assert pf_rec.to_pandas().equals(df_ref)
-
-
-def test_inserting_data(tmp_path):
-    # Validate:
-    # - inserting data in the middle of existing one, with row group sorting.
-    #   Row group 3 becomes row group 4.
-    # rgs                  [0, , ,1, , ,2, , , 3,  ]
-    # idx                  [0, , ,3, , ,6, , , 9,  ]
-    # a                    [0,1,3,3,5,7,7,8,9,11,12]
-    # b                    [0, , ,3, , ,6, , , 9,  ]
-    # c                    [0,0,0,0,0,0,0,0,0, 0, 0]
-    # a (new data, ordered_on)    [3,4,5,  8]
-    # b (new data, duplicates_on) [7,7,4,  9]
-    # c (new data, check last)    [1,1,1,  1]
-    # 1 duplicate (on b)            x  x
-    # a (concat)           [11,12,0,1,3,3,3,4,5,5,7,7,8,8, 9] (before rg sorting)
-    # b (concat)           [ 9,10,0,1,2,3,7,7,4,4,5,6,7,9, 8]
-    # c (cocnat)           [ 0, 0,0,0,0,0,1,1,  1,0,0,0,1, 0]
-    # rgs (not sharp)      [     ,x, , ,x, , ,x, , ,x, , , x]
-    # rgs (sharp)          [ x,  ,0, ,1, , , ,x 2,3, , , , 4]
-    # idx                  [     ,0, ,2, , , ,  6,7, , , ,11]
-    a1 = [0, 1, 3, 3, 5, 7, 7, 8, 9, 11, 12]
-    len_a1 = len(a1)
-    b1 = range(len_a1)
-    c1 = [0] * len_a1
-    pdf1 = DataFrame({"a": a1, "b": b1, "c": c1})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(dn, pdf1, row_group_offsets=[0, 3, 6, 9], file_scheme="hive", write_index=False)
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [3, 3, 3, 2]
-    row_group_target_size = 3
-    a2 = [3, 4, 5, 8]
-    len_a2 = len(a2)
-    b2 = [7, 7, 4, 9]
-    c2 = [1] * len_a2
-    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
-    # ordered on 'a', duplicates on 'b' ('a' added implicitly)
-    write_ordered(
-        dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
-        ordered_on="a",
-        duplicates_on="b",
-    )
-    pf_rec = ParquetFile(dn)
-    len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs_rec == [2, 4, 1, 4, 1, 2]
-    a_ref = [0, 1, 3, 3, 3, 4, 5, 7, 7, 8, 8, 9, 11, 12]
-    b_ref = [0, 1, 2, 3, 7, 7, 4, 5, 6, 7, 9, 8, 9, 10]
-    c_ref = [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0]
-    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
-    assert pf_rec.to_pandas().equals(df_ref)
-
-
-def test_inserting_data_with_drop_duplicates(tmp_path):
-    # Validate:
-    # - inserting data in the middle of existing one, with row group sorting.
-    #   Row group 3 becomes row group 4 (same as previous test).
-    # rgs                  [0, , ,1, , ,2, , , 3,  ]
-    # idx                  [0, , ,3, , ,6, , , 9,  ]
-    # a                    [0,1,3,3,5,7,7,8,9,11,12]
-    # b                    [0, , ,3, , ,6, , , 9,  ]
-    # c                    [0,0,0,0,0,0,0,0,0, 0, 0]
-    # a (new data, ordered_on)    [3,4,5,  8]
-    # b (new data, duplicates_on) [7,7,4,  9]
-    # c (new data, check last)    [1,1,1,  1]
-    # 1 duplicate (on b)            x  x
-    # a (concat)           [11,12,0,1,3,3,3,4,5,5,7,7,8,8, 9] (before rg sorting)
-    # b (concat)           [ 9,10,0,1,2,3,7,7,4,4,5,6,7,9, 8]
-    # c (cocnat)           [ 0, 0,0,0,0,0,1,1,  1,0,0,0,1, 0]
-    # rgs (not sharp)      [     ,x, , ,x, , ,x, , ,x, , , x]
-    # rgs (sharp)          [ x,  ,0, ,1, , , ,x 2,3, , , , 4]
-    # idx                  [     ,0, ,2, , , ,  6,7, , , ,11]
-    a1 = [0, 1, 3, 3, 5, 7, 7, 8, 9, 11, 12]
-    len_a1 = len(a1)
-    b1 = range(len_a1)
-    c1 = [0] * len_a1
-    pdf = DataFrame({"a": a1, "b": b1, "c": c1})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(dn, pdf, row_group_offsets=[0, 3, 6, 9], file_scheme="hive", write_index=False)
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [3, 3, 3, 2]
-    row_group_target_size = 3
-    a2 = [3, 4, 5, 8]
-    len_a2 = len(a2)
-    b2 = [7, 7, 4, 9]
-    c2 = [1] * len_a2
-    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
-    # ordered on 'a', duplicates on 'b' ('a' added implicitly)
-    write_ordered(
-        dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
-        ordered_on="a",
-        duplicates_on="b",
-    )
-    pf_rec = ParquetFile(dn)
-    len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs_rec == [2, 4, 1, 4, 1, 2]
-    a_ref = [0, 1, 3, 3, 3, 4, 5, 7, 7, 8, 8, 9, 11, 12]
-    b_ref = [0, 1, 2, 3, 7, 7, 4, 5, 6, 7, 9, 8, 9, 10]
-    c_ref = [0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0]
-    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
-    assert pf_rec.to_pandas().equals(df_ref)
-
-
-def test_inserting_data_no_drop_duplicate(tmp_path):
-    # Validate:
-    # - inserting data in the middle of existing one, with row group sorting.
-    #   Row group 3 becomes row group 4 (same as previous test).
-    # rgs                  [0, , ,1, , ,2, , , 3,  ]
-    # idx                  [0, , ,3, , ,6, , , 9,  ]
-    # a                    [0,1,3,3,5,7,7,8,9,11,12]
-    # b                    [0, , ,3, , ,6, , , 9,  ]
-    # c                    [0,0,0,0,0,0,0,0,0, 0, 0]
-    # a (new data, ordered_on)    [3,4,5,  8]
-    # b (new data)                [7,7,4,  9]
-    # c (new data, check last)    [1,1,1,  1]
-    # 1 duplicate (on b)            x  x
-    # a (concat)           [11,12,0,1,3,3,3,4,5,5,7,7,8,8, 9] (before rg sorting)
-    # b (concat)           [ 9,10,0,1,2,3,7,7,4,4,5,6,7,9, 8]
-    # c (cocnat)           [ 0, 0,0,0,0,0,1,1,  1,0,0,0,1, 0]
-    # rgs (not sharp)      [     ,x, , ,x, , ,x, , ,x, , , x]
-    # rgs (sharp)          [ x,  ,0, ,1, , , ,2, ,3, , , , 4]
-    # idx                  [     ,0, ,2, , , ,6, ,8, , , ,12]
-    a1 = [0, 1, 3, 3, 5, 7, 7, 8, 9, 11, 12]
-    len_a1 = len(a1)
-    b1 = range(len_a1)
-    c1 = [0] * len_a1
-    pdf = DataFrame({"a": a1, "b": b1, "c": c1})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(dn, pdf, row_group_offsets=[0, 3, 6, 9], file_scheme="hive", write_index=False)
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [3, 3, 3, 2]
-    row_group_target_size = 3
-    a2 = [3, 4, 5, 8]
-    len_a2 = len(a2)
-    b2 = [7, 7, 4, 9]
-    c2 = [1] * len_a2
-    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
-    # ordered on 'a', no 'duplicates_on
-    write_ordered(dn, pdf2, row_group_target_size=row_group_target_size, ordered_on="a")
-    pf_rec = ParquetFile(dn)
-    len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs_rec == [3, 3, 2, 4, 1, 2]
-    a_ref = [0, 1, 3, 3, 3, 4, 5, 5, 7, 7, 8, 8, 9, 11, 12]
-    b_ref = [0, 1, 2, 3, 7, 7, 4, 4, 5, 6, 7, 9, 8, 9, 10]
-    c_ref = [0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0]
-    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
-    assert pf_rec.to_pandas().equals(df_ref)
+        print("pf_rec.to_pandas()")
+        print(pf_rec.to_pandas())
+        assert pf_rec.to_pandas().equals(expected_df)
 
 
 def test_appending_as_if_inserting_no_coalesce(tmp_path):

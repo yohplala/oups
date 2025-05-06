@@ -940,6 +940,7 @@ def write_ordered(
         drop_duplicates = True
     else:
         drop_duplicates = False
+    # TODO: move this part to '_validate_df_param()'?
     if df.empty:
         # At least, start with an empty DataFrame containing 'ordered_on'
         # column.
@@ -992,7 +993,10 @@ def write_ordered(
     for rg_idx_start_end_excl in ms_strategy.rg_idx_mrs_starts_ends_excl:
         opd.remove_row_groups(opd[rg_idx_start_end_excl].row_groups, write_fmd=False)
     # Rename partition files.
+    print("ms_strategy.sort_rgs_after_write")
+    print(ms_strategy.sort_rgs_after_write)
     if ms_strategy.sort_rgs_after_write:
+        opd.sort_rgs(ordered_on)
         opd._sort_part_names(write_fmd=False)
     # Manage and write metadata.
     # TODO: when refactoring metadata writing, use straight away
