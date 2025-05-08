@@ -7,11 +7,9 @@ files.
 
 """
 
-from .write import to_pandas_midx
 from .write import write_ordered
 
 
 __all__ = [
-    "to_pandas_midx",
     "write_ordered",
 ]

@@ -13,53 +13,11 @@ from os import path as os_path
 
 import pytest
 from fastparquet import ParquetFile
-from fastparquet import write as fp_write
 from numpy import arange
 from pandas import DataFrame
-from pandas import MultiIndex
-from pandas import concat
 
-from oups.store.write import to_pandas_midx
 from oups.store.write import write_ordered
 from tests.test_store.conftest import create_parquet_file
-
-
-def test_to_cmidx(tmp_path):
-    # Expanding column index into a 2-level column multi-index.
-    # No level names.
-    pdf = DataFrame(
-        {
-            "('lev1-col1','lev2-col1')": range(6, 12),
-            "('lev1-col2','lev2-col2')": ["ah", "oh", "uh", "ih", "ai", "oi"],
-        },
-    )
-    res_midx = to_pandas_midx(pdf.columns)
-    ref_midx = MultiIndex.from_tuples(
-        [("lev1-col1", "lev2-col1"), ("lev1-col2", "lev2-col2")],
-        names=["l0", "l1"],
-    )
-    assert res_midx.equals(ref_midx)
-    write_ordered(str(tmp_path), ordered_on=("lev1-col1", "lev2-col1"), df=pdf, to_cmidx=[])
-    res = ParquetFile(str(tmp_path)).to_pandas()
-    pdf.columns = ref_midx
-    assert res.equals(pdf)
-
-
-def test_to_cmidx_sparse_levels(tmp_path):
-    # Expanding column index into a 2-level column multi-index.
-    # Sparse level names.
-    pdf = DataFrame(
-        {
-            "('lev1-col1','lev2-col1')": range(6, 12),
-            "('lev1-col2','lev2-col2')": ["ah", "oh", "uh", "ih", "ai", "oi"],
-        },
-    )
-    res_midx = to_pandas_midx(pdf.columns, levels=["ah"])
-    ref_midx = MultiIndex.from_tuples(
-        [("lev1-col1", "lev2-col1"), ("lev1-col2", "lev2-col2")],
-        names=["ah", "l1"],
-    )
-    assert res_midx.equals(ref_midx)
 
 
 @pytest.mark.parametrize(
@@ -501,6 +459,161 @@ def test_to_cmidx_sparse_levels(tmp_path):
                 ],
             },
         ),
+        (
+            "appending_as_if_inserting_with_coalesce",
+            {
+                "df": DataFrame(
+                    {
+                        "a": [0, 1, 2, 3, 3, 3, 4, 5],
+                        "b": range(8),
+                        "c": [0] * 8,
+                    },
+                ),
+                "row_group_offsets": [0, 3, 6],
+            },
+            # Append data as if it is insertion (no overlap with existing data).
+            # Special case:
+            # - while duplicate drop is requested, none is performed because data is
+            #   not merged with existing one before being appended.
+            # - the way number of rows are distributed per row group, the input data
+            #   (4 rows) is split into 2 row groups of 2 rows.
+            # rgs                  [0, , ,1, , ,2, ]
+            # idx                  [0, , ,3, , ,6, ]
+            # a (ordered_on)       [0,1,2,3,3,3,4,5]
+            # b (duplicates_on)    [0, , ,3, , ,6, ]
+            # c (duplicate last)   [0,0,0,0,0,0,0,0]
+            # a (new data)                         [6,6, 7, 8]
+            # b (new data)                         [9,9,10,10]
+            # c (new data)                         [5,6, 7, 8]
+            # 3 duplicates (on c)                   x x
+            # rgs (new data)       [0, , ,1, , ,2, ,x 3,  ,  ]
+            # idx                  [0, , ,3, , ,6, ,8, ,  ,  ]
+            [
+                DataFrame(
+                    {
+                        "a": [6, 6, 7, 8],
+                        "b": [9, 9, 10, 10],
+                        "c": arange(4) + 5,
+                    },
+                ),
+            ],
+            3,  # row_group_target_size
+            2,  # max_n_off_target_rgs - triggers coalescing
+            ["b"],  # duplicates_on
+            {
+                "rgs_length": [[3, 3, 2, 3]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 2, 3, 3, 3, 4, 5, 6, 7, 8],
+                            "b": [0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 10],
+                            "c": [0, 0, 0, 0, 0, 0, 0, 0, 6, 7, 8],
+                        },
+                    ),
+                ],
+            },
+        ),
+        (
+            "duplicates_all_cols",
+            {
+                "df": DataFrame(
+                    {
+                        "a": [0, 1, 2, 3, 3, 3, 4, 5],
+                        "b": range(8),
+                        "c": [0] * 7 + [2],  # Note: last element is 2 instead of 0
+                    },
+                ),
+                "row_group_offsets": [0, 3, 6],
+            },
+            # Validate:
+            # - use of empty list '[]' for 'duplicates_on'.
+            # rgs                  [0, , ,1, , ,2, ]
+            # idx                  [0, , ,3, , ,6, ]
+            # a                    [0,1,2,3,3,3,4,5]
+            # b                    [0, , ,3, , ,6, ]
+            # c                    [0,0,0,0,0,0,0,2]
+            # a (new data, ordered_on)        [3,  5,5,5, 6]
+            # b (new data, duplicates_on)     [7,  7,7,7, 9]
+            # c (new data, check last)        [1,  2,3,2, 5]
+            # 1 duplicates (b & c)                xx,  x
+            # rgs (new)            [0, , ,1, ,,, ,   2, , 3]
+            # idx                  [0, , ,3, ,,, ,   8, ,10]
+            [
+                DataFrame(
+                    {
+                        "a": [3, 5, 5, 5, 6],
+                        "b": [7, 7, 7, 7, 9],
+                        "c": [1, 2, 3, 2, 5],
+                    },
+                ),
+            ],
+            3,  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            [],  # duplicates_on - empty list means all columns
+            {
+                "rgs_length": [[3, 3, 3, 2]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 2, 3, 3, 3, 3, 4, 5, 5, 6],
+                            "b": [0, 1, 2, 3, 4, 5, 7, 6, 7, 7, 9],
+                            "c": [0, 0, 0, 0, 0, 0, 1, 0, 3, 2, 5],
+                        },
+                    ),
+                ],
+            },
+        ),
+        (
+            "drop_duplicates_wo_coalescing_incomplete_rgs",
+            {
+                "df": DataFrame(
+                    {
+                        "a": range(7),
+                        "b": [0] * 7,
+                    },
+                ),
+                "row_group_offsets": [0, 5, 6],
+            },
+            # Initialize a parquet dataset directly with fastparquet.
+            # 2 last row groups are incomplete row groups.
+            # But coalescing is not triggered with new data.
+            # However, drop duplicate is requested and new data overlap with last
+            # existing row group.
+            # Targeted result is that one-but-last row group (incomplete one) is not
+            # coalesced.
+            # row_group_target_size = 5 (one row per row group for incomplete rgs)
+            # max_n_off_target_rgs = 4 (4 incomplete rgs, but drop duplicate with new data, so
+            # after merging new data, only 2 incomplete row groups will remain)
+            # rgs                          [0, , , , ,1,2]
+            # idx                          [0,1,2,3,4,5,6]
+            # a (ordered_on)               [0,1,2,3,4,5,6]
+            # b (keep last)                [0,0,0,0,0,0,0]
+            # a (new data)                               [6]
+            # b (new data)                               [1]
+            # rgs (new)                    [0, , , , ,1,x,2]
+            [
+                DataFrame(
+                    {
+                        "a": [6],  # n_val - 1
+                        "b": [1],
+                    },
+                ),
+            ],
+            5,  # row_group_target_size
+            4,  # max_n_off_target_rgs
+            "a",  # duplicates_on
+            {
+                "rgs_length": [[5, 1, 1]],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [0, 1, 2, 3, 4, 5, 6],
+                            "b": [0, 0, 0, 0, 0, 0, 1],
+                        },
+                    ),
+                ],
+            },
+        ),
     ],
 )
 def test_write_ordered(
@@ -567,168 +680,17 @@ def test_write_ordered(
         assert pf_rec.to_pandas().equals(expected_df)
 
 
-def test_appending_as_if_inserting_with_coalesce(tmp_path):
-    # Append data as if it is insertion (no overlap with existing data).
-    # Special case:
-    # - while duplicate drop is requested, none is performed because data is
-    #   not merged with existing one before being appended.
-    # - the way number of rows are distributed per row group, the input data
-    #   (4 rows) is split into 2 row groups of 2 rows.
-    # rgs                  [0, , ,1, , ,2, ]
-    # idx                  [0, , ,3, , ,6, ]
-    # a (ordered_on)       [0,1,2,3,3,3,4,5]
-    # b (duplicates_on)    [0, , ,3, , ,6, ]
-    # c (duplicate last)   [0,0,0,0,0,0,0,0]
-    # a (new data)                         [6,6, 7, 8]
-    # b (new data)                         [9,9,10,10]
-    # c (new data)                         [5,6, 7, 8]
-    # 3 duplicates (on c)                   x x
-    # rgs (new data)       [0, , ,1, , ,2, ,x 3,  ,  ]
-    # idx                  [0, , ,3, , ,6, ,8, ,  ,  ]
-    a1 = [0, 1, 2, 3, 3, 3, 4, 5]
-    len_a1 = len(a1)
-    b1 = range(len_a1)
-    c1 = [0] * len_a1
-    pdf = DataFrame({"a": a1, "b": b1, "c": c1})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(dn, pdf, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [3, 3, 2]
-    row_group_target_size = 3
-    max_n_off_target_rgs = 2
-    a2 = [6, 6, 7, 8]
-    len_a2 = len(a2)
-    b2 = [9, 9, 10, 10]
-    c2 = arange(len_a2) + 5
-    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
-    # ordered on 'a', duplicates on 'b' ('a' added implicitly)
-    write_ordered(
-        dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
-        ordered_on="a",
-        duplicates_on=["b"],
-        max_n_off_target_rgs=max_n_off_target_rgs,
-    )
-    pf_rec = ParquetFile(dn)
-    len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs_rec == [3, 3, 2, 3]
-    df_ref = concat([pdf, pdf2.iloc[1:]]).reset_index(drop=True)
-    assert pf_rec.to_pandas().equals(df_ref)
-
-
-def test_duplicates_all_cols(tmp_path):
-    # Validate:
-    # - use of empty list '[]' for 'duplicates_on'.
-    # rgs                  [0, , ,1, , ,2, ]
-    # idx                  [0, , ,3, , ,6, ]
-    # a                    [0,1,2,3,3,3,4,5]
-    # b                    [0, , ,3, , ,6, ]
-    # c                    [0,0,0,0,0,0,0,2]
-    # a (new data, ordered_on)        [3,  5,5,5, 6]
-    # b (new data, duplicates_on)     [7,  7,7,7, 9]
-    # c (new data, check last)        [1,  2,3,2, 5]
-    # 1 duplicates (b & c)                xx,  x
-    # rgs (new)            [0, , ,1, ,,, ,   2, , 3]
-    # idx                  [0, , ,3, ,,, ,   8, ,10]
-    a1 = [0, 1, 2, 3, 3, 3, 4, 5]
-    len_a1 = len(a1)
-    b1 = range(len_a1)
-    c1 = [0] * (len_a1 - 1) + [2]
-    pdf = DataFrame({"a": a1, "b": b1, "c": c1})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(dn, pdf, row_group_offsets=[0, 3, 6], file_scheme="hive", write_index=False)
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [3, 3, 2]
-    row_group_target_size = 3
-    a2 = [3, 5, 5, 5, 6]
-    b2 = [7, 7, 7, 7, 9]
-    c2 = [1, 2, 3, 2, 5]
-    pdf2 = DataFrame({"a": a2, "b": b2, "c": c2})
-    # ordered on 'a', duplicates on 'b' ('a' added implicitly)
-    write_ordered(
-        dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
-        ordered_on="a",
-        duplicates_on=[],
-    )
-    pf_rec = ParquetFile(dn)
-    len_rgs_rec = [rg.num_rows for rg in pf_rec.row_groups]
-    assert len_rgs_rec == [3, 5, 2, 1]
-    a_ref = [0, 1, 2, 3, 3, 3, 3, 4, 5, 5, 6]
-    b_ref = [0, 1, 2, 3, 4, 5, 7, 6, 7, 7, 9]
-    c_ref = [0, 0, 0, 0, 0, 0, 1, 0, 3, 2, 5]
-    df_ref = DataFrame({"a": a_ref, "b": b_ref, "c": c_ref})
-    assert pf_rec.to_pandas().equals(df_ref)
-
-
-def test_drop_duplicates_wo_coalescing_irgs(tmp_path):
-    # Initialize a parquet dataset directly with fastparquet.
-    # 2 last row groups are incomplete row groups.
-    # But coalescing is not triggered with new data.
-    # However, drop duplicate is requested and new data overlap with last
-    # existing row group.
-    # Targeted result is that one-but-last row group (incomplete one) is not
-    # coalesced.
-    # row_group_target_size = 5 (one row per row group for incomplete rgs)
-    # max_n_off_target_rgs = 4 (4 incomplete rgs, but drop duplicate with new data, so
-    # after merging new data, only 2 incomplete row groups will remain)
-    # rgs                          [0, , , , ,1,2]
-    # idx                          [0,1,2,3,4,5,6]
-    # a (ordered_on)               [0,1,2,3,4,5,6]
-    # b (keep last)                [0,0,0,0,0,0,0]
-    # a (new data)                               [6]
-    # b (new data)                               [1]
-    # rgs (new)                    [0, , , , ,1,x,2]
-    n_val = 7
-    pdf = DataFrame({"a": range(n_val), "b": [0] * n_val})
-    dn = os_path.join(tmp_path, "test")
-    fp_write(
-        dn,
-        pdf,
-        row_group_offsets=[0, n_val - 2, n_val - 1],
-        file_scheme="hive",
-        write_index=False,
-    )
-    pf = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf.row_groups]
-    assert len_rgs == [n_val - 2, 1, 1]
-    row_group_target_size = 5
-    max_n_off_target_rgs = 4
-    pdf2 = DataFrame({"a": [n_val - 1], "b": [1]})
-    write_ordered(
-        dn,
-        pdf2,
-        row_group_target_size=row_group_target_size,
-        max_n_off_target_rgs=max_n_off_target_rgs,
-        ordered_on="a",
-        duplicates_on="a",
-    )
-    pf_rec = ParquetFile(dn)
-    len_rgs = [rg.num_rows for rg in pf_rec.row_groups]
-    # Only the last row group has been rewritten, without coalescing
-    # one-but-last incomplete row group.
-    assert len_rgs == [n_val - 2, 1, 1]
-    df_ref = concat([pdf[:-1], pdf2]).reset_index(drop=True)
-    assert pf_rec.to_pandas().equals(df_ref)
-
-
 def test_exception_ordered_on_not_existing(tmp_path):
     # While 'ordered_on' is defined, it is not in seed data.
     n_val = 5
     pdf = DataFrame({"a": range(n_val), "b": [0] * n_val})
     dn = os_path.join(tmp_path, "test")
     # Write a 1st set of data.
-    fp_write(
+    create_parquet_file(
         dn,
-        pdf,
+        df=pdf,
         row_group_offsets=[0, n_val - 2, n_val - 1],
-        file_scheme="hive",
-        write_index=False,
     )
     # Append with oups same set of data, pandas dataframe.
     with pytest.raises(ValueError, match="^column 'ts'"):
-        write_ordered(dn, pdf, ordered_on="ts")
+        write_ordered(dn, ordered_on="ts", df=pdf)
