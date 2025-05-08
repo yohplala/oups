@@ -22,6 +22,7 @@ from oups.store.write.write import write_ordered
 
 
 EMPTY_DATAFRAME = DataFrame()
+KEY_ORDERED_ON = "ordered_on"
 
 
 def check_cmidx(cmidx: MultiIndex):
@@ -123,11 +124,12 @@ class ParquetHandle(ParquetFile):
             Keywords in 'kwargs' are forwarded to `writer.write_ordered`.
 
         """
-        if self._ordered_on is None:
-            # Let's cross finger is it is provided in kwargs.
-            write_ordered(self, **kwargs)
-        else:
-            write_ordered(self, ordered_on=self._ordered_on, **kwargs)
+        if KEY_ORDERED_ON in kwargs:
+            if self._ordered_on is None:
+                self._ordered_on = kwargs.pop(KEY_ORDERED_ON)
+            else:
+                del kwargs[KEY_ORDERED_ON]
+        write_ordered(self, ordered_on=self._ordered_on, **kwargs)
 
     @cached_property
     def pf(self):

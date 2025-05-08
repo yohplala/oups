@@ -254,11 +254,6 @@ def write_ordered(
         specific oups metadata in parquet file. If not provided, all data
         in ``OUPS_METADATA`` dict are retrieved to be written.
 
-    Returns
-    -------
-    ParquetHandle
-        Instance of ParquetHandle, to be used for further operations.
-
     Notes
     -----
     - When writing a dataframe with this function,
