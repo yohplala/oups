@@ -177,3 +177,19 @@ class ParquetHandle(ParquetFile):
             self.fmd.row_groups,
             key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"],
         )
+
+    def write_ordered(self, **kwargs):
+        """
+        Write data to disk.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Keywords in 'kwargs' are forwarded to `writer.write_ordered`.
+
+        """
+        from oups.store.write.write import write_ordered
+
+        opd = write_ordered(dirpath=self._dirpath, **kwargs)
+        self.fmd = opd.fmd
+        self._set_attrs()

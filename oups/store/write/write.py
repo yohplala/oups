@@ -29,7 +29,9 @@ EMPTY_DATAFRAME = DataFrame()
 MIN = "min"
 MAX = "max"
 MAX_ROW_GROUP_SIZE = 6_345_000
-KEY_MAX_ROW_GROUP_SIZE = "max_row_group_size"
+# TODO: remove below KEY_MAX_ROW_GROUP_SIZE
+KEY_MAX_ROW_GROUP_SIZE = "row_group_target_size"
+KEY_ROW_GROUP_TARGET_SIZE = "row_group_target_size"
 KEY_DUPLICATES_ON = "duplicates_on"
 # Notes to any dev.
 # Store any oups-specific metadata in this dict, such as oups-based application
@@ -251,6 +253,11 @@ def write_ordered(
         specific oups metadata in parquet file. If not provided, all data
         in ``OUPS_METADATA`` dict are retrieved to be written.
 
+    Returns
+    -------
+    ParquetHandle
+        Instance of ParquetHandle, to be used for further operations.
+
     Notes
     -----
     - When writing a dataframe with this function,
@@ -345,8 +352,6 @@ def write_ordered(
     for rg_idx_start_end_excl in ms_strategy.rg_idx_mrs_starts_ends_excl:
         opd.remove_row_groups(opd[rg_idx_start_end_excl].row_groups, write_fmd=False)
     # Rename partition files.
-    print("ms_strategy.sort_rgs_after_write")
-    print(ms_strategy.sort_rgs_after_write)
     if ms_strategy.sort_rgs_after_write:
         opd.sort_rgs(ordered_on)
         opd._sort_part_names(write_fmd=False)
@@ -354,3 +359,4 @@ def write_ordered(
     # TODO: when refactoring metadata writing, use straight away
     # 'update_common_metadata' from fastparquet.
     write_metadata(pf=opd, metadata=metadata, md_key=md_key)
+    return opd

@@ -7,9 +7,11 @@ files.
 
 """
 
+from .write import KEY_ROW_GROUP_TARGET_SIZE
 from .write import write_ordered
 
 
 __all__ = [
     "write_ordered",
+    "KEY_ROW_GROUP_TARGET_SIZE",
 ]

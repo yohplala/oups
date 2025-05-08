@@ -74,6 +74,12 @@ def test_vaex_dataframe(tmp_path):
     assert vdf.to_pandas_df().equals(df_ref)
 
 
+def test_write_ordered(tmp_path):
+    ph = ParquetHandle(str(tmp_path), df_like=df_ref)
+    ph.write_ordered(ordered_on="timestamp", df=df_ref)
+    assert ph.to_pandas().equals(df_ref)
+
+
 def test_min_max(tmp_path):
     # Read as parquet file.
     fn = os_path.join(TEST_DATA, "df_ts_temp_4rows_2rgs.zip")

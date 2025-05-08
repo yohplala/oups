@@ -675,8 +675,6 @@ def test_write_ordered(
         # Verify state after this append
         pf_rec = ParquetFile(tmp_path)
         assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
-        print("pf_rec.to_pandas()")
-        print(pf_rec.to_pandas())
         assert pf_rec.to_pandas().equals(expected_df)
 
 

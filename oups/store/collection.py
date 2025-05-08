@@ -174,6 +174,7 @@ class ParquetSet:
         """
         yield from self._keys
 
+    # TODO: remove this method, to be replaced by 'self.write_ordered()'
     def set(self, key: dataclass, data: Union[pDataFrame, vDataFrame], **kwargs):
         """
         Write 'data' to disk, at location defined by 'key'.
@@ -183,8 +184,8 @@ class ParquetSet:
         key : dataclass
             Key specifying the location where to write the data. It has to be
             an instance of the dataclass provided at ParquetSet instantiation.
-        data : Union[pandas.DataFrame, vaex.dataframe.DataFrame]
-            A dataframe, either in pandas format, or in vaex format.
+        df : Optional[pandas.DataFrame]
+            A pandas DataFrame.
 
         Other Parameters
         ----------------
@@ -197,12 +198,13 @@ class ParquetSet:
         if not isinstance(data, (pDataFrame, vDataFrame)):
             raise TypeError("data should be a pandas or vaex dataframe.")
         dirpath = os_path.join(self._basepath, key.to_path)
-        write_ordered(dirpath=dirpath, data=data, md_key=key, **kwargs)
+        write_ordered(dirpath=dirpath, df=data, md_key=key, **kwargs)
         if key not in self:
             # If no trouble from writing, add key.
             self._keys.add(key)
         return
 
+    # TODO: remove this method, to be replaced by 'self.write_ordered()' in ParquetHandle.
     def __setitem__(
         self,
         key: dataclass,
