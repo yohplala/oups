@@ -359,3 +359,11 @@ def write_ordered(
     # TODO: when refactoring metadata writing, use straight away
     # 'update_common_metadata' from fastparquet.
     write_metadata(pf=opd, metadata=metadata, md_key=md_key)
+
+
+# TODO:
+# - add a test case with timestamps
+# - add a test case to resize existing OPD
+# - rename write_ordered to write
+# - check docstrings, comments, variable names consistencies for both write and iter_merge_data
+# - check test cases aggstream

@@ -121,7 +121,7 @@ class ParquetHandle(ParquetFile):
         Parameters
         ----------
         **kwargs : dict
-            Keywords in 'kwargs' are forwarded to `writer.write_ordered`.
+            Keywords in 'kwargs' are forwarded to `write.write_ordered`.
 
         """
         if KEY_ORDERED_ON in kwargs:
