@@ -46,7 +46,7 @@ def test_parquet_file(tmp_path):
     fn = os_path.join(TEST_DATA, "df_ts_temp_4rows_2rgs.zip")
     with zipfile.ZipFile(fn, "r") as zip_ref:
         zip_ref.extractall(tmp_path)
-    ph = ParquetHandle(str(tmp_path))
+    ph = ParquetHandle(str(tmp_path), ordered_on="timestamp")
     pf = ph.pf
     assert len(pf.row_groups) == 2
     assert sorted(df_ref.columns) == sorted(pf.columns)
@@ -57,7 +57,7 @@ def test_pandas_dataframe(tmp_path):
     fn = os_path.join(TEST_DATA, "df_ts_temp_4rows_2rgs.zip")
     with zipfile.ZipFile(fn, "r") as zip_ref:
         zip_ref.extractall(tmp_path)
-    ph = ParquetHandle(str(tmp_path))
+    ph = ParquetHandle(str(tmp_path), ordered_on="timestamp")
     pdf = ph.pdf
     assert isinstance(pdf, DataFrame)
     assert pdf.equals(df_ref)
@@ -68,15 +68,15 @@ def test_vaex_dataframe(tmp_path):
     fn = os_path.join(TEST_DATA, "df_ts_temp_4rows_2rgs.zip")
     with zipfile.ZipFile(fn, "r") as zip_ref:
         zip_ref.extractall(tmp_path)
-    ph = ParquetHandle(str(tmp_path))
+    ph = ParquetHandle(str(tmp_path), ordered_on="timestamp")
     vdf = ph.vdf
     assert isinstance(vdf, vDataFrame)
     assert vdf.to_pandas_df().equals(df_ref)
 
 
-def test_write_ordered(tmp_path):
-    ph = ParquetHandle(str(tmp_path), df_like=df_ref)
-    ph.write_ordered(ordered_on="timestamp", df=df_ref)
+def test_write(tmp_path):
+    ph = ParquetHandle(str(tmp_path), ordered_on="timestamp", df_like=df_ref)
+    ph.write(df=df_ref)
     assert ph.to_pandas().equals(df_ref)
 
 
@@ -86,26 +86,26 @@ def test_min_max(tmp_path):
     with zipfile.ZipFile(fn, "r") as zip_ref:
         zip_ref.extractall(tmp_path)
     col = "timestamp"
-    min_max = ParquetHandle(str(tmp_path)).min_max(col)
+    min_max = ParquetHandle(str(tmp_path), ordered_on="timestamp").min_max(col)
     min_ref = np.datetime64(df_ref[col].min())
     max_ref = np.datetime64(df_ref[col].max())
     assert min_max == (min_ref, max_ref)
     col = "temperature"
-    min_max = ParquetHandle(str(tmp_path)).min_max(col)
+    min_max = ParquetHandle(str(tmp_path), ordered_on="timestamp").min_max(col)
     min_ref = df_ref[col].min()
     max_ref = df_ref[col].max()
     assert min_max == (min_ref, max_ref)
 
 
 def test_parquet_handle_not_existing(tmp_path):
-    ph = ParquetHandle(str(tmp_path))
+    ph = ParquetHandle(str(tmp_path), ordered_on="timestamp")
     assert isinstance(ph, ParquetFile)
     assert ph.pdf.empty
 
 
 def test_parquet_handle_folder_not_existing(tmp_path):
     tmp_path = os_path.join(tmp_path, "test")
-    ph = ParquetHandle(str(tmp_path))
+    ph = ParquetHandle(str(tmp_path), ordered_on="timestamp")
     assert isinstance(ph, ParquetFile)
     assert ph.pdf.empty
 
@@ -115,9 +115,9 @@ def test_exception_check_cmidx(tmp_path):
     # Check 1st no column level names.
     df = DataFrame({("a", 1): [1]})
     with pytest.raises(ValueError, match="^not possible to have level name"):
-        ParquetHandle(tmp_path, df_like=df)
+        ParquetHandle(tmp_path, ordered_on="a", df_like=df)
     # Check with one column name not being a string.
     # Correcting column names.
     df.columns.set_names(["1", "2"], level=[0, 1], inplace=True)
     with pytest.raises(TypeError, match="^name 1 has to be"):
-        ParquetHandle(tmp_path, df_like=df)
+        ParquetHandle(tmp_path, ordered_on="a", df_like=df)

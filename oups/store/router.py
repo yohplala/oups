@@ -18,6 +18,7 @@ from vaex import open_many
 
 from oups.store.defines import DIR_SEP
 from oups.store.defines import OUPS_METADATA_KEY
+from oups.store.write.write import write_ordered
 
 
 EMPTY_DATAFRAME = DataFrame()
@@ -70,7 +71,7 @@ class ParquetHandle(ParquetFile):
 
     """
 
-    def __init__(self, dirpath: str, df_like: DataFrame = EMPTY_DATAFRAME):
+    def __init__(self, dirpath: str, ordered_on: str = None, df_like: DataFrame = EMPTY_DATAFRAME):
         """
         Instantiate parquet handle (ParquetFile instance).
 
@@ -80,6 +81,8 @@ class ParquetHandle(ParquetFile):
         ----------
         dirpath : str
             Directory path from where to load data.
+        ordered_on : str
+            Column name to order row groups by.
         df_like : Optional[DataFrame], default empty DataFrame
             DataFrame to use as template to create a new ParquetFile.
 
@@ -94,6 +97,7 @@ class ParquetHandle(ParquetFile):
             write(dirpath, df_like.iloc[:0], file_scheme="hive")
             super().__init__(dirpath)
         self._dirpath = dirpath
+        self._ordered_on = ordered_on
 
     @property
     def dirpath(self):
@@ -101,6 +105,29 @@ class ParquetHandle(ParquetFile):
         Return dirpath.
         """
         return self._dirpath
+
+    @property
+    def ordered_on(self):
+        """
+        Return ordered_on.
+        """
+        return self._ordered_on
+
+    def write(self, **kwargs):
+        """
+        Write data to disk.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Keywords in 'kwargs' are forwarded to `writer.write_ordered`.
+
+        """
+        if self._ordered_on is None:
+            # Let's cross finger is it is provided in kwargs.
+            write_ordered(self, **kwargs)
+        else:
+            write_ordered(self, ordered_on=self._ordered_on, **kwargs)
 
     @cached_property
     def pf(self):
@@ -177,19 +204,3 @@ class ParquetHandle(ParquetFile):
             self.fmd.row_groups,
             key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"],
         )
-
-    def write_ordered(self, **kwargs):
-        """
-        Write data to disk.
-
-        Parameters
-        ----------
-        **kwargs : dict
-            Keywords in 'kwargs' are forwarded to `writer.write_ordered`.
-
-        """
-        from oups.store.write.write import write_ordered
-
-        opd = write_ordered(dirpath=self._dirpath, **kwargs)
-        self.fmd = opd.fmd
-        self._set_attrs()

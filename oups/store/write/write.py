@@ -17,7 +17,6 @@ from pandas import DataFrame
 from pandas import Series
 
 from oups.store.defines import OUPS_METADATA_KEY
-from oups.store.router import ParquetHandle
 from oups.store.write.iter_merge_data import iter_merge_data
 from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
 from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
@@ -191,8 +190,10 @@ def write_ordered(
 
     Parameters
     ----------
-    dirpath : str
-        Directory where writing pandas dataframe.
+    dirpath : Union[str, OrderedParquetDataset]
+        If a string, it is the directory where writing pandas dataframe.
+        If an OrderedParquetDataset, it is the dataset where writing pandas
+        dataframe.
     ordered_on : Union[str, Tuple[str]]
         Name of the column with respect to which dataset is in ascending order.
         If column multi-index, name of the column is a tuple.
@@ -307,8 +308,12 @@ def write_ordered(
         except KeyError:
             # Check 'ordered_on' column is within input DataFrame.
             raise ValueError(f"column '{ordered_on}' does not exist in input DataFrame.")
+    if isinstance(dirpath, str):
+        from oups.store.router import ParquetHandle
 
-    opd = ParquetHandle(dirpath, df_like=df)
+        opd = ParquetHandle(dirpath, ordered_on=ordered_on, df_like=df)
+    else:
+        opd = dirpath
     opd_statistics = opd.statistics
     if isinstance(row_group_target_size, int):
         if drop_duplicates:
@@ -359,4 +364,3 @@ def write_ordered(
     # TODO: when refactoring metadata writing, use straight away
     # 'update_common_metadata' from fastparquet.
     write_metadata(pf=opd, metadata=metadata, md_key=md_key)
-    return opd
