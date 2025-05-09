@@ -5,7 +5,7 @@ Created on Fri Nov  8 22:30:00 2024.
 @author: yoh
 
 """
-from typing import Callable, Iterable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 from fastparquet import ParquetFile
 from numpy.typing import NDArray
@@ -20,7 +20,7 @@ def iter_merge_data(
     df: DataFrame,
     merge_sequences: List[Tuple[int, NDArray]],
     split_sequence: Callable[[Series], List[int]],
-    duplicates_on: Optional[Union[str, Iterable[str]]] = None,
+    duplicates_on: Optional[Union[str, List[str], List[Tuple[str]]]] = None,
 ):
     """
     Yield merged and ordered chunks of data from DataFrame and ParquetFile.
@@ -43,8 +43,8 @@ def iter_merge_data(
         'TimePeriodMergeSplitStrategy' to compute split sequence from
         'ordered_on' column. Used to determine where to split the merged data
         into row groups.
-    duplicates_on : Optional[List[str]], default None
-        Column(s) to check for duplicates.
+    duplicates_on : Optional[Union[str, List[str], List[Tuple[str]]]], default None
+        Column(s) to check for duplicates. If empty list, all columns are used.
 
     Yields
     ------

@@ -10,7 +10,7 @@ from os import scandir
 from pickle import loads
 
 from fastparquet import ParquetFile
-from fastparquet import write
+from fastparquet import write as fp_write
 from fastparquet.api import statistics
 from pandas import DataFrame
 from pandas import MultiIndex
@@ -18,7 +18,7 @@ from vaex import open_many
 
 from oups.store.defines import DIR_SEP
 from oups.store.defines import OUPS_METADATA_KEY
-from oups.store.write.write import write_ordered
+from oups.store.write.write import write
 
 
 EMPTY_DATAFRAME = DataFrame()
@@ -95,7 +95,7 @@ class ParquetHandle(ParquetFile):
             # limitations.
             if isinstance(df_like.columns, MultiIndex):
                 check_cmidx(df_like.columns)
-            write(dirpath, df_like.iloc[:0], file_scheme="hive")
+            fp_write(dirpath, df_like.iloc[:0], file_scheme="hive")
             super().__init__(dirpath)
         self._dirpath = dirpath
         self._ordered_on = ordered_on
@@ -127,9 +127,12 @@ class ParquetHandle(ParquetFile):
         if KEY_ORDERED_ON in kwargs:
             if self._ordered_on is None:
                 self._ordered_on = kwargs.pop(KEY_ORDERED_ON)
-            else:
-                del kwargs[KEY_ORDERED_ON]
-        write_ordered(self, ordered_on=self._ordered_on, **kwargs)
+            elif self._ordered_on != kwargs[KEY_ORDERED_ON]:
+                raise ValueError(
+                    f"'ordered_on' attribute {self._ordered_on} is not the "
+                    f"same as 'ordered_on' parameter {kwargs[KEY_ORDERED_ON]}",
+                )
+        write(self, ordered_on=self._ordered_on, **kwargs)
 
     @cached_property
     def pf(self):

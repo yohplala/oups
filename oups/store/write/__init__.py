@@ -7,11 +7,15 @@ files.
 
 """
 
+from .write import KEY_DUPLICATES_ON
+from .write import KEY_MAX_N_OFF_TARGET_RGS
 from .write import KEY_ROW_GROUP_TARGET_SIZE
-from .write import write_ordered
+from .write import write
 
 
 __all__ = [
-    "write_ordered",
+    "write",
+    "KEY_DUPLICATES_ON",
+    "KEY_MAX_N_OFF_TARGET_RGS",
     "KEY_ROW_GROUP_TARGET_SIZE",
 ]

@@ -121,3 +121,11 @@ def test_exception_check_cmidx(tmp_path):
     df.columns.set_names(["1", "2"], level=[0, 1], inplace=True)
     with pytest.raises(TypeError, match="^name 1 has to be"):
         ParquetHandle(tmp_path, ordered_on="a", df_like=df)
+
+
+def test_exception_ordered_on_write(tmp_path):
+    tmp_path = str(tmp_path)
+    df = DataFrame({"a": [1], "b": [2]})
+    opd = ParquetHandle(tmp_path, ordered_on="a", df_like=df)
+    with pytest.raises(ValueError, match="^'ordered_on' attribute a is not "):
+        opd.write(df=df, ordered_on="b")

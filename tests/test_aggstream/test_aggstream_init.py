@@ -55,7 +55,8 @@ from oups.aggstream.aggstream import NO_FILTER_ID
 from oups.aggstream.aggstream import SUM
 from oups.aggstream.aggstream import AggResType
 from oups.aggstream.aggstream import FilterApp
-from oups.store.write.write import KEY_MAX_ROW_GROUP_SIZE
+from oups.store.write import KEY_MAX_N_OFF_TARGET_RGS
+from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
 
 
 @toplevel
@@ -90,7 +91,7 @@ def always_false(**kwargs):
             # Single key at root level.
             # root_parameters
             {
-                KEY_MAX_ROW_GROUP_SIZE: 6,
+                KEY_ROW_GROUP_TARGET_SIZE: 6,
                 KEY_ORDERED_ON: "ts",
                 "keys": Indexer("key1"),
                 KEY_BIN_BY: TimeGrouper(key="ts", freq="1h", closed="left", label="left"),
@@ -111,7 +112,7 @@ def always_false(**kwargs):
                     KEY_POST: None,
                     KEY_WRITE_CONFIG: {
                         KEY_ORDERED_ON: "ts",
-                        KEY_MAX_ROW_GROUP_SIZE: 6,
+                        KEY_ROW_GROUP_TARGET_SIZE: 6,
                         KEY_DUPLICATES_ON: "ts",
                     },
                     KEY_MAX_IN_MEMORY_SIZE_B: 146800640,
@@ -137,8 +138,8 @@ def always_false(**kwargs):
             # root_parameters
             {
                 KEY_ORDERED_ON: "ts_dflt",
-                KEY_MAX_ROW_GROUP_SIZE: 1000,
-                "max_nirgs": 4,
+                KEY_ROW_GROUP_TARGET_SIZE: 1000,
+                KEY_MAX_N_OFF_TARGET_RGS: 4,
                 KEY_PRE: always_true,
                 KEY_AGG: {"out_dflt": ("in_dflt", LAST)},
                 KEY_POST: always_true,
@@ -154,7 +155,7 @@ def always_false(**kwargs):
                         KEY_AGG: {"out_spec": ("in_spec", FIRST)},
                         KEY_BIN_BY: always_true,
                         KEY_POST: None,
-                        KEY_MAX_ROW_GROUP_SIZE: 3000,
+                        KEY_ROW_GROUP_TARGET_SIZE: 3000,
                         KEY_ORDERED_ON: "ts_spec",
                     },
                     Indexer("key3_only_default"): {
@@ -182,8 +183,8 @@ def always_false(**kwargs):
                     KEY_POST: always_false,
                     KEY_MAX_IN_MEMORY_SIZE_B: 1048576,
                     KEY_WRITE_CONFIG: {
-                        KEY_MAX_ROW_GROUP_SIZE: 1000,
-                        "max_nirgs": 4,
+                        KEY_ROW_GROUP_TARGET_SIZE: 1000,
+                        KEY_MAX_N_OFF_TARGET_RGS: 4,
                         KEY_ORDERED_ON: "ts_dflt",
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },
@@ -194,8 +195,8 @@ def always_false(**kwargs):
                     KEY_POST: None,
                     KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
-                        KEY_MAX_ROW_GROUP_SIZE: 3000,
-                        "max_nirgs": 4,
+                        KEY_ROW_GROUP_TARGET_SIZE: 3000,
+                        KEY_MAX_N_OFF_TARGET_RGS: 4,
                         KEY_ORDERED_ON: "ts_spec",
                         KEY_DUPLICATES_ON: "ts_spec",
                     },
@@ -206,8 +207,8 @@ def always_false(**kwargs):
                     KEY_POST: always_true,
                     KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
-                        KEY_MAX_ROW_GROUP_SIZE: 1000,
-                        "max_nirgs": 4,
+                        KEY_ROW_GROUP_TARGET_SIZE: 1000,
+                        KEY_MAX_N_OFF_TARGET_RGS: 4,
                         KEY_ORDERED_ON: "ts_dflt",
                         KEY_DUPLICATES_ON: "bin_out_spec",
                     },
@@ -218,8 +219,8 @@ def always_false(**kwargs):
                     KEY_POST: always_true,
                     KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
-                        KEY_MAX_ROW_GROUP_SIZE: 1000,
-                        "max_nirgs": 4,
+                        KEY_ROW_GROUP_TARGET_SIZE: 1000,
+                        KEY_MAX_N_OFF_TARGET_RGS: 4,
                         KEY_ORDERED_ON: "ts_spec",
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },
@@ -254,8 +255,8 @@ def always_false(**kwargs):
             # Add 'snap_by' parameter to consolidate within each key's config.
             {
                 KEY_ORDERED_ON: "ts_dflt",
-                KEY_MAX_ROW_GROUP_SIZE: 1000,
-                "max_nirgs": 4,
+                KEY_ROW_GROUP_TARGET_SIZE: 1000,
+                KEY_MAX_N_OFF_TARGET_RGS: 4,
                 KEY_PRE: always_true,
                 KEY_AGG: {"out_dflt": ("in_dflt", LAST)},
                 KEY_POST: always_true,
@@ -272,7 +273,7 @@ def always_false(**kwargs):
                             KEY_AGG: {"out_spec": ("in_spec", FIRST)},
                             KEY_BIN_BY: always_true,
                             KEY_POST: None,
-                            KEY_MAX_ROW_GROUP_SIZE: 3000,
+                            KEY_ROW_GROUP_TARGET_SIZE: 3000,
                             KEY_ORDERED_ON: "ts_spec",
                             KEY_MAX_IN_MEMORY_SIZE_MB: 1,
                         },
@@ -311,8 +312,8 @@ def always_false(**kwargs):
                     KEY_POST: always_false,
                     KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
-                        KEY_MAX_ROW_GROUP_SIZE: 1000,
-                        "max_nirgs": 4,
+                        KEY_ROW_GROUP_TARGET_SIZE: 1000,
+                        KEY_MAX_N_OFF_TARGET_RGS: 4,
                         KEY_ORDERED_ON: "ts_dflt",
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },
@@ -323,8 +324,8 @@ def always_false(**kwargs):
                     KEY_POST: None,
                     KEY_MAX_IN_MEMORY_SIZE_B: 1048576,
                     KEY_WRITE_CONFIG: {
-                        KEY_MAX_ROW_GROUP_SIZE: 3000,
-                        "max_nirgs": 4,
+                        KEY_ROW_GROUP_TARGET_SIZE: 3000,
+                        KEY_MAX_N_OFF_TARGET_RGS: 4,
                         KEY_ORDERED_ON: "ts_spec",
                         KEY_DUPLICATES_ON: "ts_spec",
                     },
@@ -335,8 +336,8 @@ def always_false(**kwargs):
                     KEY_POST: always_true,
                     KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
-                        KEY_MAX_ROW_GROUP_SIZE: 1000,
-                        "max_nirgs": 4,
+                        KEY_ROW_GROUP_TARGET_SIZE: 1000,
+                        KEY_MAX_N_OFF_TARGET_RGS: 4,
                         KEY_ORDERED_ON: "ts_dflt",
                         KEY_DUPLICATES_ON: "bin_out_spec",
                     },
@@ -347,8 +348,8 @@ def always_false(**kwargs):
                     KEY_POST: always_true,
                     KEY_MAX_IN_MEMORY_SIZE_B: 10485760,
                     KEY_WRITE_CONFIG: {
-                        KEY_MAX_ROW_GROUP_SIZE: 1000,
-                        "max_nirgs": 4,
+                        KEY_ROW_GROUP_TARGET_SIZE: 1000,
+                        KEY_MAX_N_OFF_TARGET_RGS: 4,
                         KEY_ORDERED_ON: "ts_spec",
                         KEY_DUPLICATES_ON: "ts_dflt",
                     },

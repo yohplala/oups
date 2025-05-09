@@ -26,8 +26,8 @@ from oups.store.write.merge_split_strategies.base import get_region_start_end_de
 
 
 LEFT = "left"
-MAX_ROW_GROUP_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
-# MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS = 1 / (1 - MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
+ROW_GROUP_TARGET_SIZE_SCALE_FACTOR = 0.8  # % of target row group size.
+# MIN_RG_NUMBER_TO_ENSURE_ON_TARGET_RGS = 1 / (1 - ROW_GROUP_TARGET_SIZE_SCALE_FACTOR)
 
 
 class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
@@ -45,7 +45,7 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
         Target number of rows above which a new row group should be created.
     row_group_min_size : int
         Minimum number of rows in an ordered atomic region, computed as
-        ``MAX_ROW_GROUP_SIZE_SCALE_FACTOR * row_group_target_size``.
+        ``ROW_GROUP_TARGET_SIZE_SCALE_FACTOR * row_group_target_size``.
     oars_max_n_rows : NDArray
         Array of shape (e) containing the maximum number of rows in each ordered
         atomic region, obtained by summing the number of rows in a row group
@@ -129,7 +129,7 @@ class NRowsMergeSplitStrategy(OARMergeSplitStrategy):
 
         """
         self.row_group_target_size = row_group_target_size
-        self.row_group_min_size = int(row_group_target_size * MAX_ROW_GROUP_SIZE_SCALE_FACTOR)
+        self.row_group_min_size = int(row_group_target_size * ROW_GROUP_TARGET_SIZE_SCALE_FACTOR)
         # Max number of rows in each ordered atomic region. This is a max in case
         # there are duplicates between row groups and DataFrame that will be
         # dropped.

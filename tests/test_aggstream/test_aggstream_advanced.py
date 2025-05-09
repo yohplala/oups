@@ -37,7 +37,6 @@ from oups import ParquetSet
 from oups import toplevel
 from oups.aggstream.aggstream import KEY_AGG
 from oups.aggstream.aggstream import KEY_AGGSTREAM
-from oups.aggstream.aggstream import KEY_MAX_ROW_GROUP_SIZE
 from oups.aggstream.aggstream import KEY_PRE_BUFFER
 from oups.aggstream.aggstream import KEY_RESTART_INDEX
 from oups.aggstream.aggstream import SeedPreException
@@ -50,6 +49,7 @@ from oups.aggstream.jcumsegagg import MIN
 from oups.aggstream.segmentby import KEY_BIN_BY
 from oups.aggstream.segmentby import KEY_SNAP_BY
 from oups.aggstream.segmentby import by_x_rows
+from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
 
 
 @toplevel
@@ -93,7 +93,7 @@ def test_3_keys_only_bins(store, seed_path):
         KEY_BIN_BY: by_x_rows,
         KEY_AGG: {MIN: ("val", MIN), MAX: ("val", MAX)},
     }
-    max_row_group_size = 6
+    row_group_target_size = 6
     key_configs = {
         key1: deepcopy(key1_cf),
         key2: deepcopy(key2_cf),
@@ -103,7 +103,7 @@ def test_3_keys_only_bins(store, seed_path):
         ordered_on=ordered_on,
         store=store,
         keys=key_configs,
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         parallel=True,
         max_in_memory_size=0.0004,
     )
@@ -120,7 +120,7 @@ def test_3_keys_only_bins(store, seed_path):
     )
     bin_on = "direct_bin"
     seed_df = DataFrame({ordered_on: ts, "val": rand_ints, bin_on: bin_val})
-    fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
+    fp_write(seed_path, seed_df, row_group_offsets=row_group_target_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
@@ -176,7 +176,7 @@ def test_3_keys_only_bins(store, seed_path):
     fp_write(
         seed_path,
         seed_df2,
-        row_group_offsets=max_row_group_size,
+        row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
@@ -202,7 +202,7 @@ def test_3_keys_only_bins(store, seed_path):
     fp_write(
         seed_path,
         seed_df3,
-        row_group_offsets=max_row_group_size,
+        row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
@@ -235,12 +235,12 @@ def test_exception_different_indexes_at_restart(store, seed_path):
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
         KEY_AGG: {FIRST: ("val", FIRST), LAST: ("val", LAST)},
     }
-    max_row_group_size = 6
+    row_group_target_size = 6
     as1 = AggStream(
         ordered_on=ordered_on,
         store=store,
         keys={key1: deepcopy(key1_cf)},
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.0004,
     )
     # Seed data.
@@ -251,7 +251,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     rand_ints.sort()
     ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
     seed_df = DataFrame({ordered_on: ts, "val": rand_ints})
-    fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
+    fp_write(seed_path, seed_df, row_group_offsets=row_group_target_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation for 'key1'.
     as1.agg(seed=seed, trim_start=True, discard_last=True)
@@ -265,7 +265,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
         ordered_on=ordered_on,
         store=store,
         keys={key2: deepcopy(key2_cf)},
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
     )
     # Extend seed.
     start = seed_df[ordered_on].iloc[-1]
@@ -274,7 +274,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     fp_write(
         seed_path,
         seed_df2,
-        row_group_offsets=max_row_group_size,
+        row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
@@ -290,7 +290,7 @@ def test_exception_different_indexes_at_restart(store, seed_path):
             ordered_on=ordered_on,
             store=store,
             keys={key1: deepcopy(key1_cf), key2: deepcopy(key2_cf)},
-            max_row_group_size=max_row_group_size,
+            row_group_target_size=row_group_target_size,
         )
 
 
@@ -334,7 +334,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
     filter1 = "filter1"
     filter2 = "filter2"
     filter_on = "filter_on"
-    max_row_group_size = 6
+    row_group_target_size = 6
     as_ = AggStream(
         ordered_on=ordered_on,
         store=store,
@@ -346,7 +346,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         pre=check,
         max_in_memory_size=0.0004,
     )
@@ -411,7 +411,7 @@ def test_exception_seed_check_and_restart(store, seed_path):
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         pre=check,
         max_in_memory_size=0.0004,
     )
@@ -552,7 +552,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
     #
     # Setup streamed aggregation.
     val = "val"
-    max_row_group_size = 5
+    row_group_target_size = 5
     snap_duration = "5T"
     common_key_params = {
         KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
@@ -587,7 +587,7 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         **common_key_params,
         parallel=True,
         post=post,
@@ -972,7 +972,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
     #
     # Setup streamed aggregation.
     val = "val"
-    max_row_group_size = 5
+    row_group_target_size = 5
     snap_duration = "5T"
     common_key_params = {
         KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
@@ -1007,7 +1007,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.0004,
         **common_key_params,
         parallel=True,
@@ -1046,7 +1046,7 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         **common_key_params,
         parallel=True,
         post=post,
@@ -1126,7 +1126,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
     key1_sst = Indexer("agg_10T_sst")
     key1_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10T", closed="left", label="right"),
-        KEY_MAX_ROW_GROUP_SIZE: (max_row_group_size_8, max_row_group_size_5),
+        KEY_ROW_GROUP_TARGET_SIZE: (max_row_group_size_8, max_row_group_size_5),
     }
     key2_sst = Indexer("agg_20T_sst")
     key2_cf = {
@@ -1155,7 +1155,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        max_row_group_size=max_row_group_size_5,
+        row_group_target_size=max_row_group_size_5,
         **common_key_params,
         parallel=True,
         post=post_bin_snap if with_post else None,
@@ -1179,7 +1179,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
     seed_list = [seed_df.iloc[:17], seed_df.iloc[17:31]]
     as1.agg(seed=seed_list, trim_start=False, discard_last=False, final_write=True)
     del as1
-    # Check 'max_row_group_size' values have been both used.
+    # Check 'row_group_target_size' values have been both used.
     assert [rg.num_rows for rg in store[key1_sst].pf.row_groups] == [5, 5, 3]
     assert [rg.num_rows for rg in store[key1_bin].pf.row_groups] == [7]
     # New aggregation.
@@ -1197,14 +1197,14 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        max_row_group_size=max_row_group_size_5,
+        row_group_target_size=max_row_group_size_5,
         **common_key_params,
         parallel=True,
         post=post_bin_snap if with_post else None,
     )
     as2.agg(seed=seed_df.iloc[31:], trim_start=False, discard_last=False, final_write=True)
     # Reference results by continuous aggregation.
-    del key1_cf[KEY_MAX_ROW_GROUP_SIZE]
+    del key1_cf[KEY_ROW_GROUP_TARGET_SIZE]
     key1_bin_ref, key1_sst_ref = cumsegagg(
         data=seed_df.loc[seed_df[filter_on], :],
         **(key1_cf | common_key_params),
@@ -1251,7 +1251,7 @@ def test_exception_two_keys_but_single_result_from_post(store, seed_path):
         return bin_res
 
     val = "val"
-    max_row_group_size = 5
+    row_group_target_size = 5
     snap_duration = "5T"
     key_bin = Indexer("agg_10T_bin")
     key_sst = Indexer("agg_10T_sst")
@@ -1265,7 +1265,7 @@ def test_exception_two_keys_but_single_result_from_post(store, seed_path):
         store=store,
         keys=(key_bin, key_sst),
         **key_cf,
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         post=post,
         max_in_memory_size=0.0004,
     )

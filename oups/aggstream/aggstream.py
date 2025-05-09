@@ -39,11 +39,11 @@ from oups.aggstream.utils import dataframe_filter
 from oups.store import ParquetSet
 from oups.store.router import ParquetHandle
 from oups.store.write.write import KEY_DUPLICATES_ON
-from oups.store.write.write import KEY_MAX_ROW_GROUP_SIZE
+from oups.store.write.write import KEY_ROW_GROUP_TARGET_SIZE
 from oups.store.write.write import OUPS_METADATA
 from oups.store.write.write import OUPS_METADATA_KEY
+from oups.store.write.write import write
 from oups.store.write.write import write_metadata
-from oups.store.write.write import write_ordered
 
 
 # Aggregation functions.
@@ -74,7 +74,7 @@ KEY_AGG = "agg"
 KEY_POST = "post"
 # 'bin_by' is a compulsory parameter, and a specific check is made for it.
 # It is not added in 'KEY_CONF_IN_PARAMS'.
-WRITE_PARAMS = set(write_ordered.__code__.co_varnames[: write_ordered.__code__.co_argcount])
+WRITE_PARAMS = set(write.__code__.co_varnames[: write.__code__.co_argcount])
 KEY_CONF_IN_PARAMS = {
     KEY_BIN_ON,
     KEY_SNAP_BY,
@@ -257,14 +257,14 @@ def _init_keys_config(
             # created from both bins and snapshots. Hence it is snaps like.
             agg_res_type = AggResType.SNAPS
         if agg_res_type is AggResType.BOTH:
-            if KEY_MAX_ROW_GROUP_SIZE in key_conf_in:
-                if not isinstance(key_conf_in[KEY_MAX_ROW_GROUP_SIZE], tuple):
-                    key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = (
-                        key_conf_in[KEY_MAX_ROW_GROUP_SIZE],
-                        key_conf_in[KEY_MAX_ROW_GROUP_SIZE],
+            if KEY_ROW_GROUP_TARGET_SIZE in key_conf_in:
+                if not isinstance(key_conf_in[KEY_ROW_GROUP_TARGET_SIZE], tuple):
+                    key_conf_in[KEY_ROW_GROUP_TARGET_SIZE] = (
+                        key_conf_in[KEY_ROW_GROUP_TARGET_SIZE],
+                        key_conf_in[KEY_ROW_GROUP_TARGET_SIZE],
                     )
             else:
-                key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = (None, None)
+                key_conf_in[KEY_ROW_GROUP_TARGET_SIZE] = (None, None)
         consolidated_keys_config[key] = {
             KEY_SEG_CONFIG: seg_config,
             KEY_BIN_ON_OUT: bin_on_out,
@@ -814,11 +814,13 @@ def _post_n_write_agg_chunks(
         # Record data (with metadata possibly updated).
         if agg_res_type is AggResType.BOTH:
             store[main_key] = (
-                write_config | {KEY_MAX_ROW_GROUP_SIZE: write_config[KEY_MAX_ROW_GROUP_SIZE][0]},
+                write_config
+                | {KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][0]},
                 main_res,
             )
             store[snap_key] = (
-                write_config | {KEY_MAX_ROW_GROUP_SIZE: write_config[KEY_MAX_ROW_GROUP_SIZE][1]},
+                write_config
+                | {KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][1]},
                 snap_res,
             )
         else:

@@ -15,8 +15,9 @@ import pytest
 from fastparquet import ParquetFile
 from numpy import arange
 from pandas import DataFrame
+from pandas import Timestamp
 
-from oups.store.write import write_ordered
+from oups.store.write import write
 from tests.test_store.conftest import create_parquet_file
 
 
@@ -614,6 +615,142 @@ from tests.test_store.conftest import create_parquet_file
                 ],
             },
         ),
+        (
+            "timestamp_ordered_on",
+            {},  # No initial data
+            [
+                DataFrame(
+                    {
+                        "a": [
+                            Timestamp("2024-01-01 10:00:00"),
+                            Timestamp("2024-01-01 11:00:00"),
+                            Timestamp("2024-01-01 12:00:00"),
+                            Timestamp("2024-01-01 13:00:00"),
+                        ],
+                        "value": [1, 2, 3, 4],
+                    },
+                ),
+                DataFrame(
+                    {
+                        "a": [
+                            Timestamp("2024-01-01 08:00:00"),  # Before
+                            Timestamp("2024-01-01 09:00:00"),  # Before
+                            Timestamp("2024-01-01 09:30:00"),  # Before
+                            Timestamp("2024-01-01 14:00:00"),  # After
+                            Timestamp("2024-01-01 15:00:00"),  # After
+                        ],
+                        "value": [5, 6, 7, 8, 9],
+                    },
+                ),
+                DataFrame(
+                    {
+                        "a": [
+                            Timestamp("2024-01-01 14:30:00"),  # Overlap
+                            Timestamp("2024-01-01 15:00:00"),  # Duplicate
+                        ],
+                        "value": [10, 11],
+                    },
+                ),
+            ],
+            "2h",  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            "a",  # duplicates_on
+            {
+                "rgs_length": [
+                    [2, 2],
+                    [3, 2, 2, 2],
+                    [3, 2, 2, 3],
+                ],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [
+                                Timestamp("2024-01-01 10:00:00"),
+                                Timestamp("2024-01-01 11:00:00"),
+                                Timestamp("2024-01-01 12:00:00"),
+                                Timestamp("2024-01-01 13:00:00"),
+                            ],
+                            "value": [1, 2, 3, 4],
+                        },
+                    ),
+                    DataFrame(
+                        {
+                            "a": [
+                                Timestamp("2024-01-01 08:00:00"),
+                                Timestamp("2024-01-01 09:00:00"),
+                                Timestamp("2024-01-01 09:30:00"),
+                                Timestamp("2024-01-01 10:00:00"),
+                                Timestamp("2024-01-01 11:00:00"),
+                                Timestamp("2024-01-01 12:00:00"),
+                                Timestamp("2024-01-01 13:00:00"),
+                                Timestamp("2024-01-01 14:00:00"),
+                                Timestamp("2024-01-01 15:00:00"),
+                            ],
+                            "value": [5, 6, 7, 1, 2, 3, 4, 8, 9],
+                        },
+                    ),
+                    DataFrame(
+                        {
+                            "a": [
+                                Timestamp("2024-01-01 08:00:00"),
+                                Timestamp("2024-01-01 09:00:00"),
+                                Timestamp("2024-01-01 09:30:00"),
+                                Timestamp("2024-01-01 10:00:00"),
+                                Timestamp("2024-01-01 11:00:00"),
+                                Timestamp("2024-01-01 12:00:00"),
+                                Timestamp("2024-01-01 13:00:00"),
+                                Timestamp("2024-01-01 14:00:00"),
+                                Timestamp("2024-01-01 14:30:00"),
+                                Timestamp("2024-01-01 15:00:00"),
+                            ],
+                            "value": [5, 6, 7, 1, 2, 3, 4, 8, 10, 11],
+                        },
+                    ),
+                ],
+            },
+        ),
+        (
+            "special_case_resize_rgs",
+            {
+                "df": DataFrame(
+                    {
+                        "a": [
+                            Timestamp("2024-01-01 10:00:00"),
+                            Timestamp("2024-01-01 11:00:00"),
+                            Timestamp("2024-01-01 12:00:00"),
+                            Timestamp("2024-01-01 13:00:00"),
+                        ],
+                        "value": [1, 2, 3, 4],
+                    },
+                ),
+                # Similar to '1h' row_group_target_size
+                "row_group_offsets": [0, 1, 2, 3],
+            },
+            [
+                DataFrame({"a": [], "value": []}),  # Empty DataFrame
+            ],
+            "2h",  # row_group_target_size
+            1,  # max_n_off_target_rgs
+            None,  # duplicates_on
+            {
+                "rgs_length": [
+                    [2, 2],
+                ],
+                "dfs": [
+                    DataFrame(
+                        {
+                            "a": [
+                                Timestamp("2024-01-01 10:00:00"),
+                                Timestamp("2024-01-01 11:00:00"),
+                                Timestamp("2024-01-01 12:00:00"),
+                                Timestamp("2024-01-01 13:00:00"),
+                            ],
+                            "value": [1, 2, 3, 4],
+                        },
+                    ),
+                ],
+            },
+        ),
     ],
 )
 def test_write_ordered(
@@ -664,7 +801,7 @@ def test_write_ordered(
         expected["rgs_length"],
         expected["dfs"],
     ):
-        write_ordered(
+        write(
             tmp_path,
             ordered_on=ordered_on,
             df=write_ordered_df,
@@ -691,4 +828,4 @@ def test_exception_ordered_on_not_existing(tmp_path):
     )
     # Append with oups same set of data, pandas dataframe.
     with pytest.raises(ValueError, match="^column 'ts'"):
-        write_ordered(dn, ordered_on="ts", df=pdf)
+        write(dn, ordered_on="ts", df=pdf)
