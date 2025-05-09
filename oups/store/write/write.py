@@ -302,6 +302,14 @@ def write(
     else:
         ordered_parquet_dataset = dirpath
     opd_statistics = ordered_parquet_dataset.statistics
+    # TODO: remove below check once OPD can be correctly initialized from
+    # scratch.
+    if str(ordered_on) in opd_statistics[MIN]:
+        rg_ordered_on_mins = array(opd_statistics[MIN][str(ordered_on)])
+        rg_ordered_on_maxs = array(opd_statistics[MAX][str(ordered_on)])
+    else:
+        rg_ordered_on_mins = array([])
+        rg_ordered_on_maxs = array([])
     if isinstance(row_group_target_size, int):
         if drop_duplicates:
             # Duplicates are dropped a first time in the DataFrame, so that the
@@ -309,8 +317,8 @@ def write(
             # correct approximate number of rows in DataFrame.
             df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
         merge_split_strategy = NRowsMergeSplitStrategy(
-            rg_ordered_on_mins=array(opd_statistics[MIN][str(ordered_on)]),
-            rg_ordered_on_maxs=array(opd_statistics[MAX][str(ordered_on)]),
+            rg_ordered_on_mins=rg_ordered_on_mins,
+            rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
             drop_duplicates=drop_duplicates,
             rgs_n_rows=array([rg.num_rows for rg in ordered_parquet_dataset.row_groups], dtype=int),
@@ -318,8 +326,8 @@ def write(
         )
     else:
         merge_split_strategy = TimePeriodMergeSplitStrategy(
-            rg_ordered_on_mins=array(opd_statistics[MIN][str(ordered_on)]),
-            rg_ordered_on_maxs=array(opd_statistics[MAX][str(ordered_on)]),
+            rg_ordered_on_mins=rg_ordered_on_mins,
+            rg_ordered_on_maxs=rg_ordered_on_maxs,
             df_ordered_on=df_ordered_on,
             drop_duplicates=drop_duplicates,
             row_group_time_period=row_group_target_size,
@@ -357,4 +365,4 @@ def write(
 
 
 # TODO:
-# - check test cases aggstream, fix parameter names 'row_group_target_size' and 'max_n_off_target_rgs'
+# - test cases aggstream with row_group_max_target as a pandas freqstr

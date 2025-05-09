@@ -54,8 +54,8 @@ KEY_PRE = "pre"
 KEY_PRE_BUFFER = "pre_buffer"
 KEY_SEGAGG_BUFFER = "segagg_buffer"
 KEY_POST_BUFFER = "post_buffer"
-KEY_BIN_ON_OUT = "bin_on_out"
 KEY_BIN_RES_BUFFER = "bin_res_buffer"
+KEY_BIN_ON_OUT = "bin_on_out"
 KEY_SNAP_RES_BUFFER = "snap_res_buffer"
 KEY_FILTERS = "filters"
 KEY_RESTART_INDEX = "restart_index"
@@ -191,6 +191,8 @@ def _init_keys_config(
                     f"'{param}' not a valid parameters in" f" '{key}' aggregation config.",
                 )
         bin_on = key_conf_in.pop(KEY_BIN_ON, None)
+        agg_pd[key] = key_conf_in.pop(KEY_AGG)
+
         if isinstance(bin_on, tuple):
             # 'bin_on_out' is name of column containing group keys in
             # 'agg_res'. Setting of 'bin_on_out' is an 'AggStream'
@@ -218,7 +220,6 @@ def _init_keys_config(
                 # previously, then set it to this possibly new value of
                 # 'bin_on'.
                 bin_on_out = bin_on
-        agg_pd[key] = key_conf_in.pop(KEY_AGG)
         # 'agg' is in the form:
         # {"output_col":("input_col", "agg_function_name")}
         if bin_on_out in agg_pd[key]:
@@ -244,6 +245,7 @@ def _init_keys_config(
             key_conf_in[KEY_DUPLICATES_ON] = (
                 bin_on_out if bin_on_out else key_conf_in[KEY_ORDERED_ON]
             )
+        #            key_conf_in[KEY_DUPLICATES_ON] = key_conf_in[KEY_ORDERED_ON]
         if seg_config[KEY_SNAP_BY] is None:
             # Snapshots not requested, aggreagtation results are necessarily
             # bins.
@@ -811,7 +813,6 @@ def _post_n_write_agg_chunks(
         }
     # When there is no result, 'main_res' is None.
     if isinstance(main_res, DataFrame):
-        # Record data (with metadata possibly updated).
         if agg_res_type is AggResType.BOTH:
             store[main_key] = (
                 write_config

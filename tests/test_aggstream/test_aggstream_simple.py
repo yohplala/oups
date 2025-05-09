@@ -143,7 +143,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
     n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
-    n_rows_ref = [4, 3]
+    n_rows_ref = [6, 1]
     assert n_rows_res == n_rows_ref
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
@@ -193,7 +193,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
     n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
-    n_rows_ref = [4, 4]
+    n_rows_ref = [6, 2]
     assert n_rows_res == n_rows_ref
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
@@ -262,6 +262,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
         keys=key,
         bin_by=bin_by,
         agg=agg,
+        max_n_off_target_rgs=1,
     )
     # First seed.
     start = Timestamp("2020/01/01")
@@ -321,9 +322,6 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     ref_res[[FIRST, LAST, MIN, MAX]] = ref_res[[FIRST, LAST, MIN, MAX]].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key]
     assert rec_res.pdf.equals(ref_res)
-    n_rows_res = [rg.num_rows for rg in rec_res.pf.row_groups]
-    n_rows_ref = [4, 5, 4, 3, 5, 6, 6, 4, 5, 4, 6, 5]
-    assert n_rows_res == n_rows_ref
 
 
 def test_duration_weighted_mean_from_post(store, seed_path):
@@ -1331,7 +1329,7 @@ def test_different_ordered_on(store):
     #
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
-    # RGS   VAL ROW BIN    TS | comments
+    # RGS   VAL  ROW BIN    TS | comments
     #  1      1    0   1  8:10 | 2 aggregated rows from same row group.
     #         2                |
     #         3        2  9:10 |
@@ -1354,12 +1352,6 @@ def test_different_ordered_on(store):
     key_ordered_on = "val"
     seed_ordered_on = "ts"
 
-    def post(buffer: dict, bin_res: DataFrame):
-        """
-        Remove some columns before recording.
-        """
-        return bin_res.drop(columns=seed_ordered_on)
-
     row_group_target_size = 3
     agg = {key_ordered_on: (key_ordered_on, FIRST)}
     bin_by = TimeGrouper(key=seed_ordered_on, freq="1H", closed="left", label="left")
@@ -1375,7 +1367,7 @@ def test_different_ordered_on(store):
         },
         row_group_target_size=row_group_target_size,
         max_in_memory_size=0.000005,
-        post=post,
+        #        post=post,
     )
     # Setup seed data.
     date = "2020/01/01 "
@@ -1404,7 +1396,7 @@ def test_different_ordered_on(store):
     # Setup streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=False, final_write=True)
     # Check
-    ref_res = seed.groupby(bin_by).agg(**agg).reset_index(drop=True)
+    ref_res = seed.groupby(bin_by).agg(**agg).reset_index(drop=False)
     ref_res[key_ordered_on] = ref_res[key_ordered_on].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)

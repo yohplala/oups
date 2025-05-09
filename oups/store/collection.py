@@ -8,6 +8,7 @@ Created on Wed Dec  4 18:00:00 2021.
 from dataclasses import dataclass
 from os import listdir
 from os import path as os_path
+from os import remove
 from os import rmdir
 from shutil import rmtree
 from typing import Tuple, Type, Union
@@ -198,6 +199,14 @@ class ParquetSet:
         if not isinstance(data, (pDataFrame, vDataFrame)):
             raise TypeError("data should be a pandas or vaex dataframe.")
         dirpath = os_path.join(self._basepath, key.to_path)
+        # TODO: remove below once initialization of empty OPD will be possible.
+        # Record data (with metadata possibly updated).
+        opd = ParquetHandle(dirpath)
+        if opd.info["columns"] == []:
+            # Previous initialization has been managed with a completely empty
+            # DataFrame. Re-initialize from scratch.
+            remove(f"{dirpath}{DIR_SEP}_metadata")
+            remove(f"{dirpath}{DIR_SEP}_common_metadata")
         write(dirpath=dirpath, df=data, md_key=key, **kwargs)
         if key not in self:
             # If no trouble from writing, add key.
