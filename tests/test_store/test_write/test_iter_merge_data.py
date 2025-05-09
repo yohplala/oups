@@ -199,23 +199,20 @@ def test_iter_merge_data(
     """
     df = DataFrame(df_data)
     pf_data = DataFrame(pf_data)
-    opd = create_parquet_file(
-        tmp_path=tmp_path,
+    ordered_parquet_dataset = create_parquet_file(
+        None,  # in memory
         df=pf_data,
         row_group_offsets=compute_split_sequence(pf_data.loc[:, "ordered"], row_group_target_size),
     )
-
-    chunks = list(
-        iter_merge_data(
-            opd=opd,
-            df=df,
-            ordered_on="ordered",
-            merge_sequences=merge_sequences,
-            split_sequence=lambda x: compute_split_sequence(x, row_group_target_size),
-            duplicates_on=duplicates_on,
-        ),
+    merge_iter = iter_merge_data(
+        opd=ordered_parquet_dataset,
+        ordered_on="ordered",
+        df=df,
+        merge_sequences=merge_sequences,
+        split_sequence=lambda x: compute_split_sequence(x, row_group_target_size),
+        duplicates_on=duplicates_on,
     )
-
+    chunks = list(merge_iter)
     assert len(chunks) == len(expected_chunks)
     for chunk, expected in zip(chunks, expected_chunks):
         assert_frame_equal(chunk.reset_index(drop=True), expected.reset_index(drop=True))
