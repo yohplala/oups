@@ -1115,7 +1115,8 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
         return snap_res
 
     val = "val"
-    row_group_target_size = 5
+    row_group_target_size_5 = 5
+    row_group_target_size_8 = 8
     snap_duration = "5min"
     common_key_params = {
         KEY_SNAP_BY: TimeGrouper(key=ordered_on, freq=snap_duration, closed="left", label="right"),
@@ -1125,7 +1126,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
     key1_sst = Indexer("agg_10T_sst")
     key1_cf = {
         KEY_BIN_BY: TimeGrouper(key=ordered_on, freq="10min", closed="left", label="right"),
-        KEY_ROW_GROUP_TARGET_SIZE: (row_group_target_size, row_group_target_size),
+        KEY_ROW_GROUP_TARGET_SIZE: (row_group_target_size_8, row_group_target_size_5),
     }
     key2_sst = Indexer("agg_20T_sst")
     key2_cf = {
@@ -1154,7 +1155,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        row_group_target_size=row_group_target_size,
+        row_group_target_size=row_group_target_size_5,
         **common_key_params,
         parallel=True,
         post=post_bin_snap if with_post else None,
@@ -1196,7 +1197,7 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
             filter1: [(filter_on, "==", True)],
             filter2: [(filter_on, "==", False)],
         },
-        row_group_target_size=row_group_target_size,
+        row_group_target_size=row_group_target_size_5,
         **common_key_params,
         parallel=True,
         post=post_bin_snap if with_post else None,
