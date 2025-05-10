@@ -19,11 +19,12 @@ repos:
 
   # Codespell
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.2.6
+    rev: v2.4.1
     hooks:
       - id: codespell
         description: Checks for common misspellings.
         types_or: [python, rst, markdown]
+        args: [--ignore-words-list=SME]
 
   - repo: https://github.com/asottile/add-trailing-comma
     rev: v3.1.0
@@ -34,7 +35,7 @@ repos:
 
   # Black
   - repo: https://github.com/psf/black
-    rev: 23.10.1
+    rev: 25.1.0
     hooks:
       - id: black
         args: [
@@ -60,7 +61,7 @@ repos:
 
   # Flake8
   - repo: https://github.com/pycqa/flake8
-    rev: 6.1.0
+    rev: 7.2.0
     hooks:
       - id: flake8
         name: flake8
@@ -85,15 +86,16 @@ repos:
             --statistics,
             --ignore=C101 RST210 S101 W503,
             --per-file-ignores=
-                tests/*.py:D103
                 oups/__init__.py:F401
                 oups/store/__init__.py:F401
-                oups/store/writer.py:C901 S403 S301
+                oups/store/router.py:S403 S301
+                oups/store/write/write.py:C901 S403 S301
                 oups/aggstream/__init__.py:F401
                 oups/aggstream/jcumsegagg.py:C901
                 oups/aggstream/segmentby.py:C901
                 oups/aggstream/cumsegagg.py:C901 E203
                 oups/aggstream/aggstream.py:C901
+                tests/*.py:D103
         ]
 
   # Pydocstyle
@@ -109,9 +111,10 @@ repos:
           ]
 
   - repo: https://github.com/PyCQA/docformatter
-    rev: v1.7.5
+    rev: v1.7.6
     hooks:
       - id: docformatter
+        language: python
         additional_dependencies: [tomli]
         args: [
           "--black",

@@ -58,7 +58,7 @@ from oups.aggstream.segmentby import setup_segmentby
         #      9:30   3.2    1  b6-9:30
         (
             [6, 11],
-            TimeGrouper(freq="15T", key="dti", closed="left", label="right"),
+            TimeGrouper(freq="15min", key="dti", closed="left", label="right"),
             None,
             [pDataFrame({FIRST: [5.6], SUM: [15]}), pDataFrame({FIRST: [3.2], SUM: [1]})],
             [
@@ -84,7 +84,7 @@ from oups.aggstream.segmentby import setup_segmentby
         #      9:30   3.2    1  b6-9:30
         (
             [5, 11],
-            TimeGrouper(freq="15T", key="dti", closed="left", label="right"),
+            TimeGrouper(freq="15min", key="dti", closed="left", label="right"),
             None,
             [pDataFrame({FIRST: [5.6], SUM: [9]}), pDataFrame({FIRST: [3.2], SUM: [1]})],
             [
@@ -302,7 +302,7 @@ def test_cumsegagg_bin_only(
             #  9:10    7    3
             #  9:30    8    2
             # bin_by
-            TimeGrouper(freq="1H", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="1h", label="left", closed="left", key="dti"),
             # ordered_on
             None,
             # snap_by
@@ -353,7 +353,7 @@ def test_cumsegagg_bin_only(
             #  9:10    7    3
             #  9:30    8    2         4-9:30
             # bin_by
-            TimeGrouper(freq="30T", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="30min", label="left", closed="left", key="dti"),
             # ordered_on
             None,
             # snap_by
@@ -419,7 +419,7 @@ def test_cumsegagg_bin_only(
             #  9:10    7    3
             #  9:30    8    2         4-9:30
             # bin_by
-            TimeGrouper(freq="30T", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="30min", label="left", closed="left", key="dti"),
             # ordered_on
             None,
             # snap_by
@@ -484,7 +484,7 @@ def test_cumsegagg_bin_only(
             #  9:10    7    3
             #  9:30    8    2         4-9:30
             # bin_by
-            TimeGrouper(freq="30T", label="left", closed="left", key="dti"),
+            TimeGrouper(freq="30min", label="left", closed="left", key="dti"),
             # ordered_on
             None,
             # snap_by
@@ -589,16 +589,16 @@ def test_cumsegagg_bin_snap_time_grouper():
     # segmentation fault.
     ordered_on = "ts"
     val = "val"
-    bin_by = TimeGrouper(key=ordered_on, freq="10T", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="10min", closed="left", label="left")
     agg = {FIRST: (val, FIRST), LAST: (val, LAST)}
-    snap_by = TimeGrouper(key=ordered_on, freq="5T", closed="left", label="left")
+    snap_by = TimeGrouper(key=ordered_on, freq="5min", closed="left", label="left")
     # Seed data.
     start = pTimestamp("2020/01/01")
     rr = nrandom.default_rng(1)
     N = 50
     rand_ints = rr.integers(120, size=N)
     rand_ints.sort()
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed = pDataFrame({ordered_on: ts, val: rand_ints})
     # Setup for restart
     agg_as_list = setup_cumsegagg(agg, seed.dtypes.to_dict())

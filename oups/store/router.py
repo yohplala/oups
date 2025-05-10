@@ -7,16 +7,50 @@ Created on Wed Dec 26 22:30:00 2021.
 """
 from functools import cached_property
 from os import scandir
+from pickle import loads
 
-from cloudpickle import loads
 from fastparquet import ParquetFile
+from fastparquet import write as fp_write
+from fastparquet.api import statistics
+from pandas import DataFrame
+from pandas import MultiIndex
 from vaex import open_many
 
 from oups.store.defines import DIR_SEP
-from oups.store.writer import OUPS_METADATA_KEY
+from oups.store.defines import OUPS_METADATA_KEY
+from oups.store.write.write import write
 
 
-class ParquetHandle:
+EMPTY_DATAFRAME = DataFrame()
+KEY_ORDERED_ON = "ordered_on"
+
+
+def check_cmidx(cmidx: MultiIndex):
+    """
+    Check if column multi-index complies with fastparquet requirements.
+
+    Library fastparquet requires names for each level in a Multiindex.
+    Also, column names have to be tuple of string.
+
+    Parameters
+    ----------
+    cmidx : MultiIndex
+        MultiIndex to check.
+
+    """
+    # Check level names.
+    if None in cmidx.names:
+        raise ValueError(
+            "not possible to have level name set to None.",
+        )  # If an item of the column name is not a string, turn it into a string.
+    # Check column names.
+    for level in cmidx.levels:
+        for name in level:
+            if not isinstance(name, str):
+                raise TypeError(f"name {name} has to be of type 'string', not '{type(name)}'.")
+
+
+class ParquetHandle(ParquetFile):
     """
     Handle to parquet dataset and statistics on disk.
 
@@ -38,17 +72,33 @@ class ParquetHandle:
 
     """
 
-    def __init__(self, dirpath: str):
+    def __init__(self, dirpath: str, ordered_on: str = None, df_like: DataFrame = EMPTY_DATAFRAME):
         """
-        Instantiate parquet handle.
+        Instantiate parquet handle (ParquetFile instance).
+
+        If not existing, create a new one from an empty DataFrame.
 
         Parameters
         ----------
         dirpath : str
             Directory path from where to load data.
+        ordered_on : str
+            Column name to order row groups by.
+        df_like : Optional[DataFrame], default empty DataFrame
+            DataFrame to use as template to create a new ParquetFile.
 
         """
+        try:
+            super().__init__(dirpath)
+        except (ValueError, FileNotFoundError):
+            # In case multi-index is used, check that it complies with fastparquet
+            # limitations.
+            if isinstance(df_like.columns, MultiIndex):
+                check_cmidx(df_like.columns)
+            fp_write(dirpath, df_like.iloc[:0], file_scheme="hive")
+            super().__init__(dirpath)
         self._dirpath = dirpath
+        self._ordered_on = ordered_on
 
     @property
     def dirpath(self):
@@ -57,12 +107,39 @@ class ParquetHandle:
         """
         return self._dirpath
 
+    @property
+    def ordered_on(self):
+        """
+        Return ordered_on.
+        """
+        return self._ordered_on
+
+    def write(self, **kwargs):
+        """
+        Write data to disk.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Keywords in 'kwargs' are forwarded to `write.write_ordered`.
+
+        """
+        if KEY_ORDERED_ON in kwargs:
+            if self._ordered_on is None:
+                self._ordered_on = kwargs.pop(KEY_ORDERED_ON)
+            elif self._ordered_on != kwargs[KEY_ORDERED_ON]:
+                raise ValueError(
+                    f"'ordered_on' attribute {self._ordered_on} is not the "
+                    f"same as 'ordered_on' parameter {kwargs[KEY_ORDERED_ON]}",
+                )
+        write(self, ordered_on=self._ordered_on, **kwargs)
+
     @cached_property
     def pf(self):
         """
         Return handle to data through a parquet file.
         """
-        return ParquetFile(self._dirpath)
+        return self
 
     @property
     def pdf(self):
@@ -116,3 +193,19 @@ class ParquetHandle:
         md = self.pf.key_value_metadata
         if OUPS_METADATA_KEY in md:
             return loads(md[OUPS_METADATA_KEY])
+
+    def sort_rgs(self, ordered_on: str):
+        """
+        Sort row groups by 'ordered_on' column.
+
+        Parameters
+        ----------
+        ordered_on : str
+            Column name to sort row groups by.
+
+        """
+        ordered_on_idx = self.columns.index(ordered_on)
+        self.fmd.row_groups = sorted(
+            self.fmd.row_groups,
+            key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"],
+        )

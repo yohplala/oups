@@ -276,7 +276,7 @@ def jcsagg(
         is the new iteration to be started from scratch?
     chunk_res : np.ndarray
         Aggregation results of last chunk from previous iteration. If
-        'preserve_res' is ``True``, then these results are re-used in 1st
+        'preserve_res' is ``True``, then these results are reused in 1st
         calculation for this new iteration.
 
     Returns

@@ -21,6 +21,8 @@ from pandas import date_range
 from oups import ParquetSet
 from oups import sublevel
 from oups import toplevel
+from oups.aggstream.segmentby import KEY_ORDERED_ON
+from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
 
 from .. import TEST_DATA
 
@@ -97,11 +99,11 @@ def test_set_parquet(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 10:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 10:00", freq="2h"),
             "temperature": [8.4, 5.3],
         },
     )
-    ps[we] = df
+    ps[we] = {KEY_ORDERED_ON: "timestamp"}, df
     assert we in ps
     res = ParquetFile(os_path.join(basepath, we.to_path)).to_pandas()
     assert res.equals(df)
@@ -114,12 +116,12 @@ def test_set_parquet_with_config(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
     rg_size = 2
-    config = {"max_row_group_size": rg_size}
+    config = {KEY_ORDERED_ON: "timestamp", KEY_ROW_GROUP_TARGET_SIZE: rg_size}
     ps[we] = config, df
     assert we in ps
     # Load only first row group.
@@ -134,7 +136,7 @@ def test_exception_config_not_a_dict(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
@@ -161,11 +163,11 @@ def test_iterator(tmp_path):
     we2 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
-    ps[we1], ps[we2] = df, df
+    ps[we1], ps[we2] = ({KEY_ORDERED_ON: "timestamp"}, df), ({KEY_ORDERED_ON: "timestamp"}, df)
     for key in ps:
         assert key in (we1, we2)
 
@@ -176,11 +178,11 @@ def test_set_and_get_roundtrip_pandas(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
         },
     )
-    config = {"max_row_group_size": 2}
+    config = {KEY_ORDERED_ON: "timestamp", KEY_ROW_GROUP_TARGET_SIZE: 2}
     ps[we] = config, df
     df_res = ps[we].pdf
     assert df_res.equals(df)
@@ -192,11 +194,11 @@ def test_set_pandas_and_get_vaex(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
         },
     )
-    config = {"max_row_group_size": 2}
+    config = {KEY_ORDERED_ON: "timestamp", KEY_ROW_GROUP_TARGET_SIZE: 2}
     ps[we] = config, df
     vdf = ps[we].vdf
     assert vdf.to_pandas_df().equals(df)
@@ -208,11 +210,11 @@ def test_set_pandas_and_get_parquet_file(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
         },
     )
-    config = {"max_row_group_size": 2}
+    config = {KEY_ORDERED_ON: "timestamp", KEY_ROW_GROUP_TARGET_SIZE: 2}
     ps[we] = config, df
     pf = ps[we].pf
     assert len(pf.row_groups) == 2
@@ -223,7 +225,7 @@ def test_set_cmidx_get_vaex(tmp_path):
     # Write column multi-index in pandas, retrieve in vaex.
     pdf = pDataFrame(
         {
-            ("ts", ""): date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            ("ts", ""): date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             ("temp", "1"): [8.4, 5.3, 2.9, 6.4],
             ("temp", "2"): [8.4, 5.3, 2.9, 6.4],
         },
@@ -234,7 +236,8 @@ def test_set_cmidx_get_vaex(tmp_path):
     )
     ps = ParquetSet(tmp_path, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
-    ps[we] = pdf
+    config = {KEY_ORDERED_ON: ("ts", "")}
+    ps[we] = config, pdf
     vdf = ps[we].vdf
     assert list(map(str, pdf.columns)) == vdf.get_column_names()
     df_res = vdf.to_pandas_df()
@@ -251,11 +254,12 @@ def test_dataset_removal(tmp_path):
     we3 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
-    ps[we1], ps[we2], ps[we3] = df, df, df
+    config = {KEY_ORDERED_ON: "timestamp"}
+    ps[we1], ps[we2], ps[we3] = (config, df), (config, df), (config, df)
     # Delete london-related data.
     we3_path = os_path.join(basepath, we3.to_path)
     assert os_path.exists(we3_path)
@@ -282,11 +286,11 @@ def test_11_rgs_pandas_to_vaex(tmp_path):
     temp = range(10, 21)
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", freq="2H", periods=len(temp)),
+            "timestamp": date_range("2021/01/01 08:00", freq="2h", periods=len(temp)),
             "temperature": temp,
         },
     )
-    config = {"max_row_group_size": 1}
+    config = {KEY_ORDERED_ON: "timestamp", KEY_ROW_GROUP_TARGET_SIZE: 1}
     ps[we] = config, df
     vdf = ps[we].vdf
     assert vdf.to_pandas_df().equals(df)

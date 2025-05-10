@@ -8,6 +8,7 @@ Created on Wed Dec  4 18:00:00 2021.
 from dataclasses import dataclass
 from os import listdir
 from os import path as os_path
+from os import remove
 from os import rmdir
 from shutil import rmtree
 from typing import Tuple, Type, Union
@@ -21,7 +22,7 @@ from oups.store.indexer import is_toplevel
 from oups.store.router import ParquetHandle
 from oups.store.utils import files_at_depth
 from oups.store.utils import strip_path_tail
-from oups.store.writer import write
+from oups.store.write import write
 
 
 def is_parquet_file(file: str) -> bool:
@@ -174,6 +175,7 @@ class ParquetSet:
         """
         yield from self._keys
 
+    # TODO: remove this method, to be replaced by 'self.write_ordered()'
     def set(self, key: dataclass, data: Union[pDataFrame, vDataFrame], **kwargs):
         """
         Write 'data' to disk, at location defined by 'key'.
@@ -183,8 +185,8 @@ class ParquetSet:
         key : dataclass
             Key specifying the location where to write the data. It has to be
             an instance of the dataclass provided at ParquetSet instantiation.
-        data : Union[pandas.DataFrame, vaex.dataframe.DataFrame]
-            A dataframe, either in pandas format, or in vaex format.
+        df : Optional[pandas.DataFrame]
+            A pandas DataFrame.
 
         Other Parameters
         ----------------
@@ -197,12 +199,21 @@ class ParquetSet:
         if not isinstance(data, (pDataFrame, vDataFrame)):
             raise TypeError("data should be a pandas or vaex dataframe.")
         dirpath = os_path.join(self._basepath, key.to_path)
-        write(dirpath=dirpath, data=data, md_key=key, **kwargs)
+        # TODO: remove below once initialization of empty OPD will be possible.
+        # Record data (with metadata possibly updated).
+        opd = ParquetHandle(dirpath)
+        if opd.info["columns"] == []:
+            # Previous initialization has been managed with a completely empty
+            # DataFrame. Re-initialize from scratch.
+            remove(f"{dirpath}{DIR_SEP}_metadata")
+            remove(f"{dirpath}{DIR_SEP}_common_metadata")
+        write(dirpath=dirpath, df=data, md_key=key, **kwargs)
         if key not in self:
             # If no trouble from writing, add key.
             self._keys.add(key)
         return
 
+    # TODO: remove this method, to be replaced by 'self.write_ordered()' in ParquetHandle.
     def __setitem__(
         self,
         key: dataclass,

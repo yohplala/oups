@@ -396,7 +396,7 @@ def by_x_rows(
           - 'restart_key', an int specifying the number of rows in last
             (and possibly incomplete) bin from the previous call to
             'bin_x_rows'.
-          - 'last_bin_label', label of the last bin, that will be re-used in
+          - 'last_bin_label', label of the last bin, that will be reused in
             next iteration.
 
     Returns
@@ -664,11 +664,11 @@ def setup_segmentby(
             )
     return {
         KEY_BIN_BY: bin_by,
-        KEY_ON_COLS: [bin_on, ordered_on]
-        if ordered_on and bin_on and ordered_on != bin_on
-        else bin_on
-        if bin_on
-        else ordered_on,
+        KEY_ON_COLS: (
+            [bin_on, ordered_on]
+            if ordered_on and bin_on and ordered_on != bin_on
+            else bin_on if bin_on else ordered_on
+        ),
         KEY_ORDERED_ON: ordered_on,
         KEY_BIN_ON: bin_on,
         KEY_SNAP_BY: snap_by if isinstance(snap_by, TimeGrouper) else None,

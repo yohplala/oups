@@ -105,7 +105,7 @@ Beware that if this feature is used jointly with ``duplicates_on``, and if new d
 
 .. code-block:: python
 
-    # Re-using previous variables.
+    # Reusing previous variables.
     # Initiating a new dataset
     ps[idx1] = df1
     # Appending the same data.
@@ -130,7 +130,7 @@ Other "goodies"
 
 .. code-block:: python
 
-    # Re-using previous variables.
+    # Reusing previous variables.
     # Review store content.
     ps
     Out[3]:

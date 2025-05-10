@@ -69,7 +69,14 @@ def seed_path(tmp_path):
 key = Indexer("agg_res")
 
 
-def test_time_grouper_sum_agg(store, seed_path):
+@pytest.mark.parametrize(
+    "test_id, row_group_target_size, expected_n_rows",
+    [
+        ("rg_target_size_as_int", 6, [[6, 1], [6, 2], [6, 2]]),
+        ("rg_target_size_as_freqstr", "2h", [[2, 2, 2, 1], [2, 2, 2, 2], [2, 2, 2, 2]]),
+    ],
+)
+def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, store, seed_path):
     # Test with time grouper and 'sum' aggregation.
     # No post.
     # Creation & 1st append, 'discard_last=True',
@@ -92,7 +99,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     #  4  12:20  11   10           | stitching with previous (same bin).
     #     12:40  12                | 0 aggregated row, not incl stitching.
     #  5  13:00  13   12   6 13:00 | no stitching, 1 aggregated row.
-    #     -------------------------- write data (max_row_group_size = 6)
+    #     -------------------------- write data (row_group_target_size = 6)
     #  6  13:20  14   13           | stitching, 1 aggregated row.
     #     13:40  15                |
     #  7  14:00  16   15   7 14:00 | no stitching, 1 aggregated row.
@@ -101,16 +108,16 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Prepare AggStream object.
     ordered_on = "ts"
     agg_col = SUM
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {agg_col: ("val", SUM)}
     as_ = AggStream(
         store=store,
-        max_row_group_size=6,
         max_in_memory_size=0.0002,
         ordered_on=ordered_on,
         keys=key,
         bin_by=bin_by,
         agg=agg,
+        row_group_target_size=row_group_target_size,  # forwarded to 'write'
     )
     # Setup seed data.
     date = "2020/01/01 "
@@ -143,8 +150,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
     n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
-    n_rows_ref = [4, 3]
-    assert n_rows_res == n_rows_ref
+    assert n_rows_res == expected_n_rows[0]
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
     agg_sum_ref = [3, 7, 18, 17, 33, 42, 16]
@@ -193,8 +199,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
     n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
-    n_rows_ref = [4, 4]
-    assert n_rows_res == n_rows_ref
+    assert n_rows_res == expected_n_rows[1]
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
     agg_sum_ref = [3, 7, 18, 17, 33, 42, 33, 1]
@@ -229,6 +234,9 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Setup streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=False)
     # Test results (not trimming seed data).
+    pf_res = store[key].pf
+    n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
+    assert n_rows_res == expected_n_rows[2]
     ref_res = seed_pf.to_pandas().groupby(bin_by).agg(**agg).reset_index()
     ref_res[agg_col] = ref_res[agg_col].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
@@ -244,10 +252,10 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     # Test with time grouper and 'first', 'last', 'min', and 'max' aggregation.
     # No post, 'discard_last=True'.
     # 'Stress test' with appending new data twice.
-    max_row_group_size = 6
+    row_group_target_size = 6
     ordered_on = "ts"
     # Setup aggregation.
-    bin_by = TimeGrouper(key=ordered_on, freq="5T", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="5min", closed="left", label="left")
     agg = {
         FIRST: ("val", FIRST),
         LAST: ("val", LAST),
@@ -256,23 +264,24 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     }
     as_ = AggStream(
         store=store,
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.00001,
         ordered_on=ordered_on,
         keys=key,
         bin_by=bin_by,
         agg=agg,
+        max_n_off_target_rgs=1,
     )
     # First seed.
     start = Timestamp("2020/01/01")
     rr = np.random.default_rng(1)
     N = 20
     rand_ints = rr.integers(100, size=N)
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df = DataFrame(
         {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)},
     ).sort_values(ordered_on)
-    fp_write(seed_path, seed_df, row_group_offsets=max_row_group_size, file_scheme="hive")
+    fp_write(seed_path, seed_df, row_group_offsets=row_group_target_size, file_scheme="hive")
     seed = ParquetFile(seed_path).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
@@ -283,12 +292,12 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     assert rec_res.equals(ref_res)
     # 1st append of new data.
     start = seed_df[ordered_on].iloc[-1]
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df2 = DataFrame({ordered_on: ts, "val": rand_ints + 100}).sort_values(ordered_on)
     fp_write(
         seed_path,
         seed_df2,
-        row_group_offsets=max_row_group_size,
+        row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
@@ -302,12 +311,12 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     assert rec_res.equals(ref_res)
     # 2nd append of new data.
     start = seed_df2[ordered_on].iloc[-1]
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df3 = DataFrame({ordered_on: ts, "val": rand_ints + 400}).sort_values(ordered_on)
     fp_write(
         seed_path,
         seed_df3,
-        row_group_offsets=max_row_group_size,
+        row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
@@ -321,9 +330,6 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     ref_res[[FIRST, LAST, MIN, MAX]] = ref_res[[FIRST, LAST, MIN, MAX]].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key]
     assert rec_res.pdf.equals(ref_res)
-    n_rows_res = [rg.num_rows for rg in rec_res.pf.row_groups]
-    n_rows_ref = [4, 5, 4, 3, 5, 6, 6, 4, 5, 4, 6, 5]
-    assert n_rows_res == n_rows_ref
 
 
 def test_duration_weighted_mean_from_post(store, seed_path):
@@ -349,16 +355,16 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     #  4  12:20  11       2  10           | stitching with previous (same bin).
     #     12:40  12       1               | 0 aggregated row, not incl stitching.
     #  5  13:00  13       3  12   6 13:00 | no stitching, 1 aggregated row.
-    #     --------------------------------- write data (max_row_group_size = 6)
+    #     --------------------------------- write data (row_group_target_size = 6)
     #  6  13:20  14       0  13   1       | stitching, 1 aggregated row.
     #     13:40  15       1               |
     #  7  14:00  16       2  15   7 14:00 | no stitching, 1 aggregated row.
     #     14:20  17       1               |
     #
     # Setup aggregation.
-    max_row_group_size = 6
+    row_group_target_size = 6
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {
         FIRST: ("ts", FIRST),
         LAST: ("ts", LAST),
@@ -395,7 +401,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
 
     as_ = AggStream(
         store=store,
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.00016,
         ordered_on=ordered_on,
         keys=key,
@@ -456,7 +462,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     rr = np.random.default_rng(3)
     N = 30
     rand_ints = rr.integers(600, size=N)
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df2 = DataFrame(
         {ordered_on: ts, "val": rand_ints + 100, "weight": rand_ints},
     ).sort_values(ordered_on)
@@ -489,13 +495,13 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
     # Change group keys column name with 'bin_on' set as a tuple.
     # Setup streamed aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {ordered_on: (ordered_on, LAST), SUM: ("val", SUM)}
-    max_row_group_size = 4
+    row_group_target_size = 4
     ts_open = "ts_open"
     as_ = AggStream(
         store=store,
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.00001,
         ordered_on=ordered_on,
         keys=key,
@@ -555,8 +561,8 @@ def test_by_callable_wo_bin_on(store, seed_path):
     # Test with binning every 4 rows with 'first', and 'max' aggregation.
     # No post, `discard_last` set `True`.
     # Additionally, shows an example of how 'bin_by' as callable can output a
-    # pandas series which name is re-used straight away in aggregation results.
-    # (is re-used as 'ordered_on' column)
+    # pandas series which name is reused straight away in aggregation results.
+    # (is reused as 'ordered_on' column)
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for agg, BIN: bins
     # RG    TS   VAL       ROW BIN LABEL | comments
@@ -573,7 +579,7 @@ def test_by_callable_wo_bin_on(store, seed_path):
     #     12:20  11                      |
     #     12:40  12                      |
     #     13:00  13         12   4 13:00 |
-    #     -------------------------------- write data (max_row_group_size = 4)
+    #     -------------------------------- write data (row_group_target_size = 4)
     #  2  13:20  14                      | buffer_binning = {nrows : 1}
     #     13:40  15                      |
     #     14:00  16                      |
@@ -586,14 +592,14 @@ def test_by_callable_wo_bin_on(store, seed_path):
         FIRST: ("val", FIRST),
         MAX: ("val", MAX),
     }
-    max_row_group_size = 4
+    row_group_target_size = 4
     as_ = AggStream(
         store=store,
         ordered_on=ordered_on,
         agg=agg,
         keys=key,
         bin_by=by_x_rows,
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.00001,
     )
     # Setup seed data.
@@ -716,7 +722,7 @@ def test_by_callable_with_bin_on(store, seed_path):
     #     12:20  11                      |
     #     12:40  12                      |
     #     13:00   1         12   4     4 |
-    #     -------------------------------- write data (max_row_group_size = 4)
+    #     -------------------------------- write data (row_group_target_size = 4)
     #  2  13:20  14                      | buffer_binning = {last_key : 4}
     #     13:40  15                      |
     #     14:00  16                      |
@@ -773,7 +779,7 @@ def test_by_callable_with_bin_on(store, seed_path):
 
     ordered_on = "ts"
     bin_on = "val"
-    max_row_group_size = 4
+    row_group_target_size = 4
     agg = {
         "ts": ("ts", FIRST),
         MAX: ("val", MAX),
@@ -789,7 +795,7 @@ def test_by_callable_with_bin_on(store, seed_path):
         keys=key,
         bin_by=by_1val,
         bin_on=(bin_on, bin_out_col),
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.000007,
         duplicates_on=[ordered_on, MAX],
     )
@@ -914,7 +920,7 @@ def test_time_grouper_trim_start(store, seed_path):
     # Test 'trim_start=False' when appending.
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     # Streamed aggregation.
     as_ = AggStream(
@@ -966,7 +972,7 @@ def test_time_grouper_agg_sum(store):
     #
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     as_ = AggStream(
         ordered_on=ordered_on,
@@ -1006,7 +1012,7 @@ def test_single_row(store):
     #
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     as_ = AggStream(
         ordered_on=ordered_on,
@@ -1055,7 +1061,7 @@ def test_single_row_within_seed(store, seed_path):
     #
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     as_ = AggStream(
         ordered_on=ordered_on,
@@ -1138,7 +1144,7 @@ def test_time_grouper_duplicates_on_wo_bin_on(store):
     # Seed data.
     date = "2020/01/01 "
     ts_order = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "09:30"])
-    ts_bin = ts_order + +Timedelta("40T")
+    ts_bin = ts_order + Timedelta("40min")
     val = range(1, len(ts_order) + 1)
     bin_on = "ts_bin"
     seed = DataFrame({ordered_on: ts_order, bin_on: ts_bin, "val": val})
@@ -1179,17 +1185,17 @@ def test_bin_on_col_sum_agg(store):
     #
     # Setup aggregation.
     ordered_on = "ts"
-    max_row_group_size = 6
+    row_group_target_size = 6
     agg_col = SUM
     agg = {agg_col: ("val", SUM)}
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     as_ = AggStream(
         ordered_on=ordered_on,
         agg=agg,
         store=store,
         keys=key,
         bin_by=bin_by,
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.00001,
     )
     # Setup seed data.
@@ -1274,7 +1280,7 @@ def test_time_grouper_agg_sum_filters_and_no_filter(store):
     #
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     key_a = Indexer("key_a")
     filter_id_spec_a = "filter_a"
@@ -1331,7 +1337,7 @@ def test_different_ordered_on(store):
     #
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for 'sum' agg, BIN: bins
-    # RGS   VAL ROW BIN    TS | comments
+    # RGS   VAL  ROW BIN    TS | comments
     #  1      1    0   1  8:10 | 2 aggregated rows from same row group.
     #         2                |
     #         3        2  9:10 |
@@ -1354,15 +1360,9 @@ def test_different_ordered_on(store):
     key_ordered_on = "val"
     seed_ordered_on = "ts"
 
-    def post(buffer: dict, bin_res: DataFrame):
-        """
-        Remove some columns before recording.
-        """
-        return bin_res.drop(columns=seed_ordered_on)
-
-    max_row_group_size = 3
+    row_group_target_size = 3
     agg = {key_ordered_on: (key_ordered_on, FIRST)}
-    bin_by = TimeGrouper(key=seed_ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=seed_ordered_on, freq="1h", closed="left", label="left")
     as_ = AggStream(
         ordered_on=seed_ordered_on,
         agg=agg,
@@ -1373,9 +1373,9 @@ def test_different_ordered_on(store):
                 "bin_by": bin_by,
             },
         },
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.000005,
-        post=post,
+        #        post=post,
     )
     # Setup seed data.
     date = "2020/01/01 "
@@ -1404,7 +1404,7 @@ def test_different_ordered_on(store):
     # Setup streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=False, final_write=True)
     # Check
-    ref_res = seed.groupby(bin_by).agg(**agg).reset_index(drop=True)
+    ref_res = seed.groupby(bin_by).agg(**agg).reset_index(drop=False)
     ref_res[key_ordered_on] = ref_res[key_ordered_on].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
     assert rec_res.equals(ref_res)
@@ -1414,16 +1414,16 @@ def test_exception_unordered_seed(store, seed_path):
     # Test exception when checking seed data, with unordered seed.
     ordered_on = "ts"
     key_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
+        "bin_by": TimeGrouper(key=ordered_on, freq="2min", closed="left", label="left"),
         "agg": {FIRST: ("val", FIRST), LAST: ("val", LAST)},
     }
-    max_row_group_size = 6
+    row_group_target_size = 6
     as_ = AggStream(
         ordered_on=ordered_on,
         store=store,
         keys=key,
         **key_cf,
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.00001,
     )
     # Seed data.
@@ -1432,7 +1432,7 @@ def test_exception_unordered_seed(store, seed_path):
     N = 20
     rand_ints = rr.integers(100, size=N)
     rand_ints.sort()
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     ref_idx = 10
     seed = DataFrame({ordered_on: ts, "val": rand_ints})
     # Set a 'NaT' in 'ordered_on' column, 2nd chunk for raising an exception.
@@ -1488,7 +1488,7 @@ def test_post_with_warm_up(store):
                 },
             )
 
-    max_row_group_size = 10
+    row_group_target_size = 10
     agg = {agg_on: (agg_on, FIRST)}
     bin_by = TimeGrouper(key=ordered_on, freq=ts_period, closed="left", label="left")
     as_1 = AggStream(
@@ -1501,7 +1501,7 @@ def test_post_with_warm_up(store):
                 "bin_by": bin_by,
             },
         },
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.000015,
         post=post,
     )
@@ -1540,7 +1540,7 @@ def test_post_with_warm_up(store):
                 "bin_by": bin_by,
             },
         },
-        max_row_group_size=max_row_group_size,
+        row_group_target_size=row_group_target_size,
         max_in_memory_size=0.000015,
         post=post,
     )

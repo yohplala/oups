@@ -38,12 +38,12 @@ from oups.aggstream.segmentby import setup_segmentby
 from oups.aggstream.utils import dataframe_filter
 from oups.store import ParquetSet
 from oups.store.router import ParquetHandle
-from oups.store.writer import KEY_DUPLICATES_ON
-from oups.store.writer import KEY_MAX_ROW_GROUP_SIZE
-from oups.store.writer import OUPS_METADATA
-from oups.store.writer import OUPS_METADATA_KEY
-from oups.store.writer import write
-from oups.store.writer import write_metadata
+from oups.store.write.write import KEY_DUPLICATES_ON
+from oups.store.write.write import KEY_ROW_GROUP_TARGET_SIZE
+from oups.store.write.write import OUPS_METADATA
+from oups.store.write.write import OUPS_METADATA_KEY
+from oups.store.write.write import write
+from oups.store.write.write import write_metadata
 
 
 # Aggregation functions.
@@ -54,8 +54,8 @@ KEY_PRE = "pre"
 KEY_PRE_BUFFER = "pre_buffer"
 KEY_SEGAGG_BUFFER = "segagg_buffer"
 KEY_POST_BUFFER = "post_buffer"
-KEY_BIN_ON_OUT = "bin_on_out"
 KEY_BIN_RES_BUFFER = "bin_res_buffer"
+KEY_BIN_ON_OUT = "bin_on_out"
 KEY_SNAP_RES_BUFFER = "snap_res_buffer"
 KEY_FILTERS = "filters"
 KEY_RESTART_INDEX = "restart_index"
@@ -191,6 +191,8 @@ def _init_keys_config(
                     f"'{param}' not a valid parameters in" f" '{key}' aggregation config.",
                 )
         bin_on = key_conf_in.pop(KEY_BIN_ON, None)
+        agg_pd[key] = key_conf_in.pop(KEY_AGG)
+
         if isinstance(bin_on, tuple):
             # 'bin_on_out' is name of column containing group keys in
             # 'agg_res'. Setting of 'bin_on_out' is an 'AggStream'
@@ -218,7 +220,6 @@ def _init_keys_config(
                 # previously, then set it to this possibly new value of
                 # 'bin_on'.
                 bin_on_out = bin_on
-        agg_pd[key] = key_conf_in.pop(KEY_AGG)
         # 'agg' is in the form:
         # {"output_col":("input_col", "agg_function_name")}
         if bin_on_out in agg_pd[key]:
@@ -244,6 +245,7 @@ def _init_keys_config(
             key_conf_in[KEY_DUPLICATES_ON] = (
                 bin_on_out if bin_on_out else key_conf_in[KEY_ORDERED_ON]
             )
+        #            key_conf_in[KEY_DUPLICATES_ON] = key_conf_in[KEY_ORDERED_ON]
         if seg_config[KEY_SNAP_BY] is None:
             # Snapshots not requested, aggreagtation results are necessarily
             # bins.
@@ -257,14 +259,14 @@ def _init_keys_config(
             # created from both bins and snapshots. Hence it is snaps like.
             agg_res_type = AggResType.SNAPS
         if agg_res_type is AggResType.BOTH:
-            if KEY_MAX_ROW_GROUP_SIZE in key_conf_in:
-                if not isinstance(key_conf_in[KEY_MAX_ROW_GROUP_SIZE], tuple):
-                    key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = (
-                        key_conf_in[KEY_MAX_ROW_GROUP_SIZE],
-                        key_conf_in[KEY_MAX_ROW_GROUP_SIZE],
+            if KEY_ROW_GROUP_TARGET_SIZE in key_conf_in:
+                if not isinstance(key_conf_in[KEY_ROW_GROUP_TARGET_SIZE], tuple):
+                    key_conf_in[KEY_ROW_GROUP_TARGET_SIZE] = (
+                        key_conf_in[KEY_ROW_GROUP_TARGET_SIZE],
+                        key_conf_in[KEY_ROW_GROUP_TARGET_SIZE],
                     )
             else:
-                key_conf_in[KEY_MAX_ROW_GROUP_SIZE] = (None, None)
+                key_conf_in[KEY_ROW_GROUP_TARGET_SIZE] = (None, None)
         consolidated_keys_config[key] = {
             KEY_SEG_CONFIG: seg_config,
             KEY_BIN_ON_OUT: bin_on_out,
@@ -811,14 +813,15 @@ def _post_n_write_agg_chunks(
         }
     # When there is no result, 'main_res' is None.
     if isinstance(main_res, DataFrame):
-        # Record data (with metadata possibly updated).
         if agg_res_type is AggResType.BOTH:
             store[main_key] = (
-                write_config | {KEY_MAX_ROW_GROUP_SIZE: write_config[KEY_MAX_ROW_GROUP_SIZE][0]},
+                write_config
+                | {KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][0]},
                 main_res,
             )
             store[snap_key] = (
-                write_config | {KEY_MAX_ROW_GROUP_SIZE: write_config[KEY_MAX_ROW_GROUP_SIZE][1]},
+                write_config
+                | {KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][1]},
                 snap_res,
             )
         else:
@@ -831,7 +834,7 @@ def _post_n_write_agg_chunks(
         except FileNotFoundError:
             # In case no Parquet file exist yet, need to initiate one to start
             # storing metadata.
-            store[main_key] = DataFrame()
+            store[main_key] = write_config, DataFrame()
     if initial_agg_res:
         # If there have been results, they have been processed (either written
         # directly or through 'post()'). Time to reset aggregation buffers and
