@@ -380,7 +380,7 @@ def test_by_x_rows(
     start = pTimestamp("2022/01/01 08:00")
     dummy_data = arange(len_data)
     data = pDataFrame(
-        {"dummy_data": dummy_data, "dti": date_range(start, periods=len_data, freq="1H")},
+        {"dummy_data": dummy_data, "dti": date_range(start, periods=len_data, freq="1h")},
     )
     chunk_labels_ref = data.iloc[chunk_starts_ref, -1].reset_index(drop=True)
     chunk_ends_idx = next_chunk_starts_ref.copy()

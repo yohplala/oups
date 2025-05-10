@@ -108,7 +108,7 @@ def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, s
     # Prepare AggStream object.
     ordered_on = "ts"
     agg_col = SUM
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {agg_col: ("val", SUM)}
     as_ = AggStream(
         store=store,
@@ -255,7 +255,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     row_group_target_size = 6
     ordered_on = "ts"
     # Setup aggregation.
-    bin_by = TimeGrouper(key=ordered_on, freq="5T", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="5min", closed="left", label="left")
     agg = {
         FIRST: ("val", FIRST),
         LAST: ("val", LAST),
@@ -277,7 +277,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     rr = np.random.default_rng(1)
     N = 20
     rand_ints = rr.integers(100, size=N)
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df = DataFrame(
         {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)},
     ).sort_values(ordered_on)
@@ -292,7 +292,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     assert rec_res.equals(ref_res)
     # 1st append of new data.
     start = seed_df[ordered_on].iloc[-1]
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df2 = DataFrame({ordered_on: ts, "val": rand_ints + 100}).sort_values(ordered_on)
     fp_write(
         seed_path,
@@ -311,7 +311,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     assert rec_res.equals(ref_res)
     # 2nd append of new data.
     start = seed_df2[ordered_on].iloc[-1]
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df3 = DataFrame({ordered_on: ts, "val": rand_ints + 400}).sort_values(ordered_on)
     fp_write(
         seed_path,
@@ -364,7 +364,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     # Setup aggregation.
     row_group_target_size = 6
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {
         FIRST: ("ts", FIRST),
         LAST: ("ts", LAST),
@@ -462,7 +462,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     rr = np.random.default_rng(3)
     N = 30
     rand_ints = rr.integers(600, size=N)
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df2 = DataFrame(
         {ordered_on: ts, "val": rand_ints + 100, "weight": rand_ints},
     ).sort_values(ordered_on)
@@ -495,7 +495,7 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
     # Change group keys column name with 'bin_on' set as a tuple.
     # Setup streamed aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {ordered_on: (ordered_on, LAST), SUM: ("val", SUM)}
     row_group_target_size = 4
     ts_open = "ts_open"
@@ -920,7 +920,7 @@ def test_time_grouper_trim_start(store, seed_path):
     # Test 'trim_start=False' when appending.
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     # Streamed aggregation.
     as_ = AggStream(
@@ -972,7 +972,7 @@ def test_time_grouper_agg_sum(store):
     #
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     as_ = AggStream(
         ordered_on=ordered_on,
@@ -1012,7 +1012,7 @@ def test_single_row(store):
     #
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     as_ = AggStream(
         ordered_on=ordered_on,
@@ -1061,7 +1061,7 @@ def test_single_row_within_seed(store, seed_path):
     #
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     as_ = AggStream(
         ordered_on=ordered_on,
@@ -1144,7 +1144,7 @@ def test_time_grouper_duplicates_on_wo_bin_on(store):
     # Seed data.
     date = "2020/01/01 "
     ts_order = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "09:30"])
-    ts_bin = ts_order + +Timedelta("40T")
+    ts_bin = ts_order + Timedelta("40min")
     val = range(1, len(ts_order) + 1)
     bin_on = "ts_bin"
     seed = DataFrame({ordered_on: ts_order, bin_on: ts_bin, "val": val})
@@ -1188,7 +1188,7 @@ def test_bin_on_col_sum_agg(store):
     row_group_target_size = 6
     agg_col = SUM
     agg = {agg_col: ("val", SUM)}
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     as_ = AggStream(
         ordered_on=ordered_on,
         agg=agg,
@@ -1280,7 +1280,7 @@ def test_time_grouper_agg_sum_filters_and_no_filter(store):
     #
     # Setup aggregation.
     ordered_on = "ts"
-    bin_by = TimeGrouper(key=ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
     key_a = Indexer("key_a")
     filter_id_spec_a = "filter_a"
@@ -1362,7 +1362,7 @@ def test_different_ordered_on(store):
 
     row_group_target_size = 3
     agg = {key_ordered_on: (key_ordered_on, FIRST)}
-    bin_by = TimeGrouper(key=seed_ordered_on, freq="1H", closed="left", label="left")
+    bin_by = TimeGrouper(key=seed_ordered_on, freq="1h", closed="left", label="left")
     as_ = AggStream(
         ordered_on=seed_ordered_on,
         agg=agg,
@@ -1414,7 +1414,7 @@ def test_exception_unordered_seed(store, seed_path):
     # Test exception when checking seed data, with unordered seed.
     ordered_on = "ts"
     key_cf = {
-        "bin_by": TimeGrouper(key=ordered_on, freq="2T", closed="left", label="left"),
+        "bin_by": TimeGrouper(key=ordered_on, freq="2min", closed="left", label="left"),
         "agg": {FIRST: ("val", FIRST), LAST: ("val", LAST)},
     }
     row_group_target_size = 6
@@ -1432,7 +1432,7 @@ def test_exception_unordered_seed(store, seed_path):
     N = 20
     rand_ints = rr.integers(100, size=N)
     rand_ints.sort()
-    ts = [start + Timedelta(f"{mn}T") for mn in rand_ints]
+    ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     ref_idx = 10
     seed = DataFrame({ordered_on: ts, "val": rand_ints})
     # Set a 'NaT' in 'ordered_on' column, 2nd chunk for raising an exception.

@@ -99,7 +99,7 @@ def test_set_parquet(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 10:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 10:00", freq="2h"),
             "temperature": [8.4, 5.3],
         },
     )
@@ -116,7 +116,7 @@ def test_set_parquet_with_config(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
@@ -136,7 +136,7 @@ def test_exception_config_not_a_dict(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
@@ -163,7 +163,7 @@ def test_iterator(tmp_path):
     we2 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
@@ -178,7 +178,7 @@ def test_set_and_get_roundtrip_pandas(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
         },
     )
@@ -194,7 +194,7 @@ def test_set_pandas_and_get_vaex(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
         },
     )
@@ -210,7 +210,7 @@ def test_set_pandas_and_get_parquet_file(tmp_path):
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
         },
     )
@@ -225,7 +225,7 @@ def test_set_cmidx_get_vaex(tmp_path):
     # Write column multi-index in pandas, retrieve in vaex.
     pdf = pDataFrame(
         {
-            ("ts", ""): date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            ("ts", ""): date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             ("temp", "1"): [8.4, 5.3, 2.9, 6.4],
             ("temp", "2"): [8.4, 5.3, 2.9, 6.4],
         },
@@ -254,7 +254,7 @@ def test_dataset_removal(tmp_path):
     we3 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2H"),
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
@@ -286,7 +286,7 @@ def test_11_rgs_pandas_to_vaex(tmp_path):
     temp = range(10, 21)
     df = pDataFrame(
         {
-            "timestamp": date_range("2021/01/01 08:00", freq="2H", periods=len(temp)),
+            "timestamp": date_range("2021/01/01 08:00", freq="2h", periods=len(temp)),
             "temperature": temp,
         },
     )
