@@ -16,11 +16,11 @@ jobs:
     steps:
       # Checks-out repository under $GITHUB_WORKSPACE, so the job can access it
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       # Python setup
       - name: Set up Python environment
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
@@ -32,7 +32,7 @@ jobs:
       # Setup pre-commit cache
       - name: Setup pre-commit cache
         id: cache-pre-commit
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ hashFiles('.github/workflows/*.yml', '.pre-commit-config.yaml') }}
@@ -47,7 +47,7 @@ jobs:
         run: echo "dir=$(poetry config cache-dir)" >> $GITHUB_OUTPUT
 
       - name: Setup poetry cache
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           path: ${{ steps.cache-poetry.outputs.dir }}
           key: poetry-${{ hashFiles('.github/workflows/*.yml', '**/pyproject.toml') }}
