@@ -69,7 +69,14 @@ def seed_path(tmp_path):
 key = Indexer("agg_res")
 
 
-def test_time_grouper_sum_agg(store, seed_path):
+@pytest.mark.parametrize(
+    "test_id, row_group_target_size, expected_n_rows",
+    [
+        ("rg_target_size_as_int", 6, [[6, 1], [6, 2], [6, 2]]),
+        ("rg_target_size_as_freqstr", "2h", [[2, 2, 2, 1], [2, 2, 2, 2], [2, 2, 2, 2]]),
+    ],
+)
+def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, store, seed_path):
     # Test with time grouper and 'sum' aggregation.
     # No post.
     # Creation & 1st append, 'discard_last=True',
@@ -105,12 +112,12 @@ def test_time_grouper_sum_agg(store, seed_path):
     agg = {agg_col: ("val", SUM)}
     as_ = AggStream(
         store=store,
-        row_group_target_size=6,
         max_in_memory_size=0.0002,
         ordered_on=ordered_on,
         keys=key,
         bin_by=bin_by,
         agg=agg,
+        row_group_target_size=row_group_target_size,  # forwarded to 'write'
     )
     # Setup seed data.
     date = "2020/01/01 "
@@ -143,8 +150,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
     n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
-    n_rows_ref = [6, 1]
-    assert n_rows_res == n_rows_ref
+    assert n_rows_res == expected_n_rows[0]
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
     agg_sum_ref = [3, 7, 18, 17, 33, 42, 16]
@@ -193,8 +199,7 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Check number of rows of each row groups in aggregated results.
     pf_res = store[key].pf
     n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
-    n_rows_ref = [6, 2]
-    assert n_rows_res == n_rows_ref
+    assert n_rows_res == expected_n_rows[1]
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
     agg_sum_ref = [3, 7, 18, 17, 33, 42, 33, 1]
@@ -229,6 +234,9 @@ def test_time_grouper_sum_agg(store, seed_path):
     # Setup streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=False)
     # Test results (not trimming seed data).
+    pf_res = store[key].pf
+    n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
+    assert n_rows_res == expected_n_rows[2]
     ref_res = seed_pf.to_pandas().groupby(bin_by).agg(**agg).reset_index()
     ref_res[agg_col] = ref_res[agg_col].astype(DTYPE_NULLABLE_INT64)
     rec_res = store[key].pdf
