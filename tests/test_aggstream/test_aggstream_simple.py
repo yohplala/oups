@@ -561,8 +561,8 @@ def test_by_callable_wo_bin_on(store, seed_path):
     # Test with binning every 4 rows with 'first', and 'max' aggregation.
     # No post, `discard_last` set `True`.
     # Additionally, shows an example of how 'bin_by' as callable can output a
-    # pandas series which name is re-used straight away in aggregation results.
-    # (is re-used as 'ordered_on' column)
+    # pandas series which name is reused straight away in aggregation results.
+    # (is reused as 'ordered_on' column)
     # Seed data
     # RGS: row groups, TS: 'ordered_on', VAL: values for agg, BIN: bins
     # RG    TS   VAL       ROW BIN LABEL | comments

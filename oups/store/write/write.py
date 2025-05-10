@@ -269,7 +269,7 @@ def write(
 
       - either not reaching the maximum number of rows if
         'row_group_target_size' is an ``int``,
-      - or several row groups lying in tge same time period if
+      - or several row groups lying in the same time period if
         'row_group_target_size' is a pandas 'freqstr'.
 
     - When incorporating new data within recorded data, existing off target size
