@@ -692,8 +692,6 @@ class OARMergeSplitStrategy(ABC):
         The return value is also stored in 'self.filtered_merge_sequences'.
 
         """
-        # TODO: merge '_compute_merge_regions_start_ends_excl()' in this method.
-        # Possibly adapt '_compute_merge_regions_start_ends_excl()' test cases.
         self._compute_merge_regions_start_ends_excl(max_n_off_target_rgs=max_n_off_target_rgs)
         self.filtered_merge_sequences = (
             self._specialized_compute_merge_sequences()
