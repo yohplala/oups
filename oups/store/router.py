@@ -209,3 +209,23 @@ class ParquetHandle(ParquetFile):
             self.fmd.row_groups,
             key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"],
         )
+
+
+# TODO:
+# Switch aggstream to use standard metadata method.
+# Remove METADATA dict.
+# Create:
+#  - write_metadata()
+#  - __init__
+#      - with sorting parquet file names if _opd_metadata is not existing
+#  - write_row_group_files()
+#  - to_pandas()
+#  - getitem()
+#  - align_part_names()
+#      - check beforehand how many digit is max part number to set appropriate
+#        number of leading zeros
+#  - sort_rgs() ?
+#  - clean oups.store.write.write() and colllection.py
+#  - rename ParquetHandle to OrderedParquetDataset
+#  - rename collection.py and router.py
+#  - remove vaex dependency
