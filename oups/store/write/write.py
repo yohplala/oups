@@ -17,7 +17,7 @@ from pandas import DataFrame
 from pandas import Series
 
 from oups.store.defines import OUPS_METADATA_KEY
-from oups.store.write.iter_merge_data import iter_merge_data
+from oups.store.write.iter_merge_split_data import iter_merge_split_data
 from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
 from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
 
@@ -140,7 +140,7 @@ def _validate_duplicate_on_param(
     -------
     List[str]
         Normalized list of columns to check for duplicates, including
-        'ordered_on' column.
+        'ordered_on' column. It will never be an empty list.
 
     Raises
     ------
@@ -278,15 +278,18 @@ def write(
       target size row groups.
 
     """
-    if duplicates_on is not None:
-        duplicates_on = _validate_duplicate_on_param(
-            duplicates_on=duplicates_on,
-            ordered_on=ordered_on,
-            columns=list(df.columns),
+    drop_duplicates, duplicates_on = (
+        (
+            True,
+            _validate_duplicate_on_param(
+                duplicates_on=duplicates_on,
+                ordered_on=ordered_on,
+                columns=list(df.columns),
+            ),
         )
-        drop_duplicates = True
-    else:
-        drop_duplicates = False
+        if duplicates_on is not None
+        else (False, None)
+    )
     if df.empty:
         df_ordered_on = Series([])
     else:
@@ -315,7 +318,7 @@ def write(
             # Duplicates are dropped a first time in the DataFrame, so that the
             # calculation of merge and split strategy is made with the most
             # correct approximate number of rows in DataFrame.
-            df.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
+            df.drop_duplicates(subset=duplicates_on, keep="last", ignore_index=True, inplace=True)
         merge_split_strategy = NRowsMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
@@ -333,7 +336,7 @@ def write(
             row_group_time_period=row_group_target_size,
         )
     ordered_parquet_dataset.write_row_groups(
-        data=iter_merge_data(
+        data=iter_merge_split_data(
             opd=ordered_parquet_dataset,
             ordered_on=ordered_on,
             df=df,
@@ -362,7 +365,3 @@ def write(
     # TODO: when refactoring metadata writing, use straight away
     # 'update_common_metadata' from fastparquet.
     write_metadata(pf=ordered_parquet_dataset, metadata=metadata, md_key=md_key)
-
-
-# TODO:
-# - test cases aggstream with row_group_max_target as a pandas freqstr

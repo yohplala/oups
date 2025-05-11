@@ -15,7 +15,7 @@ from numpy import array
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 
-from oups.store.write.iter_merge_data import iter_merge_data
+from oups.store.write.iter_merge_split_data import iter_merge_split_data
 from tests.test_store.conftest import create_parquet_file
 
 
@@ -204,7 +204,7 @@ def test_iter_merge_data(
         df=pf_data,
         row_group_offsets=compute_split_sequence(pf_data.loc[:, "ordered"], row_group_target_size),
     )
-    merge_iter = iter_merge_data(
+    merge_iter = iter_merge_split_data(
         opd=ordered_parquet_dataset,
         ordered_on="ordered",
         df=df,

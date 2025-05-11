@@ -14,7 +14,7 @@ from pandas import Series
 from pandas import concat
 
 
-def iter_merge_data(
+def iter_merge_split_data(
     opd: ParquetFile,
     ordered_on: Union[str, Tuple[str]],
     df: DataFrame,
@@ -44,7 +44,7 @@ def iter_merge_data(
         'ordered_on' column. Used to determine where to split the merged data
         into row groups.
     duplicates_on : Optional[Union[str, List[str], List[Tuple[str]]]], default None
-        Column(s) to check for duplicates. If empty list, all columns are used.
+        Column(s) to check for duplicates. If ``None``, no check is performed.
 
     Yields
     ------
@@ -106,7 +106,12 @@ def iter_merge_data(
                 ignore_index=True,
             ).sort_values(ordered_on, ignore_index=True)
             if duplicates_on:
-                chunk.drop_duplicates(duplicates_on, keep="last", ignore_index=True, inplace=True)
+                chunk.drop_duplicates(
+                    subset=duplicates_on,
+                    keep="last",
+                    ignore_index=True,
+                    inplace=True,
+                )
             row_group_ends_excl = split_sequence(chunk.loc[:, ordered_on])[1:]
             row_idx_start = 0
             for row_idx_end_excl in row_group_ends_excl:
