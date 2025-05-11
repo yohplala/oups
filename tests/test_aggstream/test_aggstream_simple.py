@@ -378,7 +378,7 @@ def test_duration_weighted_mean_from_post(store, seed_path):
         Compute duration, weighted mean and keep track of data to buffer.
         """
         # Compute 'duration'.
-        bin_res[LAST] = (bin_res[LAST] - bin_res[FIRST]).view("int64")
+        bin_res[LAST] = (bin_res[LAST] - bin_res[FIRST]).astype("int64")
         # Compute 'weighted_mean'.
         bin_res["sum_weighted_val"] = bin_res["sum_weighted_val"] / bin_res["sum_weight"]
         # Rename column 'first' and remove the others.

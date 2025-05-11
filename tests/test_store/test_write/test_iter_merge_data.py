@@ -200,7 +200,7 @@ def test_iter_merge_data(
     df = DataFrame(df_data)
     pf_data = DataFrame(pf_data)
     ordered_parquet_dataset = create_parquet_file(
-        None,  # in memory
+        tmp_path,
         df=pf_data,
         row_group_offsets=compute_split_sequence(pf_data.loc[:, "ordered"], row_group_target_size),
     )

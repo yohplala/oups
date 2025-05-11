@@ -753,7 +753,7 @@ from tests.test_store.conftest import create_parquet_file
         ),
     ],
 )
-def test_write_ordered(
+def test_write(
     test_id,
     tmp_path,
     initial_data,
