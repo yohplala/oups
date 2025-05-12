@@ -121,7 +121,6 @@ def write_metadata(
 def _validate_duplicate_on_param(
     duplicates_on: Union[str, List[str], List[Tuple[str]]],
     ordered_on: str,
-    columns: List[str],
 ) -> List[str]:
     """
     Validate and normalize duplicate parameters.
@@ -132,15 +131,13 @@ def _validate_duplicate_on_param(
         Column(s) to check for duplicates. If empty list, all columns are used.
     ordered_on : str
         Column name by which data is ordered.
-    columns : List[str]
-        Available columns in the DataFrame.
-        If an emlpty list, related check is not performed.
 
     Returns
     -------
-    List[str]
-        Normalized list of columns to check for duplicates, including
-        'ordered_on' column. It will never be an empty list.
+    Tuple[bool, Union[List[str], None]]
+        Boolean flag indicating if duplicates are to be dropped, and list of
+        columns to check for duplicates, including 'ordered_on' column. If
+        duplicates are dropped, a ``None`` indicates to consider all columns.
 
     Raises
     ------
@@ -148,30 +145,20 @@ def _validate_duplicate_on_param(
         If distinct_bounds is not set while duplicates_on is provided.
 
     """
-    if isinstance(duplicates_on, list):
-        if duplicates_on == []:
-            if not columns:
-                raise ValueError(
-                    "not possible to set 'duplicates_on' to '[]' when not "
-                    "providing a DataFrame.",
-                )
-            else:
-                return list(columns)
-        if columns and not all(col in columns for col in duplicates_on):
-            # If columns is an empty list, it means Dataframe is empty.
-            # Don't proceed with the check.
-            missing_columns = [col for col in duplicates_on if col not in columns]
-            raise ValueError(f"duplicate columns not found in input DataFrame: {missing_columns}")
-        if ordered_on not in duplicates_on:
-            duplicates_on.append(ordered_on)
-        return duplicates_on
+    if duplicates_on is None:
+        return (False, None)
     else:
-        # 'duplicates_on' is a single column name.
-        if columns and duplicates_on not in columns:
-            raise ValueError(f"column '{duplicates_on}' not found in input DataFrame.")
-        if duplicates_on != ordered_on:
-            return [duplicates_on, ordered_on]
-        return [ordered_on]
+        if isinstance(duplicates_on, list):
+            if duplicates_on == []:
+                return (True, None)
+            elif ordered_on not in duplicates_on:
+                duplicates_on.append(ordered_on)
+            return (True, duplicates_on)
+        else:
+            # 'duplicates_on' is a single column name.
+            if duplicates_on != ordered_on:
+                return (True, [duplicates_on, ordered_on])
+            return (True, ordered_on)
 
 
 def write(
@@ -278,17 +265,9 @@ def write(
       target size row groups.
 
     """
-    drop_duplicates, duplicates_on = (
-        (
-            True,
-            _validate_duplicate_on_param(
-                duplicates_on=duplicates_on,
-                ordered_on=ordered_on,
-                columns=list(df.columns),
-            ),
-        )
-        if duplicates_on is not None
-        else (False, None)
+    drop_duplicates, duplicates_on = _validate_duplicate_on_param(
+        duplicates_on=duplicates_on,
+        ordered_on=ordered_on,
     )
     if df.empty:
         df_ordered_on = Series([])
@@ -344,6 +323,7 @@ def write(
                 max_n_off_target_rgs=max_n_off_target_rgs,
             ),
             split_sequence=merge_split_strategy.compute_split_sequence,
+            drop_duplicates=drop_duplicates,
             duplicates_on=duplicates_on,
         ),
         row_group_offsets=None,

@@ -40,14 +40,14 @@ def compute_split_sequence(series, max_size=2):
 
 
 @pytest.mark.parametrize(
-    "test_id,pf_data,df_data,row_group_target_size,duplicates_on,merge_sequences,expected_chunks",
+    "test_id,pf_data,df_data,row_group_target_size,drop_duplicates_on,merge_sequences,expected_chunks",
     [
         (  # DataFrame before OrderedParquetDataset, no overlap, wo duplicates_on.
             "df_before_pf_wo_duplicates_on",
             {"ordered": [3, 4, 5], "values": ["c", "d", "e"]},  # pf_data
             {"ordered": [1, 2, 2], "values": ["a", "b", "c"]},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[0, 3]]))],  # merge_sequences - no pf row group
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
@@ -59,7 +59,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [1, 2, 3], "values": ["a", "b", "c"]},  # pf_data
             {"ordered": [4, 5, 6, 7], "values": ["d", "e", "f", "g"]},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(1, array([[2, 4]]))],  # merge_sequences - incl. last pf row group
             [
                 DataFrame({"ordered": [3, 4], "values": ["c", "d"]}),
@@ -72,7 +72,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [2, 3, 4], "values": ["x", "c", "y"]},  # pf_data
             {"ordered": [1, 2, 4, 5], "values": ["a", "b", "d", "e"]},  # df_data
             3,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[1, 3], [1, 4]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [1, 2, 2], "values": ["a", "x", "b"]}),
@@ -85,7 +85,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},  # pf_data
             {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[1, 0], [2, 2], [3, 3]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "x"]}),
@@ -102,7 +102,7 @@ def compute_split_sequence(series, max_size=2):
             },  # pf_data
             {"ordered": [2, 6, 7, 11, 12], "values": ["b", "c", "d", "i", "j"]},  # df_data
             2,  # row_group_target_size
-            "ordered",  # duplicates_on
+            (True, "ordered"),  # drop_duplicates, duplicates_on
             [(0, array([[1, 1]])), (2, array([[3, 3]])), (4, array([[5, 5]]))],
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
@@ -117,7 +117,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},
             {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
             2,  # row_group_target_size
-            "ordered",  # duplicates_on
+            (True, "ordered"),  # drop_duplicates, duplicates_on
             [(0, array([[1, 1], [2, 3], [3, 3]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
@@ -130,7 +130,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [1, 2, 6], "values": ["a", "x", "y"]},
             {"ordered": [2, 3, 4, 5, 6, 7, 8], "values": ["b", "c", "d", "e", "f", "g", "h"]},
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(1, array([[1, 2], [1, 4]])), (2, array([[2, 6], [2, 7]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [2, 3], "values": ["b", "c"]}),
@@ -144,7 +144,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [1, 2], "values": ["a", "b"]},  # pf_data
             {"ordered": [], "values": []},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[1, 0]]))],  # merge_sequences
             [DataFrame({"ordered": [1, 2], "values": ["a", "b"]})],  # expected_chunks
         ),
@@ -153,7 +153,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [], "values": []},  # pf_data
             {"ordered": [1, 2], "values": ["a", "b"]},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[0, 2]]))],  # merge_sequences
             [DataFrame({"ordered": [1, 2], "values": ["a", "b"]})],  # expected_chunks
         ),
@@ -164,7 +164,7 @@ def test_iter_merge_data(
     pf_data,
     df_data,
     row_group_target_size,
-    duplicates_on,
+    drop_duplicates_on,
     merge_sequences,
     expected_chunks,
     tmp_path,
@@ -183,8 +183,9 @@ def test_iter_merge_data(
         Data for input DataFrame.
     row_group_target_size : int
         Maximum size for each chunk.
-    duplicates_on : str or None
-        Column to check for duplicates.
+    drop_duplicates_on : Tuple[bool, Union[str, List[str], None]]
+        Boolean flag indicating if duplicates are to be dropped, and list of
+        columns to check for duplicates, including 'ordered_on' column.
     merge_sequences : list of tuples
         List of tuples containing merge sequences, where each tuple contains:
         - First element: Start index of the first row group in the merge sequence
@@ -199,6 +200,7 @@ def test_iter_merge_data(
     """
     df = DataFrame(df_data)
     pf_data = DataFrame(pf_data)
+    drop_duplicates, duplicates_on = drop_duplicates_on
     ordered_parquet_dataset = create_parquet_file(
         tmp_path,
         df=pf_data,
@@ -210,6 +212,7 @@ def test_iter_merge_data(
         df=df,
         merge_sequences=merge_sequences,
         split_sequence=lambda x: compute_split_sequence(x, row_group_target_size),
+        drop_duplicates=drop_duplicates,
         duplicates_on=duplicates_on,
     )
     chunks = list(merge_iter)

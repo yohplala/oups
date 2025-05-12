@@ -20,7 +20,8 @@ def iter_merge_split_data(
     df: DataFrame,
     merge_sequences: List[Tuple[int, NDArray]],
     split_sequence: Callable[[Series], List[int]],
-    duplicates_on: Optional[Union[str, List[str], List[Tuple[str]]]] = None,
+    drop_duplicates: bool,
+    duplicates_on: Optional[Union[str, List[str]]] = None,
 ):
     """
     Yield merged and ordered chunks of data from DataFrame and ParquetFile.
@@ -43,8 +44,11 @@ def iter_merge_split_data(
         'TimePeriodMergeSplitStrategy' to compute split sequence from
         'ordered_on' column. Used to determine where to split the merged data
         into row groups.
-    duplicates_on : Optional[Union[str, List[str], List[Tuple[str]]]], default None
-        Column(s) to check for duplicates. If ``None``, no check is performed.
+    drop_duplicates : bool
+        If ``True``, duplicates are removed from both the pandas DataFrame and
+        the corresponding Parquet data overlapping with it.
+    duplicates_on : Optional[Union[str, List[str]]], default None
+        Column(s) to check for duplicates. If ``None``, all columns are used.
 
     Yields
     ------
@@ -61,8 +65,8 @@ def iter_merge_split_data(
 
     Notes
     -----
-    If 'duplicates_on' is set, duplicates are removed from both the pandas
-    DataFrame and the corresponding Parquet data overlapping with it.
+    If 'duplicates_on' is ``True````, duplicates are removed from both the
+    pandas DataFrame and the corresponding Parquet data overlapping with it.
     In case there would be duplicates only within the Parquet data, while there
     is no overlap with the pandas DataFrame, then duplicates are not removed
     from Parquet data.
@@ -105,7 +109,7 @@ def iter_merge_split_data(
                 ],
                 ignore_index=True,
             ).sort_values(ordered_on, ignore_index=True)
-            if duplicates_on:
+            if drop_duplicates:
                 chunk.drop_duplicates(
                     subset=duplicates_on,
                     keep="last",
