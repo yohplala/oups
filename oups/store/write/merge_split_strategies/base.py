@@ -43,7 +43,6 @@ from pandas import Series
 
 LEFT = "left"
 RIGHT = "right"
-FILTERED_MERGE_SEQUENCES = "filtered_merge_sequences"
 
 
 def get_region_indices_of_true_values(mask: NDArray[bool_]) -> NDArray[int_]:
@@ -163,7 +162,7 @@ class OARMergeSplitStrategy(ABC):
         indices for each merge regions.
     rg_idx_ends_excl_not_to_use_as_split_points : Union[NDArray, None]
         Array containing indices of row groups which should not be used as split
-        points in 'filtered_merge_sequences'. This ensures these row groups will
+        points in 'merge_sequences'. This ensures these row groups will
         be loaded all together so that duplicate search can be made over all
         relevant row groups.
     n_rgs : int
@@ -173,7 +172,7 @@ class OARMergeSplitStrategy(ABC):
     rg_idx_mrs_starts_ends_excl : List[slice]
         List of slices, each containing the start (included) and end (excluded)
         indices of the row groups in a merge sequence.
-    filtered_merge_sequences : List[Tuple[int, NDArray]]
+    merge_sequences : List[Tuple[int, NDArray]]
         List of merge sequences, each containing a tuple of two items:
         - the first item is the row group index starting the merge sequence,
         - the second item is a numpy array of shape (n, 2) containing the
@@ -222,7 +221,7 @@ class OARMergeSplitStrategy(ABC):
         ----------
         rg_idx_ends_excl_not_to_use_as_split_points : Union[NDArray, None]
             Array containing indices of row groups which should not be used as
-            split points in 'filtered_merge_sequences'. This ensures these row
+            split points in 'merge_sequences'. This ensures these row
             groups will be loaded all together so that duplicate search can be
             made over all relevant row groups.
 
@@ -401,7 +400,7 @@ class OARMergeSplitStrategy(ABC):
             Boolean array indicating if OAR overlaps with a DataFrame chunk.
         rg_idx_ends_excl_not_to_use_as_split_points : Union[NDArray, None]
             Array of indices for row group not to use as split points. There are
-            filtered out from 'filtered_merge_sequences'.
+            filtered out from 'merge_sequences'.
         **kwargs
             Additional arguments needed by specific strategy implementations.
             For NRowsMergeSplitStrategy, this should include 'rgs_n_rows',
@@ -689,11 +688,11 @@ class OARMergeSplitStrategy(ABC):
 
         Notes
         -----
-        The return value is also stored in 'self.filtered_merge_sequences'.
+        The return value is also stored in 'self.merge_sequences'.
 
         """
         self._compute_merge_regions_start_ends_excl(max_n_off_target_rgs=max_n_off_target_rgs)
-        self.filtered_merge_sequences = (
+        self.merge_sequences = (
             self._specialized_compute_merge_sequences()
             if self.rg_idx_ends_excl_not_to_use_as_split_points is None
             else [
@@ -710,7 +709,7 @@ class OARMergeSplitStrategy(ABC):
                 for rg_idx_start, cmpt_ends_excl in self._specialized_compute_merge_sequences()
             ]
         )
-        return self.filtered_merge_sequences
+        return self.merge_sequences
 
     @cached_property
     def rg_idx_mrs_starts_ends_excl(self) -> List[slice]:
@@ -756,12 +755,12 @@ class OARMergeSplitStrategy(ABC):
         try:
             return (
                 (
-                    len(self.filtered_merge_sequences) > 1
-                    # 'filtered_merge_sequences[0][1][-1,0]' is 'rg_idx_ends_excl'
+                    len(self.merge_sequences) > 1
+                    # 'merge_sequences[0][1][-1,0]' is 'rg_idx_ends_excl'
                     # of the last row group in the first merge sequence.
-                    or self.filtered_merge_sequences[0][1][-1, 0] < self.n_rgs
+                    or self.merge_sequences[0][1][-1, 0] < self.n_rgs
                 )
-                if self.filtered_merge_sequences
+                if self.merge_sequences
                 else False
             )
         except AttributeError:

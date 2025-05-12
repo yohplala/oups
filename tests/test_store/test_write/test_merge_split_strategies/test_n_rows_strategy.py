@@ -1109,11 +1109,11 @@ def test_nrows_integration_compute_merge_sequences(
     )
     # Check.
     assert strategy.sort_rgs_after_write == expected["sort_rgs_after_write"]
-    assert len(strategy.filtered_merge_sequences) == len(expected["oars_merge_sequences"])
+    assert len(strategy.merge_sequences) == len(expected["oars_merge_sequences"])
     for (result_rg_idx_start, result_cmpt_ends_excl), (
         expected_rg_idx_start,
         expected_cmpt_ends_excl,
-    ) in zip(strategy.filtered_merge_sequences, expected["oars_merge_sequences"]):
+    ) in zip(strategy.merge_sequences, expected["oars_merge_sequences"]):
         assert result_rg_idx_start == expected_rg_idx_start
         assert_array_equal(result_cmpt_ends_excl, expected_cmpt_ends_excl)
 
