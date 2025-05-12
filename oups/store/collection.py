@@ -13,11 +13,10 @@ from os import rmdir
 from shutil import rmtree
 from typing import Tuple, Type, Union
 
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from sortedcontainers import SortedSet
-from vaex.dataframe import DataFrame as vDataFrame
 
-from oups.store.defines import DIR_SEP
+from oups.defines import DIR_SEP
 from oups.store.indexer import is_toplevel
 from oups.store.router import ParquetHandle
 from oups.store.utils import files_at_depth
@@ -176,7 +175,7 @@ class ParquetSet:
         yield from self._keys
 
     # TODO: remove this method, to be replaced by 'self.write_ordered()'
-    def set(self, key: dataclass, data: Union[pDataFrame, vDataFrame], **kwargs):
+    def set(self, key: dataclass, data: DataFrame, **kwargs):
         """
         Write 'data' to disk, at location defined by 'key'.
 
@@ -196,8 +195,8 @@ class ParquetSet:
         """
         if not isinstance(key, self._indexer):
             raise TypeError(f"{key} is not an instance of {self._indexer.__name__}.")
-        if not isinstance(data, (pDataFrame, vDataFrame)):
-            raise TypeError("data should be a pandas or vaex dataframe.")
+        if not isinstance(data, DataFrame):
+            raise TypeError("data should be a pandas dataframe.")
         dirpath = os_path.join(self._basepath, key.to_path)
         # TODO: remove below once initialization of empty OPD will be possible.
         # Record data (with metadata possibly updated).
@@ -207,7 +206,9 @@ class ParquetSet:
             # DataFrame. Re-initialize from scratch.
             remove(f"{dirpath}{DIR_SEP}_metadata")
             remove(f"{dirpath}{DIR_SEP}_common_metadata")
-        write(dirpath=dirpath, df=data, md_key=key, **kwargs)
+        # Need to keep 'write()' instead of 'opd.write()' as opd may be empty
+        # at this stage and an empty opd is not yet fully functional.
+        write(dirpath=dirpath, df=data, **kwargs)
         if key not in self:
             # If no trouble from writing, add key.
             self._keys.add(key)
@@ -217,7 +218,7 @@ class ParquetSet:
     def __setitem__(
         self,
         key: dataclass,
-        data: Union[Tuple[dict, Union[pDataFrame, vDataFrame]], Union[pDataFrame, vDataFrame]],
+        data: Union[Tuple[dict, DataFrame], DataFrame],
     ):
         """
         Write ``data`` to disk, at location defined by ``key``.
@@ -227,7 +228,7 @@ class ParquetSet:
         key : dataclass
             Key specifying the location where to write the data. It has to be
             an instance of the dataclass provided at ParquetSet instantiation.
-        data : Union[Tuple[dict, Union[pDataFrame, vDataFrame]], Union[pDataFrame, vDataFrame]]
+        data : Union[Tuple[dict, DataFrame, DataFrame]
             If a ``tuple``, first element is a ``dict`` containing parameter
             setting for `writer.write`, and second element is a dataframe
             (pandas or vaex).

@@ -200,7 +200,7 @@ def test_iter_merge_data(
     """
     df = DataFrame(df_data)
     pf_data = DataFrame(pf_data)
-    drop_duplicates, duplicates_on = drop_duplicates_on
+    drop_duplicates, subset = drop_duplicates_on
     ordered_parquet_dataset = create_parquet_file(
         tmp_path,
         df=pf_data,
@@ -213,7 +213,7 @@ def test_iter_merge_data(
         merge_sequences=merge_sequences,
         split_sequence=lambda x: compute_split_sequence(x, row_group_target_size),
         drop_duplicates=drop_duplicates,
-        duplicates_on=duplicates_on,
+        subset=subset,
     )
     chunks = list(merge_iter)
     assert len(chunks) == len(expected_chunks)

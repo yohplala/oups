@@ -16,7 +16,7 @@ from cloudpickle import loads
 from oups import is_toplevel
 from oups import sublevel
 from oups import toplevel
-from oups.store.defines import DIR_SEP
+from oups.defines import DIR_SEP
 from oups.store.indexer import DEFAULT_FIELDS_SEP
 
 

@@ -25,7 +25,7 @@ from pandas import NA as pNA
 from pandas import DataFrame
 from pandas import DatetimeIndex
 from pandas import NaT as pNaT
-from pandas import Series as pSeries
+from pandas import Series
 from pandas import Timedelta
 from pandas import Timestamp
 from pandas import concat
@@ -636,7 +636,7 @@ def test_by_callable_wo_bin_on(store, seed_path):
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed = seed_pdf.iloc[:-2]
     bin_starts = np.array([0, 4, 8, 12])
-    bins = pSeries(pNaT, index=np.arange(len(trimmed_seed)))
+    bins = Series(pNaT, index=np.arange(len(trimmed_seed)))
     bins.iloc[bin_starts] = ts[bin_starts]
     bins.ffill(inplace=True)
     ref_res_agg = trimmed_seed.groupby(bins).agg(**agg)
@@ -685,7 +685,7 @@ def test_by_callable_wo_bin_on(store, seed_path):
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed2 = seed_pdf2.iloc[:-2]
     bin_starts = np.array([0, 4, 8, 12, 16, 20])
-    bins = pSeries(pNaT, index=np.arange(len(trimmed_seed2)))
+    bins = Series(pNaT, index=np.arange(len(trimmed_seed2)))
     bins.iloc[bin_starts] = trimmed_seed2.iloc[bin_starts].loc[:, ordered_on]
     bins.ffill(inplace=True)
     ref_res_agg2 = trimmed_seed2.groupby(bins).agg(**agg)
@@ -737,10 +737,10 @@ def test_by_callable_with_bin_on(store, seed_path):
         Returns
         -------
         next_chunk_starts, 1d array of int
-        bin_labels, pSeries, the label of each bin
+        bin_labels, Series, the label of each bin
         n_null_bins,int, number of empty bins: always 0.
         bin_closed: str, does not matter as no snapshotting.
-        bin_ends: pSeries, does not matter as no snapshotting.
+        bin_ends: Series, does not matter as no snapshotting.
         unknown_last_bin_end: bool, does not matter as no snapshotting.
 
         """
@@ -769,11 +769,11 @@ def test_by_callable_with_bin_on(store, seed_path):
         if len(ncs) == 0:
             # Not a single 1 has been found.
             ncs = np.array([len(on)], dtype=int)
-            group_keys = pSeries([first_lab])
+            group_keys = Series([first_lab])
         else:
             # 1st bin is one that was started before.
             ncs = np.append(ncs, len(on))
-            group_keys = concat([pSeries([first_lab]), group_keys])
+            group_keys = concat([Series([first_lab]), group_keys])
         buffer["last_key"] = group_keys.iloc[-1]
         return ncs, group_keys, 0, "left", ncs, True
 

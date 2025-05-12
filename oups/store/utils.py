@@ -13,7 +13,7 @@ from pandas import Timedelta
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.store.defines import DIR_SEP
+from oups.defines import DIR_SEP
 
 
 def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[str]]]:

@@ -5,18 +5,13 @@ Created on Wed Dec  6 22:30:00 2021.
 @author: yoh
 
 """
-from pickle import dumps
-from pickle import loads
-from typing import Dict, Hashable, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
-from fastparquet import ParquetFile
-from fastparquet.util import update_custom_metadata
 from numpy import array
 from numpy import dtype
 from pandas import DataFrame
 from pandas import Series
 
-from oups.store.defines import OUPS_METADATA_KEY
 from oups.store.write.iter_merge_split_data import iter_merge_split_data
 from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
 from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
@@ -28,94 +23,8 @@ EMPTY_DATAFRAME = DataFrame()
 MIN = "min"
 MAX = "max"
 ROW_GROUP_INT_TARGET_SIZE = 6_345_000
-KEY_DUPLICATES_ON = "duplicates_on"
 KEY_MAX_N_OFF_TARGET_RGS = "max_n_off_target_rgs"
 KEY_ROW_GROUP_TARGET_SIZE = "row_group_target_size"
-# Notes to any dev.
-# Store any oups-specific metadata in this dict, such as oups-based application
-# metadata.
-# When appending new data, use `OUPS_METADATA.update()`.
-# `OUPS_METADATA` can be used as a buffer, to keep in memory the metadata to
-# be updated, till a write is triggered.
-# Metadata itself should be within a nested dict, referred to by a `md_key`.
-# By use of a `md_key`, management in parallel of metadata for several keys is
-# possible (i.e. several dataset in difference `ParquetFile`).
-OUPS_METADATA = {}
-
-
-def write_metadata(
-    pf: ParquetFile,
-    metadata: Dict[str, str] = None,
-    md_key: Hashable = None,
-):
-    """
-    Write metadata to disk.
-
-    Update oups-specific metadata and merge to user-defined metadata.
-    "oups-specific" metadata is retrieved from OUPS_METADATA dict.
-
-    Parameters
-    ----------
-    pf : ParquetFile
-        ParquetFile which metadata are to be updated.
-    metadata : Dict[str, str], optional
-        User-defined key-value metadata to write, or update in dataset. Please
-        see fastparquet for updating logic in case of `None` value being used.
-    md_key: Hashable, optional
-        Key to retrieve data in ``OUPS_METADATA`` dict, and write it as
-        specific oups metadata in parquet file. If not provided, all data
-        in ``OUPS_METADATA`` dict are retrieved to be written.
-        This parameter is not compulsory. It is needed for instance in case
-        data is written at same time for several keys. Then the right metadata
-        for each key can be found thanks to this label.
-
-    Notes
-    -----
-    - Specific oups metadata are available in global variable ``OUPS_METADATA``.
-    - Once merged to ``new_metadata``, ``OUPS_METADATA`` is reset.
-    - Update strategy of oups specific metadata depends if key found in
-      ``OUPS_METADATA``metadata` is also found in already existing metadata,
-      as well as its value.
-
-      - If not found in existing, it is added.
-      - If found in existing, it is updated.
-      - If its value is `None`, it is not added, and if found in existing, it
-        is removed from existing.
-
-    """
-    if OUPS_METADATA and md_key and md_key in OUPS_METADATA:
-        # If 'md_key' is 'None', then no metadata from ``OUPS_METADATA`` is
-        # retrieved.
-        new_oups_spec_md = OUPS_METADATA[md_key]
-        if OUPS_METADATA_KEY in (existing_metadata := pf.key_value_metadata):
-            # Case 'append' to existing metadata.
-            # oups-specific metadata is expected to be a dict itself.
-            # To be noticed, 'md_key' is not written itself in metadata to
-            # disk.
-            existing_oups_spec_md = loads(existing_metadata[OUPS_METADATA_KEY])
-            for key, value in new_oups_spec_md.items():
-                if key in existing_oups_spec_md:
-                    if value is None:
-                        # Case 'remove'.
-                        del existing_oups_spec_md[key]
-                    else:
-                        # Case 'update'.
-                        existing_oups_spec_md[key] = value
-                elif value:
-                    # Case 'add'.
-                    existing_oups_spec_md[key] = value
-        else:
-            existing_oups_spec_md = new_oups_spec_md
-        del OUPS_METADATA[md_key]
-
-        if metadata:
-            metadata[OUPS_METADATA_KEY] = dumps(existing_oups_spec_md)
-        else:
-            metadata = {OUPS_METADATA_KEY: dumps(existing_oups_spec_md)}
-
-    if metadata:
-        update_custom_metadata(pf, metadata)
-    pf._write_common_metadata()
 
 
 def _validate_duplicate_on_param(
@@ -168,9 +77,8 @@ def write(
     row_group_target_size: Optional[Union[int, str]] = ROW_GROUP_INT_TARGET_SIZE,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_n_off_target_rgs: int = None,
-    compression: str = COMPRESSION,
     metadata: Dict[str, str] = None,
-    md_key: Hashable = None,
+    compression: str = COMPRESSION,
 ):
     """
     Write data to disk at location specified by path.
@@ -224,16 +132,12 @@ def write(
           - A value of ``0`` or ``1`` means that new data should systematically
             be merged to the last existing one to 'complete' it (if it is not
             'complete' already).
-    compression : str, default SNAPPY
-        Algorithm to use for compressing data. This parameter is fastparquet
-        specific. Please see fastparquet documentation for more information.
     metadata : Dict[str, str], optional
         Key-value metadata to write, or update in dataset. Please see
         fastparquet for updating logic in case of `None` value being used.
-    md_key: Hashable, optional
-        Key to retrieve data in ``OUPS_METADATA`` dict, and write it as
-        specific oups metadata in parquet file. If not provided, all data
-        in ``OUPS_METADATA`` dict are retrieved to be written.
+    compression : str, default SNAPPY
+        Algorithm to use for compressing data. This parameter is fastparquet
+        specific. Please see fastparquet documentation for more information.
 
     Notes
     -----
@@ -265,7 +169,7 @@ def write(
       target size row groups.
 
     """
-    drop_duplicates, duplicates_on = _validate_duplicate_on_param(
+    drop_duplicates, subset = _validate_duplicate_on_param(
         duplicates_on=duplicates_on,
         ordered_on=ordered_on,
     )
@@ -297,7 +201,7 @@ def write(
             # Duplicates are dropped a first time in the DataFrame, so that the
             # calculation of merge and split strategy is made with the most
             # correct approximate number of rows in DataFrame.
-            df.drop_duplicates(subset=duplicates_on, keep="last", ignore_index=True, inplace=True)
+            df.drop_duplicates(subset=subset, keep="last", ignore_index=True, inplace=True)
         merge_split_strategy = NRowsMergeSplitStrategy(
             rg_ordered_on_mins=rg_ordered_on_mins,
             rg_ordered_on_maxs=rg_ordered_on_maxs,
@@ -324,7 +228,7 @@ def write(
             ),
             split_sequence=merge_split_strategy.compute_split_sequence,
             drop_duplicates=drop_duplicates,
-            duplicates_on=duplicates_on,
+            subset=subset,
         ),
         row_group_offsets=None,
         sort_pnames=False,
@@ -344,4 +248,4 @@ def write(
     # Manage and write metadata.
     # TODO: when refactoring metadata writing, use straight away
     # 'update_common_metadata' from fastparquet.
-    write_metadata(pf=ordered_parquet_dataset, metadata=metadata, md_key=md_key)
+    ordered_parquet_dataset.write_metadata(metadata=metadata)

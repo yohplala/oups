@@ -21,7 +21,7 @@ def iter_merge_split_data(
     merge_sequences: List[Tuple[int, NDArray]],
     split_sequence: Callable[[Series], List[int]],
     drop_duplicates: bool,
-    duplicates_on: Optional[Union[str, List[str]]] = None,
+    subset: Optional[Union[str, List[str]]] = None,
 ):
     """
     Yield merged and ordered chunks of data from DataFrame and ParquetFile.
@@ -47,7 +47,7 @@ def iter_merge_split_data(
     drop_duplicates : bool
         If ``True``, duplicates are removed from both the pandas DataFrame and
         the corresponding Parquet data overlapping with it.
-    duplicates_on : Optional[Union[str, List[str]]], default None
+    subset : Optional[Union[str, List[str]]], default None
         Column(s) to check for duplicates. If ``None``, all columns are used.
 
     Yields
@@ -111,7 +111,7 @@ def iter_merge_split_data(
             ).sort_values(ordered_on, ignore_index=True)
             if drop_duplicates:
                 chunk.drop_duplicates(
-                    subset=duplicates_on,
+                    subset=subset,
                     keep="last",
                     ignore_index=True,
                     inplace=True,

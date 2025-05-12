@@ -24,7 +24,7 @@ from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from pandas import DataFrame
 from pandas import NaT as pNaT
-from pandas import Series as pSeries
+from pandas import Series
 from pandas import Timedelta
 from pandas import Timestamp
 from pandas import concat as pconcat
@@ -147,7 +147,7 @@ def test_3_keys_only_bins(store, seed_path):
         k2_res[FIRST] = k2_res[FIRST].astype(DTYPE_NULLABLE_INT64)
         k2_res[MAX] = k2_res[MAX].astype(DTYPE_NULLABLE_INT64)
         key3_bins = by_x_rows(on=seed_df[ordered_on], buffer={})
-        key3_bins = pSeries(pNaT, index=np.arange(len(seed_df)))
+        key3_bins = Series(pNaT, index=np.arange(len(seed_df)))
         key3_bin_starts = np.arange(0, len(seed_df), 4)
         key3_bins.iloc[key3_bin_starts] = seed_df.iloc[key3_bin_starts].loc[:, ordered_on]
         key3_bins.ffill(inplace=True)

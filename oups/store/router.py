@@ -7,18 +7,21 @@ Created on Wed Dec 26 22:30:00 2021.
 """
 from functools import cached_property
 from os import scandir
+from pickle import dumps
 from pickle import loads
+from typing import Dict
 
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from fastparquet.api import statistics
+from fastparquet.util import update_custom_metadata
 from pandas import DataFrame
 from pandas import MultiIndex
 from vaex import open_many
 
-from oups.store.defines import DIR_SEP
-from oups.store.defines import OUPS_METADATA_KEY
-from oups.store.write.write import write
+from oups.defines import DIR_SEP
+from oups.defines import OUPS_METADATA_KEY
+from oups.store.write import write
 
 
 EMPTY_DATAFRAME = DataFrame()
@@ -179,13 +182,6 @@ class ParquetHandle(ParquetFile):
         return (min(pf_stats["min"][col]), max(pf_stats["max"][col]))
 
     @property
-    def metadata(self) -> dict:
-        """
-        Return metadata stored when using `oups.writer.write()`.
-        """
-        return self.pf.key_value_metadata
-
-    @property
     def _oups_metadata(self) -> dict:
         """
         Return specific oups metadata.
@@ -210,14 +206,67 @@ class ParquetHandle(ParquetFile):
             key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"],
         )
 
+    def write_metadata(
+        self,
+        metadata: Dict[str, str] = None,
+    ):
+        """
+        Write metadata to disk.
+
+        Update oups-specific metadata and merge to user-defined metadata.
+        "oups-specific" metadata is retrieved from OUPS_METADATA dict.
+
+        Parameters
+        ----------
+        pf : ParquetFile
+            ParquetFile which metadata are to be updated.
+        metadata : Dict[str, str], optional
+            User-defined key-value metadata to write, or update in dataset.
+
+        Notes
+        -----
+        - These specific oups metadata are available in global variable
+        ``OUPS_METADATA``.
+        - Update strategy of oups specific metadata depends if key found in
+        ``OUPS_METADATA``metadata` is also found in already existing metadata,
+        as well as its value.
+
+        - If not found in existing, it is added.
+        - If found in existing, it is updated.
+        - If its value is `None`, it is not added, and if found in existing, it
+            is removed from existing.
+
+        """
+        if metadata:
+            new_oups_spec_md = metadata
+            if OUPS_METADATA_KEY in (existing_metadata := self.key_value_metadata):
+                # Case 'append' to existing metadata.
+                # oups-specific metadata is expected to be a dict itself.
+                # To be noticed, 'md_key' is not written itself in metadata to
+                # disk.
+                existing_oups_spec_md = loads(existing_metadata[OUPS_METADATA_KEY])
+                for key, value in new_oups_spec_md.items():
+                    if key in existing_oups_spec_md:
+                        if value is None:
+                            # Case 'remove'.
+                            del existing_oups_spec_md[key]
+                        else:
+                            # Case 'update'.
+                            existing_oups_spec_md[key] = value
+                    elif value:
+                        # Case 'add'.
+                        existing_oups_spec_md[key] = value
+            else:
+                existing_oups_spec_md = new_oups_spec_md
+            update_custom_metadata(self, {OUPS_METADATA_KEY: dumps(existing_oups_spec_md)})
+        self._write_common_metadata()
+
 
 # TODO:
-# Switch aggstream to use standard metadata method.
-# Remove METADATA dict.
 # Create:
-#  - write_metadata()
 #  - __init__
 #      - with sorting parquet file names if _opd_metadata is not existing
+#  - write_metadata()
 #  - write_row_group_files()
 #  - to_pandas()
 #  - getitem()

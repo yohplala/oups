@@ -32,18 +32,16 @@ from oups.aggstream.jcumsegagg import MIN
 from oups.aggstream.jcumsegagg import SUM
 from oups.aggstream.segmentby import KEY_BIN_BY
 from oups.aggstream.segmentby import KEY_BIN_ON
-from oups.aggstream.segmentby import KEY_ORDERED_ON
 from oups.aggstream.segmentby import KEY_SNAP_BY
 from oups.aggstream.segmentby import setup_segmentby
 from oups.aggstream.utils import dataframe_filter
+from oups.defines import KEY_DUPLICATES_ON
+from oups.defines import KEY_ORDERED_ON
+from oups.defines import OUPS_METADATA_KEY
 from oups.store import ParquetSet
 from oups.store.router import ParquetHandle
-from oups.store.write.write import KEY_DUPLICATES_ON
-from oups.store.write.write import KEY_ROW_GROUP_TARGET_SIZE
-from oups.store.write.write import OUPS_METADATA
-from oups.store.write.write import OUPS_METADATA_KEY
-from oups.store.write.write import write
-from oups.store.write.write import write_metadata
+from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
+from oups.store.write import write
 
 
 # Aggregation functions.
@@ -115,7 +113,7 @@ def _is_aggstream_result(handle: ParquetHandle) -> bool:
     # As oups specific metadata is a string produced by json library, the last
     # 'in' condition is checking if the set of characters defined by
     # 'AGGSTREAM' is in a string.
-    if OUPS_METADATA_KEY in handle.metadata:
+    if OUPS_METADATA_KEY in handle.key_value_metadata:
         return KEY_AGGSTREAM in handle._oups_metadata
 
 
@@ -803,7 +801,7 @@ def _post_n_write_agg_chunks(
         # 'pre_buffer', 'segagg_buffer' and 'post_buffer'.
         # Oups metadata only get written for 'main_key'.
         # When 'key' is a tuple, 'main_key' is the 1st key.
-        OUPS_METADATA[main_key] = {
+        write_config["metadata"] = {
             KEY_AGGSTREAM: {
                 KEY_RESTART_INDEX: last_seed_index,
                 KEY_PRE_BUFFER: pre_buffer,
@@ -821,7 +819,10 @@ def _post_n_write_agg_chunks(
             )
             store[snap_key] = (
                 write_config
-                | {KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][1]},
+                | {
+                    KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][1],
+                    "metadata": None,
+                },
                 snap_res,
             )
         else:
@@ -829,12 +830,7 @@ def _post_n_write_agg_chunks(
     elif last_seed_index:
         # If no result, metadata is possibly to be written, as this is the
         # flag indicating the last 'aggstream' local iteration.
-        try:
-            write_metadata(pf=store[main_key].pf, md_key=main_key)
-        except FileNotFoundError:
-            # In case no Parquet file exist yet, need to initiate one to start
-            # storing metadata.
-            store[main_key] = write_config, DataFrame()
+        store[main_key].write_metadata(metadata=write_config["metadata"])
     if initial_agg_res:
         # If there have been results, they have been processed (either written
         # directly or through 'post()'). Time to reset aggregation buffers and

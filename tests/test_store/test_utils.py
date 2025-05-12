@@ -18,7 +18,7 @@ from pandas import DataFrame
 from pandas import MultiIndex
 from pandas import Timestamp
 
-from oups.store.defines import DIR_SEP
+from oups.defines import DIR_SEP
 from oups.store.utils import ceil_ts
 from oups.store.utils import conform_cmidx
 from oups.store.utils import files_at_depth

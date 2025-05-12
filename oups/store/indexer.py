@@ -12,7 +12,7 @@ from dataclasses import is_dataclass
 from functools import partial
 from typing import Any, Callable, Iterator, List, Tuple, Type, Union
 
-from oups.store.defines import DIR_SEP
+from oups.defines import DIR_SEP
 
 
 # Float removed to prevent having '.' in field values.
