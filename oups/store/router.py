@@ -263,6 +263,7 @@ class ParquetHandle(ParquetFile):
 
 
 # TODO:
+# - study df=None in 'write()' to try simplifying further write step in aggstream.
 # Create:
 #  - __init__
 #      - with sorting parquet file names if _opd_metadata is not existing
@@ -278,3 +279,4 @@ class ParquetHandle(ParquetFile):
 #  - rename ParquetHandle to OrderedParquetDataset
 #  - rename collection.py and router.py
 #  - remove vaex dependency
+#  - set numpy above 2.0
