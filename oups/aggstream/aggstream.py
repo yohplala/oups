@@ -810,7 +810,10 @@ def _post_n_write_agg_chunks(
             },
         }
     # When there is no result, 'main_res' is None.
-    if isinstance(main_res, DataFrame):
+    # If no result, metadata is possibly to be written. This is indicated by
+    # 'last_seed_index', which informs about the last 'aggstream' local
+    # iteration.
+    if isinstance(main_res, DataFrame) or last_seed_index:
         if agg_res_type is AggResType.BOTH:
             store[main_key] = (
                 write_config
@@ -827,10 +830,6 @@ def _post_n_write_agg_chunks(
             )
         else:
             store[main_key] = write_config, main_res
-    elif last_seed_index:
-        # If no result, metadata is possibly to be written, as this is the
-        # flag indicating the last 'aggstream' local iteration.
-        store[main_key].write_metadata(metadata=write_config["metadata"])
     if initial_agg_res:
         # If there have been results, they have been processed (either written
         # directly or through 'post()'). Time to reset aggregation buffers and

@@ -751,6 +751,18 @@ from tests.test_store.conftest import create_parquet_file
                 ],
             },
         ),
+        (
+            "special_case_no_opd_no_dataframe",
+            {},  # No initial data
+            [None],  # No DataFrame
+            "2h",  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            None,  # duplicates_on
+            {
+                "rgs_length": [[]],
+                "dfs": [DataFrame()],
+            },
+        ),
     ],
 )
 def test_write(

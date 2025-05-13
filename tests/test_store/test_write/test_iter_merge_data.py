@@ -139,7 +139,7 @@ def compute_split_sequence(series, max_size=2):
                 DataFrame({"ordered": [8], "values": ["h"]}),
             ],
         ),
-        (  # Empty DataFrame test case
+        (  # Empty DataFrame case
             "empty_dataframe",
             {"ordered": [1, 2], "values": ["a", "b"]},  # pf_data
             {"ordered": [], "values": []},  # df_data
@@ -148,7 +148,7 @@ def compute_split_sequence(series, max_size=2):
             [(0, array([[1, 0]]))],  # merge_sequences
             [DataFrame({"ordered": [1, 2], "values": ["a", "b"]})],  # expected_chunks
         ),
-        (  # Empty OrderedParquetDataset test case
+        (  # Empty OrderedParquetDataset case
             "empty_parquetfile",
             {"ordered": [], "values": []},  # pf_data
             {"ordered": [1, 2], "values": ["a", "b"]},  # df_data
@@ -156,6 +156,15 @@ def compute_split_sequence(series, max_size=2):
             (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[0, 2]]))],  # merge_sequences
             [DataFrame({"ordered": [1, 2], "values": ["a", "b"]})],  # expected_chunks
+        ),
+        (  # Empty merge sequence case
+            "empty_merge_sequence",
+            {"ordered": [1, 2], "values": ["a", "b"]},  # pf_data
+            {"ordered": [1, 2], "values": ["a", "b"]},  # df_data
+            2,  # row_group_target_size
+            (False, None),  # drop_duplicates, duplicates_on
+            [],  # merge_sequences
+            [],  # expected_chunks
         ),
     ],
 )

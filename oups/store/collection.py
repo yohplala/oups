@@ -195,8 +195,8 @@ class ParquetSet:
         """
         if not isinstance(key, self._indexer):
             raise TypeError(f"{key} is not an instance of {self._indexer.__name__}.")
-        if not isinstance(data, DataFrame):
-            raise TypeError("data should be a pandas dataframe.")
+        if not isinstance(data, (DataFrame, type(None))):
+            raise TypeError("data should be a pandas dataframe or None.")
         dirpath = os_path.join(self._basepath, key.to_path)
         # TODO: remove below once initialization of empty OPD will be possible.
         # Record data (with metadata possibly updated).

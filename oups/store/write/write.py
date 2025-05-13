@@ -182,10 +182,12 @@ def write(
             # Check 'ordered_on' column is within input DataFrame.
             raise ValueError(f"column '{ordered_on}' does not exist in input DataFrame.")
     if isinstance(dirpath, str):
+        # Case 'dirpath' is a path to a directory.
         from oups.store.router import ParquetHandle
 
         ordered_parquet_dataset = ParquetHandle(dirpath, ordered_on=ordered_on, df_like=df)
     else:
+        # Case 'dirpath' is an OrderedParquetDataset.
         ordered_parquet_dataset = dirpath
     opd_statistics = ordered_parquet_dataset.statistics
     # TODO: remove below check once OPD can be correctly initialized from
@@ -196,55 +198,59 @@ def write(
     else:
         rg_ordered_on_mins = array([])
         rg_ordered_on_maxs = array([])
-    if isinstance(row_group_target_size, int):
-        if drop_duplicates and df is not None:
-            # Duplicates are dropped a first time in the DataFrame, so that the
-            # calculation of merge and split strategy is made with the most
-            # correct approximate number of rows in DataFrame.
-            df.drop_duplicates(subset=subset, keep="last", ignore_index=True, inplace=True)
-        merge_split_strategy = NRowsMergeSplitStrategy(
-            rg_ordered_on_mins=rg_ordered_on_mins,
-            rg_ordered_on_maxs=rg_ordered_on_maxs,
-            df_ordered_on=df_ordered_on,
-            drop_duplicates=drop_duplicates,
-            rgs_n_rows=array([rg.num_rows for rg in ordered_parquet_dataset.row_groups], dtype=int),
-            row_group_target_size=row_group_target_size,
-        )
-    else:
-        merge_split_strategy = TimePeriodMergeSplitStrategy(
-            rg_ordered_on_mins=rg_ordered_on_mins,
-            rg_ordered_on_maxs=rg_ordered_on_maxs,
-            df_ordered_on=df_ordered_on,
-            drop_duplicates=drop_duplicates,
-            row_group_time_period=row_group_target_size,
-        )
-    ordered_parquet_dataset.write_row_groups(
-        data=iter_merge_split_data(
-            opd=ordered_parquet_dataset,
-            ordered_on=ordered_on,
-            df=df,
-            merge_sequences=merge_split_strategy.compute_merge_sequences(
-                max_n_off_target_rgs=max_n_off_target_rgs,
+    if df is not None or len(rg_ordered_on_mins):
+        if isinstance(row_group_target_size, int):
+            if drop_duplicates and df is not None:
+                # Duplicates are dropped a first time in the DataFrame, so that the
+                # calculation of merge and split strategy is made with the most
+                # correct approximate number of rows in DataFrame.
+                df.drop_duplicates(subset=subset, keep="last", ignore_index=True, inplace=True)
+            merge_split_strategy = NRowsMergeSplitStrategy(
+                rg_ordered_on_mins=rg_ordered_on_mins,
+                rg_ordered_on_maxs=rg_ordered_on_maxs,
+                df_ordered_on=df_ordered_on,
+                drop_duplicates=drop_duplicates,
+                rgs_n_rows=array(
+                    [rg.num_rows for rg in ordered_parquet_dataset.row_groups],
+                    dtype=int,
+                ),
+                row_group_target_size=row_group_target_size,
+            )
+        else:
+            merge_split_strategy = TimePeriodMergeSplitStrategy(
+                rg_ordered_on_mins=rg_ordered_on_mins,
+                rg_ordered_on_maxs=rg_ordered_on_maxs,
+                df_ordered_on=df_ordered_on,
+                drop_duplicates=drop_duplicates,
+                row_group_time_period=row_group_target_size,
+            )
+        ordered_parquet_dataset.write_row_groups(
+            data=iter_merge_split_data(
+                opd=ordered_parquet_dataset,
+                ordered_on=ordered_on,
+                df=df,
+                merge_sequences=merge_split_strategy.compute_merge_sequences(
+                    max_n_off_target_rgs=max_n_off_target_rgs,
+                ),
+                split_sequence=merge_split_strategy.compute_split_sequence,
+                drop_duplicates=drop_duplicates,
+                subset=subset,
             ),
-            split_sequence=merge_split_strategy.compute_split_sequence,
-            drop_duplicates=drop_duplicates,
-            subset=subset,
-        ),
-        row_group_offsets=None,
-        sort_pnames=False,
-        compression=compression,
-        write_fmd=False,
-    )
-    # Remove row groups of data that is overlapping.
-    for rg_idx_start_end_excl in merge_split_strategy.rg_idx_mrs_starts_ends_excl:
-        ordered_parquet_dataset.remove_row_groups(
-            ordered_parquet_dataset[rg_idx_start_end_excl].row_groups,
+            row_group_offsets=None,
+            sort_pnames=False,
+            compression=compression,
             write_fmd=False,
         )
-    # Rename partition files.
-    if merge_split_strategy.sort_rgs_after_write:
-        ordered_parquet_dataset.sort_rgs(ordered_on)
-        ordered_parquet_dataset._sort_part_names(write_fmd=False)
+        # Remove row groups of data that is overlapping.
+        for rg_idx_start_end_excl in merge_split_strategy.rg_idx_mrs_starts_ends_excl:
+            ordered_parquet_dataset.remove_row_groups(
+                ordered_parquet_dataset[rg_idx_start_end_excl].row_groups,
+                write_fmd=False,
+            )
+        # Rename partition files.
+        if merge_split_strategy.sort_rgs_after_write:
+            ordered_parquet_dataset.sort_rgs(ordered_on)
+            ordered_parquet_dataset._sort_part_names(write_fmd=False)
     # Manage and write metadata.
     # TODO: when refactoring metadata writing, use straight away
     # 'update_common_metadata' from fastparquet.

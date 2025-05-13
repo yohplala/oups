@@ -76,6 +76,8 @@ def iter_merge_split_data(
     values from the pandas DataFrame will be positioned behind after the merge.
 
     """
+    if len(merge_sequences) == 0:
+        return
     df_idx_start = 0
     # Check shape of 'cmpt_ends_excl'array of 1st merge sequence.
     if merge_sequences[0][1].ndim != 2:

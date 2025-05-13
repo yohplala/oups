@@ -96,9 +96,12 @@ class ParquetHandle(ParquetFile):
         except (ValueError, FileNotFoundError):
             # In case multi-index is used, check that it complies with fastparquet
             # limitations.
-            if isinstance(df_like.columns, MultiIndex):
-                check_cmidx(df_like.columns)
-            fp_write(dirpath, df_like.iloc[:0], file_scheme="hive")
+            if df_like is None:
+                fp_write(dirpath, DataFrame(), file_scheme="hive")
+            else:
+                if isinstance(df_like.columns, MultiIndex):
+                    check_cmidx(df_like.columns)
+                fp_write(dirpath, df_like.iloc[:0], file_scheme="hive")
             super().__init__(dirpath)
         self._dirpath = dirpath
         self._ordered_on = ordered_on
@@ -263,7 +266,6 @@ class ParquetHandle(ParquetFile):
 
 
 # TODO:
-# - study df=None in 'write()' to try simplifying further write step in aggstream.
 # Create:
 #  - __init__
 #      - with sorting parquet file names if _opd_metadata is not existing

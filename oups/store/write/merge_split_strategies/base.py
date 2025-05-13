@@ -264,7 +264,7 @@ class OARMergeSplitStrategy(ABC):
         if not df_ordered_on.is_monotonic_increasing:
             raise ValueError("'df_ordered_on' must be sorted in ascending order.")
         # Check use of OARSplitStrategy with no row groups.
-        if n_df_rows and not n_rgs:
+        if not n_rgs:
             self.oars_rg_idx_starts = zeros(1, dtype=int_)
             self.oars_cmpt_idx_ends_excl = array([[0, n_df_rows]], dtype=int_)
             self.oars_has_row_group = zeros(1).astype(bool_)
