@@ -33,7 +33,7 @@ def iter_merge_split_data(
         'ordered_on' column.
     ordered_on : Union[str, Tuple[str]]
         Column name by which data is ordered. Data must be in ascending order.
-    df : DataFrame
+    df : Union[DataFrame, None]
         DataFrame (pandas) ordered by 'ordered_on' column.
     merge_sequences : List[Tuple[int, NDArray]]
         Merge sequences defining how to merge data from parquet and dataframe,
@@ -99,7 +99,9 @@ def iter_merge_split_data(
                 else opd[rg_idx_start:rg_idx_end_excl].to_pandas()
             )
             df_chunk = (
-                None if df_idx_start == df_idx_end_excl else df.iloc[df_idx_start:df_idx_end_excl]
+                None
+                if (df_idx_start == df_idx_end_excl or df is None)
+                else df.iloc[df_idx_start:df_idx_end_excl]
             )
             chunk = concat(
                 [

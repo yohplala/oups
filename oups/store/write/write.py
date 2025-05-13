@@ -73,7 +73,7 @@ def _validate_duplicate_on_param(
 def write(
     dirpath: str,
     ordered_on: Union[str, Tuple[str]],
-    df: Optional[DataFrame] = EMPTY_DATAFRAME,
+    df: Optional[DataFrame] = None,
     row_group_target_size: Optional[Union[int, str]] = ROW_GROUP_INT_TARGET_SIZE,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_n_off_target_rgs: int = None,
@@ -95,10 +95,9 @@ def write(
         It allows knowing 'where' to insert new data into existing data, i.e.
         completing or correcting past records (but it does not allow to remove
         prior data).
-
-    df : Optional[DataFrame], default empty DataFrame
-        Data to write. If not provided, an empty dataframe is created with a
-        single 'ordered_on' column.
+    df : Optional[DataFrame], default None
+        Data to write. If None, a resize of Oredered Parquet Dataset may however
+        be performed.
     row_group_target_size : Optional[Union[int, str]]
         Target size of row groups. If not set, default to ``6_345_000``, which
         for a dataframe with 6 columns of ``float64`` or ``int64`` results in a
@@ -132,6 +131,7 @@ def write(
           - A value of ``0`` or ``1`` means that new data should systematically
             be merged to the last existing one to 'complete' it (if it is not
             'complete' already).
+
     metadata : Dict[str, str], optional
         Key-value metadata to write, or update in dataset. Please see
         fastparquet for updating logic in case of `None` value being used.
@@ -173,7 +173,7 @@ def write(
         duplicates_on=duplicates_on,
         ordered_on=ordered_on,
     )
-    if df.empty:
+    if df is None:
         df_ordered_on = Series([])
     else:
         try:
@@ -197,7 +197,7 @@ def write(
         rg_ordered_on_mins = array([])
         rg_ordered_on_maxs = array([])
     if isinstance(row_group_target_size, int):
-        if drop_duplicates:
+        if drop_duplicates and df is not None:
             # Duplicates are dropped a first time in the DataFrame, so that the
             # calculation of merge and split strategy is made with the most
             # correct approximate number of rows in DataFrame.
