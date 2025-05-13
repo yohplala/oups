@@ -78,13 +78,13 @@ def iter_merge_split_data(
     """
     if len(merge_sequences) == 0:
         return
-    df_idx_start = 0
-    # Check shape of 'cmpt_ends_excl'array of 1st merge sequence.
-    if merge_sequences[0][1].ndim != 2:
+    elif merge_sequences[0][1].ndim != 2:
+        # Check shape of 'cmpt_ends_excl'array of 1st merge sequence.
         raise ValueError(
             "2nd item in merge sequences should be 2D numpy array, got ndim "
             f"{merge_sequences[0][1].ndim}.",
         )
+    df_idx_start = 0
     for rg_idx_start, cmpt_ends_excl in merge_sequences:
         # 1st loop over merge sequences.
         # Between each merge sequence, remainder is reset.

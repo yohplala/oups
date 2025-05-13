@@ -187,7 +187,7 @@ def write(
 
         ordered_parquet_dataset = ParquetHandle(dirpath, ordered_on=ordered_on, df_like=df)
     else:
-        # Case 'dirpath' is an OrderedParquetDataset.
+        # Case 'dirpath' is already an OrderedParquetDataset.
         ordered_parquet_dataset = dirpath
     opd_statistics = ordered_parquet_dataset.statistics
     # TODO: remove below check once OPD can be correctly initialized from
