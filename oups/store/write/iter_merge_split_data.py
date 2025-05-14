@@ -101,9 +101,7 @@ def iter_merge_split_data(
                 else opd[rg_idx_start:rg_idx_end_excl].to_pandas()
             )
             df_chunk = (
-                None
-                if (df_idx_start == df_idx_end_excl or df is None)
-                else df.iloc[df_idx_start:df_idx_end_excl]
+                None if df_idx_start == df_idx_end_excl else df.iloc[df_idx_start:df_idx_end_excl]
             )
             chunk = concat(
                 [

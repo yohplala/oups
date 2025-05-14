@@ -5,6 +5,7 @@ Created on Wed Dec  6 22:30:00 2021.
 @author: yoh
 
 """
+from importlib import import_module
 from typing import Dict, List, Optional, Tuple, Union
 
 from numpy import array
@@ -181,14 +182,14 @@ def write(
         except KeyError:
             # Check 'ordered_on' column is within input DataFrame.
             raise ValueError(f"column '{ordered_on}' does not exist in input DataFrame.")
-    if isinstance(dirpath, str):
+    ordered_parquet_dataset = (
         # Case 'dirpath' is a path to a directory.
-        from oups.store.router import ParquetHandle
-
-        ordered_parquet_dataset = ParquetHandle(dirpath, ordered_on=ordered_on, df_like=df)
-    else:
+        import_module("oups.store.router").ParquetHandle(dirpath, ordered_on=ordered_on, df_like=df)
+        if isinstance(dirpath, str)
+        else
         # Case 'dirpath' is already an OrderedParquetDataset.
-        ordered_parquet_dataset = dirpath
+        dirpath
+    )
     opd_statistics = ordered_parquet_dataset.statistics
     # TODO: remove below check once OPD can be correctly initialized from
     # scratch.
