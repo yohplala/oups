@@ -409,14 +409,18 @@ class OrderedParquetDataset2:
     def to_pandas(self):
         """
         Return data as a pandas dataframe.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Dataframe.
+
         """
         return DataFrame
 
 
 # TODO:
 # Create:
-#  - __init__
-#      - with sorting parquet file names if _opd_metadata is not existing
 #  - clean oups.store.write.write() and colllection.py
 #  - rename collection.py
 #  - remove vaex dependency
