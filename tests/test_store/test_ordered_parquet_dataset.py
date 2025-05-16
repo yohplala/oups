@@ -156,6 +156,8 @@ def test_opd2_write_metadata(tmp_path):
     assert opd2.rgs_stats.empty
     assert opd2.kvm == metadata_ref
 
+    # TODO: test with some binary data in metadata
+
 
 def test_opd2_write_row_group_files(tmp_path):
     opd1 = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
@@ -175,3 +177,5 @@ def test_opd2_write_row_group_files(tmp_path):
         },
     ).astype(RGS_STATS_BASE_DTYPES)
     assert opd1.rgs_stats.equals(rgs_stats_ref)
+
+    # TODO: modify with writing and checking metadata

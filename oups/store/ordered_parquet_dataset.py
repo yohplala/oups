@@ -39,6 +39,7 @@ ORDERED_ON_MIN = "ordered_on_min"
 ORDERED_ON_MAX = "ordered_on_max"
 N_ROWS = "n_rows"
 PART_ID = "part_id"
+# Do not change this order, it is expected by OrderedParquetDataset.write_row_group_files()
 RGS_STATS_COLUMNS = [ORDERED_ON_MIN, ORDERED_ON_MAX, N_ROWS, PART_ID]
 MIN_PART_ID_N_DIGITS = 4
 RGS_STATS_BASE_DTYPES = {
@@ -374,18 +375,19 @@ class OrderedParquetDataset2:
             Dataframes to write.
 
         """
-        ordered_on_mins = []
-        ordered_on_maxs = []
-        n_rows = []
+        buffer = []
         part_id = 0 if self.rgs_stats.empty else self.rgs_stats.loc[:, PART_ID].max()
-        part_ids = []
         part_id_n_digits = max(MIN_PART_ID_N_DIGITS, len(str(part_id)))
         for df in dfs:
-            ordered_on_mins.append(df.loc[:, self.ordered_on].iloc[0])
-            ordered_on_maxs.append(df.loc[:, self.ordered_on].iloc[-1])
-            n_rows.append(len(df))
             part_id += 1
-            part_ids.append(part_id)
+            buffer.append(
+                (
+                    df.loc[:, self.ordered_on].iloc[0],  # ordered_on_min
+                    df.loc[:, self.ordered_on].iloc[-1],  # ordered_on_max
+                    len(df),  # n_rows
+                    part_id,  # part_id
+                ),
+            )
             write_parquet(
                 df,
                 os_path.join(
@@ -396,14 +398,7 @@ class OrderedParquetDataset2:
         self.rgs_stats = concat(
             [
                 None if self.rgs_stats.empty else self.rgs_stats,
-                DataFrame(
-                    {
-                        ORDERED_ON_MIN: ordered_on_mins,
-                        ORDERED_ON_MAX: ordered_on_maxs,
-                        N_ROWS: n_rows,
-                        PART_ID: part_ids,
-                    },
-                ).astype(RGS_STATS_BASE_DTYPES),
+                DataFrame(data=buffer, columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES),
             ],
             ignore_index=True,
             copy=False,
