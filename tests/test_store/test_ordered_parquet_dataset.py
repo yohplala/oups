@@ -15,12 +15,20 @@ from os import path as os_path
 import numpy as np
 import pytest
 from fastparquet import ParquetFile
+from numpy import uint16
+from numpy import uint32
 from pandas import DataFrame
 from pandas import date_range
 from vaex.dataframe import DataFrame as vDataFrame
 
+from oups.defines import KEY_ORDERED_ON
 from oups.store.indexer import toplevel
+from oups.store.ordered_parquet_dataset import N_ROWS
+from oups.store.ordered_parquet_dataset import ORDERED_ON_MAX
+from oups.store.ordered_parquet_dataset import ORDERED_ON_MIN
+from oups.store.ordered_parquet_dataset import PART_ID
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
+from oups.store.ordered_parquet_dataset import OrderedParquetDataset2
 
 from .. import TEST_DATA
 
@@ -129,3 +137,42 @@ def test_exception_ordered_on_write(tmp_path):
     opd = OrderedParquetDataset(tmp_path, ordered_on="a", df_like=df)
     with pytest.raises(ValueError, match="^'ordered_on' attribute a is not "):
         opd.write(df=df, ordered_on="b")
+
+
+def test_opd2_init_empty(tmp_path):
+    opd = OrderedParquetDataset2(tmp_path, ordered_on="a")
+    assert opd.dirpath == tmp_path
+    assert opd.ordered_on == "a"
+    assert opd.rgs_stats.empty
+    assert opd.kvm == {KEY_ORDERED_ON: "a"}
+
+
+def test_opd2_write_metadata(tmp_path):
+    opd1 = OrderedParquetDataset2(tmp_path, ordered_on="a")
+    opd1.write_metadata(metadata={"a": "b"})
+    metadata_ref = {KEY_ORDERED_ON: "a", "a": "b"}
+    assert opd1.rgs_stats.empty
+    assert opd1.kvm == metadata_ref
+    opd2 = OrderedParquetDataset2(tmp_path)
+    assert opd2.rgs_stats.empty
+    assert opd2.kvm == metadata_ref
+
+
+def test_opd2_write_row_group_files(tmp_path):
+    opd1 = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
+    opd1.write_row_group_files([df_ref.iloc[:2], df_ref.iloc[2:]], write_opdmd=False)
+    rgs_stats_ref = DataFrame(
+        {
+            ORDERED_ON_MIN: [
+                np.datetime64(df_ref.loc[:, "timestamp"].iloc[0]),
+                np.datetime64(df_ref.loc[:, "timestamp"].iloc[2]),
+            ],
+            ORDERED_ON_MAX: [
+                np.datetime64(df_ref.loc[:, "timestamp"].iloc[1]),
+                np.datetime64(df_ref.loc[:, "timestamp"].iloc[3]),
+            ],
+            N_ROWS: [2, 2],
+            PART_ID: [1, 2],
+        },
+    ).astype({N_ROWS: uint32, PART_ID: uint16})
+    assert opd1.rgs_stats.equals(rgs_stats_ref)

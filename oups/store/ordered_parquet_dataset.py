@@ -5,18 +5,27 @@ Created on Wed Dec 26 22:30:00 2021.
 @author: yoh
 
 """
+from base64 import b64decode
+from base64 import b64encode
 from functools import cached_property
+from os import path as os_path
 from os import scandir
 from pickle import dumps
 from pickle import loads
-from typing import Dict
+from typing import Dict, Iterable
 
+# from pandas import read_parquet
+from arro3.io import read_parquet
+from arro3.io import write_parquet
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from fastparquet.api import statistics
 from fastparquet.util import update_custom_metadata
+from numpy import uint16
+from numpy import uint32
 from pandas import DataFrame
 from pandas import MultiIndex
+from pandas import concat
 from vaex import open_many
 
 from oups.defines import DIR_SEP
@@ -26,6 +35,17 @@ from oups.store.write import write
 
 EMPTY_DATAFRAME = DataFrame()
 KEY_ORDERED_ON = "ordered_on"
+ORDERED_ON_MIN = "ordered_on_min"
+ORDERED_ON_MAX = "ordered_on_max"
+N_ROWS = "n_rows"
+PART_ID = "part_id"
+RGS_STATS_COLUMNS = [ORDERED_ON_MIN, ORDERED_ON_MAX, N_ROWS, PART_ID]
+MIN_PART_ID_N_DIGITS = 4
+RGS_STATS_BASE_DTYPES = {
+    N_ROWS: uint32,
+    PART_ID: uint16,
+}
+EMPTY_RGS_STATS = DataFrame(columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES)
 
 
 def check_cmidx(cmidx: MultiIndex):
@@ -265,20 +285,146 @@ class OrderedParquetDataset(ParquetFile):
         self._write_common_metadata()
 
 
+class OrderedParquetDataset2:
+    """
+    Ordered Parquet Dataset.
+
+    Attributes
+    ----------
+    dirpath : str
+        Directory path from where to load data.
+    kvm : dict
+        Custom key-value metadata.
+    ordered_on : str
+        Column name to order row groups by.
+    rgs_stats : DataFrame
+        Row groups statistics.
+
+    Methods
+    -------
+    __getitem__()
+        Select among the row-groups using integer/slicing.
+    align_part_names()
+        Align part names to row group position in the dataset. Also format
+        part names to have the same number of digits.
+    sort_rgs()
+        Sort row groups according their min value in 'ordered_on' column.
+    to_pandas()
+        Return data as a pandas dataframe.
+    write()
+        Write data to disk.
+    write_metadata()
+        Write metadata to disk.
+    write_row_group_files()
+        Write row group as files to disk. One row group per file.
+
+    """
+
+    def __init__(self, dirpath: str, ordered_on: str = None):
+        """
+        Initialize OrderedParquetDataset.
+
+        Parameters
+        ----------
+        dirpath : str
+            Directory path from where to load data.
+        ordered_on : Optional[str], default None
+            Column name to order row groups by.
+
+        """
+        self.dirpath = dirpath
+        self.ordered_on = ordered_on
+        try:
+            record_batch = read_parquet(f"{self.dirpath}_opdmd").read_all()
+            self.rgs_stats = (
+                EMPTY_RGS_STATS
+                if len(record_batch) == 0
+                else DataFrame(record_batch.to_struct_array())
+            )
+            self.kvm = loads(
+                b64decode((record_batch.schema.metadata_str[OUPS_METADATA_KEY]).encode()),
+            )
+            if ordered_on is not None and self.kvm[KEY_ORDERED_ON] != self.ordered_on:
+                raise ValueError(
+                    f"ordered_on {self.kvm[KEY_ORDERED_ON]} in record dataset does not match {self.ordered_on} in constructor.",
+                )
+        except FileNotFoundError:
+            # Using an empty Dataframe so that it can be written in the case
+            # user is only using 'write_metadata()' without adding row groups.
+            self.rgs_stats = EMPTY_RGS_STATS
+            self.kvm = {KEY_ORDERED_ON: self.ordered_on}
+
+    def write_metadata(self, metadata: Dict[str, str] = None):
+        """
+        Write metadata to disk.
+        """
+        if metadata:
+            self.kvm.update(metadata)
+        write_parquet(
+            self.rgs_stats,
+            f"{self.dirpath}_opdmd",
+            key_value_metadata={OUPS_METADATA_KEY: b64encode(dumps(self.kvm)).decode()},
+        )
+
+    def write_row_group_files(self, dfs: Iterable[DataFrame], write_opdmd: bool = True):
+        """
+        Write row group as files to disk. One row group per file.
+
+        Parameters
+        ----------
+        dfs : Iterable[DataFrame]
+            Dataframes to write.
+
+        """
+        ordered_on_mins = []
+        ordered_on_maxs = []
+        n_rows = []
+        part_id = 0 if self.rgs_stats.empty else self.rgs_stats.loc[:, PART_ID].max()
+        part_ids = []
+        part_id_n_digits = max(MIN_PART_ID_N_DIGITS, len(str(part_id)))
+        for df in dfs:
+            ordered_on_mins.append(df.loc[:, self.ordered_on].iloc[0])
+            ordered_on_maxs.append(df.loc[:, self.ordered_on].iloc[-1])
+            n_rows.append(len(df))
+            part_id += 1
+            part_ids.append(part_id)
+            write_parquet(
+                df,
+                os_path.join(
+                    self.dirpath,
+                    f"part_{part_id:0{part_id_n_digits}}.parquet",
+                ),
+            )
+        self.rgs_stats = concat(
+            [
+                None if self.rgs_stats.empty else self.rgs_stats,
+                DataFrame(
+                    {
+                        ORDERED_ON_MIN: ordered_on_mins,
+                        ORDERED_ON_MAX: ordered_on_maxs,
+                        N_ROWS: n_rows,
+                        PART_ID: part_ids,
+                    },
+                ).astype(RGS_STATS_BASE_DTYPES),
+            ],
+            ignore_index=True,
+            copy=False,
+        )
+        if write_opdmd:
+            self.write_metadata()
+
+    def to_pandas(self):
+        """
+        Return data as a pandas dataframe.
+        """
+        return DataFrame
+
+
 # TODO:
 # Create:
 #  - __init__
 #      - with sorting parquet file names if _opd_metadata is not existing
-#  - write_metadata()
-#  - write_row_group_files()
-#  - to_pandas()
-#  - getitem()
-#  - align_part_names()
-#      - check beforehand how many digit is max part number to set appropriate
-#        number of leading zeros
-#  - sort_rgs() ?
 #  - clean oups.store.write.write() and colllection.py
-#  - rename ParquetHandle to OrderedParquetDataset
-#  - rename collection.py and router.py
+#  - rename collection.py
 #  - remove vaex dependency
 #  - set numpy above 2.0
