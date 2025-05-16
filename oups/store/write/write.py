@@ -184,7 +184,11 @@ def write(
             raise ValueError(f"column '{ordered_on}' does not exist in input DataFrame.")
     ordered_parquet_dataset = (
         # Case 'dirpath' is a path to a directory.
-        import_module("oups.store.router").ParquetHandle(dirpath, ordered_on=ordered_on, df_like=df)
+        import_module("oups.store.ordered_parquet_dataset").OrderedParquetDataset(
+            dirpath,
+            ordered_on=ordered_on,
+            df_like=df,
+        )
         if isinstance(dirpath, str)
         else
         # Case 'dirpath' is already an OrderedParquetDataset.

@@ -39,7 +39,7 @@ from oups.defines import KEY_DUPLICATES_ON
 from oups.defines import KEY_ORDERED_ON
 from oups.defines import OUPS_METADATA_KEY
 from oups.store import ParquetSet
-from oups.store.router import ParquetHandle
+from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
 from oups.store.write import write
 
@@ -93,7 +93,7 @@ FilterApp = namedtuple("FilterApp", "keys n_jobs")
 AggResType = Enum("AggResType", ["BINS", "SNAPS", "BOTH"])
 
 
-def _is_aggstream_result(handle: ParquetHandle) -> bool:
+def _is_aggstream_result(handle: OrderedParquetDataset) -> bool:
     """
     Check if input handle is that of a dataset produced by streamagg.
 

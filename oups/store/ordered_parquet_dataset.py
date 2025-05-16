@@ -53,7 +53,7 @@ def check_cmidx(cmidx: MultiIndex):
                 raise TypeError(f"name {name} has to be of type 'string', not '{type(name)}'.")
 
 
-class ParquetHandle(ParquetFile):
+class OrderedParquetDataset(ParquetFile):
     """
     Handle to parquet dataset and statistics on disk.
 
