@@ -335,14 +335,12 @@ class OrderedParquetDataset2:
         self.dirpath = dirpath
         self.ordered_on = ordered_on
         try:
-            record_batch = read_parquet(f"{self.dirpath}_opdmd").read_all()
+            table = read_parquet(f"{self.dirpath}_opdmd").read_all()
             self.rgs_stats = (
-                EMPTY_RGS_STATS
-                if len(record_batch) == 0
-                else DataFrame(record_batch.to_struct_array())
+                EMPTY_RGS_STATS if len(table) == 0 else DataFrame(table.to_struct_array())
             )
             self.kvm = loads(
-                b64decode((record_batch.schema.metadata_str[OUPS_METADATA_KEY]).encode()),
+                b64decode((table.schema.metadata_str[OUPS_METADATA_KEY]).encode()),
             )
             if ordered_on is not None and self.kvm[KEY_ORDERED_ON] != self.ordered_on:
                 raise ValueError(

@@ -15,8 +15,6 @@ from os import path as os_path
 import numpy as np
 import pytest
 from fastparquet import ParquetFile
-from numpy import uint16
-from numpy import uint32
 from pandas import DataFrame
 from pandas import date_range
 from vaex.dataframe import DataFrame as vDataFrame
@@ -27,6 +25,7 @@ from oups.store.ordered_parquet_dataset import N_ROWS
 from oups.store.ordered_parquet_dataset import ORDERED_ON_MAX
 from oups.store.ordered_parquet_dataset import ORDERED_ON_MIN
 from oups.store.ordered_parquet_dataset import PART_ID
+from oups.store.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset2
 
@@ -174,5 +173,5 @@ def test_opd2_write_row_group_files(tmp_path):
             N_ROWS: [2, 2],
             PART_ID: [1, 2],
         },
-    ).astype({N_ROWS: uint32, PART_ID: uint16})
+    ).astype(RGS_STATS_BASE_DTYPES)
     assert opd1.rgs_stats.equals(rgs_stats_ref)
