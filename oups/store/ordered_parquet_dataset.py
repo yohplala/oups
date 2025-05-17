@@ -371,6 +371,7 @@ class OrderedParquetDataset2:
         self.ordered_on = ordered_on
         try:
             table = read_parquet(f"{self.dirpath}_opdmd").read_all()
+            # TODO: it seems that check on length is not required.
             self.row_group_stats = (
                 EMPTY_RGS_STATS
                 if len(table) == 0
