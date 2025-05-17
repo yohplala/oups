@@ -353,7 +353,7 @@ def test_by_scale(
         ),
     ],
 )
-def test_by_scale_exceptions_if_datetimeindex(by, closed, exception_mess):
+def test_exception_by_scale_datetimeindex(by, closed, exception_mess):
     on = Series(date_range("2020/01/01 07:59", "2020/01/01 07:09", freq="2min"))
     with pytest.raises(ValueError, match=exception_mess):
         by_scale(on, by, closed)
@@ -460,7 +460,7 @@ def test_mergesort_labels_and_keys_force_last():
         ),
     ],
 )
-def test_mergesort_exceptions_array_length(labels1, labels2, exception_mess):
+def test_exception_mergesort_array_length(labels1, labels2, exception_mess):
     # Test data
     keys1 = array([1], dtype="int64")
     keys2 = array([2], dtype="int64")
@@ -607,7 +607,7 @@ def test_setup_segmentby(
         ),
     ],
 )
-def test_setup_segmentby_exception(bin_by, bin_on, ordered_on, snap_by, regex_ref):
+def test_exception_setup_segmentby(bin_by, bin_on, ordered_on, snap_by, regex_ref):
     with pytest.raises(ValueError, match=regex_ref):
         setup_segmentby(bin_by, bin_on, ordered_on, snap_by)
 
@@ -902,7 +902,7 @@ def test_segmentby_with_outer_setup():
     assert n_max_null_snaps == 2
 
 
-def test_segmentby_binby_exceptions():
+def test_exception_segmentby_binby_invalid_return():
     # Check when 'next_chunk_starts', 'chunk_labels' and 'chunk_ends' from
     # 'bin_by' as a Callable are not all of the same length.
     bin_on = "dti"
@@ -935,7 +935,7 @@ def test_segmentby_binby_exceptions():
         segmentby(data=data, bin_by=None, bin_on=bin_on)
 
 
-def test_segmentby_orderedon_exceptions():
+def test_exception_segmentby_ordered_on():
     # Check when 'ordered_on' is not ordered.
     bin_on = "ordered_on"
     bin_by = TimeGrouper(key=bin_on, freq="2min")

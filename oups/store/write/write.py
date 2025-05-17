@@ -248,6 +248,10 @@ def write(
         )
         # Remove row groups of data that is overlapping.
         for rg_idx_start_end_excl in merge_split_strategy.rg_idx_mrs_starts_ends_excl:
+            # TODO: this method is flawed, it should be based on 'file_ids',
+            # which do not change when removing row groups, while
+            # row group indexes (position in dataset) do.
+            # raise ValueError("not implemented yet")
             ordered_parquet_dataset.remove_row_groups(
                 ordered_parquet_dataset[rg_idx_start_end_excl].row_groups,
                 write_fmd=False,

@@ -10,9 +10,10 @@ from base64 import b64encode
 from functools import cached_property
 from os import path as os_path
 from os import scandir
+from pathlib import Path
 from pickle import dumps
 from pickle import loads
-from typing import Dict, Iterable
+from typing import Dict, Iterable, List
 
 # from pandas import read_parquet
 from arro3.io import read_parquet
@@ -21,6 +22,7 @@ from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from fastparquet.api import statistics
 from fastparquet.util import update_custom_metadata
+from numpy import iinfo
 from numpy import uint16
 from numpy import uint32
 from pandas import DataFrame
@@ -35,18 +37,38 @@ from oups.store.write import write
 
 EMPTY_DATAFRAME = DataFrame()
 KEY_ORDERED_ON = "ordered_on"
-ORDERED_ON_MIN = "ordered_on_min"
-ORDERED_ON_MAX = "ordered_on_max"
+ORDERED_ON_MINS = "ordered_on_mins"
+ORDERED_ON_MAXS = "ordered_on_maxs"
 N_ROWS = "n_rows"
-PART_ID = "part_id"
+FILE_IDS = "file_ids"
 # Do not change this order, it is expected by OrderedParquetDataset.write_row_group_files()
-RGS_STATS_COLUMNS = [ORDERED_ON_MIN, ORDERED_ON_MAX, N_ROWS, PART_ID]
-MIN_PART_ID_N_DIGITS = 4
+RGS_STATS_COLUMNS = [ORDERED_ON_MINS, ORDERED_ON_MAXS, N_ROWS, FILE_IDS]
 RGS_STATS_BASE_DTYPES = {
     N_ROWS: uint32,
-    PART_ID: uint16,
+    FILE_IDS: uint16,
 }
 EMPTY_RGS_STATS = DataFrame(columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES)
+
+
+def MAX_FILE_ID():
+    """
+    Return maximum allowed file id.
+    """
+    return iinfo(RGS_STATS_BASE_DTYPES[FILE_IDS]).max
+
+
+def FILE_ID_N_DIGITS():
+    """
+    Return number of digits imposed to format file ids in file names.
+    """
+    return len(str(MAX_FILE_ID()))
+
+
+def MAX_N_ROWS():
+    """
+    Return maximum allowed number of rows in a row group.
+    """
+    return iinfo(RGS_STATS_BASE_DTYPES[N_ROWS]).max
 
 
 def check_cmidx(cmidx: MultiIndex):
@@ -298,16 +320,18 @@ class OrderedParquetDataset2:
         Custom key-value metadata.
     ordered_on : str
         Column name to order row groups by.
-    rgs_stats : DataFrame
+    row_group_stats : DataFrame
         Row groups statistics.
 
     Methods
     -------
     __getitem__()
         Select among the row-groups using integer/slicing.
-    align_part_names()
-        Align part names to row group position in the dataset. Also format
-        part names to have the same number of digits.
+    align_file_ids()
+        Align file ids to row group position in the dataset.
+    remove_row_group_files()
+        Remove row group files from disk. Row group indexes are also removed
+        from OrderedParquetDataset.row_group_stats.
     sort_rgs()
         Sort row groups according their min value in 'ordered_on' column.
     to_pandas()
@@ -318,6 +342,16 @@ class OrderedParquetDataset2:
         Write metadata to disk.
     write_row_group_files()
         Write row group as files to disk. One row group per file.
+
+    Notes
+    -----
+    - There is one row group per file.
+    - Dataset metadata are written in a separate file in parquet format, located
+      at the same level than the dataset directory (not within the directory).
+      This way, if provided the directory path, another parquet reader can read
+      the dataset without being confused by this metadata file.
+    - File ids (in file names) have the same number of digits. This is to ensure
+      that files can be read in the correct order by other parquet readers.
 
     """
 
@@ -337,8 +371,10 @@ class OrderedParquetDataset2:
         self.ordered_on = ordered_on
         try:
             table = read_parquet(f"{self.dirpath}_opdmd").read_all()
-            self.rgs_stats = (
-                EMPTY_RGS_STATS if len(table) == 0 else DataFrame(table.to_struct_array())
+            self.row_group_stats = (
+                EMPTY_RGS_STATS
+                if len(table) == 0
+                else DataFrame(table.to_struct_array().to_numpy())
             )
             self.kvm = loads(
                 b64decode((table.schema.metadata_str[OUPS_METADATA_KEY]).encode()),
@@ -350,8 +386,50 @@ class OrderedParquetDataset2:
         except FileNotFoundError:
             # Using an empty Dataframe so that it can be written in the case
             # user is only using 'write_metadata()' without adding row groups.
-            self.rgs_stats = EMPTY_RGS_STATS
+            self.row_group_stats = EMPTY_RGS_STATS
             self.kvm = {KEY_ORDERED_ON: self.ordered_on}
+
+    def align_file_ids(self):
+        """
+        Align file ids to row group position in the dataset.
+
+        This method also formats file ids in file names to have the same number
+        of digits.
+
+        Notes
+        -----
+        - Enforcing file ids number of digits is done so that the files of
+          dataset can be read seamlessly in the correct order by other parquet
+          readers.
+
+        """
+        pass
+
+    def remove_row_group_files(self, file_ids: List[int]):
+        """
+        Remove row group files from disk.
+
+        Row group indexes are also removed from 'self.row_group_stats'.
+
+        Parameters
+        ----------
+        file_ids : Iterable[int]
+            File ids to remove.
+
+        """
+        pass
+
+    def to_pandas(self):
+        """
+        Return data as a pandas dataframe.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Dataframe.
+
+        """
+        pass
 
     def write_metadata(self, metadata: Dict[str, str] = None):
         """
@@ -360,7 +438,7 @@ class OrderedParquetDataset2:
         if metadata:
             self.kvm.update(metadata)
         write_parquet(
-            self.rgs_stats,
+            self.row_group_stats,
             f"{self.dirpath}_opdmd",
             key_value_metadata={OUPS_METADATA_KEY: b64encode(dumps(self.kvm)).decode()},
         )
@@ -376,47 +454,55 @@ class OrderedParquetDataset2:
 
         """
         buffer = []
-        part_id = 0 if self.rgs_stats.empty else self.rgs_stats.loc[:, PART_ID].max()
-        part_id_n_digits = max(MIN_PART_ID_N_DIGITS, len(str(part_id)))
+        file_id = (
+            0 if self.row_group_stats.empty else self.row_group_stats.loc[:, FILE_IDS].max() + 1
+        )
+        max_file_id_exceeded = False
+        max_n_rows_exceeded = False
+        Path(self.dirpath).mkdir(parents=True, exist_ok=True)
         for df in dfs:
-            part_id += 1
+            if file_id > MAX_FILE_ID():
+                max_file_id_exceeded = True
+                break
+            if len(df) > MAX_N_ROWS():
+                max_n_rows_exceeded = True
+                break
             buffer.append(
                 (
-                    df.loc[:, self.ordered_on].iloc[0],  # ordered_on_min
-                    df.loc[:, self.ordered_on].iloc[-1],  # ordered_on_max
+                    df.loc[:, self.ordered_on].iloc[0],  # ordered_on_mins
+                    df.loc[:, self.ordered_on].iloc[-1],  # ordered_on_maxs
                     len(df),  # n_rows
-                    part_id,  # part_id
+                    file_id,  # file_ids
                 ),
             )
             write_parquet(
                 df,
                 os_path.join(
                     self.dirpath,
-                    f"part_{part_id:0{part_id_n_digits}}.parquet",
+                    f"file_{file_id:0{FILE_ID_N_DIGITS()}}.parquet",
                 ),
             )
-        self.rgs_stats = concat(
+            file_id += 1
+        self.row_group_stats = concat(
             [
-                None if self.rgs_stats.empty else self.rgs_stats,
+                None if self.row_group_stats.empty else self.row_group_stats,
                 DataFrame(data=buffer, columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES),
             ],
             ignore_index=True,
             copy=False,
         )
-        if write_opdmd:
+        if write_opdmd or max_file_id_exceeded or max_n_rows_exceeded:
             self.write_metadata()
-
-    def to_pandas(self):
-        """
-        Return data as a pandas dataframe.
-
-        Returns
-        -------
-        pandas.DataFrame
-            Dataframe.
-
-        """
-        return DataFrame
+        if max_file_id_exceeded:
+            raise ValueError(
+                f"file id {file_id} exceeds max value {MAX_FILE_ID()}. "
+                "Metadata has been written before the exception has been raised.",
+            )
+        if max_n_rows_exceeded:
+            raise ValueError(
+                f"number of rows {len(df)} exceeds max value {MAX_N_ROWS()}. "
+                "Metadata has been written before the exception has been raised.",
+            )
 
 
 # TODO:
@@ -425,3 +511,6 @@ class OrderedParquetDataset2:
 #  - rename collection.py
 #  - remove vaex dependency
 #  - set numpy above 2.0
+#  - test case when reaching MAX_FILE_ID
+#  - test case in write when removing 2 sequence of row groups, to check that
+#    when not based on row group indexes, but on file_ids, it works.

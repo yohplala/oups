@@ -520,7 +520,7 @@ def test_exception_not_key_of_streamagg_results(store):
         ),
     ],
 )
-def test_exceptions_Aggstream_parameters(store, other_parameters, exception_mess):
+def test_exception_aggstream_parameters(store, other_parameters, exception_mess):
     ordered_on = "ts"
     conf = {
         "store": store,

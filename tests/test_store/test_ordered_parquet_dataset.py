@@ -15,16 +15,18 @@ from os import path as os_path
 import numpy as np
 import pytest
 from fastparquet import ParquetFile
+from numpy import iinfo
+from numpy import int8
 from pandas import DataFrame
 from pandas import date_range
 from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.defines import KEY_ORDERED_ON
 from oups.store.indexer import toplevel
+from oups.store.ordered_parquet_dataset import FILE_IDS
 from oups.store.ordered_parquet_dataset import N_ROWS
-from oups.store.ordered_parquet_dataset import ORDERED_ON_MAX
-from oups.store.ordered_parquet_dataset import ORDERED_ON_MIN
-from oups.store.ordered_parquet_dataset import PART_ID
+from oups.store.ordered_parquet_dataset import ORDERED_ON_MAXS
+from oups.store.ordered_parquet_dataset import ORDERED_ON_MINS
 from oups.store.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset2
@@ -138,44 +140,114 @@ def test_exception_ordered_on_write(tmp_path):
         opd.write(df=df, ordered_on="b")
 
 
-def test_opd2_init_empty(tmp_path):
+def test_opd_init_empty(tmp_path):
     opd = OrderedParquetDataset2(tmp_path, ordered_on="a")
     assert opd.dirpath == tmp_path
     assert opd.ordered_on == "a"
-    assert opd.rgs_stats.empty
+    assert opd.row_group_stats.empty
     assert opd.kvm == {KEY_ORDERED_ON: "a"}
 
 
-def test_opd2_write_metadata(tmp_path):
+def test_opd_write_metadata(tmp_path):
     opd1 = OrderedParquetDataset2(tmp_path, ordered_on="a")
     opd1.write_metadata(metadata={"a": "b"})
     metadata_ref = {KEY_ORDERED_ON: "a", "a": "b"}
-    assert opd1.rgs_stats.empty
+    assert opd1.row_group_stats.empty
     assert opd1.kvm == metadata_ref
     opd2 = OrderedParquetDataset2(tmp_path)
-    assert opd2.rgs_stats.empty
+    assert opd2.row_group_stats.empty
     assert opd2.kvm == metadata_ref
 
     # TODO: test with some binary data in metadata
 
 
-def test_opd2_write_row_group_files(tmp_path):
+def test_opd_write_row_group_files(tmp_path):
     opd1 = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
     opd1.write_row_group_files([df_ref.iloc[:2], df_ref.iloc[2:]], write_opdmd=False)
     rgs_stats_ref = DataFrame(
         {
-            ORDERED_ON_MIN: [
+            ORDERED_ON_MINS: [
                 np.datetime64(df_ref.loc[:, "timestamp"].iloc[0]),
                 np.datetime64(df_ref.loc[:, "timestamp"].iloc[2]),
             ],
-            ORDERED_ON_MAX: [
+            ORDERED_ON_MAXS: [
                 np.datetime64(df_ref.loc[:, "timestamp"].iloc[1]),
                 np.datetime64(df_ref.loc[:, "timestamp"].iloc[3]),
             ],
             N_ROWS: [2, 2],
-            PART_ID: [1, 2],
+            FILE_IDS: [0, 1],
         },
     ).astype(RGS_STATS_BASE_DTYPES)
-    assert opd1.rgs_stats.equals(rgs_stats_ref)
+    assert opd1.row_group_stats.equals(rgs_stats_ref)
 
     # TODO: modify with writing and checking metadata
+
+
+def test_exception_opd_write_row_group_files_max_file_id_reached(tmp_path, monkeypatch):
+    """
+    Test error when reaching maximum file ID.
+    """
+    # Modify RGS_STATS_BASE_DTYPES to use int8 for FILE_IDS which has a lower max value
+    int8_type = int8
+    exceeding_max_n_files = iinfo(int8_type).max + 2
+    # Patch the RGS_STATS_BASE_DTYPES dictionary
+    monkeypatch.setitem(RGS_STATS_BASE_DTYPES, FILE_IDS, int8_type)
+
+    opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
+    # Create iterable of dataframes.
+    large_df = DataFrame(
+        {
+            "timestamp": date_range("2021/01/01", periods=exceeding_max_n_files, freq="1min"),
+            "value": range(exceeding_max_n_files),
+        },
+    )
+
+    def dataframes():
+        for _, new_row in large_df.iterrows():
+            yield DataFrame([new_row.to_list()], columns=new_row.index)
+
+    dataframes = list(dataframes())
+    # Write max_file_id dataframes.
+    opd.write_row_group_files(dataframes[: exceeding_max_n_files - 2], write_opdmd=True)
+
+    opd_tmp = OrderedParquetDataset2(tmp_path)
+    assert opd_tmp.row_group_stats.loc[:, FILE_IDS].iloc[-1] == exceeding_max_n_files - 3
+
+    # Try to write one more.
+    max_n_files = exceeding_max_n_files - 1
+    with pytest.raises(
+        ValueError,
+        match=f"^file id {max_n_files} exceeds max value {max_n_files-1}",
+    ):
+        opd.write_row_group_files(dataframes[max_n_files:], write_opdmd=False)
+
+    opd_tmp = OrderedParquetDataset2(tmp_path)
+    # Check that the opmd file has been correctly rewritten.
+    assert opd_tmp.row_group_stats.loc[:, FILE_IDS].iloc[-1] == exceeding_max_n_files - 2
+
+
+def test_exception_opd_write_row_group_files_max_n_rows_reached(tmp_path, monkeypatch):
+    """
+    Test error when reaching maximum number of rows.
+    """
+    # Modify RGS_STATS_BASE_DTYPES to use int8 for N_ROWS which has a lower max value
+    int8_type = int8
+    exceeding_max_n_rows = iinfo(int8_type).max + 1
+    # Patch the RGS_STATS_BASE_DTYPES dictionary
+    monkeypatch.setitem(RGS_STATS_BASE_DTYPES, N_ROWS, int8_type)
+
+    opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
+    # Create a dataframe with more rows than the max
+    large_df = DataFrame(
+        {
+            "timestamp": date_range("2021/01/01", periods=exceeding_max_n_rows, freq="1min"),
+            "temperature": [20.0] * (exceeding_max_n_rows),
+        },
+    )
+
+    # Try to write the large dataframe (this should fail)
+    with pytest.raises(
+        ValueError,
+        match=f"^number of rows {exceeding_max_n_rows} exceeds max value {exceeding_max_n_rows-1}",
+    ):
+        opd.write_row_group_files([large_df])
