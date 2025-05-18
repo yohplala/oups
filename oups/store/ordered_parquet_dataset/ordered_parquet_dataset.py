@@ -330,6 +330,8 @@ class OrderedParquetDataset2:
         Maximum allowed number of rows in a row group. Kept as hidden
         attribute to avoid recomputing it at each call in
         'write_row_group_files()'.
+    dirpath : str
+        Directory path from where to load data.
     forbidden_to_write_row_group_files : bool
         Flag warning if writing is blocked. Writing is blocked when the opd
         object is a subset (use of '_getitem__' method).
@@ -346,8 +348,6 @@ class OrderedParquetDataset2:
         involving the current opd object has been completed first.
         It is anticipated/expected that the completion of such a process
         involves a 'write_metadata()' step.
-    dirpath : str
-        Directory path from where to load data.
     kvm : dict
         Key-value metadata, from user and including 'ordered_on' column name.
     ordered_on : str
@@ -455,11 +455,11 @@ class OrderedParquetDataset2:
             "_file_id_n_digits": self._file_id_n_digits,
             "_max_file_id": self._max_file_id,
             "_max_n_rows": self._max_n_rows,
+            "dirpath": self.dirpath,
             "forbidden_to_write_row_group_files": True,
             "forbidden_to_remove_row_group_files": self.forbidden_to_remove_row_group_files,
-            "dirpath": self.dirpath,
-            "ordered_on": self.ordered_on,
             "kvm": deepcopy(self.kvm),
+            "ordered_on": self.ordered_on,
             "row_group_stats": new_row_group_stats,
         }
         return new_opd
@@ -496,6 +496,25 @@ class OrderedParquetDataset2:
         ----------
         file_ids : Iterable[int]
             File ids to remove.
+
+        Notes
+        -----
+        It is anticipated that 'file_ids' may be generate from row group
+        indexes. If definition of 'file_ids' from row group indexes occurs in a
+        loop where 'remove_row_group_files()' is called, and that row group
+        indexes are defined before execution of the loop, then row group indexes
+        may not be valid anylonger at a next iteration.
+        To mitigate this issue, removing is blocked after running
+        'remove_row_group_files()' by using the
+        'forbidden_to_remove_row_group_files' flag.
+         This flag is a security to prevent iterating 'remove_row_group_files()'
+        method without the sense that the process involving the current opd
+        object has been completed first. It is anticipated/expected that the
+        completion of such a process involves a 'write_metadata()' step.
+        For this reason, writing opdmd data right after removing row group files
+        is not proposed either.
+        The 'forbidden_to_remove_row_group_files' flag is then reset when
+        'write_metadata()' method is called.
 
         """
         if self.forbidden_to_remove_row_group_files:
