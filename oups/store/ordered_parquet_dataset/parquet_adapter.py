@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""
+Created on Sun May 18 16:00:00 2025.
+
+@author: yoh
+
+"""
+from base64 import b64decode
+from base64 import b64encode
+from pickle import dumps
+from pickle import loads
+from typing import Dict
+
+from pandas import DataFrame
+
+from oups.defines import OUPS_METADATA_KEY
+
+
+class ParquetAdapter:
+    """
+    Adapter for working either with fastparquet or arro3.
+    """
+
+    def __init__(self, use_arro3=False):
+        """
+        Initialize ParquetAdapter.
+        """
+        self.use_arro3 = use_arro3
+
+    def write_parquet(self, path, df: DataFrame, metadata: Dict = None, **kwargs):
+        """
+        Write DataFrame to parquet with unified interface.
+        """
+        if self.use_arro3:
+            from arro3.io import write_parquet
+
+            metadata = (
+                {OUPS_METADATA_KEY: b64encode(dumps(metadata)).decode()} if metadata else None
+            )
+            write_parquet(df, path, key_value_metadata=metadata, **kwargs)
+        else:
+            from fastparquet import write
+
+            metadata = {OUPS_METADATA_KEY: dumps(metadata)} if metadata else None
+            write(
+                path,
+                df,
+                custom_metadata=metadata,
+                file_scheme="simple",
+                **kwargs,
+            )
+
+    def read_parquet(self, path, return_metadata: bool = True, **kwargs):
+        """
+        Read parquet and metadata with unified interface.
+        """
+        if self.use_arro3:
+            from arro3.io import read_parquet
+
+            table = read_parquet(path).read_all()
+            df = DataFrame(table.to_struct_array().to_numpy())
+            metadata = (
+                loads(b64decode((table.schema.metadata_str[OUPS_METADATA_KEY]).encode()))
+                if return_metadata
+                else None
+            )
+        else:
+            from fastparquet import ParquetFile
+
+            pf = ParquetFile(path)
+            df = pf.to_pandas()
+            metadata = loads(pf.key_value_metadata[OUPS_METADATA_KEY]) if return_metadata else None
+
+        return df, metadata if return_metadata else df

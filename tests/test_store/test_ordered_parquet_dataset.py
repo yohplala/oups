@@ -18,18 +18,19 @@ from fastparquet import ParquetFile
 from numpy import iinfo
 from numpy import int8
 from pandas import DataFrame
+from pandas import Timestamp
 from pandas import date_range
 from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.defines import KEY_ORDERED_ON
 from oups.store.indexer import toplevel
-from oups.store.ordered_parquet_dataset import FILE_IDS
-from oups.store.ordered_parquet_dataset import N_ROWS
-from oups.store.ordered_parquet_dataset import ORDERED_ON_MAXS
-from oups.store.ordered_parquet_dataset import ORDERED_ON_MINS
-from oups.store.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
-from oups.store.ordered_parquet_dataset import OrderedParquetDataset
-from oups.store.ordered_parquet_dataset import OrderedParquetDataset2
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import FILE_IDS
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import N_ROWS
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import ORDERED_ON_MAXS
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import ORDERED_ON_MINS
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset2
 
 from .. import TEST_DATA
 
@@ -150,20 +151,20 @@ def test_opd_init_empty(tmp_path):
 
 def test_opd_write_metadata(tmp_path):
     opd1 = OrderedParquetDataset2(tmp_path, ordered_on="a")
-    opd1.write_metadata(metadata={"a": "b"})
-    metadata_ref = {KEY_ORDERED_ON: "a", "a": "b"}
+    additional_metadata_in = {"a": "b", "ts": Timestamp("2021-01-01")}
+    opd1.write_metadata(metadata=additional_metadata_in)
+    metadata_ref = {KEY_ORDERED_ON: "a", **additional_metadata_in}
     assert opd1.row_group_stats.empty
     assert opd1.kvm == metadata_ref
     opd2 = OrderedParquetDataset2(tmp_path)
     assert opd2.row_group_stats.empty
     assert opd2.kvm == metadata_ref
 
-    # TODO: test with some binary data in metadata
 
-
-def test_opd_write_row_group_files(tmp_path):
+@pytest.mark.parametrize("write_opdmd", [False, True])
+def test_opd_write_row_group_files(tmp_path, write_opdmd):
     opd1 = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
-    opd1.write_row_group_files([df_ref.iloc[:2], df_ref.iloc[2:]], write_opdmd=False)
+    opd1.write_row_group_files([df_ref.iloc[:2], df_ref.iloc[2:]], write_opdmd=write_opdmd)
     rgs_stats_ref = DataFrame(
         {
             ORDERED_ON_MINS: [
@@ -179,8 +180,9 @@ def test_opd_write_row_group_files(tmp_path):
         },
     ).astype(RGS_STATS_BASE_DTYPES)
     assert opd1.row_group_stats.equals(rgs_stats_ref)
-
-    # TODO: modify with writing and checking metadata
+    if write_opdmd:
+        opd2 = OrderedParquetDataset2(tmp_path)
+        assert opd2.row_group_stats.equals(rgs_stats_ref)
 
 
 def test_exception_opd_write_row_group_files_max_file_id_reached(tmp_path, monkeypatch):
@@ -207,23 +209,23 @@ def test_exception_opd_write_row_group_files_max_file_id_reached(tmp_path, monke
             yield DataFrame([new_row.to_list()], columns=new_row.index)
 
     dataframes = list(dataframes())
+    max_file_id = exceeding_max_n_files - 2
     # Write max_file_id dataframes.
-    opd.write_row_group_files(dataframes[: exceeding_max_n_files - 2], write_opdmd=True)
+    opd.write_row_group_files(dataframes[:max_file_id], write_opdmd=True)
 
     opd_tmp = OrderedParquetDataset2(tmp_path)
-    assert opd_tmp.row_group_stats.loc[:, FILE_IDS].iloc[-1] == exceeding_max_n_files - 3
+    assert opd_tmp.row_group_stats.loc[:, FILE_IDS].iloc[-1] == max_file_id - 1
 
     # Try to write one more.
-    max_n_files = exceeding_max_n_files - 1
     with pytest.raises(
         ValueError,
-        match=f"^file id {max_n_files} exceeds max value {max_n_files-1}",
+        match=f"^file id {max_file_id+1} exceeds max value {max_file_id}",
     ):
-        opd.write_row_group_files(dataframes[max_n_files:], write_opdmd=False)
+        opd.write_row_group_files(dataframes[max_file_id:], write_opdmd=False)
 
     opd_tmp = OrderedParquetDataset2(tmp_path)
     # Check that the opmd file has been correctly rewritten.
-    assert opd_tmp.row_group_stats.loc[:, FILE_IDS].iloc[-1] == exceeding_max_n_files - 2
+    assert opd_tmp.row_group_stats.loc[:, FILE_IDS].iloc[-1] == max_file_id
 
 
 def test_exception_opd_write_row_group_files_max_n_rows_reached(tmp_path, monkeypatch):

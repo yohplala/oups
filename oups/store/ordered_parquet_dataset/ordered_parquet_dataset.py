@@ -5,8 +5,6 @@ Created on Wed Dec 26 22:30:00 2021.
 @author: yoh
 
 """
-from base64 import b64decode
-from base64 import b64encode
 from functools import cached_property
 from os import path as os_path
 from os import scandir
@@ -15,9 +13,6 @@ from pickle import dumps
 from pickle import loads
 from typing import Dict, Iterable, List
 
-# from pandas import read_parquet
-from arro3.io import read_parquet
-from arro3.io import write_parquet
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
 from fastparquet.api import statistics
@@ -32,6 +27,7 @@ from vaex import open_many
 
 from oups.defines import DIR_SEP
 from oups.defines import OUPS_METADATA_KEY
+from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.write import write
 
 
@@ -308,6 +304,9 @@ class OrderedParquetDataset(ParquetFile):
         self._write_common_metadata()
 
 
+parquet_adapter = ParquetAdapter(use_arro3=False)
+
+
 class OrderedParquetDataset2:
     """
     Ordered Parquet Dataset.
@@ -370,15 +369,9 @@ class OrderedParquetDataset2:
         self.dirpath = dirpath
         self.ordered_on = ordered_on
         try:
-            table = read_parquet(f"{self.dirpath}_opdmd").read_all()
-            # TODO: it seems that check on length is not required.
-            self.row_group_stats = (
-                EMPTY_RGS_STATS
-                if len(table) == 0
-                else DataFrame(table.to_struct_array().to_numpy())
-            )
-            self.kvm = loads(
-                b64decode((table.schema.metadata_str[OUPS_METADATA_KEY]).encode()),
+            self.row_group_stats, self.kvm = parquet_adapter.read_parquet(
+                f"{self.dirpath}_opdmd",
+                return_metadata=True,
             )
             if ordered_on is not None and self.kvm[KEY_ORDERED_ON] != self.ordered_on:
                 raise ValueError(
@@ -438,10 +431,10 @@ class OrderedParquetDataset2:
         """
         if metadata:
             self.kvm.update(metadata)
-        write_parquet(
-            self.row_group_stats,
+        parquet_adapter.write_parquet(
             f"{self.dirpath}_opdmd",
-            key_value_metadata={OUPS_METADATA_KEY: b64encode(dumps(self.kvm)).decode()},
+            self.row_group_stats,
+            metadata=self.kvm,
         )
 
     def write_row_group_files(self, dfs: Iterable[DataFrame], write_opdmd: bool = True):
@@ -476,12 +469,12 @@ class OrderedParquetDataset2:
                     file_id,  # file_ids
                 ),
             )
-            write_parquet(
-                df,
+            parquet_adapter.write_parquet(
                 os_path.join(
                     self.dirpath,
                     f"file_{file_id:0{FILE_ID_N_DIGITS()}}.parquet",
                 ),
+                df,
             )
             file_id += 1
         self.row_group_stats = concat(
@@ -508,6 +501,7 @@ class OrderedParquetDataset2:
 
 # TODO:
 # Create:
+#  - __len__: number of row_groups to check if empty opd or not?
 #  - clean oups.store.write.write() and colllection.py
 #  - rename collection.py
 #  - remove vaex dependency

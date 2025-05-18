@@ -39,7 +39,7 @@ from oups.defines import KEY_DUPLICATES_ON
 from oups.defines import KEY_ORDERED_ON
 from oups.defines import OUPS_METADATA_KEY
 from oups.store import ParquetSet
-from oups.store.ordered_parquet_dataset import OrderedParquetDataset
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
 from oups.store.write import write
 
