@@ -502,11 +502,11 @@ class OrderedParquetDataset2:
                 ),
             )
             parquet_adapter.write_parquet(
-                os_path.join(
+                path=os_path.join(
                     self.dirpath,
                     f"file_{file_id:0{FILE_ID_N_DIGITS()}}.parquet",
                 ),
-                df,
+                df=df,
             )
             file_id += 1
         self.row_group_stats = concat(

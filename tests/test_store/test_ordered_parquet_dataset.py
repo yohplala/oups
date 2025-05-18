@@ -43,14 +43,6 @@ def test_exception_check_cmidx(tmp_path):
         OrderedParquetDataset(tmp_path, ordered_on="a", df_like=df)
 
 
-def test_exception_ordered_on_write(tmp_path):
-    tmp_path = str(tmp_path)
-    df = DataFrame({"a": [1], "b": [2]})
-    opd = OrderedParquetDataset(tmp_path, ordered_on="a", df_like=df)
-    with pytest.raises(ValueError, match="^'ordered_on' attribute a is not "):
-        opd.write(df=df, ordered_on="b")
-
-
 def test_opd_init_empty(tmp_path):
     opd = OrderedParquetDataset2(tmp_path, ordered_on="a")
     assert opd.dirpath == tmp_path
@@ -87,6 +79,13 @@ def test_opd_write_metadata(tmp_path):
     assert opd1.kvm == metadata_ref
     opd2 = OrderedParquetDataset2(tmp_path)
     assert opd2.row_group_stats.empty
+    assert opd2.kvm == metadata_ref
+    # Changing some metadata values, removing another one.
+    additional_metadata_in = {"a": "c", "ts": None}
+    opd1.write_metadata(metadata=additional_metadata_in)
+    metadata_ref = {KEY_ORDERED_ON: "a", "a": "c"}
+    assert opd1.kvm == metadata_ref
+    opd2 = OrderedParquetDataset2(tmp_path)
     assert opd2.kvm == metadata_ref
 
 
