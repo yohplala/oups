@@ -190,3 +190,20 @@ def test_exception_opd_write_row_group_files_ordered_on(tmp_path):
         match="^'ordered_on' column 'a' is not in",
     ):
         opd.write_row_group_files([df_ref])
+
+
+def test_opd_getitem(tmp_path):
+    opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
+    range_df = list(range(len(df_ref) + 1))
+    opd.write_row_group_files(
+        [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
+        write_opdmd=True,
+    )
+    opd_sub1 = opd[1]
+    assert opd_sub1.row_group_stats.equals(opd.row_group_stats.iloc[1])
+    assert opd_sub1.kvm == opd.kvm
+    assert opd_sub1.ordered_on == opd.ordered_on
+    opd_sub2 = opd[1:3]
+    assert opd_sub2.row_group_stats.equals(opd.row_group_stats.iloc[1:3])
+    assert opd_sub2.kvm == opd.kvm
+    assert opd_sub2.ordered_on == opd.ordered_on

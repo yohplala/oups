@@ -5,6 +5,7 @@ Created on Wed Dec 26 22:30:00 2021.
 @author: yoh
 
 """
+from copy import deepcopy
 from functools import cached_property
 from itertools import chain
 from os import path as os_path
@@ -299,7 +300,7 @@ class OrderedParquetDataset2:
     dirpath : str
         Directory path from where to load data.
     kvm : dict
-        Custom key-value metadata.
+        Key-value metadata, from user and including 'ordered_on' column name.
     ordered_on : str
         Column name to order row groups by.
     row_group_stats : DataFrame
@@ -374,6 +375,29 @@ class OrderedParquetDataset2:
             self.row_group_stats = EMPTY_RGS_STATS
             self.kvm = {KEY_ORDERED_ON: ordered_on}
         self.ordered_on = self.kvm[KEY_ORDERED_ON]
+
+    def __getitem__(self, item):
+        """
+        Select among the row-groups using integer/slicing.
+
+        Parameters
+        ----------
+        item : int or slice
+            Integer or slice to select row groups.
+
+        Returns
+        -------
+        OrderedParquetDataset
+
+        """
+        new_opd = object.__new__(OrderedParquetDataset2)
+        new_opd.__dict__ = {
+            "dirpath": self.dirpath,
+            "ordered_on": self.ordered_on,
+            "kvm": deepcopy(self.kvm),
+            "row_group_stats": self.row_group_stats.iloc[item],
+        }
+        return new_opd
 
     def align_file_ids(self):
         """
@@ -485,12 +509,15 @@ class OrderedParquetDataset2:
                 f"'ordered_on' column '{self.ordered_on}' is not in dataframe columns.",
             )
         dfs = chain([first_df], iter_dfs)
+        max_file_id = MAX_FILE_ID()
+        max_n_rows = MAX_N_ROWS()
+        file_id_n_digits = FILE_ID_N_DIGITS()
         Path(self.dirpath).mkdir(parents=True, exist_ok=True)
         for df in dfs:
-            if file_id > MAX_FILE_ID():
+            if file_id > max_file_id:
                 max_file_id_exceeded = True
                 break
-            if len(df) > MAX_N_ROWS():
+            if len(df) > max_n_rows:
                 max_n_rows_exceeded = True
                 break
             buffer.append(
@@ -504,7 +531,7 @@ class OrderedParquetDataset2:
             parquet_adapter.write_parquet(
                 path=os_path.join(
                     self.dirpath,
-                    f"file_{file_id:0{FILE_ID_N_DIGITS()}}.parquet",
+                    f"file_{file_id:0{file_id_n_digits}}.parquet",
                 ),
                 df=df,
             )
@@ -521,12 +548,12 @@ class OrderedParquetDataset2:
             self.write_metadata()
         if max_file_id_exceeded:
             raise ValueError(
-                f"file id '{file_id}' exceeds max value {MAX_FILE_ID()}. "
+                f"file id '{file_id}' exceeds max value {max_file_id}. "
                 "Metadata has been written before the exception has been raised.",
             )
         if max_n_rows_exceeded:
             raise ValueError(
-                f"number of rows {len(df)} exceeds max value {MAX_N_ROWS()}. "
+                f"number of rows {len(df)} exceeds max value {max_n_rows}. "
                 "Metadata has been written before the exception has been raised.",
             )
 
