@@ -323,6 +323,13 @@ class OrderedParquetDataset2:
         Number of digits to use for 'file_id' in filename. It is kept as an
         attribute to avoid recomputing it at each call to
         'get_parquet_file_name()'.
+    _max_file_id : int
+        Maximum allowed file id. Kept as hidden attribute to avoid
+        recomputing it at each call in 'write_row_group_files()'.
+    _max_n_rows : int
+        Maximum allowed number of rows in a row group. Kept as hidden
+        attribute to avoid recomputing it at each call in
+        'write_row_group_files()'.
     forbidden_to_write_row_group_files : bool
         Flag warning if writing is blocked. Writing is blocked when the opd
         object is a subset (use of '_getitem__' method).
@@ -419,7 +426,9 @@ class OrderedParquetDataset2:
         self.ordered_on = self.kvm[KEY_ORDERED_ON]
         self.forbidden_to_write_row_group_files = False
         self.forbidden_to_remove_row_group_files = False
-        self._file_ids_n_digits = FILE_ID_N_DIGITS()
+        self._file_id_n_digits = FILE_ID_N_DIGITS()
+        self._max_file_id = MAX_FILE_ID()
+        self._max_n_rows = MAX_N_ROWS()
 
     def __getitem__(self, item):
         """
@@ -443,7 +452,9 @@ class OrderedParquetDataset2:
             else self.row_group_stats.iloc[item]
         )
         new_opd.__dict__ = {
-            "_file_ids_n_digits": self._file_ids_n_digits,
+            "_file_id_n_digits": self._file_id_n_digits,
+            "_max_file_id": self._max_file_id,
+            "_max_n_rows": self._max_n_rows,
             "forbidden_to_write_row_group_files": True,
             "forbidden_to_remove_row_group_files": self.forbidden_to_remove_row_group_files,
             "dirpath": self.dirpath,
@@ -492,7 +503,7 @@ class OrderedParquetDataset2:
         # Remove files from disk.
         for file_id in file_ids:
             remove(
-                os_path.join(self.dirpath, get_parquet_file_name(file_id, self._file_ids_n_digits)),
+                os_path.join(self.dirpath, get_parquet_file_name(file_id, self._file_id_n_digits)),
             )
         # Remove corresponding file ids from 'self.row_group_stats'.
         ids_to_keep = ones(len(self.row_group_stats), dtype=bool)
@@ -585,9 +596,6 @@ class OrderedParquetDataset2:
                 f"'ordered_on' column '{self.ordered_on}' is not in dataframe columns.",
             )
         dfs = chain([first_df], iter_dfs)
-        max_file_id = MAX_FILE_ID()
-        max_n_rows = MAX_N_ROWS()
-        file_id_n_digits = FILE_ID_N_DIGITS()
         buffer = []
         file_id = (
             0 if self.row_group_stats.empty else self.row_group_stats.loc[:, FILE_IDS].max() + 1
@@ -596,10 +604,10 @@ class OrderedParquetDataset2:
         max_n_rows_exceeded = False
         Path(self.dirpath).mkdir(parents=True, exist_ok=True)
         for df in dfs:
-            if file_id > max_file_id:
+            if file_id > self._max_file_id:
                 max_file_id_exceeded = True
                 break
-            if len(df) > max_n_rows:
+            if len(df) > self._max_n_rows:
                 max_n_rows_exceeded = True
                 break
             buffer.append(
@@ -613,7 +621,7 @@ class OrderedParquetDataset2:
             parquet_adapter.write_parquet(
                 path=os_path.join(
                     self.dirpath,
-                    f"file_{file_id:0{file_id_n_digits}}.parquet",
+                    f"file_{file_id:0{self._file_id_n_digits}}.parquet",
                 ),
                 df=df,
             )
@@ -630,12 +638,12 @@ class OrderedParquetDataset2:
             self.write_metadata()
         if max_file_id_exceeded:
             raise ValueError(
-                f"file id '{file_id}' exceeds max value {max_file_id}. "
+                f"file id '{file_id}' exceeds max value {self._max_file_id}. "
                 "Metadata has been written before the exception has been raised.",
             )
         if max_n_rows_exceeded:
             raise ValueError(
-                f"number of rows {len(df)} exceeds max value {max_n_rows}. "
+                f"number of rows {len(df)} exceeds max value {self._max_n_rows}. "
                 "Metadata has been written before the exception has been raised.",
             )
 
