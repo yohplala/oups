@@ -6,6 +6,7 @@ Created on Wed Dec 26 22:30:00 2021.
 
 """
 from functools import cached_property
+from itertools import chain
 from os import path as os_path
 from os import scandir
 from pathlib import Path
@@ -205,24 +206,6 @@ class OrderedParquetDataset(ParquetFile):
         prefix_dirpath = f"{str(self._dirpath)}{DIR_SEP}".__add__
         return open_many(map(prefix_dirpath, files))
 
-    def min_max(self, col: str) -> tuple:
-        """
-        Return min and max of values of a column.
-
-        Parameters
-        ----------
-        col : str
-            Column name.
-
-        Returns
-        -------
-        tuple
-            Min and max values of column.
-
-        """
-        pf_stats = ParquetFile(self._dirpath).statistics
-        return (min(pf_stats["min"][col]), max(pf_stats["max"][col]))
-
     @property
     def _oups_metadata(self) -> dict:
         """
@@ -320,18 +303,24 @@ class OrderedParquetDataset2:
     ordered_on : str
         Column name to order row groups by.
     row_group_stats : DataFrame
-        Row groups statistics.
+        Row groups statistics,
+          - "ordered_on_min", min value in 'ordered_on' column for this group,
+          - "ordered_on_max", max value in 'ordered_on' column for this group,
+          - "n_rows": number of rows per row group,
+          - "file_id": an int indicating the file id for this group.
 
     Methods
     -------
     __getitem__()
         Select among the row-groups using integer/slicing.
+    __len__()
+        Return number of row groups in the dataset.
     align_file_ids()
         Align file ids to row group position in the dataset.
     remove_row_group_files()
         Remove row group files from disk. Row group indexes are also removed
         from OrderedParquetDataset.row_group_stats.
-    sort_rgs()
+    sort_row_groups()
         Sort row groups according their min value in 'ordered_on' column.
     to_pandas()
         Return data as a pandas dataframe.
@@ -367,21 +356,24 @@ class OrderedParquetDataset2:
 
         """
         self.dirpath = dirpath
-        self.ordered_on = ordered_on
         try:
             self.row_group_stats, self.kvm = parquet_adapter.read_parquet(
                 f"{self.dirpath}_opdmd",
                 return_metadata=True,
             )
-            if ordered_on is not None and self.kvm[KEY_ORDERED_ON] != self.ordered_on:
+            if ordered_on and self.kvm[KEY_ORDERED_ON] != ordered_on:
                 raise ValueError(
-                    f"ordered_on {self.kvm[KEY_ORDERED_ON]} in record dataset does not match {self.ordered_on} in constructor.",
+                    f"'ordered_on' parameter value '{ordered_on}' does not match "
+                    f"'{self.kvm[KEY_ORDERED_ON]}' in record dataset.",
                 )
         except FileNotFoundError:
             # Using an empty Dataframe so that it can be written in the case
             # user is only using 'write_metadata()' without adding row groups.
+            if ordered_on is None:
+                raise ValueError("'ordered_on' column name must be provided.")
             self.row_group_stats = EMPTY_RGS_STATS
-            self.kvm = {KEY_ORDERED_ON: self.ordered_on}
+            self.kvm = {KEY_ORDERED_ON: ordered_on}
+        self.ordered_on = self.kvm[KEY_ORDERED_ON]
 
     def align_file_ids(self):
         """
@@ -428,13 +420,46 @@ class OrderedParquetDataset2:
     def write_metadata(self, metadata: Dict[str, str] = None):
         """
         Write metadata to disk.
+
+        Metadata are 2 different types of data,
+          - ``self.kvm``, a dict which values can be set by user, and which also
+            contain ``self.ordered_on`` parameter.
+          - ``self.row_group_stats``
+        oups metadata is retrieved from ``OUPS_METADATA_KEY`` key.
+
+        Parameters
+        ----------
+        metadata : Dict[str, str], optional
+            User-defined key-value metadata to write, or update in dataset.
+
+        Notes
+        -----
+        Update strategy of oups specific metadata depends if key found in
+        ``OUPS_METADATA`` metadata is also found in already existing metadata,
+        as well as its value.
+          - If not found in existing, it is added.
+          - If found in existing, it is updated.
+          - If its value is `None`, it is not added, and if found in existing,
+            it is removed from existing.
+
         """
+        existing_md = self.kvm
         if metadata:
-            self.kvm.update(metadata)
+            for key, value in metadata.items():
+                if key in existing_md:
+                    if value is None:
+                        # Case 'remove'.
+                        del existing_md[key]
+                    else:
+                        # Case 'update'.
+                        existing_md[key] = value
+                elif value:
+                    # Case 'add'.
+                    existing_md[key] = value
         parquet_adapter.write_parquet(
-            f"{self.dirpath}_opdmd",
-            self.row_group_stats,
-            metadata=self.kvm,
+            path=f"{self.dirpath}_opdmd",
+            df=self.row_group_stats,
+            metadata=existing_md,
         )
 
     def write_row_group_files(self, dfs: Iterable[DataFrame], write_opdmd: bool = True):
@@ -453,6 +478,13 @@ class OrderedParquetDataset2:
         )
         max_file_id_exceeded = False
         max_n_rows_exceeded = False
+        iter_dfs = iter(dfs)
+        first_df = next(iter_dfs)
+        if self.ordered_on not in first_df.columns:
+            raise ValueError(
+                f"'ordered_on' column '{self.ordered_on}' is not in dataframe columns.",
+            )
+        dfs = chain([first_df], iter_dfs)
         Path(self.dirpath).mkdir(parents=True, exist_ok=True)
         for df in dfs:
             if file_id > MAX_FILE_ID():
@@ -489,7 +521,7 @@ class OrderedParquetDataset2:
             self.write_metadata()
         if max_file_id_exceeded:
             raise ValueError(
-                f"file id {file_id} exceeds max value {MAX_FILE_ID()}. "
+                f"file id '{file_id}' exceeds max value {MAX_FILE_ID()}. "
                 "Metadata has been written before the exception has been raised.",
             )
         if max_n_rows_exceeded:

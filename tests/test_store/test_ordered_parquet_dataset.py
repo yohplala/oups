@@ -4,26 +4,15 @@ Created on Sat Dec 18 15:00:00 2021.
 
 @author: yoh
 
-Test utils.
-TEST_DATA = 'test-data'
-tmp_path = os_path.expanduser('~/Documents/code/data/oups')
-
 """
-import zipfile
-from os import path as os_path
-
-import numpy as np
 import pytest
-from fastparquet import ParquetFile
 from numpy import iinfo
 from numpy import int8
 from pandas import DataFrame
 from pandas import Timestamp
 from pandas import date_range
-from vaex.dataframe import DataFrame as vDataFrame
 
 from oups.defines import KEY_ORDERED_ON
-from oups.store.indexer import toplevel
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import FILE_IDS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import N_ROWS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import ORDERED_ON_MAXS
@@ -32,8 +21,6 @@ from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import RGS_STATS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset2
 
-from .. import TEST_DATA
-
 
 df_ref = DataFrame(
     {
@@ -41,83 +28,6 @@ df_ref = DataFrame(
         "temperature": [8.4, 5.3, 4.9, 2.3],
     },
 )
-
-
-@toplevel
-class Indexer:
-    loc: str
-
-
-key_ref = Indexer("ah")
-
-
-def test_parquet_file(tmp_path):
-    # Read as parquet file.
-    fn = os_path.join(TEST_DATA, "df_ts_temp_4rows_2rgs.zip")
-    with zipfile.ZipFile(fn, "r") as zip_ref:
-        zip_ref.extractall(tmp_path)
-    ph = OrderedParquetDataset(str(tmp_path), ordered_on="timestamp")
-    pf = ph.pf
-    assert len(pf.row_groups) == 2
-    assert sorted(df_ref.columns) == sorted(pf.columns)
-
-
-def test_pandas_dataframe(tmp_path):
-    # Read as pandas dataframe.
-    fn = os_path.join(TEST_DATA, "df_ts_temp_4rows_2rgs.zip")
-    with zipfile.ZipFile(fn, "r") as zip_ref:
-        zip_ref.extractall(tmp_path)
-    ph = OrderedParquetDataset(str(tmp_path), ordered_on="timestamp")
-    pdf = ph.pdf
-    assert isinstance(pdf, DataFrame)
-    assert pdf.equals(df_ref)
-
-
-def test_vaex_dataframe(tmp_path):
-    # Read as vaex dataframe.
-    fn = os_path.join(TEST_DATA, "df_ts_temp_4rows_2rgs.zip")
-    with zipfile.ZipFile(fn, "r") as zip_ref:
-        zip_ref.extractall(tmp_path)
-    ph = OrderedParquetDataset(str(tmp_path), ordered_on="timestamp")
-    vdf = ph.vdf
-    assert isinstance(vdf, vDataFrame)
-    assert vdf.to_pandas_df().equals(df_ref)
-
-
-def test_write(tmp_path):
-    ph = OrderedParquetDataset(str(tmp_path), ordered_on="timestamp", df_like=df_ref)
-    ph.write(df=df_ref)
-    assert ph.to_pandas().equals(df_ref)
-
-
-def test_min_max(tmp_path):
-    # Read as parquet file.
-    fn = os_path.join(TEST_DATA, "df_ts_temp_4rows_2rgs.zip")
-    with zipfile.ZipFile(fn, "r") as zip_ref:
-        zip_ref.extractall(tmp_path)
-    col = "timestamp"
-    min_max = OrderedParquetDataset(str(tmp_path), ordered_on="timestamp").min_max(col)
-    min_ref = np.datetime64(df_ref[col].min())
-    max_ref = np.datetime64(df_ref[col].max())
-    assert min_max == (min_ref, max_ref)
-    col = "temperature"
-    min_max = OrderedParquetDataset(str(tmp_path), ordered_on="timestamp").min_max(col)
-    min_ref = df_ref[col].min()
-    max_ref = df_ref[col].max()
-    assert min_max == (min_ref, max_ref)
-
-
-def test_parquet_handle_not_existing(tmp_path):
-    ph = OrderedParquetDataset(str(tmp_path), ordered_on="timestamp")
-    assert isinstance(ph, ParquetFile)
-    assert ph.pdf.empty
-
-
-def test_parquet_handle_folder_not_existing(tmp_path):
-    tmp_path = os_path.join(tmp_path, "test")
-    ph = OrderedParquetDataset(str(tmp_path), ordered_on="timestamp")
-    assert isinstance(ph, ParquetFile)
-    assert ph.pdf.empty
 
 
 def test_exception_check_cmidx(tmp_path):
@@ -149,6 +59,25 @@ def test_opd_init_empty(tmp_path):
     assert opd.kvm == {KEY_ORDERED_ON: "a"}
 
 
+@pytest.mark.parametrize(
+    "ordered_on, err_msg",
+    [
+        (None, "'ordered_on' column name must be provided."),
+        ("b", "^'ordered_on' parameter value 'b' does not match"),
+    ],
+)
+def test_exception_opd_init_ordered_on(tmp_path, ordered_on, err_msg):
+    if ordered_on:
+        # Write a 1st dataset with a different 'ordered_on' column name.
+        opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
+        opd.write_row_group_files([df_ref], write_opdmd=True)
+    with pytest.raises(
+        ValueError,
+        match=err_msg,
+    ):
+        opd = OrderedParquetDataset2(tmp_path, ordered_on=ordered_on)
+
+
 def test_opd_write_metadata(tmp_path):
     opd1 = OrderedParquetDataset2(tmp_path, ordered_on="a")
     additional_metadata_in = {"a": "b", "ts": Timestamp("2021-01-01")}
@@ -168,12 +97,12 @@ def test_opd_write_row_group_files(tmp_path, write_opdmd):
     rgs_stats_ref = DataFrame(
         {
             ORDERED_ON_MINS: [
-                np.datetime64(df_ref.loc[:, "timestamp"].iloc[0]),
-                np.datetime64(df_ref.loc[:, "timestamp"].iloc[2]),
+                df_ref.loc[:, "timestamp"].iloc[0],
+                df_ref.loc[:, "timestamp"].iloc[2],
             ],
             ORDERED_ON_MAXS: [
-                np.datetime64(df_ref.loc[:, "timestamp"].iloc[1]),
-                np.datetime64(df_ref.loc[:, "timestamp"].iloc[3]),
+                df_ref.loc[:, "timestamp"].iloc[1],
+                df_ref.loc[:, "timestamp"].iloc[3],
             ],
             N_ROWS: [2, 2],
             FILE_IDS: [0, 1],
@@ -219,7 +148,7 @@ def test_exception_opd_write_row_group_files_max_file_id_reached(tmp_path, monke
     # Try to write one more.
     with pytest.raises(
         ValueError,
-        match=f"^file id {max_file_id+1} exceeds max value {max_file_id}",
+        match=f"^file id '{max_file_id+1}' exceeds max value {max_file_id}",
     ):
         opd.write_row_group_files(dataframes[max_file_id:], write_opdmd=False)
 
@@ -253,3 +182,12 @@ def test_exception_opd_write_row_group_files_max_n_rows_reached(tmp_path, monkey
         match=f"^number of rows {exceeding_max_n_rows} exceeds max value {exceeding_max_n_rows-1}",
     ):
         opd.write_row_group_files([large_df])
+
+
+def test_exception_opd_write_row_group_files_ordered_on(tmp_path):
+    opd = OrderedParquetDataset2(tmp_path, ordered_on="a")
+    with pytest.raises(
+        ValueError,
+        match="^'ordered_on' column 'a' is not in",
+    ):
+        opd.write_row_group_files([df_ref])
