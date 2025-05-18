@@ -32,6 +32,7 @@ from vaex import open_many
 from oups.defines import DIR_SEP
 from oups.defines import OUPS_METADATA_KEY
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
+from oups.store.ordered_parquet_dataset.parquet_adapter import check_cmidx
 from oups.store.write import write
 
 
@@ -71,7 +72,7 @@ def MAX_N_ROWS():
     return iinfo(RGS_STATS_BASE_DTYPES[N_ROWS]).max
 
 
-def get_parquet_file_name(file_id: int, file_id_n_digits: int) -> str:
+def get_parquet_filename(file_id: int, file_id_n_digits: int) -> str:
     """
     Get standardized parquet file name format.
 
@@ -89,31 +90,6 @@ def get_parquet_file_name(file_id: int, file_id_n_digits: int) -> str:
 
     """
     return f"file_{file_id:0{file_id_n_digits}}.parquet"
-
-
-def check_cmidx(cmidx: MultiIndex):
-    """
-    Check if column multi-index complies with fastparquet requirements.
-
-    Library fastparquet requires names for each level in a Multiindex.
-    Also, column names have to be tuple of string.
-
-    Parameters
-    ----------
-    cmidx : MultiIndex
-        MultiIndex to check.
-
-    """
-    # Check level names.
-    if None in cmidx.names:
-        raise ValueError(
-            "not possible to have level name set to None.",
-        )  # If an item of the column name is not a string, turn it into a string.
-    # Check column names.
-    for level in cmidx.levels:
-        for name in level:
-            if not isinstance(name, str):
-                raise TypeError(f"name {name} has to be of type 'string', not '{type(name)}'.")
 
 
 class OrderedParquetDataset(ParquetFile):
@@ -451,15 +427,9 @@ class OrderedParquetDataset2:
             if isinstance(item, int)
             else self.row_group_stats.iloc[item]
         )
-        new_opd.__dict__ = {
-            "_file_id_n_digits": self._file_id_n_digits,
-            "_max_file_id": self._max_file_id,
-            "_max_n_rows": self._max_n_rows,
-            "dirpath": self.dirpath,
+        new_opd.__dict__ = self.__dict__ | {
             "forbidden_to_write_row_group_files": True,
-            "forbidden_to_remove_row_group_files": self.forbidden_to_remove_row_group_files,
             "kvm": deepcopy(self.kvm),
-            "ordered_on": self.ordered_on,
             "row_group_stats": new_row_group_stats,
         }
         return new_opd
@@ -499,15 +469,15 @@ class OrderedParquetDataset2:
 
         Notes
         -----
-        It is anticipated that 'file_ids' may be generate from row group
+        It is anticipated that 'file_ids' may be generated from row group
         indexes. If definition of 'file_ids' from row group indexes occurs in a
         loop where 'remove_row_group_files()' is called, and that row group
         indexes are defined before execution of the loop, then row group indexes
         may not be valid anylonger at a next iteration.
-        To mitigate this issue, removing is blocked after running
-        'remove_row_group_files()' by using the
+        To mitigate this issue, removing row group files is blocked after
+        running 'remove_row_group_files()' once by using
         'forbidden_to_remove_row_group_files' flag.
-         This flag is a security to prevent iterating 'remove_row_group_files()'
+        This flag is a security to prevent iterating 'remove_row_group_files()'
         method without the sense that the process involving the current opd
         object has been completed first. It is anticipated/expected that the
         completion of such a process involves a 'write_metadata()' step.
@@ -518,11 +488,11 @@ class OrderedParquetDataset2:
 
         """
         if self.forbidden_to_remove_row_group_files:
-            raise ValueError("Removing row group files is blocked.")
+            raise ValueError("removing row group files is blocked.")
         # Remove files from disk.
         for file_id in file_ids:
             remove(
-                os_path.join(self.dirpath, get_parquet_file_name(file_id, self._file_id_n_digits)),
+                os_path.join(self.dirpath, get_parquet_filename(file_id, self._file_id_n_digits)),
             )
         # Remove corresponding file ids from 'self.row_group_stats'.
         ids_to_keep = ones(len(self.row_group_stats), dtype=bool)
@@ -607,7 +577,7 @@ class OrderedParquetDataset2:
 
         """
         if self.forbidden_to_write_row_group_files:
-            raise ValueError("Writing row group files is blocked.")
+            raise ValueError("writing row group files is blocked.")
         iter_dfs = iter(dfs)
         first_df = next(iter_dfs)
         if self.ordered_on not in first_df.columns:
@@ -640,7 +610,7 @@ class OrderedParquetDataset2:
             parquet_adapter.write_parquet(
                 path=os_path.join(
                     self.dirpath,
-                    f"file_{file_id:0{self._file_id_n_digits}}.parquet",
+                    get_parquet_filename(file_id, self._file_id_n_digits),
                 ),
                 df=df,
             )

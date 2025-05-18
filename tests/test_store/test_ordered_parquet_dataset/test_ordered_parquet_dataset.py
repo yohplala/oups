@@ -18,7 +18,6 @@ from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import N_ROWS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import ORDERED_ON_MAXS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import ORDERED_ON_MINS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset2
 
 
@@ -28,19 +27,6 @@ df_ref = DataFrame(
         "temperature": [8.4, 5.3, 4.9, 2.3],
     },
 )
-
-
-def test_exception_check_cmidx(tmp_path):
-    tmp_path = str(tmp_path)
-    # Check 1st no column level names.
-    df = DataFrame({("a", 1): [1]})
-    with pytest.raises(ValueError, match="^not possible to have level name"):
-        OrderedParquetDataset(tmp_path, ordered_on="a", df_like=df)
-    # Check with one column name not being a string.
-    # Correcting column names.
-    df.columns.set_names(["1", "2"], level=[0, 1], inplace=True)
-    with pytest.raises(TypeError, match="^name 1 has to be"):
-        OrderedParquetDataset(tmp_path, ordered_on="a", df_like=df)
 
 
 def test_opd_init_empty(tmp_path):

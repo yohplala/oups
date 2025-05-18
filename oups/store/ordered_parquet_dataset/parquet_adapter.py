@@ -12,8 +12,34 @@ from pickle import loads
 from typing import Dict
 
 from pandas import DataFrame
+from pandas import MultiIndex
 
 from oups.defines import OUPS_METADATA_KEY
+
+
+def check_cmidx(cmidx: MultiIndex):
+    """
+    Check if column multi-index complies with fastparquet requirements.
+
+    Library fastparquet requires names for each level in a Multiindex.
+    Also, column names have to be tuple of string.
+
+    Parameters
+    ----------
+    cmidx : MultiIndex
+        MultiIndex to check.
+
+    """
+    # Check level names.
+    if None in cmidx.names:
+        raise ValueError(
+            "not possible to have level name set to None.",
+        )  # If an item of the column name is not a string, turn it into a string.
+    # Check column names.
+    for level in cmidx.levels:
+        for name in level:
+            if not isinstance(name, str):
+                raise TypeError(f"name {name} has to be of type 'string', not '{type(name)}'.")
 
 
 class ParquetAdapter:
