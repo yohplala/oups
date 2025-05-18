@@ -192,18 +192,24 @@ def test_exception_opd_write_row_group_files_ordered_on(tmp_path):
         opd.write_row_group_files([df_ref])
 
 
-def test_opd_getitem(tmp_path):
+def test_opd_getitem_and_len(tmp_path):
     opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
     range_df = list(range(len(df_ref) + 1))
     opd.write_row_group_files(
         [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
         write_opdmd=True,
     )
+    assert len(opd) == len(df_ref)
     opd_sub1 = opd[1]
-    assert opd_sub1.row_group_stats.equals(opd.row_group_stats.iloc[1])
+    # Using slice notation to preserve DataFrame format.
+    assert opd_sub1.row_group_stats.equals(opd.row_group_stats.iloc[1:2])
     assert opd_sub1.kvm == opd.kvm
     assert opd_sub1.ordered_on == opd.ordered_on
+    assert opd_sub1.__dict__.keys() == opd.__dict__.keys()
+    assert len(opd_sub1) == 1
     opd_sub2 = opd[1:3]
     assert opd_sub2.row_group_stats.equals(opd.row_group_stats.iloc[1:3])
     assert opd_sub2.kvm == opd.kvm
     assert opd_sub2.ordered_on == opd.ordered_on
+    assert opd_sub2.__dict__.keys() == opd.__dict__.keys()
+    assert len(opd_sub2) == 2

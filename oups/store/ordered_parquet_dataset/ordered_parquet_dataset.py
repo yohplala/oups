@@ -297,6 +297,22 @@ class OrderedParquetDataset2:
 
     Attributes
     ----------
+    forbidden_to_write_row_group_files : bool
+        Flag warning if writing is blocked. Writing is blocked when the opd
+        object is a subset (use of '_getitem__' method).
+        This flag is a security to prevent adding then new row group files
+        without knowing all file ids that may already exist in the dataset.
+        To effectively remove row group files, use 'remove_row_group_files()'
+        method.
+    forbidden_to_remove_row_group_files : bool
+        Flag warning if removing is blocked. Removing is blocked when
+        'remove_row_group_files()' method is called, but reset when
+        'write_metadata()' method is then called.
+        This flag is a security to prevent iterating
+        'remove_row_group_files()' method without the sense that the process
+        involving the current opd object has been completed first.
+        It is anticipated/expected that the completion of such a process
+        involves a 'write_metadata()' step.
     dirpath : str
         Directory path from where to load data.
     kvm : dict
@@ -326,7 +342,7 @@ class OrderedParquetDataset2:
     to_pandas()
         Return data as a pandas dataframe.
     write()
-        Write data to disk.
+        Write data to disk, merging with existing data.
     write_metadata()
         Write metadata to disk.
     write_row_group_files()
@@ -375,6 +391,8 @@ class OrderedParquetDataset2:
             self.row_group_stats = EMPTY_RGS_STATS
             self.kvm = {KEY_ORDERED_ON: ordered_on}
         self.ordered_on = self.kvm[KEY_ORDERED_ON]
+        self.forbidden_to_write_row_group_files = False
+        self.forbidden_to_remove_row_group_files = False
 
     def __getitem__(self, item):
         """
@@ -391,13 +409,27 @@ class OrderedParquetDataset2:
 
         """
         new_opd = object.__new__(OrderedParquetDataset2)
+        # To preserve Dataframe format.
+        new_row_group_stats = (
+            self.row_group_stats.iloc[item : item + 1]
+            if isinstance(item, int)
+            else self.row_group_stats.iloc[item]
+        )
         new_opd.__dict__ = {
+            "forbidden_to_write_row_group_files": True,
+            "forbidden_to_remove_row_group_files": self.forbidden_to_remove_row_group_files,
             "dirpath": self.dirpath,
             "ordered_on": self.ordered_on,
             "kvm": deepcopy(self.kvm),
-            "row_group_stats": self.row_group_stats.iloc[item],
+            "row_group_stats": new_row_group_stats,
         }
         return new_opd
+
+    def __len__(self):
+        """
+        Return number of row groups in the dataset.
+        """
+        return len(self.row_group_stats)
 
     def align_file_ids(self):
         """
@@ -427,6 +459,10 @@ class OrderedParquetDataset2:
             File ids to remove.
 
         """
+        if self.forbidden_to_remove_row_group_files:
+            raise ValueError("Removing row group files is blocked.")
+
+        self.forbidden_to_remove_row_group_files = True
         pass
 
     def to_pandas(self):
@@ -485,6 +521,13 @@ class OrderedParquetDataset2:
             df=self.row_group_stats,
             metadata=existing_md,
         )
+        # Reset 'forbidden_to_remove_row_group_files' flag, in case it was set.
+        # This flag is a security to prevent iterating
+        # 'remove_row_group_files()' method without the sense that the process
+        # involving the current opd object has been completed first.
+        # It is anticipated/expected that the completion of such a process
+        # involves a 'write_metadata()' step.
+        self.forbidden_to_remove_row_group_files = False
 
     def write_row_group_files(self, dfs: Iterable[DataFrame], write_opdmd: bool = True):
         """
@@ -496,12 +539,8 @@ class OrderedParquetDataset2:
             Dataframes to write.
 
         """
-        buffer = []
-        file_id = (
-            0 if self.row_group_stats.empty else self.row_group_stats.loc[:, FILE_IDS].max() + 1
-        )
-        max_file_id_exceeded = False
-        max_n_rows_exceeded = False
+        if self.forbidden_to_write_row_group_files:
+            raise ValueError("Writing row group files is blocked.")
         iter_dfs = iter(dfs)
         first_df = next(iter_dfs)
         if self.ordered_on not in first_df.columns:
@@ -512,6 +551,12 @@ class OrderedParquetDataset2:
         max_file_id = MAX_FILE_ID()
         max_n_rows = MAX_N_ROWS()
         file_id_n_digits = FILE_ID_N_DIGITS()
+        buffer = []
+        file_id = (
+            0 if self.row_group_stats.empty else self.row_group_stats.loc[:, FILE_IDS].max() + 1
+        )
+        max_file_id_exceeded = False
+        max_n_rows_exceeded = False
         Path(self.dirpath).mkdir(parents=True, exist_ok=True)
         for df in dfs:
             if file_id > max_file_id:
@@ -561,6 +606,7 @@ class OrderedParquetDataset2:
 # TODO:
 # Create:
 #  - __len__: number of row_groups to check if empty opd or not?
+#  - __getitem__ / to_pandas(): test to_pandas on row group subset
 #  - clean oups.store.write.write() and colllection.py
 #  - rename collection.py
 #  - remove vaex dependency
