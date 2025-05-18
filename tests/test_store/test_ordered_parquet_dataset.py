@@ -95,6 +95,8 @@ def test_opd_write_row_group_files(tmp_path, write_opdmd):
     opd1.write_row_group_files([df_ref.iloc[:2], df_ref.iloc[2:]], write_opdmd=write_opdmd)
     rgs_stats_ref = DataFrame(
         {
+            FILE_IDS: [0, 1],
+            N_ROWS: [2, 2],
             ORDERED_ON_MINS: [
                 df_ref.loc[:, "timestamp"].iloc[0],
                 df_ref.loc[:, "timestamp"].iloc[2],
@@ -103,8 +105,6 @@ def test_opd_write_row_group_files(tmp_path, write_opdmd):
                 df_ref.loc[:, "timestamp"].iloc[1],
                 df_ref.loc[:, "timestamp"].iloc[3],
             ],
-            N_ROWS: [2, 2],
-            FILE_IDS: [0, 1],
         },
     ).astype(RGS_STATS_BASE_DTYPES)
     assert opd1.row_group_stats.equals(rgs_stats_ref)
@@ -200,6 +200,7 @@ def test_opd_getitem_and_len(tmp_path):
         write_opdmd=True,
     )
     assert len(opd) == len(df_ref)
+    assert not opd.forbidden_to_write_row_group_files
     opd_sub1 = opd[1]
     # Using slice notation to preserve DataFrame format.
     assert opd_sub1.row_group_stats.equals(opd.row_group_stats.iloc[1:2])
@@ -207,9 +208,26 @@ def test_opd_getitem_and_len(tmp_path):
     assert opd_sub1.ordered_on == opd.ordered_on
     assert opd_sub1.__dict__.keys() == opd.__dict__.keys()
     assert len(opd_sub1) == 1
+    assert opd_sub1.forbidden_to_write_row_group_files
     opd_sub2 = opd[1:3]
     assert opd_sub2.row_group_stats.equals(opd.row_group_stats.iloc[1:3])
     assert opd_sub2.kvm == opd.kvm
     assert opd_sub2.ordered_on == opd.ordered_on
     assert opd_sub2.__dict__.keys() == opd.__dict__.keys()
     assert len(opd_sub2) == 2
+
+
+def test_opd_remove_row_group_files(tmp_path):
+    opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
+    range_df = list(range(len(df_ref) + 1))
+    opd.write_row_group_files(
+        [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
+        write_opdmd=True,
+    )
+    # Keep ref before removing.
+    rg_stats_ref = opd.row_group_stats.iloc[[1, 3]].reset_index(drop=True)
+    assert not opd.forbidden_to_remove_row_group_files
+    opd.remove_row_group_files([0, 2])
+    assert len(opd) == 2
+    assert opd.row_group_stats.equals(rg_stats_ref)
+    assert opd.forbidden_to_remove_row_group_files

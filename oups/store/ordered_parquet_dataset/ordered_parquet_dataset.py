@@ -9,6 +9,7 @@ from copy import deepcopy
 from functools import cached_property
 from itertools import chain
 from os import path as os_path
+from os import remove
 from os import scandir
 from pathlib import Path
 from pickle import dumps
@@ -20,6 +21,7 @@ from fastparquet import write as fp_write
 from fastparquet.api import statistics
 from fastparquet.util import update_custom_metadata
 from numpy import iinfo
+from numpy import ones
 from numpy import uint16
 from numpy import uint32
 from pandas import DataFrame
@@ -40,7 +42,7 @@ ORDERED_ON_MAXS = "ordered_on_maxs"
 N_ROWS = "n_rows"
 FILE_IDS = "file_ids"
 # Do not change this order, it is expected by OrderedParquetDataset.write_row_group_files()
-RGS_STATS_COLUMNS = [ORDERED_ON_MINS, ORDERED_ON_MAXS, N_ROWS, FILE_IDS]
+RGS_STATS_COLUMNS = [FILE_IDS, N_ROWS, ORDERED_ON_MINS, ORDERED_ON_MAXS]
 RGS_STATS_BASE_DTYPES = {
     N_ROWS: uint32,
     FILE_IDS: uint16,
@@ -67,6 +69,26 @@ def MAX_N_ROWS():
     Return maximum allowed number of rows in a row group.
     """
     return iinfo(RGS_STATS_BASE_DTYPES[N_ROWS]).max
+
+
+def get_parquet_file_name(file_id: int, file_id_n_digits: int) -> str:
+    """
+    Get standardized parquet file name format.
+
+    Parameters
+    ----------
+    file_id : int
+        The file ID to use in the filename.
+    file_id_n_digits : int, optional
+        Number of digits to use for 'file_id' in filename.
+
+    Returns
+    -------
+    str
+        The formatted file name.
+
+    """
+    return f"file_{file_id:0{file_id_n_digits}}.parquet"
 
 
 def check_cmidx(cmidx: MultiIndex):
@@ -297,6 +319,10 @@ class OrderedParquetDataset2:
 
     Attributes
     ----------
+    _file_ids_n_digits : int
+        Number of digits to use for 'file_id' in filename. It is kept as an
+        attribute to avoid recomputing it at each call to
+        'get_parquet_file_name()'.
     forbidden_to_write_row_group_files : bool
         Flag warning if writing is blocked. Writing is blocked when the opd
         object is a subset (use of '_getitem__' method).
@@ -393,6 +419,7 @@ class OrderedParquetDataset2:
         self.ordered_on = self.kvm[KEY_ORDERED_ON]
         self.forbidden_to_write_row_group_files = False
         self.forbidden_to_remove_row_group_files = False
+        self._file_ids_n_digits = FILE_ID_N_DIGITS()
 
     def __getitem__(self, item):
         """
@@ -416,6 +443,7 @@ class OrderedParquetDataset2:
             else self.row_group_stats.iloc[item]
         )
         new_opd.__dict__ = {
+            "_file_ids_n_digits": self._file_ids_n_digits,
             "forbidden_to_write_row_group_files": True,
             "forbidden_to_remove_row_group_files": self.forbidden_to_remove_row_group_files,
             "dirpath": self.dirpath,
@@ -461,9 +489,18 @@ class OrderedParquetDataset2:
         """
         if self.forbidden_to_remove_row_group_files:
             raise ValueError("Removing row group files is blocked.")
-
+        # Remove files from disk.
+        for file_id in file_ids:
+            remove(
+                os_path.join(self.dirpath, get_parquet_file_name(file_id, self._file_ids_n_digits)),
+            )
+        # Remove corresponding file ids from 'self.row_group_stats'.
+        ids_to_keep = ones(len(self.row_group_stats), dtype=bool)
+        ids_to_keep[file_ids] = False
+        self.row_group_stats = (
+            self.row_group_stats.set_index(FILE_IDS).iloc[ids_to_keep].reset_index()
+        )
         self.forbidden_to_remove_row_group_files = True
-        pass
 
     def to_pandas(self):
         """
@@ -567,10 +604,10 @@ class OrderedParquetDataset2:
                 break
             buffer.append(
                 (
+                    file_id,  # file_ids
+                    len(df),  # n_rows
                     df.loc[:, self.ordered_on].iloc[0],  # ordered_on_mins
                     df.loc[:, self.ordered_on].iloc[-1],  # ordered_on_maxs
-                    len(df),  # n_rows
-                    file_id,  # file_ids
                 ),
             )
             parquet_adapter.write_parquet(
