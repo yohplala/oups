@@ -48,28 +48,6 @@ RGS_STATS_BASE_DTYPES = {
     N_ROWS: uint32,
     FILE_IDS: uint16,
 }
-EMPTY_RGS_STATS = DataFrame(columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES)
-
-
-def MAX_FILE_ID():
-    """
-    Return maximum allowed file id.
-    """
-    return iinfo(RGS_STATS_BASE_DTYPES[FILE_IDS]).max
-
-
-def FILE_ID_N_DIGITS():
-    """
-    Return number of digits imposed to format file ids in file names.
-    """
-    return len(str(MAX_FILE_ID()))
-
-
-def MAX_N_ROWS():
-    """
-    Return maximum allowed number of rows in a row group.
-    """
-    return iinfo(RGS_STATS_BASE_DTYPES[N_ROWS]).max
 
 
 def get_parquet_filename(file_id: int, file_id_n_digits: int) -> str:
@@ -397,14 +375,13 @@ class OrderedParquetDataset2:
             # user is only using 'write_metadata()' without adding row groups.
             if ordered_on is None:
                 raise ValueError("'ordered_on' column name must be provided.")
-            self.row_group_stats = EMPTY_RGS_STATS
+            self.row_group_stats = DataFrame(columns=RGS_STATS_COLUMNS).astype(
+                RGS_STATS_BASE_DTYPES,
+            )
             self.kvm = {KEY_ORDERED_ON: ordered_on}
         self.ordered_on = self.kvm[KEY_ORDERED_ON]
         self.forbidden_to_write_row_group_files = False
         self.forbidden_to_remove_row_group_files = False
-        self._file_id_n_digits = FILE_ID_N_DIGITS()
-        self._max_file_id = MAX_FILE_ID()
-        self._max_n_rows = MAX_N_ROWS()
 
     def __getitem__(self, item):
         """
@@ -439,6 +416,27 @@ class OrderedParquetDataset2:
         Return number of row groups in the dataset.
         """
         return len(self.row_group_stats)
+
+    @cached_property
+    def _max_file_id(self):
+        """
+        Return maximum allowed file id.
+        """
+        return iinfo(self.row_group_stats[FILE_IDS].dtype).max
+
+    @cached_property
+    def _file_id_n_digits(self):
+        """
+        Return number of digits imposed to format file ids in file names.
+        """
+        return len(str(self._max_file_id))
+
+    @cached_property
+    def _max_n_rows(self):
+        """
+        Return maximum allowed number of rows in a row group.
+        """
+        return iinfo(self.row_group_stats[N_ROWS].dtype).max
 
     def align_file_ids(self):
         """
