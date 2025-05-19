@@ -636,13 +636,15 @@ class OrderedParquetDataset2:
             )
         dfs = chain([first_df], iter_dfs)
         buffer = []
-        file_id = (
-            0 if self.row_group_stats.empty else self.row_group_stats.loc[:, FILE_IDS].max() + 1
-        )
         max_file_id_exceeded = False
         max_n_rows_exceeded = False
         Path(self.dirpath).mkdir(parents=True, exist_ok=True)
-        for df in dfs:
+        for file_id, df in enumerate(
+            dfs,
+            start=(
+                0 if self.row_group_stats.empty else self.row_group_stats.loc[:, FILE_IDS].max() + 1
+            ),
+        ):
             if file_id > self._max_file_id:
                 max_file_id_exceeded = True
                 break
@@ -664,7 +666,6 @@ class OrderedParquetDataset2:
                 ),
                 df=df,
             )
-            file_id += 1
         self.row_group_stats = concat(
             [
                 None if self.row_group_stats.empty else self.row_group_stats,
