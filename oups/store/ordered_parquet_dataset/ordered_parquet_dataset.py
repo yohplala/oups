@@ -462,9 +462,10 @@ class OrderedParquetDataset2:
         Align file ids to row group position in the dataset and rename files.
 
         This method ensures that file ids match their row group positions while:
-        1. Minimizing the number of renames
-        2. Avoiding conflicts where target filenames are already taken
-        3. Using temporary files when necessary to handle circular dependencies
+        1. Minimizing the number of renames.
+        2. Avoiding conflicts where target filenames are already taken.
+        3. Using temporary filenames when necessary to handle circular
+           dependencies.
 
         """
         # Build mapping of current file ids to desired new ids
@@ -567,10 +568,11 @@ class OrderedParquetDataset2:
         Write metadata to disk.
 
         Metadata are 2 different types of data,
-          - ``self.kvm``, a dict which values can be set by user, and which also
-            contain ``self.ordered_on`` parameter.
-          - ``self.row_group_stats``
-        oups metadata is retrieved from ``OUPS_METADATA_KEY`` key.
+          - ``self.kvm``, a dict which (key, value) pairs can be set by user,
+            and which also contain ``self.ordered_on`` parameter.
+            It is retrieved from ``OUPS_METADATA_KEY`` key.
+          - ``self.row_group_stats``, a DataFrame which contains row groups
+            statistics.
 
         Parameters
         ----------
@@ -616,7 +618,7 @@ class OrderedParquetDataset2:
 
     def write_row_group_files(self, dfs: Iterable[DataFrame], write_opdmd: bool = True):
         """
-        Write row group as files to disk. One row group per file.
+        Write row groups as files to disk. One row group per file.
 
         Parameters
         ----------
@@ -687,12 +689,10 @@ class OrderedParquetDataset2:
 
 # TODO:
 # Create:
-#  - __len__: number of row_groups to check if empty opd or not?
 #  - __getitem__ / to_pandas(): test to_pandas on row group subset
 #  - clean oups.store.write.write() and colllection.py
 #  - rename collection.py
 #  - remove vaex dependency
 #  - set numpy above 2.0
-#  - test case when reaching MAX_FILE_ID
 #  - test case in write when removing 2 sequence of row groups, to check that
 #    when not based on row group indexes, but on file_ids, it works.
