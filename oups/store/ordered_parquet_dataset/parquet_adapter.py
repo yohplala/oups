@@ -97,4 +97,4 @@ class ParquetAdapter:
             df = pf.to_pandas()
             metadata = loads(pf.key_value_metadata[OUPS_METADATA_KEY]) if return_metadata else None
 
-        return df, metadata if return_metadata else df
+        return (df, metadata) if return_metadata else df

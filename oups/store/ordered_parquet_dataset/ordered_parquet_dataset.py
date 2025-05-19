@@ -15,7 +15,7 @@ from os import scandir
 from pathlib import Path
 from pickle import dumps
 from pickle import loads
-from typing import Dict, Iterable, List
+from typing import Dict, Iterable, List, Union
 
 from fastparquet import ParquetFile
 from fastparquet import write as fp_write
@@ -27,6 +27,7 @@ from numpy import uint16
 from numpy import uint32
 from pandas import DataFrame
 from pandas import MultiIndex
+from pandas import Series
 from pandas import concat
 from vaex import open_many
 
@@ -49,6 +50,8 @@ RGS_STATS_BASE_DTYPES = {
     N_ROWS: uint32,
     FILE_IDS: uint16,
 }
+PARQUET_FILE_EXTENSION = ".parquet"
+PARQUET_FILE_PREFIX = "file_"
 
 
 def get_opdmd_filepath(dirpath: str) -> str:
@@ -69,24 +72,35 @@ def get_opdmd_filepath(dirpath: str) -> str:
     return f"{dirpath}_opdmd"
 
 
-def get_parquet_filename(file_id: int, file_id_n_digits: int) -> str:
+def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_digits: int) -> str:
     """
     Get standardized parquet file name format.
 
     Parameters
     ----------
-    file_id : int
-        The file ID to use in the filename.
+    dirpath : str
+        The directory path to use in the filename.
+    file_id : int or Series[int]
+        The file ID to use in the filename. If a Series, a list of file paths
+        is returned.
     file_id_n_digits : int, optional
         Number of digits to use for 'file_id' in filename.
 
     Returns
     -------
-    str
-        The formatted file name.
+    Union[str, List[str]]
+        The formatted file path(s).
 
     """
-    return f"file_{file_id:0{file_id_n_digits}}.parquet"
+    return (
+        f"{dirpath}{os_path.sep}{PARQUET_FILE_PREFIX}{file_id:0{file_id_n_digits}}{PARQUET_FILE_EXTENSION}"
+        if isinstance(file_id, int)
+        else (
+            f"{dirpath}{os_path.sep}{PARQUET_FILE_PREFIX}"
+            + file_id.astype("string").str.zfill(file_id_n_digits)
+            + PARQUET_FILE_EXTENSION
+        ).to_list()
+    )
 
 
 class OrderedParquetDataset(ParquetFile):
@@ -483,14 +497,8 @@ class OrderedParquetDataset2:
                 if new_id not in current_ids:
                     # Safe to rename directly
                     rename(
-                        os_path.join(
-                            self.dirpath,
-                            get_parquet_filename(current_id, self._file_id_n_digits),
-                        ),
-                        os_path.join(
-                            self.dirpath,
-                            get_parquet_filename(new_id, self._file_id_n_digits),
-                        ),
+                        get_parquet_filepaths(self.dirpath, current_id, self._file_id_n_digits),
+                        get_parquet_filepaths(self.dirpath, new_id, self._file_id_n_digits),
                     )
                     current_to_new.pop(current_id)
                     current_ids.discard(current_id)
@@ -540,9 +548,7 @@ class OrderedParquetDataset2:
             raise ValueError("removing row group files is blocked.")
         # Remove files from disk.
         for file_id in file_ids:
-            remove(
-                os_path.join(self.dirpath, get_parquet_filename(file_id, self._file_id_n_digits)),
-            )
+            remove(get_parquet_filepaths(self.dirpath, file_id, self._file_id_n_digits))
         # Remove corresponding file ids from 'self.row_group_stats'.
         ids_to_keep = ones(len(self.row_group_stats), dtype=bool)
         ids_to_keep[file_ids] = False
@@ -550,6 +556,12 @@ class OrderedParquetDataset2:
             self.row_group_stats.set_index(FILE_IDS).iloc[ids_to_keep].reset_index()
         )
         self.forbidden_to_remove_row_group_files = True
+
+    def sort_row_groups(self):
+        """
+        Sort row groups according their min value in 'ordered_on' column.
+        """
+        self.row_group_stats.sort_values(by=ORDERED_ON_MINS, inplace=True, ignore_index=True)
 
     def to_pandas(self):
         """
@@ -561,7 +573,14 @@ class OrderedParquetDataset2:
             Dataframe.
 
         """
-        pass
+        return parquet_adapter.read_parquet(
+            get_parquet_filepaths(
+                self.dirpath,
+                self.row_group_stats[FILE_IDS],
+                self._file_id_n_digits,
+            ),
+            return_metadata=False,
+        )
 
     def write_metadata(self, metadata: Dict[str, str] = None):
         """
@@ -660,10 +679,7 @@ class OrderedParquetDataset2:
                 ),
             )
             parquet_adapter.write_parquet(
-                path=os_path.join(
-                    self.dirpath,
-                    get_parquet_filename(file_id, self._file_id_n_digits),
-                ),
+                path=get_parquet_filepaths(self.dirpath, file_id, self._file_id_n_digits),
                 df=df,
             )
         self.row_group_stats = concat(

@@ -23,7 +23,7 @@ from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import ORDERED_O
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import ORDERED_ON_MINS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset2
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import get_parquet_filename
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import get_parquet_filepaths
 
 
 df_ref = DataFrame(
@@ -245,16 +245,34 @@ def switch_row_group_files(opd, file_id_1, file_id_2):
     file_id_1_row_idx = file_id_list.index(file_id_1)
     file_id_2_row_idx = file_id_list.index(file_id_2)
     rename(
-        os_path.join(opd.dirpath, get_parquet_filename(file_id_1, opd._file_id_n_digits)),
-        os_path.join(opd.dirpath, get_parquet_filename(tmp_id, opd._file_id_n_digits)),
+        os_path.join(
+            opd.dirpath,
+            get_parquet_filepaths(opd.dirpath, file_id_1, opd._file_id_n_digits),
+        ),
+        os_path.join(
+            opd.dirpath,
+            get_parquet_filepaths(opd.dirpath, tmp_id, opd._file_id_n_digits),
+        ),
     )
     rename(
-        os_path.join(opd.dirpath, get_parquet_filename(file_id_2, opd._file_id_n_digits)),
-        os_path.join(opd.dirpath, get_parquet_filename(file_id_1, opd._file_id_n_digits)),
+        os_path.join(
+            opd.dirpath,
+            get_parquet_filepaths(opd.dirpath, file_id_2, opd._file_id_n_digits),
+        ),
+        os_path.join(
+            opd.dirpath,
+            get_parquet_filepaths(opd.dirpath, file_id_1, opd._file_id_n_digits),
+        ),
     )
     rename(
-        os_path.join(opd.dirpath, get_parquet_filename(tmp_id, opd._file_id_n_digits)),
-        os_path.join(opd.dirpath, get_parquet_filename(file_id_2, opd._file_id_n_digits)),
+        os_path.join(
+            opd.dirpath,
+            get_parquet_filepaths(opd.dirpath, tmp_id, opd._file_id_n_digits),
+        ),
+        os_path.join(
+            opd.dirpath,
+            get_parquet_filepaths(opd.dirpath, file_id_2, opd._file_id_n_digits),
+        ),
     )
     tmp_row_group_stats = deepcopy(opd.row_group_stats.iloc[file_id_1_row_idx])
     opd.row_group_stats.iloc[file_id_1_row_idx] = opd.row_group_stats.iloc[file_id_2_row_idx]
@@ -295,3 +313,37 @@ def test_opd_align_file_ids(tmp_path):
         },
     ).astype(RGS_STATS_BASE_DTYPES)
     assert opd.row_group_stats.equals(rg_stats_ref)
+
+
+def test_opd_to_pandas(tmp_path):
+    opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
+    range_df = list(range(len(df_ref) + 1))
+    opd.write_row_group_files(
+        [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
+        write_opdmd=True,
+    )
+    df_res = opd[2:4].to_pandas()
+    assert df_ref.iloc[2:4].equals(df_res)
+
+
+def test_opd_sort_row_groups(tmp_path):
+    tmp_path = "/home/yoh/Documents/code/data/oups/test_opd_sort_row_groups"
+    opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
+    range_df = list(range(len(df_ref) + 1))
+    opd.write_row_group_files(
+        [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
+        write_opdmd=False,
+    )
+    # Unsorting file_ids.
+    switch_row_group_files(opd, 2, 4)
+    switch_row_group_files(opd, 4, 6)
+    opd.align_file_ids()  # Enforce the non sorting, this rest index.
+    print()
+    print("opd.row_group_stats")
+    print(opd.row_group_stats)
+    assert opd.row_group_stats[FILE_IDS].is_monotonic_increasing
+    assert not opd.row_group_stats[ORDERED_ON_MINS].is_monotonic_increasing
+    opd.sort_row_groups()
+    assert opd.row_group_stats[ORDERED_ON_MINS].is_monotonic_increasing
+    df_res = opd[2:].to_pandas()
+    assert df_ref.iloc[2:].equals(df_res)
