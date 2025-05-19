@@ -10,6 +10,7 @@ from functools import cached_property
 from itertools import chain
 from os import path as os_path
 from os import remove
+from os import rename
 from os import scandir
 from pathlib import Path
 from pickle import dumps
@@ -48,6 +49,24 @@ RGS_STATS_BASE_DTYPES = {
     N_ROWS: uint32,
     FILE_IDS: uint16,
 }
+
+
+def get_opdmd_filepath(dirpath: str) -> str:
+    """
+    Get standardized opdmd file path.
+
+    Parameters
+    ----------
+    dirpath : str
+        The directory path to use in the file path.
+
+    Returns
+    -------
+    str
+        The formatted file name.
+
+    """
+    return f"{dirpath}_opdmd"
 
 
 def get_parquet_filename(file_id: int, file_id_n_digits: int) -> str:
@@ -362,7 +381,7 @@ class OrderedParquetDataset2:
         self.dirpath = dirpath
         try:
             self.row_group_stats, self.kvm = parquet_adapter.read_parquet(
-                f"{self.dirpath}_opdmd",
+                get_opdmd_filepath(self.dirpath),
                 return_metadata=True,
             )
             if ordered_on and self.kvm[KEY_ORDERED_ON] != ordered_on:
@@ -440,19 +459,50 @@ class OrderedParquetDataset2:
 
     def align_file_ids(self):
         """
-        Align file ids to row group position in the dataset.
+        Align file ids to row group position in the dataset and rename files.
 
-        This method also formats file ids in file names to have the same number
-        of digits.
-
-        Notes
-        -----
-        - Enforcing file ids number of digits is done so that the files of
-          dataset can be read seamlessly in the correct order by other parquet
-          readers.
+        This method ensures that file ids match their row group positions while:
+        1. Minimizing the number of renames
+        2. Avoiding conflicts where target filenames are already taken
+        3. Using temporary files when necessary to handle circular dependencies
 
         """
-        pass
+        # Build mapping of current file ids to desired new ids
+        mask_ids_to_rename = self.row_group_stats[FILE_IDS] != self.row_group_stats.index
+        current_ids = self.row_group_stats.loc[mask_ids_to_rename, FILE_IDS]
+        if len(current_ids) == 0:
+            return
+        new_ids = current_ids.index.astype(RGS_STATS_BASE_DTYPES[FILE_IDS])
+        current_to_new = dict(zip(current_ids, new_ids))
+        # Process renames
+        current_ids = set(current_ids)
+        while current_to_new:
+            # Find a current_id whose new_id is not taken by another current_id.
+            for current_id, new_id in list(current_to_new.items()):
+                if new_id not in current_ids:
+                    # Safe to rename directly
+                    rename(
+                        os_path.join(
+                            self.dirpath,
+                            get_parquet_filename(current_id, self._file_id_n_digits),
+                        ),
+                        os_path.join(
+                            self.dirpath,
+                            get_parquet_filename(new_id, self._file_id_n_digits),
+                        ),
+                    )
+                    current_to_new.pop(current_id)
+                    current_ids.discard(current_id)
+                else:
+                    # No direct renames possible, need to use temporary id.
+                    temp_id = max(current_to_new) + 1
+                    current_to_new[current_id] = temp_id
+                    # Add at bottom of dict the correct mapping.
+                    current_to_new[temp_id] = new_id
+                    # Restart the loop.
+                    break
+        # Set new ids.
+        self.row_group_stats.loc[mask_ids_to_rename, FILE_IDS] = new_ids
 
     def remove_row_group_files(self, file_ids: List[int]):
         """
@@ -552,7 +602,7 @@ class OrderedParquetDataset2:
                     # Case 'add'.
                     existing_md[key] = value
         parquet_adapter.write_parquet(
-            path=f"{self.dirpath}_opdmd",
+            path=get_opdmd_filepath(self.dirpath),
             df=self.row_group_stats,
             metadata=existing_md,
         )

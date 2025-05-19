@@ -5,6 +5,10 @@ Created on Sat Dec 18 15:00:00 2021.
 @author: yoh
 
 """
+from copy import deepcopy
+from os import path as os_path
+from os import rename
+
 import pytest
 from numpy import iinfo
 from numpy import int8
@@ -19,12 +23,13 @@ from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import ORDERED_O
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import ORDERED_ON_MINS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset2
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import get_parquet_filename
 
 
 df_ref = DataFrame(
     {
-        "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
-        "temperature": [8.4, 5.3, 4.9, 2.3],
+        "timestamp": date_range(start="2021/01/01 08:00", periods=8, freq="2h"),
+        "temperature": [8.4, 5.3, 4.9, 2.3, 1.0, 0.5, 0.2, 0.1],
     },
 )
 
@@ -82,14 +87,14 @@ def test_opd_write_row_group_files(tmp_path, write_opdmd):
     rgs_stats_ref = DataFrame(
         {
             FILE_IDS: [0, 1],
-            N_ROWS: [2, 2],
+            N_ROWS: [2, len(df_ref) - 2],
             ORDERED_ON_MINS: [
                 df_ref.loc[:, "timestamp"].iloc[0],
                 df_ref.loc[:, "timestamp"].iloc[2],
             ],
             ORDERED_ON_MAXS: [
                 df_ref.loc[:, "timestamp"].iloc[1],
-                df_ref.loc[:, "timestamp"].iloc[3],
+                df_ref.loc[:, "timestamp"].iloc[-1],
             ],
         },
     ).astype(RGS_STATS_BASE_DTYPES)
@@ -211,9 +216,82 @@ def test_opd_remove_row_group_files(tmp_path):
         write_opdmd=True,
     )
     # Keep ref before removing.
-    rg_stats_ref = opd.row_group_stats.iloc[[1, 3]].reset_index(drop=True)
+    file_ids_to_remove = [0, 2]
+    file_ids_to_keep = [i for i in opd.row_group_stats.index if i not in file_ids_to_remove]
+    rg_stats_ref = opd.row_group_stats.iloc[file_ids_to_keep].reset_index(drop=True)
     assert not opd.forbidden_to_remove_row_group_files
-    opd.remove_row_group_files([0, 2])
-    assert len(opd) == 2
+    opd.remove_row_group_files(file_ids=file_ids_to_remove)
+    assert len(opd) == len(df_ref) - len(file_ids_to_remove)
     assert opd.row_group_stats.equals(rg_stats_ref)
     assert opd.forbidden_to_remove_row_group_files
+
+
+def switch_row_group_files(opd, file_id_1, file_id_2):
+    """
+    Switch two row group files.
+
+    Parameters
+    ----------
+    opd : OrderedParquetDataset2
+        The ordered parquet dataset.
+    file_id_1 : int
+        The first file id to switch.
+    file_id_2 : int
+        The second file id to switch with file_id_1.
+
+    """
+    tmp_id = len(df_ref)
+    file_id_list = opd.row_group_stats.loc[:, FILE_IDS].to_list()
+    file_id_1_row_idx = file_id_list.index(file_id_1)
+    file_id_2_row_idx = file_id_list.index(file_id_2)
+    rename(
+        os_path.join(opd.dirpath, get_parquet_filename(file_id_1, opd._file_id_n_digits)),
+        os_path.join(opd.dirpath, get_parquet_filename(tmp_id, opd._file_id_n_digits)),
+    )
+    rename(
+        os_path.join(opd.dirpath, get_parquet_filename(file_id_2, opd._file_id_n_digits)),
+        os_path.join(opd.dirpath, get_parquet_filename(file_id_1, opd._file_id_n_digits)),
+    )
+    rename(
+        os_path.join(opd.dirpath, get_parquet_filename(tmp_id, opd._file_id_n_digits)),
+        os_path.join(opd.dirpath, get_parquet_filename(file_id_2, opd._file_id_n_digits)),
+    )
+    tmp_row_group_stats = deepcopy(opd.row_group_stats.iloc[file_id_1_row_idx])
+    opd.row_group_stats.iloc[file_id_1_row_idx] = opd.row_group_stats.iloc[file_id_2_row_idx]
+    opd.row_group_stats.iloc[file_id_2_row_idx] = tmp_row_group_stats
+
+
+def test_opd_align_file_ids(tmp_path):
+    opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
+    range_df = list(range(len(df_ref) + 1))
+    opd.write_row_group_files(
+        [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
+        write_opdmd=False,
+    )
+    # Remove 2nd row group. It keeps one original id and requires to update the
+    # 2 last ids.
+    opd.remove_row_group_files(file_ids=[1])
+    # Introduce two loops in file_ids.
+    # 2 <-> 3.
+    # 4 <-> 5.
+    switch_row_group_files(opd, 2, 4)
+    switch_row_group_files(opd, 4, 6)
+    opd.align_file_ids()
+    ordered_on_mins_maxs_ref = [
+        df_ref.loc[:, "timestamp"].iloc[0],
+        df_ref.loc[:, "timestamp"].iloc[6],
+        df_ref.loc[:, "timestamp"].iloc[3],
+        df_ref.loc[:, "timestamp"].iloc[2],
+        df_ref.loc[:, "timestamp"].iloc[5],
+        df_ref.loc[:, "timestamp"].iloc[4],
+        df_ref.loc[:, "timestamp"].iloc[7],
+    ]
+    rg_stats_ref = DataFrame(
+        {
+            FILE_IDS: [0, 1, 2, 3, 4, 5, 6],
+            N_ROWS: [1, 1, 1, 1, 1, 1, 1],
+            ORDERED_ON_MINS: ordered_on_mins_maxs_ref,
+            ORDERED_ON_MAXS: ordered_on_mins_maxs_ref,
+        },
+    ).astype(RGS_STATS_BASE_DTYPES)
+    assert opd.row_group_stats.equals(rg_stats_ref)
