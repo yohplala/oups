@@ -7,10 +7,10 @@ Created on Sun May 18 16:00:00 2025.
 """
 from base64 import b64decode
 from base64 import b64encode
-from pickle import dumps
-from pickle import loads
 from typing import Dict
 
+from cloudpickle import dumps
+from cloudpickle import loads
 from pandas import DataFrame
 from pandas import MultiIndex
 

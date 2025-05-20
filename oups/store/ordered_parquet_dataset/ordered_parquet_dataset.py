@@ -8,7 +8,6 @@ Created on Wed Dec 26 22:30:00 2021.
 from copy import deepcopy
 from functools import cached_property
 from itertools import chain
-from os import path as os_path
 from os import remove
 from os import rename
 from os import scandir
@@ -74,7 +73,7 @@ def get_opdmd_filepath(dirpath: str) -> str:
 
 def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_digits: int) -> str:
     """
-    Get standardized parquet file name format.
+    Get standardized parquet file path(s).
 
     Parameters
     ----------
@@ -93,13 +92,13 @@ def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_d
 
     """
     return (
-        f"{dirpath}{os_path.sep}{PARQUET_FILE_PREFIX}{file_id:0{file_id_n_digits}}{PARQUET_FILE_EXTENSION}"
-        if isinstance(file_id, int)
-        else (
-            f"{dirpath}{os_path.sep}{PARQUET_FILE_PREFIX}"
+        (
+            f"{dirpath}{DIR_SEP}{PARQUET_FILE_PREFIX}"
             + file_id.astype("string").str.zfill(file_id_n_digits)
             + PARQUET_FILE_EXTENSION
         ).to_list()
+        if isinstance(file_id, Series)
+        else f"{dirpath}{DIR_SEP}{PARQUET_FILE_PREFIX}{file_id:0{file_id_n_digits}}{PARQUET_FILE_EXTENSION}"
     )
 
 
@@ -482,32 +481,34 @@ class OrderedParquetDataset2:
            dependencies.
 
         """
-        # Build mapping of current file ids to desired new ids
+        # Build mapping of current file ids to desired new ids.
         mask_ids_to_rename = self.row_group_stats[FILE_IDS] != self.row_group_stats.index
-        current_ids = self.row_group_stats.loc[mask_ids_to_rename, FILE_IDS]
-        if len(current_ids) == 0:
+        current_ids_to_rename = self.row_group_stats.loc[mask_ids_to_rename, FILE_IDS]
+        if len(current_ids_to_rename) == 0:
             return
-        new_ids = current_ids.index.astype(RGS_STATS_BASE_DTYPES[FILE_IDS])
-        current_to_new = dict(zip(current_ids, new_ids))
+        # Initialize 'temp_id' to be used when no direct rename is possible.
+        temp_id = self.row_group_stats[FILE_IDS].max() + 1
+        new_ids = current_ids_to_rename.index.astype(RGS_STATS_BASE_DTYPES[FILE_IDS])
+        current_to_new = dict(zip(current_ids_to_rename, new_ids))
         # Process renames
-        current_ids = set(current_ids)
+        current_ids_to_rename = set(current_ids_to_rename)
         while current_to_new:
             # Find a current_id whose new_id is not taken by another current_id.
             for current_id, new_id in list(current_to_new.items()):
-                if new_id not in current_ids:
+                if new_id not in current_ids_to_rename:
                     # Safe to rename directly
                     rename(
                         get_parquet_filepaths(self.dirpath, current_id, self._file_id_n_digits),
                         get_parquet_filepaths(self.dirpath, new_id, self._file_id_n_digits),
                     )
-                    current_to_new.pop(current_id)
-                    current_ids.discard(current_id)
+                    del current_to_new[current_id]
+                    current_ids_to_rename.discard(current_id)
                 else:
                     # No direct renames possible, need to use temporary id.
-                    temp_id = max(current_to_new) + 1
                     current_to_new[current_id] = temp_id
                     # Add at bottom of dict the correct mapping.
                     current_to_new[temp_id] = new_id
+                    temp_id += 1
                     # Restart the loop.
                     break
         # Set new ids.
@@ -706,10 +707,9 @@ class OrderedParquetDataset2:
 
 # TODO:
 # Create:
-#  - __getitem__ / to_pandas(): test to_pandas on row group subset
 #  - clean oups.store.write.write() and colllection.py
 #  - rename collection.py
 #  - remove vaex dependency
 #  - set numpy above 2.0
-#  - test case in write when removing 2 sequence of row groups, to check that
+#  - in write when removing 2 sequence of row groups, to check that
 #    when not based on row group indexes, but on file_ids, it works.

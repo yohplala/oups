@@ -5,8 +5,6 @@ Created on Sat Dec 18 15:00:00 2021.
 @author: yoh
 
 """
-from copy import deepcopy
-from os import path as os_path
 from os import rename
 
 import pytest
@@ -226,9 +224,12 @@ def test_opd_remove_row_group_files(tmp_path):
     assert opd.forbidden_to_remove_row_group_files
 
 
-def switch_row_group_files(opd, file_id_1, file_id_2):
+def switch_row_group_file_ids(opd, file_id_1, file_id_2):
     """
-    Switch two row group files.
+    Switch two row group file ids in row group filename and row group stats.
+
+    This function does not change the row group order. It only switches the file
+    ids.
 
     Parameters
     ----------
@@ -242,41 +243,27 @@ def switch_row_group_files(opd, file_id_1, file_id_2):
     """
     tmp_id = len(df_ref)
     file_id_list = opd.row_group_stats.loc[:, FILE_IDS].to_list()
+    file_ids_col_idx = opd.row_group_stats.columns.get_loc(FILE_IDS)
     file_id_1_row_idx = file_id_list.index(file_id_1)
     file_id_2_row_idx = file_id_list.index(file_id_2)
     rename(
-        os_path.join(
-            opd.dirpath,
-            get_parquet_filepaths(opd.dirpath, file_id_1, opd._file_id_n_digits),
-        ),
-        os_path.join(
-            opd.dirpath,
-            get_parquet_filepaths(opd.dirpath, tmp_id, opd._file_id_n_digits),
-        ),
+        get_parquet_filepaths(opd.dirpath, file_id_1, opd._file_id_n_digits),
+        get_parquet_filepaths(opd.dirpath, tmp_id, opd._file_id_n_digits),
     )
     rename(
-        os_path.join(
-            opd.dirpath,
-            get_parquet_filepaths(opd.dirpath, file_id_2, opd._file_id_n_digits),
-        ),
-        os_path.join(
-            opd.dirpath,
-            get_parquet_filepaths(opd.dirpath, file_id_1, opd._file_id_n_digits),
-        ),
+        get_parquet_filepaths(opd.dirpath, file_id_2, opd._file_id_n_digits),
+        get_parquet_filepaths(opd.dirpath, file_id_1, opd._file_id_n_digits),
     )
     rename(
-        os_path.join(
-            opd.dirpath,
-            get_parquet_filepaths(opd.dirpath, tmp_id, opd._file_id_n_digits),
-        ),
-        os_path.join(
-            opd.dirpath,
-            get_parquet_filepaths(opd.dirpath, file_id_2, opd._file_id_n_digits),
-        ),
+        get_parquet_filepaths(opd.dirpath, tmp_id, opd._file_id_n_digits),
+        get_parquet_filepaths(opd.dirpath, file_id_2, opd._file_id_n_digits),
     )
-    tmp_row_group_stats = deepcopy(opd.row_group_stats.iloc[file_id_1_row_idx])
-    opd.row_group_stats.iloc[file_id_1_row_idx] = opd.row_group_stats.iloc[file_id_2_row_idx]
-    opd.row_group_stats.iloc[file_id_2_row_idx] = tmp_row_group_stats
+    tmp_file_id = opd.row_group_stats.iloc[file_id_1_row_idx, file_ids_col_idx]
+    opd.row_group_stats.iloc[file_id_1_row_idx, file_ids_col_idx] = opd.row_group_stats.iloc[
+        file_id_2_row_idx,
+        file_ids_col_idx,
+    ]
+    opd.row_group_stats.iloc[file_id_2_row_idx, file_ids_col_idx] = tmp_file_id
 
 
 def test_opd_align_file_ids(tmp_path):
@@ -292,16 +279,16 @@ def test_opd_align_file_ids(tmp_path):
     # Introduce two loops in file_ids.
     # 2 <-> 3.
     # 4 <-> 5.
-    switch_row_group_files(opd, 2, 4)
-    switch_row_group_files(opd, 4, 6)
+    switch_row_group_file_ids(opd, 2, 4)
+    switch_row_group_file_ids(opd, 4, 6)
     opd.align_file_ids()
     ordered_on_mins_maxs_ref = [
         df_ref.loc[:, "timestamp"].iloc[0],
-        df_ref.loc[:, "timestamp"].iloc[6],
-        df_ref.loc[:, "timestamp"].iloc[3],
         df_ref.loc[:, "timestamp"].iloc[2],
-        df_ref.loc[:, "timestamp"].iloc[5],
+        df_ref.loc[:, "timestamp"].iloc[3],
         df_ref.loc[:, "timestamp"].iloc[4],
+        df_ref.loc[:, "timestamp"].iloc[5],
+        df_ref.loc[:, "timestamp"].iloc[6],
         df_ref.loc[:, "timestamp"].iloc[7],
     ]
     rg_stats_ref = DataFrame(
@@ -327,7 +314,6 @@ def test_opd_to_pandas(tmp_path):
 
 
 def test_opd_sort_row_groups(tmp_path):
-    tmp_path = "/home/yoh/Documents/code/data/oups/test_opd_sort_row_groups"
     opd = OrderedParquetDataset2(tmp_path, ordered_on="timestamp")
     range_df = list(range(len(df_ref) + 1))
     opd.write_row_group_files(
@@ -335,13 +321,10 @@ def test_opd_sort_row_groups(tmp_path):
         write_opdmd=False,
     )
     # Unsorting file_ids.
-    switch_row_group_files(opd, 2, 4)
-    switch_row_group_files(opd, 4, 6)
-    opd.align_file_ids()  # Enforce the non sorting, this rest index.
-    print()
-    print("opd.row_group_stats")
-    print(opd.row_group_stats)
-    assert opd.row_group_stats[FILE_IDS].is_monotonic_increasing
+    switch_row_group_file_ids(opd, 2, 4)
+    switch_row_group_file_ids(opd, 4, 6)
+    # Un-order row groups 'ordered_on_mins' and 'ordered_on_maxs'.
+    opd.row_group_stats.sort_values(by=FILE_IDS, inplace=True)
     assert not opd.row_group_stats[ORDERED_ON_MINS].is_monotonic_increasing
     opd.sort_row_groups()
     assert opd.row_group_stats[ORDERED_ON_MINS].is_monotonic_increasing
