@@ -517,6 +517,7 @@ class OrderedParquetDataset2:
             if self.is_row_group_subset
             else set(self.row_group_stats.loc[:, FILE_IDS])
         )
+        max_iterations_allowed = 2 * len(current_ids_to_rename)
         # Process renames
         while current_to_new:
             # Find a current_id whose new_id is not taken by another current_id.
@@ -530,6 +531,12 @@ class OrderedParquetDataset2:
                     del current_to_new[current_id]
                     ids_already_in_use.discard(current_id)
                 else:
+                    max_iterations_allowed -= 1
+                    if max_iterations_allowed == 0:
+                        raise ValueError(
+                            "infinite loop detected in OrderedParquetDataset.align_file_ids()."
+                            f"Check dataset in {self.dirpath}.",
+                        )
                     # No direct renames possible, need to use temporary id.
                     current_to_new[current_id] = temp_id
                     # Add at bottom of dict the correct mapping.
