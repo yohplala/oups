@@ -112,7 +112,7 @@ def file_ids_in_directory(dirpath: str) -> List[int]:
     Return an unordered list of file ids of parquet files in directory.
 
     Find the integer matching "**file_*.parquet" in referenced path and returns them as
-    list.
+    a list.
 
     """
     return [
