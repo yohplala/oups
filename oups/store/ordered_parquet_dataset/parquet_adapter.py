@@ -53,30 +53,34 @@ class ParquetAdapter:
         """
         self.use_arro3 = use_arro3
 
-    def write_parquet(self, path, df: DataFrame, metadata: Dict = None, **kwargs):
+    def write_parquet(self, path, df: DataFrame, key_value_metadata: Dict = None, **kwargs):
         """
         Write DataFrame to parquet with unified interface.
         """
         if self.use_arro3:
             from arro3.io import write_parquet
 
-            metadata = (
-                {OUPS_METADATA_KEY: b64encode(dumps(metadata)).decode()} if metadata else None
+            key_value_metadata = (
+                {OUPS_METADATA_KEY: b64encode(dumps(key_value_metadata)).decode()}
+                if key_value_metadata
+                else None
             )
-            write_parquet(df, path, key_value_metadata=metadata, **kwargs)
+            write_parquet(df, path, key_value_metadata=key_value_metadata, **kwargs)
         else:
             from fastparquet import write
 
-            metadata = {OUPS_METADATA_KEY: dumps(metadata)} if metadata else None
+            key_value_metadata = (
+                {OUPS_METADATA_KEY: dumps(key_value_metadata)} if key_value_metadata else None
+            )
             write(
                 path,
                 df,
-                custom_metadata=metadata,
+                custom_metadata=key_value_metadata,
                 file_scheme="simple",
                 **kwargs,
             )
 
-    def read_parquet(self, path, return_metadata: bool = True, **kwargs):
+    def read_parquet(self, path, return_key_value_metadata: bool = True, **kwargs):
         """
         Read parquet and metadata with unified interface.
         """
@@ -85,9 +89,9 @@ class ParquetAdapter:
 
             table = read_parquet(path).read_all()
             df = DataFrame(table.to_struct_array().to_numpy())
-            metadata = (
+            key_value_metadata = (
                 loads(b64decode((table.schema.metadata_str[OUPS_METADATA_KEY]).encode()))
-                if return_metadata
+                if return_key_value_metadata
                 else None
             )
         else:
@@ -95,6 +99,10 @@ class ParquetAdapter:
 
             pf = ParquetFile(path)
             df = pf.to_pandas()
-            metadata = loads(pf.key_value_metadata[OUPS_METADATA_KEY]) if return_metadata else None
+            key_value_metadata = (
+                loads(pf.key_value_metadata[OUPS_METADATA_KEY])
+                if return_key_value_metadata
+                else None
+            )
 
-        return (df, metadata) if return_metadata else df
+        return (df, key_value_metadata) if return_key_value_metadata else df

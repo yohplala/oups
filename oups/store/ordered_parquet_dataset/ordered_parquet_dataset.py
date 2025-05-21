@@ -14,6 +14,7 @@ from os import scandir
 from pathlib import Path
 from pickle import dumps
 from pickle import loads
+from re import compile
 from typing import Dict, Iterable, List, Union
 
 from fastparquet import ParquetFile
@@ -100,6 +101,25 @@ def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_d
         if isinstance(file_id, Series)
         else f"{dirpath}{DIR_SEP}{PARQUET_FILE_PREFIX}{file_id:0{file_id_n_digits}}{PARQUET_FILE_EXTENSION}"
     )
+
+
+# Find in names of parquet files the integer matching "**file_*.parquet" as 'i'.
+FILE_ID_FROM_REGEX = compile(rf".*{PARQUET_FILE_PREFIX}(?P<i>[\d]+){PARQUET_FILE_EXTENSION}$")
+
+
+def file_ids_in_directory(dirpath: str) -> List[int]:
+    """
+    Return an unordered list of file ids of parquet files in directory.
+
+    Find the integer matching "**file_*.parquet" in referenced path and returns them as
+    list.
+
+    """
+    return [
+        int(FILE_ID_FROM_REGEX.match(entry.name)["i"])
+        for entry in scandir(dirpath)
+        if entry.is_file()
+    ]
 
 
 class OrderedParquetDataset(ParquetFile):
@@ -309,7 +329,7 @@ class OrderedParquetDataset2:
         Number of digits to use for 'file_id' in filename. It is kept as an
         attribute to avoid recomputing it at each call to
         'get_parquet_file_name()'.
-    _max_file_id : int
+    _max_allowed_file_id : int
         Maximum allowed file id. Kept as hidden attribute to avoid
         recomputing it at each call in 'write_row_group_files()'.
     _max_n_rows : int
@@ -318,24 +338,24 @@ class OrderedParquetDataset2:
         'write_row_group_files()'.
     dirpath : str
         Directory path from where to load data.
-    forbidden_to_write_row_group_files : bool
-        Flag warning if writing is blocked. Writing is blocked when the opd
-        object is a subset (use of '_getitem__' method).
-        This flag is a security to prevent adding then new row group files
-        without knowing all file ids that may already exist in the dataset.
-        To effectively remove row group files, use 'remove_row_group_files()'
-        method.
-    forbidden_to_remove_row_group_files : bool
-        Flag warning if removing is blocked. Removing is blocked when
-        'remove_row_group_files()' method is called, but reset when
-        'write_metadata()' method is then called.
-        This flag is a security to prevent iterating
-        'remove_row_group_files()' method without the sense that the process
-        involving the current opd object has been completed first.
-        It is anticipated/expected that the completion of such a process
-        involves a 'write_metadata()' step.
-    kvm : dict
+    has_row_groups_already_removed : bool
+        Flag warning that 'remove_row_group_files()' method has already been
+        called. It is reset when 'write_metadata()' method is then called.
+        This flag is a security to prevent iterating 'remove_row_group_files()'
+        method without the sense that the process involving the current opd
+        object has been completed first. It is anticipated/expected that the
+        completion of such a process involves a 'write_metadata()' step.
+    is_row_group_subset : bool
+        Flag warning current opd is a subset of an bigger one (use of
+        '_getitem__' method). In this case, methods interacting with file ids in
+        parquet filename needs to use a 'max_file_id' based on all files in
+        directory. This flag ensures that 'max_file_id' gets assessed this way.
+        This applies to 'align_file_ids()' and 'write_row_group_files()'
+        methods.
+    key_value_metadata : Dict[str, str]
         Key-value metadata, from user and including 'ordered_on' column name.
+    max_file_id : int
+        Maximum file id in current directory.
     ordered_on : str
         Column name to order row groups by.
     row_group_stats : DataFrame
@@ -393,14 +413,14 @@ class OrderedParquetDataset2:
         """
         self.dirpath = dirpath
         try:
-            self.row_group_stats, self.kvm = parquet_adapter.read_parquet(
+            self.row_group_stats, self.key_value_metadata = parquet_adapter.read_parquet(
                 get_opdmd_filepath(self.dirpath),
-                return_metadata=True,
+                return_key_value_metadata=True,
             )
-            if ordered_on and self.kvm[KEY_ORDERED_ON] != ordered_on:
+            if ordered_on and self.key_value_metadata[KEY_ORDERED_ON] != ordered_on:
                 raise ValueError(
                     f"'ordered_on' parameter value '{ordered_on}' does not match "
-                    f"'{self.kvm[KEY_ORDERED_ON]}' in record dataset.",
+                    f"'{self.key_value_metadata[KEY_ORDERED_ON]}' in record dataset.",
                 )
         except FileNotFoundError:
             # Using an empty Dataframe so that it can be written in the case
@@ -410,10 +430,10 @@ class OrderedParquetDataset2:
             self.row_group_stats = DataFrame(columns=RGS_STATS_COLUMNS).astype(
                 RGS_STATS_BASE_DTYPES,
             )
-            self.kvm = {KEY_ORDERED_ON: ordered_on}
-        self.ordered_on = self.kvm[KEY_ORDERED_ON]
-        self.forbidden_to_write_row_group_files = False
-        self.forbidden_to_remove_row_group_files = False
+            self.key_value_metadata = {KEY_ORDERED_ON: ordered_on}
+        self.ordered_on = self.key_value_metadata[KEY_ORDERED_ON]
+        self.is_row_group_subset = False
+        self.has_row_groups_already_removed = False
 
     def __getitem__(self, item):
         """
@@ -437,8 +457,8 @@ class OrderedParquetDataset2:
             else self.row_group_stats.iloc[item]
         )
         new_opd.__dict__ = self.__dict__ | {
-            "forbidden_to_write_row_group_files": True,
-            "kvm": deepcopy(self.kvm),
+            "is_row_group_subset": True,
+            "key_value_metadata": deepcopy(self.key_value_metadata),
             "row_group_stats": new_row_group_stats,
         }
         return new_opd
@@ -450,7 +470,7 @@ class OrderedParquetDataset2:
         return len(self.row_group_stats)
 
     @cached_property
-    def _max_file_id(self):
+    def _max_allowed_file_id(self):
         """
         Return maximum allowed file id.
         """
@@ -461,7 +481,7 @@ class OrderedParquetDataset2:
         """
         Return number of digits imposed to format file ids in file names.
         """
-        return len(str(self._max_file_id))
+        return len(str(self._max_allowed_file_id))
 
     @cached_property
     def _max_n_rows(self):
@@ -482,27 +502,33 @@ class OrderedParquetDataset2:
 
         """
         # Build mapping of current file ids to desired new ids.
-        mask_ids_to_rename = self.row_group_stats[FILE_IDS] != self.row_group_stats.index
+        mask_ids_to_rename = self.row_group_stats.loc[:, FILE_IDS] != self.row_group_stats.index
         current_ids_to_rename = self.row_group_stats.loc[mask_ids_to_rename, FILE_IDS]
         if len(current_ids_to_rename) == 0:
             return
         # Initialize 'temp_id' to be used when no direct rename is possible.
-        temp_id = self.row_group_stats[FILE_IDS].max() + 1
+        temp_id = self.max_file_id + 1
         new_ids = current_ids_to_rename.index.astype(RGS_STATS_BASE_DTYPES[FILE_IDS])
         current_to_new = dict(zip(current_ids_to_rename, new_ids))
+        # Set of ids already being used by files in directory.
+        # Before renaming, we will check the 'new_id' is not already taken.
+        ids_already_in_use = (
+            set(file_ids_in_directory(self.dirpath))
+            if self.is_row_group_subset
+            else set(self.row_group_stats.loc[:, FILE_IDS])
+        )
         # Process renames
-        current_ids_to_rename = set(current_ids_to_rename)
         while current_to_new:
             # Find a current_id whose new_id is not taken by another current_id.
             for current_id, new_id in list(current_to_new.items()):
-                if new_id not in current_ids_to_rename:
+                if new_id not in ids_already_in_use:
                     # Safe to rename directly
                     rename(
                         get_parquet_filepaths(self.dirpath, current_id, self._file_id_n_digits),
                         get_parquet_filepaths(self.dirpath, new_id, self._file_id_n_digits),
                     )
                     del current_to_new[current_id]
-                    current_ids_to_rename.discard(current_id)
+                    ids_already_in_use.discard(current_id)
                 else:
                     # No direct renames possible, need to use temporary id.
                     current_to_new[current_id] = temp_id
@@ -513,6 +539,20 @@ class OrderedParquetDataset2:
                     break
         # Set new ids.
         self.row_group_stats.loc[mask_ids_to_rename, FILE_IDS] = new_ids
+
+    @property
+    def max_file_id(self):
+        """
+        Return maximum file id in current directory.
+
+        If not row group in directory, return -1.
+
+        """
+        if self.is_row_group_subset:
+            # Get max 'file_id' safely by reviewing all files in directory.
+            return max(file_ids_in_directory(self.dirpath))
+        # Get max 'file_id' from 'self.row_group_stats'.
+        return -1 if self.row_group_stats.empty else int(self.row_group_stats[FILE_IDS].max())
 
     def remove_row_group_files(self, file_ids: List[int]):
         """
@@ -534,18 +574,18 @@ class OrderedParquetDataset2:
         may not be valid anylonger at a next iteration.
         To mitigate this issue, removing row group files is blocked after
         running 'remove_row_group_files()' once by using
-        'forbidden_to_remove_row_group_files' flag.
+        'has_row_groups_already_removed' flag.
         This flag is a security to prevent iterating 'remove_row_group_files()'
         method without the sense that the process involving the current opd
         object has been completed first. It is anticipated/expected that the
         completion of such a process involves a 'write_metadata()' step.
         For this reason, writing opdmd data right after removing row group files
         is not proposed either.
-        The 'forbidden_to_remove_row_group_files' flag is then reset when
+        The 'has_row_groups_already_removed' flag is then reset when
         'write_metadata()' method is called.
 
         """
-        if self.forbidden_to_remove_row_group_files:
+        if self.has_row_groups_already_removed:
             raise ValueError("removing row group files is blocked.")
         # Remove files from disk.
         for file_id in file_ids:
@@ -556,7 +596,7 @@ class OrderedParquetDataset2:
         self.row_group_stats = (
             self.row_group_stats.set_index(FILE_IDS).iloc[ids_to_keep].reset_index()
         )
-        self.forbidden_to_remove_row_group_files = True
+        self.has_row_groups_already_removed = True
 
     def sort_row_groups(self):
         """
@@ -580,23 +620,23 @@ class OrderedParquetDataset2:
                 self.row_group_stats[FILE_IDS],
                 self._file_id_n_digits,
             ),
-            return_metadata=False,
+            return_key_value_metadata=False,
         )
 
-    def write_metadata(self, metadata: Dict[str, str] = None):
+    def write_metadata(self, key_value_metadata: Dict[str, str] = None):
         """
         Write metadata to disk.
 
         Metadata are 2 different types of data,
-          - ``self.kvm``, a dict which (key, value) pairs can be set by user,
-            and which also contain ``self.ordered_on`` parameter.
+          - ``self.key_value_metadata``, a dict which (key, value) pairs can be
+            set by user, and which also contain ``self.ordered_on`` parameter.
             It is retrieved from ``OUPS_METADATA_KEY`` key.
           - ``self.row_group_stats``, a DataFrame which contains row groups
             statistics.
 
         Parameters
         ----------
-        metadata : Dict[str, str], optional
+        key_value_metadata : Dict[str, str], optional
             User-defined key-value metadata to write, or update in dataset.
 
         Notes
@@ -610,9 +650,9 @@ class OrderedParquetDataset2:
             it is removed from existing.
 
         """
-        existing_md = self.kvm
-        if metadata:
-            for key, value in metadata.items():
+        existing_md = self.key_value_metadata
+        if key_value_metadata:
+            for key, value in key_value_metadata.items():
                 if key in existing_md:
                     if value is None:
                         # Case 'remove'.
@@ -626,15 +666,15 @@ class OrderedParquetDataset2:
         parquet_adapter.write_parquet(
             path=get_opdmd_filepath(self.dirpath),
             df=self.row_group_stats,
-            metadata=existing_md,
+            key_value_metadata=existing_md,
         )
-        # Reset 'forbidden_to_remove_row_group_files' flag, in case it was set.
+        # Reset 'has_row_groups_already_removed' flag, in case it was set.
         # This flag is a security to prevent iterating
         # 'remove_row_group_files()' method without the sense that the process
         # involving the current opd object has been completed first.
         # It is anticipated/expected that the completion of such a process
         # involves a 'write_metadata()' step.
-        self.forbidden_to_remove_row_group_files = False
+        self.has_row_groups_already_removed = False
 
     def write_row_group_files(self, dfs: Iterable[DataFrame], write_opdmd: bool = True):
         """
@@ -646,8 +686,6 @@ class OrderedParquetDataset2:
             Dataframes to write.
 
         """
-        if self.forbidden_to_write_row_group_files:
-            raise ValueError("writing row group files is blocked.")
         iter_dfs = iter(dfs)
         first_df = next(iter_dfs)
         if self.ordered_on not in first_df.columns:
@@ -659,13 +697,8 @@ class OrderedParquetDataset2:
         max_file_id_exceeded = False
         max_n_rows_exceeded = False
         Path(self.dirpath).mkdir(parents=True, exist_ok=True)
-        for file_id, df in enumerate(
-            dfs,
-            start=(
-                0 if self.row_group_stats.empty else self.row_group_stats.loc[:, FILE_IDS].max() + 1
-            ),
-        ):
-            if file_id > self._max_file_id:
+        for file_id, df in enumerate(dfs, start=self.max_file_id + 1):
+            if file_id > self._max_allowed_file_id:
                 max_file_id_exceeded = True
                 break
             if len(df) > self._max_n_rows:
@@ -695,7 +728,7 @@ class OrderedParquetDataset2:
             self.write_metadata()
         if max_file_id_exceeded:
             raise ValueError(
-                f"file id '{file_id}' exceeds max value {self._max_file_id}. "
+                f"file id '{file_id}' exceeds max value {self._max_allowed_file_id}. "
                 "Metadata has been written before the exception has been raised.",
             )
         if max_n_rows_exceeded:
@@ -707,6 +740,7 @@ class OrderedParquetDataset2:
 
 # TODO:
 # Create:
+#  - implement 'write()' method
 #  - clean oups.store.write.write() and colllection.py
 #  - rename collection.py
 #  - remove vaex dependency
