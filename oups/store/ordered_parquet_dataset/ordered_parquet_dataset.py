@@ -500,7 +500,13 @@ class OrderedParquetDataset2:
         3. Using temporary filenames when necessary to handle circular
            dependencies.
 
+        Notes
+        -----
+        - This method is not supported for row group subsets.
+
         """
+        if self.is_row_group_subset:
+            raise ValueError("'align_file_ids()' is not supported for row group subsets.")
         # Build mapping of current file ids to desired new ids.
         mask_ids_to_rename = self.row_group_stats.loc[:, FILE_IDS] != self.row_group_stats.index
         current_ids_to_rename = self.row_group_stats.loc[mask_ids_to_rename, FILE_IDS]
@@ -512,12 +518,7 @@ class OrderedParquetDataset2:
         current_to_new = dict(zip(current_ids_to_rename, new_ids))
         # Set of ids already being used by files in directory.
         # Before renaming, we will check the 'new_id' is not already taken.
-        ids_already_in_use = (
-            set(file_ids_in_directory(self.dirpath))
-            if self.is_row_group_subset
-            else set(self.row_group_stats.loc[:, FILE_IDS])
-        )
-        max_iterations_allowed = 2 * len(current_ids_to_rename)
+        ids_already_in_use = set(current_ids_to_rename)
         # Process renames
         while current_to_new:
             # Find a current_id whose new_id is not taken by another current_id.
@@ -531,12 +532,6 @@ class OrderedParquetDataset2:
                     del current_to_new[current_id]
                     ids_already_in_use.discard(current_id)
                 else:
-                    max_iterations_allowed -= 1
-                    if max_iterations_allowed == 0:
-                        raise ValueError(
-                            "infinite loop detected in OrderedParquetDataset.align_file_ids()."
-                            f"Check dataset in {self.dirpath}.",
-                        )
                     # No direct renames possible, need to use temporary id.
                     current_to_new[current_id] = temp_id
                     # Add at bottom of dict the correct mapping.
