@@ -8,11 +8,14 @@ Created on Wed Dec  6 22:30:00 2021.
 from importlib import import_module
 from typing import Dict, List, Optional, Tuple, Union
 
-from numpy import array
 from numpy import dtype
 from pandas import DataFrame
 from pandas import Series
 
+from oups.defines import KEY_FILE_IDS
+from oups.defines import KEY_N_ROWS
+from oups.defines import KEY_ORDERED_ON_MAXS
+from oups.defines import KEY_ORDERED_ON_MINS
 from oups.store.write.iter_merge_split_data import iter_merge_split_data
 from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
 from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
@@ -20,9 +23,6 @@ from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
 
 COMPRESSION = "SNAPPY"
 DTYPE_DATETIME64 = dtype("datetime64[ns]")
-EMPTY_DATAFRAME = DataFrame()
-MIN = "min"
-MAX = "max"
 ROW_GROUP_INT_TARGET_SIZE = 6_345_000
 KEY_MAX_N_OFF_TARGET_RGS = "max_n_off_target_rgs"
 KEY_ROW_GROUP_TARGET_SIZE = "row_group_target_size"
@@ -78,7 +78,7 @@ def write(
     row_group_target_size: Optional[Union[int, str]] = ROW_GROUP_INT_TARGET_SIZE,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_n_off_target_rgs: int = None,
-    metadata: Dict[str, str] = None,
+    key_value_metadata: Dict[str, str] = None,
     compression: str = COMPRESSION,
 ):
     """
@@ -133,7 +133,7 @@ def write(
             be merged to the last existing one to 'complete' it (if it is not
             'complete' already).
 
-    metadata : Dict[str, str], optional
+    key_value_metadata : Dict[str, str], optional
         Key-value metadata to write, or update in dataset. Please see
         fastparquet for updating logic in case of `None` value being used.
     compression : str, default SNAPPY
@@ -187,23 +187,13 @@ def write(
         import_module("oups.store.ordered_parquet_dataset").OrderedParquetDataset(
             dirpath,
             ordered_on=ordered_on,
-            df_like=df,
         )
         if isinstance(dirpath, str)
         else
         # Case 'dirpath' is already an OrderedParquetDataset.
         dirpath
     )
-    opd_statistics = ordered_parquet_dataset.statistics
-    # TODO: remove below check once OPD can be correctly initialized from
-    # scratch.
-    if str(ordered_on) in opd_statistics[MIN]:
-        rg_ordered_on_mins = array(opd_statistics[MIN][str(ordered_on)])
-        rg_ordered_on_maxs = array(opd_statistics[MAX][str(ordered_on)])
-    else:
-        rg_ordered_on_mins = array([])
-        rg_ordered_on_maxs = array([])
-    if df is not None or len(rg_ordered_on_mins):
+    if df is not None or len(ordered_parquet_dataset):  # len(rg_ordered_on_mins):
         if isinstance(row_group_target_size, int):
             if drop_duplicates and df is not None:
                 # Duplicates are dropped a first time in the DataFrame, so that the
@@ -211,26 +201,35 @@ def write(
                 # correct approximate number of rows in DataFrame.
                 df.drop_duplicates(subset=subset, keep="last", ignore_index=True, inplace=True)
             merge_split_strategy = NRowsMergeSplitStrategy(
-                rg_ordered_on_mins=rg_ordered_on_mins,
-                rg_ordered_on_maxs=rg_ordered_on_maxs,
+                rg_ordered_on_mins=ordered_parquet_dataset.row_group_stats.loc[
+                    :,
+                    KEY_ORDERED_ON_MINS,
+                ].to_numpy(),  # rg_ordered_on_mins,
+                rg_ordered_on_maxs=ordered_parquet_dataset.row_group_stats.loc[
+                    :,
+                    KEY_ORDERED_ON_MAXS,
+                ].to_numpy(),  # rg_ordered_on_maxs,
                 df_ordered_on=df_ordered_on,
                 drop_duplicates=drop_duplicates,
-                rgs_n_rows=array(
-                    [rg.num_rows for rg in ordered_parquet_dataset.row_groups],
-                    dtype=int,
-                ),
+                rgs_n_rows=ordered_parquet_dataset.row_group_stats.loc[:, KEY_N_ROWS],
                 row_group_target_size=row_group_target_size,
             )
         else:
             merge_split_strategy = TimePeriodMergeSplitStrategy(
-                rg_ordered_on_mins=rg_ordered_on_mins,
-                rg_ordered_on_maxs=rg_ordered_on_maxs,
+                rg_ordered_on_mins=ordered_parquet_dataset.row_group_stats.loc[
+                    :,
+                    KEY_ORDERED_ON_MINS,
+                ].to_numpy(),  # rg_ordered_on_mins,
+                rg_ordered_on_maxs=ordered_parquet_dataset.row_group_stats.loc[
+                    :,
+                    KEY_ORDERED_ON_MAXS,
+                ].to_numpy(),  # rg_ordered_on_maxs,
                 df_ordered_on=df_ordered_on,
                 drop_duplicates=drop_duplicates,
                 row_group_time_period=row_group_target_size,
             )
-        ordered_parquet_dataset.write_row_groups(
-            data=iter_merge_split_data(
+        ordered_parquet_dataset.write_row_group_files(
+            dfs=iter_merge_split_data(
                 opd=ordered_parquet_dataset,
                 ordered_on=ordered_on,
                 df=df,
@@ -241,26 +240,18 @@ def write(
                 drop_duplicates=drop_duplicates,
                 subset=subset,
             ),
-            row_group_offsets=None,
-            sort_pnames=False,
             compression=compression,
-            write_fmd=False,
+            write_opdmd=False,
         )
         # Remove row groups of data that is overlapping.
-        for rg_idx_start_end_excl in merge_split_strategy.rg_idx_mrs_starts_ends_excl:
-            # TODO: this method is flawed, it should be based on 'file_ids',
-            # which do not change when removing row groups, while
-            # row group indexes (position in dataset) do.
-            # raise ValueError("not implemented yet")
-            ordered_parquet_dataset.remove_row_groups(
-                ordered_parquet_dataset[rg_idx_start_end_excl].row_groups,
-                write_fmd=False,
-            )
+        rg_file_ids = [
+            ordered_parquet_dataset[rg_idx_mr_start_end_excl].row_group_stats.loc[:, KEY_FILE_IDS]
+            for rg_idx_mr_start_end_excl in merge_split_strategy.rg_idx_mrs_starts_ends_excl
+        ]
+        ordered_parquet_dataset.remove_row_group_files(file_ids=rg_file_ids)
         # Rename partition files.
         if merge_split_strategy.sort_rgs_after_write:
-            ordered_parquet_dataset.sort_rgs(ordered_on)
-            ordered_parquet_dataset._sort_part_names(write_fmd=False)
-    # Manage and write metadata.
-    # TODO: when refactoring metadata writing, use straight away
-    # 'update_common_metadata' from fastparquet.
-    ordered_parquet_dataset.write_metadata(metadata=metadata)
+            ordered_parquet_dataset.sort_row_groups()
+            ordered_parquet_dataset.align_file_ids()
+    # Write metadata.
+    ordered_parquet_dataset.write_metadata(key_value_metadata=key_value_metadata)

@@ -32,23 +32,23 @@ from pandas import concat
 from vaex import open_many
 
 from oups.defines import DIR_SEP
-from oups.defines import OUPS_METADATA_KEY
+from oups.defines import KEY_FILE_IDS
+from oups.defines import KEY_N_ROWS
+from oups.defines import KEY_ORDERED_ON
+from oups.defines import KEY_ORDERED_ON_MAXS
+from oups.defines import KEY_ORDERED_ON_MINS
+from oups.defines import KEY_OUPS_METADATA
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.ordered_parquet_dataset.parquet_adapter import check_cmidx
 from oups.store.write import write
 
 
 EMPTY_DATAFRAME = DataFrame()
-KEY_ORDERED_ON = "ordered_on"
-ORDERED_ON_MINS = "ordered_on_mins"
-ORDERED_ON_MAXS = "ordered_on_maxs"
-N_ROWS = "n_rows"
-FILE_IDS = "file_ids"
 # Do not change this order, it is expected by OrderedParquetDataset.write_row_group_files()
-RGS_STATS_COLUMNS = [FILE_IDS, N_ROWS, ORDERED_ON_MINS, ORDERED_ON_MAXS]
+RGS_STATS_COLUMNS = [KEY_FILE_IDS, KEY_N_ROWS, KEY_ORDERED_ON_MINS, KEY_ORDERED_ON_MAXS]
 RGS_STATS_BASE_DTYPES = {
-    N_ROWS: uint32,
-    FILE_IDS: uint16,
+    KEY_N_ROWS: uint32,
+    KEY_FILE_IDS: uint16,
 }
 PARQUET_FILE_EXTENSION = ".parquet"
 PARQUET_FILE_PREFIX = "file_"
@@ -122,7 +122,7 @@ def file_ids_in_directory(dirpath: str) -> List[int]:
     ]
 
 
-class OrderedParquetDataset(ParquetFile):
+class OrderedParquetDataset3(ParquetFile):
     """
     Handle to parquet dataset and statistics on disk.
 
@@ -241,8 +241,8 @@ class OrderedParquetDataset(ParquetFile):
         Return specific oups metadata.
         """
         md = self.pf.key_value_metadata
-        if OUPS_METADATA_KEY in md:
-            return loads(md[OUPS_METADATA_KEY])
+        if KEY_OUPS_METADATA in md:
+            return loads(md[KEY_OUPS_METADATA])
 
     def sort_rgs(self, ordered_on: str):
         """
@@ -293,12 +293,12 @@ class OrderedParquetDataset(ParquetFile):
         """
         if metadata:
             new_oups_spec_md = metadata
-            if OUPS_METADATA_KEY in (existing_metadata := self.key_value_metadata):
+            if KEY_OUPS_METADATA in (existing_metadata := self.key_value_metadata):
                 # Case 'append' to existing metadata.
                 # oups-specific metadata is expected to be a dict itself.
                 # To be noticed, 'md_key' is not written itself in metadata to
                 # disk.
-                existing_oups_spec_md = loads(existing_metadata[OUPS_METADATA_KEY])
+                existing_oups_spec_md = loads(existing_metadata[KEY_OUPS_METADATA])
                 for key, value in new_oups_spec_md.items():
                     if key in existing_oups_spec_md:
                         if value is None:
@@ -312,14 +312,14 @@ class OrderedParquetDataset(ParquetFile):
                         existing_oups_spec_md[key] = value
             else:
                 existing_oups_spec_md = new_oups_spec_md
-            update_custom_metadata(self, {OUPS_METADATA_KEY: dumps(existing_oups_spec_md)})
+            update_custom_metadata(self, {KEY_OUPS_METADATA: dumps(existing_oups_spec_md)})
         self._write_common_metadata()
 
 
 parquet_adapter = ParquetAdapter(use_arro3=False)
 
 
-class OrderedParquetDataset2:
+class OrderedParquetDataset:
     """
     Ordered Parquet Dataset.
 
@@ -449,7 +449,7 @@ class OrderedParquetDataset2:
         OrderedParquetDataset
 
         """
-        new_opd = object.__new__(OrderedParquetDataset2)
+        new_opd = object.__new__(OrderedParquetDataset)
         # To preserve Dataframe format.
         new_row_group_stats = (
             self.row_group_stats.iloc[item : item + 1]
@@ -474,7 +474,7 @@ class OrderedParquetDataset2:
         """
         Return maximum allowed file id.
         """
-        return iinfo(self.row_group_stats[FILE_IDS].dtype).max
+        return iinfo(self.row_group_stats[KEY_FILE_IDS].dtype).max
 
     @cached_property
     def _file_id_n_digits(self):
@@ -488,7 +488,7 @@ class OrderedParquetDataset2:
         """
         Return maximum allowed number of rows in a row group.
         """
-        return iinfo(self.row_group_stats[N_ROWS].dtype).max
+        return iinfo(self.row_group_stats[KEY_N_ROWS].dtype).max
 
     def align_file_ids(self):
         """
@@ -508,13 +508,13 @@ class OrderedParquetDataset2:
         if self.is_row_group_subset:
             raise ValueError("'align_file_ids()' is not supported for row group subsets.")
         # Build mapping of current file ids to desired new ids.
-        mask_ids_to_rename = self.row_group_stats.loc[:, FILE_IDS] != self.row_group_stats.index
-        current_ids_to_rename = self.row_group_stats.loc[mask_ids_to_rename, FILE_IDS]
+        mask_ids_to_rename = self.row_group_stats.loc[:, KEY_FILE_IDS] != self.row_group_stats.index
+        current_ids_to_rename = self.row_group_stats.loc[mask_ids_to_rename, KEY_FILE_IDS]
         if len(current_ids_to_rename) == 0:
             return
         # Initialize 'temp_id' to be used when no direct rename is possible.
         temp_id = self.max_file_id + 1
-        new_ids = current_ids_to_rename.index.astype(RGS_STATS_BASE_DTYPES[FILE_IDS])
+        new_ids = current_ids_to_rename.index.astype(RGS_STATS_BASE_DTYPES[KEY_FILE_IDS])
         current_to_new = dict(zip(current_ids_to_rename, new_ids))
         # Set of ids already being used by files in directory.
         # Before renaming, we will check the 'new_id' is not already taken.
@@ -540,7 +540,7 @@ class OrderedParquetDataset2:
                     # Restart the loop.
                     break
         # Set new ids.
-        self.row_group_stats.loc[mask_ids_to_rename, FILE_IDS] = new_ids
+        self.row_group_stats.loc[mask_ids_to_rename, KEY_FILE_IDS] = new_ids
 
     @property
     def max_file_id(self):
@@ -554,7 +554,7 @@ class OrderedParquetDataset2:
             # Get max 'file_id' safely by reviewing all files in directory.
             return max(file_ids_in_directory(self.dirpath))
         # Get max 'file_id' from 'self.row_group_stats'.
-        return -1 if self.row_group_stats.empty else int(self.row_group_stats[FILE_IDS].max())
+        return -1 if self.row_group_stats.empty else int(self.row_group_stats[KEY_FILE_IDS].max())
 
     def remove_row_group_files(self, file_ids: List[int]):
         """
@@ -596,7 +596,7 @@ class OrderedParquetDataset2:
         ids_to_keep = ones(len(self.row_group_stats), dtype=bool)
         ids_to_keep[file_ids] = False
         self.row_group_stats = (
-            self.row_group_stats.set_index(FILE_IDS).iloc[ids_to_keep].reset_index()
+            self.row_group_stats.set_index(KEY_FILE_IDS).iloc[ids_to_keep].reset_index()
         )
         self.has_row_groups_already_removed = True
 
@@ -604,7 +604,7 @@ class OrderedParquetDataset2:
         """
         Sort row groups according their min value in 'ordered_on' column.
         """
-        self.row_group_stats.sort_values(by=ORDERED_ON_MINS, inplace=True, ignore_index=True)
+        self.row_group_stats.sort_values(by=KEY_ORDERED_ON_MINS, inplace=True, ignore_index=True)
 
     def to_pandas(self):
         """
@@ -619,11 +619,30 @@ class OrderedParquetDataset2:
         return parquet_adapter.read_parquet(
             get_parquet_filepaths(
                 self.dirpath,
-                self.row_group_stats[FILE_IDS],
+                self.row_group_stats[KEY_FILE_IDS],
                 self._file_id_n_digits,
             ),
             return_key_value_metadata=False,
         )
+
+    def write(self, **kwargs):
+        """
+        Write data to disk.
+
+        This method relies on 'oups.store.write.write()' function.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Keywords in 'kwargs' are forwarded to `oups.store.write.write()`.
+
+        """
+        if KEY_ORDERED_ON in kwargs and self.ordered_on != kwargs[KEY_ORDERED_ON]:
+            raise ValueError(
+                f"'ordered_on' attribute '{self.ordered_on}' is not the "
+                f"same as 'ordered_on' parameter '{kwargs[KEY_ORDERED_ON]}'",
+            )
+        write(self, ordered_on=self.ordered_on, **kwargs)
 
     def write_metadata(self, key_value_metadata: Dict[str, str] = None):
         """
@@ -650,6 +669,8 @@ class OrderedParquetDataset2:
           - If found in existing, it is updated.
           - If its value is `None`, it is not added, and if found in existing,
             it is removed from existing.
+
+        Albeit a parquet file, opdmd file is not compressed.
 
         """
         existing_md = self.key_value_metadata
@@ -678,7 +699,12 @@ class OrderedParquetDataset2:
         # involves a 'write_metadata()' step.
         self.has_row_groups_already_removed = False
 
-    def write_row_group_files(self, dfs: Iterable[DataFrame], write_opdmd: bool = True):
+    def write_row_group_files(
+        self,
+        dfs: Iterable[DataFrame],
+        write_opdmd: bool = True,
+        compression: str = None,
+    ):
         """
         Write row groups as files to disk. One row group per file.
 
@@ -686,6 +712,10 @@ class OrderedParquetDataset2:
         ----------
         dfs : Iterable[DataFrame]
             Dataframes to write.
+        write_opdmd : bool, optional
+            If `True`, write opd metadata file to disk.
+        compression : str, optional
+            Compression to use.
 
         """
         iter_dfs = iter(dfs)
@@ -717,6 +747,7 @@ class OrderedParquetDataset2:
             parquet_adapter.write_parquet(
                 path=get_parquet_filepaths(self.dirpath, file_id, self._file_id_n_digits),
                 df=df,
+                compression=compression,
             )
         self.row_group_stats = concat(
             [

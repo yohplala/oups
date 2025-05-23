@@ -7,7 +7,6 @@ Created on Fri Nov  8 22:30:00 2024.
 """
 from typing import Callable, List, Optional, Tuple, Union
 
-from fastparquet import ParquetFile
 from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import Series
@@ -15,7 +14,7 @@ from pandas import concat
 
 
 def iter_merge_split_data(
-    opd: ParquetFile,
+    opd,
     ordered_on: Union[str, Tuple[str]],
     df: DataFrame,
     merge_sequences: List[Tuple[int, NDArray]],
@@ -24,11 +23,11 @@ def iter_merge_split_data(
     subset: Optional[Union[str, List[str]]] = None,
 ):
     """
-    Yield merged and ordered chunks of data from DataFrame and ParquetFile.
+    Yield merged and ordered chunks of data from DataFrame and OrderedParquetDataset.
 
     Parameters
     ----------
-    opd : ParquetFile
+    opd : OrderedParquetDataset
         Ordered parquet dataset to merge with dataframe. Must be ordered by
         'ordered_on' column.
     ordered_on : Union[str, Tuple[str]]

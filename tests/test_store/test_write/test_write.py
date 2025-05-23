@@ -813,6 +813,9 @@ def test_write(
         expected["rgs_length"],
         expected["dfs"],
     ):
+        print()
+        print("write_ordered_df")
+        print(write_ordered_df)
         write(
             tmp_path,
             ordered_on=ordered_on,
@@ -823,6 +826,11 @@ def test_write(
         )
         # Verify state after this append
         pf_rec = ParquetFile(tmp_path)
+        print()
+        print("pf_rec.to_pandas()")
+        print(pf_rec.to_pandas())
+        print("expected_df")
+        print(expected_df)
         assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
         assert pf_rec.to_pandas().equals(expected_df)
 

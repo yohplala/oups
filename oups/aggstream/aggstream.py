@@ -37,7 +37,7 @@ from oups.aggstream.segmentby import setup_segmentby
 from oups.aggstream.utils import dataframe_filter
 from oups.defines import KEY_DUPLICATES_ON
 from oups.defines import KEY_ORDERED_ON
-from oups.defines import OUPS_METADATA_KEY
+from oups.defines import KEY_OUPS_METADATA
 from oups.store import ParquetSet
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
@@ -113,7 +113,7 @@ def _is_aggstream_result(handle: OrderedParquetDataset) -> bool:
     # As oups specific metadata is a string produced by json library, the last
     # 'in' condition is checking if the set of characters defined by
     # 'AGGSTREAM' is in a string.
-    if OUPS_METADATA_KEY in handle.key_value_metadata:
+    if KEY_OUPS_METADATA in handle.key_value_metadata:
         return KEY_AGGSTREAM in handle._oups_metadata
 
 

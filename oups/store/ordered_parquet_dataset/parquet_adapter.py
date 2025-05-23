@@ -14,7 +14,7 @@ from cloudpickle import loads
 from pandas import DataFrame
 from pandas import MultiIndex
 
-from oups.defines import OUPS_METADATA_KEY
+from oups.defines import KEY_OUPS_METADATA
 
 
 def check_cmidx(cmidx: MultiIndex):
@@ -53,7 +53,13 @@ class ParquetAdapter:
         """
         self.use_arro3 = use_arro3
 
-    def write_parquet(self, path, df: DataFrame, key_value_metadata: Dict = None, **kwargs):
+    def write_parquet(
+        self,
+        path,
+        df: DataFrame,
+        key_value_metadata: Dict = None,
+        compression: str = None,
+    ):
         """
         Write DataFrame to parquet with unified interface.
         """
@@ -61,26 +67,29 @@ class ParquetAdapter:
             from arro3.io import write_parquet
 
             key_value_metadata = (
-                {OUPS_METADATA_KEY: b64encode(dumps(key_value_metadata)).decode()}
+                {KEY_OUPS_METADATA: b64encode(dumps(key_value_metadata)).decode()}
                 if key_value_metadata
                 else None
             )
-            write_parquet(df, path, key_value_metadata=key_value_metadata, **kwargs)
+            write_parquet(df, path, key_value_metadata=key_value_metadata, compression=compression)
         else:
             from fastparquet import write
 
+            if isinstance(df.columns, MultiIndex):
+                check_cmidx(df.columns)
+
             key_value_metadata = (
-                {OUPS_METADATA_KEY: dumps(key_value_metadata)} if key_value_metadata else None
+                {KEY_OUPS_METADATA: dumps(key_value_metadata)} if key_value_metadata else None
             )
             write(
                 path,
                 df,
                 custom_metadata=key_value_metadata,
                 file_scheme="simple",
-                **kwargs,
+                compression=compression,
             )
 
-    def read_parquet(self, path, return_key_value_metadata: bool = True, **kwargs):
+    def read_parquet(self, path, return_key_value_metadata: bool = True):
         """
         Read parquet and metadata with unified interface.
         """
@@ -90,7 +99,7 @@ class ParquetAdapter:
             table = read_parquet(path).read_all()
             df = DataFrame(table.to_struct_array().to_numpy())
             key_value_metadata = (
-                loads(b64decode((table.schema.metadata_str[OUPS_METADATA_KEY]).encode()))
+                loads(b64decode((table.schema.metadata_str[KEY_OUPS_METADATA]).encode()))
                 if return_key_value_metadata
                 else None
             )
@@ -100,7 +109,7 @@ class ParquetAdapter:
             pf = ParquetFile(path)
             df = pf.to_pandas()
             key_value_metadata = (
-                loads(pf.key_value_metadata[OUPS_METADATA_KEY])
+                loads(pf.key_value_metadata[KEY_OUPS_METADATA])
                 if return_key_value_metadata
                 else None
             )
