@@ -12,24 +12,16 @@ from os import remove
 from os import rename
 from os import scandir
 from pathlib import Path
-from pickle import dumps
-from pickle import loads
 from re import compile
 from typing import Dict, Iterable, List, Union
 
-from fastparquet import ParquetFile
-from fastparquet import write as fp_write
-from fastparquet.api import statistics
-from fastparquet.util import update_custom_metadata
 from numpy import iinfo
 from numpy import ones
 from numpy import uint16
 from numpy import uint32
 from pandas import DataFrame
-from pandas import MultiIndex
 from pandas import Series
 from pandas import concat
-from vaex import open_many
 
 from oups.defines import DIR_SEP
 from oups.defines import KEY_FILE_IDS
@@ -37,9 +29,7 @@ from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
-from oups.defines import KEY_OUPS_METADATA
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
-from oups.store.ordered_parquet_dataset.parquet_adapter import check_cmidx
 from oups.store.write import write
 
 
@@ -52,6 +42,8 @@ RGS_STATS_BASE_DTYPES = {
 }
 PARQUET_FILE_EXTENSION = ".parquet"
 PARQUET_FILE_PREFIX = "file_"
+
+parquet_adapter = ParquetAdapter(use_arro3=False)
 
 
 def get_opdmd_filepath(dirpath: str) -> str:
@@ -120,203 +112,6 @@ def file_ids_in_directory(dirpath: str) -> List[int]:
         for entry in scandir(dirpath)
         if entry.is_file()
     ]
-
-
-class OrderedParquetDataset3(ParquetFile):
-    """
-    Handle to parquet dataset and statistics on disk.
-
-    Attributes
-    ----------
-    dirpath : str
-        Directory path from where to load data.
-    pf : ParquetFile
-        `ParquetFile` (fastparquet) instance.
-    pdf : pDataframe
-        Dataframe in pandas format.
-    vdf : vDataFrame
-        Dataframe in vaex format.
-
-    Methods
-    -------
-    min_max(col)
-        Retrieve min and max from statistics for a column.
-
-    """
-
-    def __init__(self, dirpath: str, ordered_on: str = None, df_like: DataFrame = EMPTY_DATAFRAME):
-        """
-        Instantiate parquet handle (ParquetFile instance).
-
-        If not existing, create a new one from an empty DataFrame.
-
-        Parameters
-        ----------
-        dirpath : str
-            Directory path from where to load data.
-        ordered_on : str
-            Column name to order row groups by.
-        df_like : Optional[DataFrame], default empty DataFrame
-            DataFrame to use as template to create a new ParquetFile.
-
-        """
-        try:
-            super().__init__(dirpath)
-        except (ValueError, FileNotFoundError):
-            # In case multi-index is used, check that it complies with fastparquet
-            # limitations.
-            if df_like is None:
-                fp_write(dirpath, DataFrame(), file_scheme="hive")
-            else:
-                if isinstance(df_like.columns, MultiIndex):
-                    check_cmidx(df_like.columns)
-                fp_write(dirpath, df_like.iloc[:0], file_scheme="hive")
-            super().__init__(dirpath)
-        self._dirpath = dirpath
-        self._ordered_on = ordered_on
-
-    @property
-    def dirpath(self):
-        """
-        Return dirpath.
-        """
-        return self._dirpath
-
-    @property
-    def ordered_on(self):
-        """
-        Return ordered_on.
-        """
-        return self._ordered_on
-
-    def write(self, **kwargs):
-        """
-        Write data to disk.
-
-        Parameters
-        ----------
-        **kwargs : dict
-            Keywords in 'kwargs' are forwarded to `write.write_ordered`.
-
-        """
-        if KEY_ORDERED_ON in kwargs:
-            if self._ordered_on is None:
-                self._ordered_on = kwargs.pop(KEY_ORDERED_ON)
-            elif self._ordered_on != kwargs[KEY_ORDERED_ON]:
-                raise ValueError(
-                    f"'ordered_on' attribute {self._ordered_on} is not the "
-                    f"same as 'ordered_on' parameter {kwargs[KEY_ORDERED_ON]}",
-                )
-        write(self, ordered_on=self._ordered_on, **kwargs)
-
-    @cached_property
-    def pf(self):
-        """
-        Return handle to data through a parquet file.
-        """
-        return self
-
-    @property
-    def pdf(self):
-        """
-        Return data as a pandas dataframe.
-        """
-        return ParquetFile(self._dirpath).to_pandas()
-
-    @property
-    def vdf(self):
-        """
-        Return handle to data through a vaex dataframe.
-        """
-        # To circumvent vaex lexicographic filename sorting to order row
-        # groups, ordering the list of files is required.
-        files = [file.name for file in scandir(self._dirpath) if file.name[-7:] == "parquet"]
-        files.sort(key=lambda x: int(x[5:-8]))
-        prefix_dirpath = f"{str(self._dirpath)}{DIR_SEP}".__add__
-        return open_many(map(prefix_dirpath, files))
-
-    @property
-    def _oups_metadata(self) -> dict:
-        """
-        Return specific oups metadata.
-        """
-        md = self.pf.key_value_metadata
-        if KEY_OUPS_METADATA in md:
-            return loads(md[KEY_OUPS_METADATA])
-
-    def sort_rgs(self, ordered_on: str):
-        """
-        Sort row groups by 'ordered_on' column.
-
-        Parameters
-        ----------
-        ordered_on : str
-            Column name to sort row groups by.
-
-        """
-        ordered_on_idx = self.columns.index(ordered_on)
-        self.fmd.row_groups = sorted(
-            self.fmd.row_groups,
-            key=lambda rg: statistics(rg.columns[ordered_on_idx])["max"],
-        )
-
-    def write_metadata(
-        self,
-        metadata: Dict[str, str] = None,
-    ):
-        """
-        Write metadata to disk.
-
-        Update oups-specific metadata and merge to user-defined metadata.
-        "oups-specific" metadata is retrieved from OUPS_METADATA dict.
-
-        Parameters
-        ----------
-        pf : ParquetFile
-            ParquetFile which metadata are to be updated.
-        metadata : Dict[str, str], optional
-            User-defined key-value metadata to write, or update in dataset.
-
-        Notes
-        -----
-        - These specific oups metadata are available in global variable
-        ``OUPS_METADATA``.
-        - Update strategy of oups specific metadata depends if key found in
-        ``OUPS_METADATA``metadata` is also found in already existing metadata,
-        as well as its value.
-
-        - If not found in existing, it is added.
-        - If found in existing, it is updated.
-        - If its value is `None`, it is not added, and if found in existing, it
-            is removed from existing.
-
-        """
-        if metadata:
-            new_oups_spec_md = metadata
-            if KEY_OUPS_METADATA in (existing_metadata := self.key_value_metadata):
-                # Case 'append' to existing metadata.
-                # oups-specific metadata is expected to be a dict itself.
-                # To be noticed, 'md_key' is not written itself in metadata to
-                # disk.
-                existing_oups_spec_md = loads(existing_metadata[KEY_OUPS_METADATA])
-                for key, value in new_oups_spec_md.items():
-                    if key in existing_oups_spec_md:
-                        if value is None:
-                            # Case 'remove'.
-                            del existing_oups_spec_md[key]
-                        else:
-                            # Case 'update'.
-                            existing_oups_spec_md[key] = value
-                    elif value:
-                        # Case 'add'.
-                        existing_oups_spec_md[key] = value
-            else:
-                existing_oups_spec_md = new_oups_spec_md
-            update_custom_metadata(self, {KEY_OUPS_METADATA: dumps(existing_oups_spec_md)})
-        self._write_common_metadata()
-
-
-parquet_adapter = ParquetAdapter(use_arro3=False)
 
 
 class OrderedParquetDataset:
