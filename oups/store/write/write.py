@@ -8,7 +8,6 @@ Created on Wed Dec  6 22:30:00 2021.
 from importlib import import_module
 from typing import Dict, List, Optional, Tuple, Union
 
-from numpy import dtype
 from pandas import DataFrame
 from pandas import Series
 
@@ -21,8 +20,6 @@ from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
 from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
 
 
-COMPRESSION = "SNAPPY"
-DTYPE_DATETIME64 = dtype("datetime64[ns]")
 ROW_GROUP_INT_TARGET_SIZE = 6_345_000
 KEY_MAX_N_OFF_TARGET_RGS = "max_n_off_target_rgs"
 KEY_ROW_GROUP_TARGET_SIZE = "row_group_target_size"
@@ -174,14 +171,7 @@ def write(
         duplicates_on=duplicates_on,
         ordered_on=ordered_on,
     )
-    if df is None:
-        df_ordered_on = Series([])
-    else:
-        try:
-            df_ordered_on = df.loc[:, ordered_on]
-        except KeyError:
-            # Check 'ordered_on' column is within input DataFrame.
-            raise ValueError(f"column '{ordered_on}' does not exist in input DataFrame.")
+    df_ordered_on = Series([]) if df is None else df.loc[:, ordered_on]
     ordered_parquet_dataset = (
         # Case 'dirpath' is a path to a directory.
         import_module("oups.store.ordered_parquet_dataset").OrderedParquetDataset(

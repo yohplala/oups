@@ -4,13 +4,7 @@ Created on Sat Dec 18 15:00:00 2021.
 
 @author: yoh
 
-Test utils.
-- Initialize path:
-tmp_path = os_path.expanduser('~/Documents/code/data/oups')
-
 """
-from os import path as os_path
-
 import pytest
 from fastparquet import ParquetFile
 from numpy import arange
@@ -20,7 +14,6 @@ from pandas import Timestamp
 from oups.defines import DIR_SEP
 from oups.store.ordered_parquet_dataset import create_custom_opd
 from oups.store.write import write
-from tests.test_store.conftest import create_parquet_file
 
 
 @pytest.mark.parametrize(
@@ -834,19 +827,3 @@ def test_write(
                 pass
             else:
                 raise
-
-
-def test_exception_ordered_on_not_existing(tmp_path):
-    # While 'ordered_on' is defined, it is not in seed data.
-    n_val = 5
-    pdf = DataFrame({"a": range(n_val), "b": [0] * n_val})
-    dn = os_path.join(tmp_path, "test")
-    # Write a 1st set of data.
-    create_parquet_file(
-        dn,
-        df=pdf,
-        row_group_offsets=[0, n_val - 2, n_val - 1],
-    )
-    # Append with oups same set of data, pandas dataframe.
-    with pytest.raises(ValueError, match="^column 'ts'"):
-        write(dn, ordered_on="ts", df=pdf)
