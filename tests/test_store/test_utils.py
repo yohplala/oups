@@ -42,21 +42,26 @@ def test_files_at_depth(tmp_path):
             for path, files in paths_files
         ],
     )
-    paths_ref = [
-        (f"london.temperature{DIR_SEP}greenwich.summer", ["dataset.parquet"]),
-        (f"london.temperature{DIR_SEP}westminster.winter", ["dummyfile.txt"]),
-        (f"paris.temperature{DIR_SEP}bastille.summer", ["datasetfile1.parq", "datasetfile2.parq"]),
-        (f"stockholm.pressure{DIR_SEP}skansen.fall", ["datasetfile.parquet"]),
+    paths_ref2 = [
+        (f"stockholm.pressure{DIR_SEP}flemings.spring", ["innerplace.morning_opdmd"]),
     ]
-    assert paths_files == paths_ref
+    assert paths_files == paths_ref2
     # Test with 'depth=2'.
     depth = 1
     paths_files = files_at_depth(basepath, depth)
     # Trim head.
-    paths_files = [
-        (DIR_SEP.join(path.rsplit(DIR_SEP, depth)[1:]), files) for path, files in paths_files
+    paths_files = sorted(
+        [
+            (DIR_SEP.join(path.rsplit(DIR_SEP, depth)[1:]), sorted(files))
+            for path, files in paths_files
+        ],
+    )
+    paths_ref1 = [
+        ("london.temperature", ["greenwich.summer_opdmd", "westminster.winter_dummy"]),
+        ("paris.temperature", ["bastille.summer_opdmd"]),
+        ("stockholm.pressure", ["skansen.fall_opdmd"]),
     ]
-    assert paths_files == []
+    assert paths_files == paths_ref1
     # Test with 'depth=3'.
     depth = 3
     paths_files = files_at_depth(basepath, depth)
@@ -67,11 +72,7 @@ def test_files_at_depth(tmp_path):
             for path, files in paths_files
         ],
     )
-    paths_ref = [
-        (f"paris.temperature{DIR_SEP}bastille.summer{DIR_SEP}forgottendir", ["forgottenfile.parq"]),
-        (f"stockholm.pressure{DIR_SEP}flemings.spring{DIR_SEP}innerplace.morning", ["_metadata"]),
-    ]
-    assert paths_files == paths_ref
+    assert paths_files == []
 
 
 def test_conform_cmidx(tmp_path):

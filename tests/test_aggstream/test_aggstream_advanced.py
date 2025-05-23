@@ -33,7 +33,7 @@ from pandas import merge_ordered
 from pandas.core.resample import TimeGrouper
 
 from oups import AggStream
-from oups import ParquetSet
+from oups import Store
 from oups import toplevel
 from oups.aggstream.aggstream import KEY_AGG
 from oups.aggstream.aggstream import KEY_AGGSTREAM
@@ -63,7 +63,7 @@ ordered_on = "ts"
 @pytest.fixture
 def store(tmp_path):
     # Reuse pre-defined Indexer.
-    return ParquetSet(os_path.join(tmp_path, "store"), Indexer)
+    return Store(os_path.join(tmp_path, "store"), Indexer)
 
 
 @pytest.fixture

@@ -23,7 +23,7 @@ from pandas import DatetimeIndex
 from pandas.core.resample import TimeGrouper
 
 from oups import AggStream
-from oups import ParquetSet
+from oups import Store
 from oups import toplevel
 from oups.aggstream.aggstream import FIRST
 from oups.aggstream.aggstream import KEY_AGG
@@ -70,7 +70,7 @@ key = Indexer("agg_res")
 @pytest.fixture
 def store(tmp_path):
     # Reuse pre-defined Indexer.
-    return ParquetSet(os_path.join(tmp_path, "store"), Indexer)
+    return Store(os_path.join(tmp_path, "store"), Indexer)
 
 
 def always_true(**kwargs):

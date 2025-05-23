@@ -18,10 +18,11 @@ from pandas import DataFrame as pDataFrame
 from pandas import MultiIndex
 from pandas import date_range
 
-from oups import ParquetSet
+from oups import Store
 from oups import sublevel
 from oups import toplevel
-from oups.aggstream.segmentby import KEY_ORDERED_ON
+from oups.defines import DIR_SEP
+from oups.defines import KEY_ORDERED_ON
 from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
 
 from .. import TEST_DATA
@@ -33,9 +34,9 @@ class SpaceTime:
     season: str
 
 
-def test_parquet_set_init(tmp_path):
-    # Test parquet set 'discovery' from existing directories.
-    fn = os_path.join(TEST_DATA, "dummy_store.zip")
+def test_store_init(tmp_path):
+    # Test store 'discovery' from existing directories.
+    fn = f"{TEST_DATA}{DIR_SEP}dummy_store.zip"
     with zipfile.ZipFile(fn, "r") as zip_ref:
         zip_ref.extractall(tmp_path)
 
@@ -45,8 +46,8 @@ def test_parquet_set_init(tmp_path):
         quantity: str
         spacetime: SpaceTime
 
-    basepath = os_path.join(tmp_path, "store")
-    ps = ParquetSet(basepath, WeatherEntry)
+    basepath = f"{tmp_path}{DIR_SEP}store"
+    ps = Store(basepath, WeatherEntry)
     assert ps.basepath == basepath
     # 'keys' is empty as 'fields_sep' in example directories is '.',
     # while default 'fields_sep' is '-'.
@@ -59,7 +60,7 @@ def test_parquet_set_init(tmp_path):
         quantity: str
         spacetime: SpaceTime
 
-    ps = ParquetSet(basepath, WeatherEntry)
+    ps = Store(basepath, WeatherEntry)
     assert len(ps) == 3
     # Test '__repr__'.
     repr_ref = (
@@ -80,9 +81,9 @@ def test_exception_key_not_correct_indexer(tmp_path):
         quantity: str
         spacetime: SpaceTime
 
-    basepath = os_path.join(tmp_path, "store")
+    basepath = f"{tmp_path}{DIR_SEP}store"
     with pytest.raises(TypeError, match="^WeatherEntry"):
-        ParquetSet(basepath, WeatherEntry)
+        Store(basepath, WeatherEntry)
 
 
 @toplevel
@@ -92,10 +93,10 @@ class WeatherEntry:
     spacetime: SpaceTime
 
 
-def test_set_parquet(tmp_path):
+def test_store_getitem(tmp_path):
     # Initialize a parquet dataset.
-    basepath = os_path.join(tmp_path, "store")
-    ps = ParquetSet(basepath, WeatherEntry)
+    basepath = f"{tmp_path}{DIR_SEP}store"
+    ps = Store(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
@@ -103,16 +104,16 @@ def test_set_parquet(tmp_path):
             "temperature": [8.4, 5.3],
         },
     )
-    ps[we] = {KEY_ORDERED_ON: "timestamp"}, df
+    ps[we].write(ordered_on="timestamp", df=df)
     assert we in ps
-    res = ParquetFile(os_path.join(basepath, we.to_path)).to_pandas()
+    res = ps[we].to_pandas()
     assert res.equals(df)
 
 
 def test_set_parquet_with_config(tmp_path):
     # Initialize a parquet dataset with config.
     basepath = os_path.join(tmp_path, "store")
-    ps = ParquetSet(basepath, WeatherEntry)
+    ps = Store(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
@@ -132,7 +133,7 @@ def test_set_parquet_with_config(tmp_path):
 def test_exception_config_not_a_dict(tmp_path):
     # Initialize a parquet dataset with config.
     basepath = os_path.join(tmp_path, "store")
-    ps = ParquetSet(basepath, WeatherEntry)
+    ps = Store(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
@@ -148,7 +149,7 @@ def test_exception_config_not_a_dict(tmp_path):
 def test_exception_data_not_a_dataframe(tmp_path):
     # Initialize a parquet dataset with config.
     basepath = os_path.join(tmp_path, "store")
-    ps = ParquetSet(basepath, WeatherEntry)
+    ps = Store(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = []  # First silly thing that comes to mind.
     with pytest.raises(TypeError, match="^data should"):
@@ -158,7 +159,7 @@ def test_exception_data_not_a_dataframe(tmp_path):
 def test_iterator(tmp_path):
     # Test `__iter__`.
     basepath = os_path.join(tmp_path, "store")
-    ps = ParquetSet(basepath, WeatherEntry)
+    ps = Store(basepath, WeatherEntry)
     we1 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     we2 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
     df = pDataFrame(
@@ -174,7 +175,7 @@ def test_iterator(tmp_path):
 
 def test_set_and_get_roundtrip_pandas(tmp_path):
     # Set and get data, roundtrip.
-    ps = ParquetSet(tmp_path, WeatherEntry)
+    ps = Store(tmp_path, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
@@ -190,7 +191,7 @@ def test_set_and_get_roundtrip_pandas(tmp_path):
 
 def test_set_pandas_and_get_vaex(tmp_path):
     # Set and get data, roundtrip.
-    ps = ParquetSet(tmp_path, WeatherEntry)
+    ps = Store(tmp_path, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
@@ -206,7 +207,7 @@ def test_set_pandas_and_get_vaex(tmp_path):
 
 def test_set_pandas_and_get_parquet_file(tmp_path):
     # Set and get data, roundtrip.
-    ps = ParquetSet(tmp_path, WeatherEntry)
+    ps = Store(tmp_path, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
         {
@@ -234,7 +235,7 @@ def test_set_cmidx_get_vaex(tmp_path):
         [("ts", ""), ("temp", "1"), ("temp", "2")],
         names=["component", "point"],
     )
-    ps = ParquetSet(tmp_path, WeatherEntry)
+    ps = Store(tmp_path, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     config = {KEY_ORDERED_ON: ("ts", "")}
     ps[we] = config, pdf
@@ -248,7 +249,7 @@ def test_set_cmidx_get_vaex(tmp_path):
 def test_dataset_removal(tmp_path):
     # Test `__delitem__`.
     basepath = os_path.join(tmp_path, "store")
-    ps = ParquetSet(basepath, WeatherEntry)
+    ps = Store(basepath, WeatherEntry)
     we1 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     we2 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "summer"))
     we3 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
@@ -281,7 +282,7 @@ def test_dataset_removal(tmp_path):
 def test_11_rgs_pandas_to_vaex(tmp_path):
     # With 11 row groups, 'bug' related to the way sort files in lexicographic
     # order to read them is apparent.
-    ps = ParquetSet(tmp_path, WeatherEntry)
+    ps = Store(tmp_path, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     temp = range(10, 21)
     df = pDataFrame(

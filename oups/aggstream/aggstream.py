@@ -38,7 +38,7 @@ from oups.aggstream.utils import dataframe_filter
 from oups.defines import KEY_DUPLICATES_ON
 from oups.defines import KEY_ORDERED_ON
 from oups.defines import KEY_OUPS_METADATA
-from oups.store import ParquetSet
+from oups.store import Store
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
 from oups.store.write import write
@@ -113,7 +113,7 @@ def _is_aggstream_result(handle: OrderedParquetDataset) -> bool:
     # As oups specific metadata is a string produced by json library, the last
     # 'in' condition is checking if the set of characters defined by
     # 'AGGSTREAM' is in a string.
-    if KEY_OUPS_METADATA in handle.key_value_metadata:
+    if KEY_OUPS_METADATA in handle._key_value_metadata:
         return KEY_AGGSTREAM in handle._oups_metadata
 
 
@@ -277,7 +277,7 @@ def _init_keys_config(
 
 
 def _init_buffers(
-    store: ParquetSet,
+    store: Store,
     keys: dict,
 ):
     """
@@ -641,7 +641,7 @@ def _post_n_write_agg_chunks(
     agg_buffers: dict,
     agg_res_type: Enum,
     append_last_res: bool,
-    store: ParquetSet,
+    store: Store,
     key: Union[dataclass, Tuple[dataclass, dataclass]],
     write_config: dict,
     index_name: Optional[str] = None,
@@ -840,7 +840,7 @@ def _post_n_write_agg_chunks(
 
 def agg_iter(
     seed_chunk: DataFrame,
-    store: ParquetSet,
+    store: Store,
     key: dataclass,
     keys_config: dict,
     agg_config: dict,
@@ -997,7 +997,7 @@ class AggStream:
     def __init__(
         self,
         ordered_on: str,
-        store: ParquetSet,
+        store: Store,
         keys: Union[dataclass, Tuple[dataclass, dataclass], dict],
         pre: Optional[Callable] = None,
         filters: Optional[dict] = None,

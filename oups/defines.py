@@ -26,3 +26,6 @@ DIR_SEP = os_path.sep
 # In a fastparquet `ParquetFile`, oups-specific metadata is stored as value for
 # key `KEY_METADATA_KEY`.
 KEY_OUPS_METADATA = "oups"
+# Others.
+PARQUET_FILE_EXTENSION = ".parquet"
+OPDMD_EXTENSION = "_opdmd"

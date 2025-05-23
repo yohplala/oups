@@ -67,11 +67,11 @@ def switch_row_group_file_ids(opd, file_id_1, file_id_2):
         get_parquet_filepaths(opd.dirpath, file_id_2, opd._file_id_n_digits),
     )
     tmp_file_id = opd.row_group_stats.iloc[file_id_1_row_idx, file_ids_col_idx]
-    opd.row_group_stats.iloc[file_id_1_row_idx, file_ids_col_idx] = opd.row_group_stats.iloc[
+    opd._row_group_stats.iloc[file_id_1_row_idx, file_ids_col_idx] = opd.row_group_stats.iloc[
         file_id_2_row_idx,
         file_ids_col_idx,
     ]
-    opd.row_group_stats.iloc[file_id_2_row_idx, file_ids_col_idx] = tmp_file_id
+    opd._row_group_stats.iloc[file_id_2_row_idx, file_ids_col_idx] = tmp_file_id
 
 
 def test_opd_init_empty(tmp_path):
@@ -85,7 +85,6 @@ def test_opd_init_empty(tmp_path):
 @pytest.mark.parametrize(
     "ordered_on, err_msg",
     [
-        (None, "'ordered_on' column name must be provided."),
         ("b", "^'ordered_on' parameter value 'b' does not match"),
     ],
 )
@@ -109,15 +108,15 @@ def test_opd_getitem_and_len(tmp_path):
         write_opdmd=True,
     )
     assert len(opd) == len(df_ref)
-    assert not opd.is_row_group_subset
+    assert not opd._is_row_group_subset
     opd_sub1 = opd[1]
     # Using slice notation to preserve DataFrame format.
-    assert opd_sub1.row_group_stats.equals(opd.row_group_stats.iloc[1:2])
+    assert opd_sub1.row_group_stats.equals(opd._row_group_stats.iloc[1:2])
     assert opd_sub1.key_value_metadata == opd.key_value_metadata
     assert opd_sub1.ordered_on == opd.ordered_on
     assert opd_sub1.__dict__.keys() == opd.__dict__.keys()
     assert len(opd_sub1) == 1
-    assert opd_sub1.is_row_group_subset
+    assert opd_sub1._is_row_group_subset
     opd_sub2 = opd[1:3]
     assert opd_sub2.row_group_stats.equals(opd.row_group_stats.iloc[1:3])
     assert opd_sub2.key_value_metadata == opd.key_value_metadata
@@ -191,11 +190,11 @@ def test_opd_remove_row_group_files(tmp_path):
     file_ids_to_remove = [0, 2]
     file_ids_to_keep = [i for i in opd.row_group_stats.index if i not in file_ids_to_remove]
     rg_stats_ref = opd.row_group_stats.iloc[file_ids_to_keep].reset_index(drop=True)
-    assert not opd.has_row_groups_already_removed
+    assert not opd._has_row_groups_already_removed
     opd.remove_row_group_files(file_ids=file_ids_to_remove)
     assert len(opd) == len(df_ref) - len(file_ids_to_remove)
     assert opd.row_group_stats.equals(rg_stats_ref)
-    assert opd.has_row_groups_already_removed
+    assert opd._has_row_groups_already_removed
 
 
 def test_opd_sort_row_groups(tmp_path):
