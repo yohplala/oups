@@ -79,7 +79,7 @@ def write(
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_n_off_target_rgs: int = None,
     key_value_metadata: Dict[str, str] = None,
-    compression: str = COMPRESSION,
+    **kwargs,
 ):
     """
     Write data to disk at location specified by path.
@@ -136,9 +136,9 @@ def write(
     key_value_metadata : Dict[str, str], optional
         Key-value metadata to write, or update in dataset. Please see
         fastparquet for updating logic in case of `None` value being used.
-    compression : str, default SNAPPY
-        Algorithm to use for compressing data. This parameter is fastparquet
-        specific. Please see fastparquet documentation for more information.
+    **kwargs :
+        Additional parameters to pass to
+        'OrderedParquetDataset.write_row_group_files()'.
 
     Notes
     -----
@@ -193,7 +193,7 @@ def write(
         # Case 'dirpath' is already an OrderedParquetDataset.
         dirpath
     )
-    if df is not None or len(ordered_parquet_dataset):  # len(rg_ordered_on_mins):
+    if df is not None or len(ordered_parquet_dataset):
         if isinstance(row_group_target_size, int):
             if drop_duplicates and df is not None:
                 # Duplicates are dropped a first time in the DataFrame, so that the
@@ -240,13 +240,18 @@ def write(
                 drop_duplicates=drop_duplicates,
                 subset=subset,
             ),
-            compression=compression,
             write_opdmd=False,
+            **kwargs,
         )
         # Remove row groups of data that is overlapping.
+        file_id_loc = ordered_parquet_dataset.row_group_stats.columns.get_loc(KEY_FILE_IDS)
         rg_file_ids = [
-            ordered_parquet_dataset[rg_idx_mr_start_end_excl].row_group_stats.loc[:, KEY_FILE_IDS]
+            file_id
             for rg_idx_mr_start_end_excl in merge_split_strategy.rg_idx_mrs_starts_ends_excl
+            for file_id in ordered_parquet_dataset.row_group_stats.iloc[
+                rg_idx_mr_start_end_excl,
+                file_id_loc,
+            ].to_list()
         ]
         ordered_parquet_dataset.remove_row_group_files(file_ids=rg_file_ids)
         # Rename partition files.

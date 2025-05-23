@@ -58,7 +58,7 @@ class ParquetAdapter:
         path,
         df: DataFrame,
         key_value_metadata: Dict = None,
-        compression: str = None,
+        **kwargs,
     ):
         """
         Write DataFrame to parquet with unified interface.
@@ -71,7 +71,7 @@ class ParquetAdapter:
                 if key_value_metadata
                 else None
             )
-            write_parquet(df, path, key_value_metadata=key_value_metadata, compression=compression)
+            write_parquet(df, path, key_value_metadata=key_value_metadata, **kwargs)
         else:
             from fastparquet import write
 
@@ -86,7 +86,7 @@ class ParquetAdapter:
                 df,
                 custom_metadata=key_value_metadata,
                 file_scheme="simple",
-                compression=compression,
+                **kwargs,
             )
 
     def read_parquet(self, path, return_key_value_metadata: bool = True):

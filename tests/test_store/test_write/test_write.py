@@ -17,6 +17,8 @@ from numpy import arange
 from pandas import DataFrame
 from pandas import Timestamp
 
+from oups.defines import DIR_SEP
+from oups.store.ordered_parquet_dataset import create_custom_opd
 from oups.store.write import write
 from tests.test_store.conftest import create_parquet_file
 
@@ -798,13 +800,14 @@ def test_write(
 
     """
     ordered_on = "a"
-    tmp_path = f"{str(tmp_path)}/test_data"
+    tmp_path = f"{str(tmp_path)}{DIR_SEP}test_data"
     # Init phase.
     if initial_data:
         # Use 'write' from fastparquet with 'row_group_offsets'.
-        create_parquet_file(
+        create_custom_opd(
             tmp_path,
             **initial_data,
+            ordered_on=ordered_on,
         )
 
     # Phase 'write_ordered()'.
@@ -813,9 +816,6 @@ def test_write(
         expected["rgs_length"],
         expected["dfs"],
     ):
-        print()
-        print("write_ordered_df")
-        print(write_ordered_df)
         write(
             tmp_path,
             ordered_on=ordered_on,
@@ -825,14 +825,15 @@ def test_write(
             duplicates_on=duplicates_on,
         )
         # Verify state after this append
-        pf_rec = ParquetFile(tmp_path)
-        print()
-        print("pf_rec.to_pandas()")
-        print(pf_rec.to_pandas())
-        print("expected_df")
-        print(expected_df)
-        assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
-        assert pf_rec.to_pandas().equals(expected_df)
+        try:
+            pf_rec = ParquetFile(tmp_path)
+            assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
+            assert pf_rec.to_pandas().equals(expected_df)
+        except FileNotFoundError:
+            if not expected_rgs:
+                pass
+            else:
+                raise
 
 
 def test_exception_ordered_on_not_existing(tmp_path):

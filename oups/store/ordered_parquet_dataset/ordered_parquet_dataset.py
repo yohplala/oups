@@ -383,6 +383,8 @@ class OrderedParquetDataset:
         if self.has_row_groups_already_removed:
             raise ValueError("removing row group files is blocked.")
         # Remove files from disk.
+        print()
+        print(f"Removing files from disk: {file_ids}")
         for file_id in file_ids:
             remove(get_parquet_filepaths(self.dirpath, file_id, self._file_id_n_digits))
         # Remove corresponding file ids from 'self.row_group_stats'.
@@ -496,7 +498,7 @@ class OrderedParquetDataset:
         self,
         dfs: Iterable[DataFrame],
         write_opdmd: bool = True,
-        compression: str = None,
+        **kwargs,
     ):
         """
         Write row groups as files to disk. One row group per file.
@@ -507,8 +509,8 @@ class OrderedParquetDataset:
             Dataframes to write.
         write_opdmd : bool, optional
             If `True`, write opd metadata file to disk.
-        compression : str, optional
-            Compression to use.
+        **kwargs : dict
+            Additional parameters to pass to 'ParquetAdapter.write_parquet()'.
 
         """
         iter_dfs = iter(dfs)
@@ -540,7 +542,7 @@ class OrderedParquetDataset:
             parquet_adapter.write_parquet(
                 path=get_parquet_filepaths(self.dirpath, file_id, self._file_id_n_digits),
                 df=df,
-                compression=compression,
+                **kwargs,
             )
         self.row_group_stats = concat(
             [
@@ -562,6 +564,60 @@ class OrderedParquetDataset:
                 f"number of rows {len(df)} exceeds max value {self._max_n_rows}. "
                 "Metadata has been written before the exception has been raised.",
             )
+
+
+def create_custom_opd(tmp_path: str, df: DataFrame, row_group_offsets: List[int], ordered_on: str):
+    """
+    Create a custom opd for testing.
+
+    Parameters
+    ----------
+    tmp_path : str
+        Temporary directory wheere to locate the opd files.
+    df : DataFrame
+        Data to write to opd files.
+    row_group_offsets : List[int]
+        Start index of row groups in 'df'.
+    ordered_on : str
+        Column name to order row groups by.
+
+
+    Returns
+    -------
+    OrderedParquetDataset
+        The created opd object.
+
+    """
+    _max_allowed_file_id = iinfo(RGS_STATS_BASE_DTYPES[KEY_FILE_IDS]).max
+    _file_id_n_digits = len(str(_max_allowed_file_id))
+    n_rows = []
+    ordered_on_mins = []
+    ordered_on_maxs = []
+    row_group_ends_excluded = row_group_offsets[1:] + [len(df)]
+    Path(tmp_path).mkdir(parents=True, exist_ok=True)
+    for file_id, (row_group_start, row_group_end_excluded) in enumerate(
+        zip(row_group_offsets, row_group_ends_excluded),
+    ):
+        df_rg = df.iloc[row_group_start:row_group_end_excluded]
+        n_rows.append(len(df_rg))
+        ordered_on_mins.append(df_rg.loc[:, ordered_on].iloc[0])
+        ordered_on_maxs.append(df_rg.loc[:, ordered_on].iloc[-1])
+        parquet_adapter.write_parquet(
+            path=get_parquet_filepaths(tmp_path, file_id, _file_id_n_digits),
+            df=df_rg,
+            # file_scheme="simple",   # not needed, is already a parameter in parquet_adapter.write_parquet()
+        )
+    row_group_stats = DataFrame(
+        data=zip(range(len(row_group_offsets)), n_rows, ordered_on_mins, ordered_on_maxs),
+        columns=RGS_STATS_COLUMNS,
+    ).astype(RGS_STATS_BASE_DTYPES)
+    parquet_adapter.write_parquet(
+        path=get_opdmd_filepath(tmp_path),
+        df=row_group_stats,
+        # file_scheme="simple",   # not needed, is already a parameter in parquet_adapter.write_parquet()
+        key_value_metadata={KEY_ORDERED_ON: ordered_on},
+    )
+    return OrderedParquetDataset(tmp_path)
 
 
 # TODO:
