@@ -33,7 +33,6 @@ from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.write import write
 
 
-EMPTY_DATAFRAME = DataFrame()
 # Do not change this order, it is expected by OrderedParquetDataset.write_row_group_files()
 RGS_STATS_COLUMNS = [KEY_FILE_IDS, KEY_N_ROWS, KEY_ORDERED_ON_MINS, KEY_ORDERED_ON_MAXS]
 RGS_STATS_BASE_DTYPES = {
@@ -44,6 +43,9 @@ PARQUET_FILE_EXTENSION = ".parquet"
 PARQUET_FILE_PREFIX = "file_"
 
 parquet_adapter = ParquetAdapter(use_arro3=False)
+
+# Find in names of parquet files the integer matching "**file_*.parquet" as 'i'.
+FILE_ID_FROM_REGEX = compile(rf".*{PARQUET_FILE_PREFIX}(?P<i>[\d]+){PARQUET_FILE_EXTENSION}$")
 
 
 def get_opdmd_filepath(dirpath: str) -> str:
@@ -93,10 +95,6 @@ def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_d
         if isinstance(file_id, Series)
         else f"{dirpath}{DIR_SEP}{PARQUET_FILE_PREFIX}{file_id:0{file_id_n_digits}}{PARQUET_FILE_EXTENSION}"
     )
-
-
-# Find in names of parquet files the integer matching "**file_*.parquet" as 'i'.
-FILE_ID_FROM_REGEX = compile(rf".*{PARQUET_FILE_PREFIX}(?P<i>[\d]+){PARQUET_FILE_EXTENSION}$")
 
 
 def file_ids_in_directory(dirpath: str) -> List[int]:
