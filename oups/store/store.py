@@ -68,13 +68,12 @@ def get_keys(basepath: str, indexer: Type[dataclass]) -> SortedSet:
 
     """
     depth = indexer.depth - 1
-    paths_files = list(files_at_depth(basepath, depth))
     # Filter, keeping only folders having files with correct extension,
     # then materialize paths into keys, filtering out those that can't.
     return SortedSet(
         [
             key
-            for path, files in paths_files
+            for path, files in files_at_depth(basepath, depth)
             for file in files
             if (
                 file.endswith(OPDMD_EXTENSION)
@@ -202,6 +201,8 @@ class Store:
             an instance of the dataclass provided at Store instantiation.
 
         """
+        # TODO: remove opdmd file.
+        # TODO: check if rmtree raise error if directory does not exist (only metadata)
         if key in self._keys:
             # Keep track of intermediate partition folders, in case one get
             # empty.
