@@ -8,6 +8,7 @@ Created on Wed Dec  4 18:00:00 2021.
 from dataclasses import dataclass
 from os import listdir
 from os import rmdir
+from pathlib import Path
 from shutil import rmtree
 from typing import Type
 
@@ -17,6 +18,7 @@ from oups.defines import DIR_SEP
 from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_basename
+from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.store.utils import files_at_depth
 from oups.store.store.utils import strip_path_tail
 
@@ -208,14 +210,17 @@ class Store:
             an instance of the dataclass provided at Store instantiation.
 
         """
-        # TODO: remove opdmd file.
-        # TODO: check if rmtree raise error if directory does not exist (only metadata)
         if key in self.keys:
             # Keep track of intermediate partition folders, in case one get
             # empty.
             basepath = self.basepath
-            dirpath = f"{basepath}{DIR_SEP}{key.to_path}"
-            rmtree(dirpath)
+            dirpath = get_opd_basepath(basepath, key)
+            try:
+                rmtree(dirpath)
+            except FileNotFoundError:
+                pass
+            # Remove opdmd file.
+            Path(get_md_filepath(dirpath)).unlink()
             self._keys.remove(key)
             # Remove possibly empty directories.
             upper_dir = strip_path_tail(dirpath)

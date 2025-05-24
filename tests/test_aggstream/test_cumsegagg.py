@@ -8,9 +8,9 @@ Created on Sun Mar 13 18:00:00 2022.
 from functools import partial
 
 import pytest
-from numpy import NaN as nNaN
 from numpy import all as nall
 from numpy import array
+from numpy import nan as nNaN
 from numpy import ndarray
 from pandas import NA as pNA
 from pandas import DataFrame

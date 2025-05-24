@@ -664,14 +664,3 @@ def create_custom_opd(tmp_path: str, df: DataFrame, row_group_offsets: List[int]
         key_value_metadata={KEY_ORDERED_ON: ordered_on},
     )
     return OrderedParquetDataset(tmp_path)
-
-
-# TODO:
-# Create:
-#  - implement 'write()' method
-#  - clean oups.store.write.write() and colllection.py
-#  - rename collection.py
-#  - remove vaex dependency
-#  - set numpy above 2.0
-#  - in write when removing 2 sequence of row groups, to check that
-#    when not based on row group indexes, but on file_ids, it works.

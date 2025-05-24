@@ -95,7 +95,7 @@ repos:
                 oups/aggstream/__init__.py:F401
                 oups/aggstream/jcumsegagg.py:C901
                 oups/aggstream/segmentby.py:C901
-                oups/aggstream/cumsegagg.py:C901
+                oups/aggstream/cumsegagg.py:C901 E203
                 oups/aggstream/aggstream.py:C901
                 tests/*.py:D103
         ]
