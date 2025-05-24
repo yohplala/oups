@@ -29,8 +29,8 @@ from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
-from oups.defines import OPDMD_EXTENSION
 from oups.defines import PARQUET_FILE_EXTENSION
+from oups.store.ordered_parquet_dataset.opdmd_file import get_opdmd_filepath
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.write import write
 
@@ -48,24 +48,6 @@ parquet_adapter = ParquetAdapter(use_arro3=False)
 
 # Find in names of parquet files the integer matching "**file_*.parquet" as 'i'.
 FILE_ID_FROM_REGEX = compile(rf".*{PARQUET_FILE_PREFIX}(?P<i>[\d]+){PARQUET_FILE_EXTENSION}$")
-
-
-def get_opdmd_filepath(dirpath: str) -> str:
-    """
-    Get standardized opdmd file path.
-
-    Parameters
-    ----------
-    dirpath : str
-        The directory path to use in the file path.
-
-    Returns
-    -------
-    str
-        The formatted file name.
-
-    """
-    return f"{dirpath}{OPDMD_EXTENSION}"
 
 
 def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_digits: int) -> str:
@@ -502,7 +484,7 @@ class OrderedParquetDataset:
             )
         write(self, ordered_on=self.ordered_on, **kwargs)
 
-    def write_metadata(self, key_value_metadata: Dict[str, str] = None):
+    def write_metadata_file(self, key_value_metadata: Dict[str, str] = None):
         """
         Write metadata to disk.
 
@@ -561,7 +543,7 @@ class OrderedParquetDataset:
     def write_row_group_files(
         self,
         dfs: Iterable[DataFrame],
-        write_opdmd: bool = True,
+        write_metadata_file: bool = True,
         **kwargs,
     ):
         """
@@ -571,7 +553,7 @@ class OrderedParquetDataset:
         ----------
         dfs : Iterable[DataFrame]
             Dataframes to write.
-        write_opdmd : bool, optional
+        write_metadata_file : bool, optional
             If `True`, write opd metadata file to disk.
         **kwargs : dict
             Additional parameters to pass to 'ParquetAdapter.write_parquet()'.
@@ -616,8 +598,8 @@ class OrderedParquetDataset:
             ignore_index=True,
             copy=False,
         )
-        if write_opdmd or max_file_id_exceeded or max_n_rows_exceeded:
-            self.write_metadata()
+        if write_metadata_file or max_file_id_exceeded or max_n_rows_exceeded:
+            self.write_metadata_file()
         if max_file_id_exceeded:
             raise ValueError(
                 f"file id '{file_id}' exceeds max value {self._max_allowed_file_id}. "

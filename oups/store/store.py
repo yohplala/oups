@@ -176,7 +176,6 @@ class Store:
             Key to assess presence of.
 
         """
-        # Check if corresponding 'opdmd' file exists.
         return key in self.keys
 
     def __iter__(self):

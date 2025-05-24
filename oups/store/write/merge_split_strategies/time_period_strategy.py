@@ -22,8 +22,8 @@ from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.store.utils import ceil_ts
-from oups.store.utils import floor_ts
+from oups.date_utils import ceil_ts
+from oups.date_utils import floor_ts
 from oups.store.write.merge_split_strategies.base import OARMergeSplitStrategy
 
 

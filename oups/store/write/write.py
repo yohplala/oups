@@ -230,7 +230,7 @@ def write(
                 drop_duplicates=drop_duplicates,
                 subset=subset,
             ),
-            write_opdmd=False,
+            write_metadata_file=False,
             **kwargs,
         )
         # Remove row groups of data that is overlapping.
@@ -249,4 +249,4 @@ def write(
             ordered_parquet_dataset.sort_row_groups()
             ordered_parquet_dataset.align_file_ids()
     # Write metadata.
-    ordered_parquet_dataset.write_metadata(key_value_metadata=key_value_metadata)
+    ordered_parquet_dataset.write_metadata_file(key_value_metadata=key_value_metadata)
