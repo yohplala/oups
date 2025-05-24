@@ -9,7 +9,7 @@ from .aggstream import AggStream
 from .aggstream import by_x_rows
 from .store import OrderedParquetDataset
 from .store import Store
+from .store import conform_cmidx
 from .store import is_toplevel
 from .store import sublevel
 from .store import toplevel
-from .store.ordered_parquet_dataset.parquet_adapter import conform_cmidx

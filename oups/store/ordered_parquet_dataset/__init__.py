@@ -6,14 +6,12 @@ Created on Sun May 18 16:00:00 2025.
 
 """
 from .ordered_parquet_dataset import OrderedParquetDataset
-from .ordered_parquet_dataset import create_custom_opd
 from .parquet_adapter import check_cmidx
 from .parquet_adapter import conform_cmidx
 
 
 __all__ = [
     "OrderedParquetDataset",
-    "create_custom_opd",
     "check_cmidx",
     "conform_cmidx",
 ]

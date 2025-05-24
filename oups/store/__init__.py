@@ -9,5 +9,5 @@ from .indexer import is_toplevel
 from .indexer import sublevel
 from .indexer import toplevel
 from .ordered_parquet_dataset import OrderedParquetDataset
-from .ordered_parquet_dataset.parquet_adapter import conform_cmidx
-from .store.store import Store
+from .ordered_parquet_dataset import conform_cmidx
+from .store import Store
