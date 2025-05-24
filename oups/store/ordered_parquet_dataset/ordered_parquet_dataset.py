@@ -29,12 +29,13 @@ from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
-from oups.defines import PARQUET_FILE_EXTENSION
-from oups.store.ordered_parquet_dataset.opdmd_file import get_opdmd_filepath
+from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.write import write
 
 
+PARQUET_FILE_PREFIX = "file_"
+PARQUET_FILE_EXTENSION = ".parquet"
 # Do not change this order, it is expected by OrderedParquetDataset.write_row_group_files()
 RGS_STATS_COLUMNS = [KEY_FILE_IDS, KEY_N_ROWS, KEY_ORDERED_ON_MINS, KEY_ORDERED_ON_MAXS]
 RGS_STATS_BASE_DTYPES = {
@@ -42,7 +43,6 @@ RGS_STATS_BASE_DTYPES = {
     KEY_FILE_IDS: uint16,
 }
 
-PARQUET_FILE_PREFIX = "file_"
 
 parquet_adapter = ParquetAdapter(use_arro3=False)
 
@@ -211,7 +211,7 @@ class OrderedParquetDataset:
         self._dirpath = dirpath
         try:
             self._row_group_stats, self._key_value_metadata = parquet_adapter.read_parquet(
-                get_opdmd_filepath(self.dirpath),
+                get_md_filepath(self.dirpath),
                 return_key_value_metadata=True,
             )
             if ordered_on:
@@ -527,7 +527,7 @@ class OrderedParquetDataset:
                     # Case 'add'.
                     existing_md[key] = value
         parquet_adapter.write_parquet(
-            path=get_opdmd_filepath(self.dirpath),
+            path=get_md_filepath(self.dirpath),
             df=self.row_group_stats,
             key_value_metadata=existing_md | {KEY_ORDERED_ON: self.ordered_on},
         )
@@ -658,7 +658,7 @@ def create_custom_opd(tmp_path: str, df: DataFrame, row_group_offsets: List[int]
         columns=RGS_STATS_COLUMNS,
     ).astype(RGS_STATS_BASE_DTYPES)
     parquet_adapter.write_parquet(
-        path=get_opdmd_filepath(tmp_path),
+        path=get_md_filepath(tmp_path),
         df=row_group_stats,
         # file_scheme="simple",   # not needed, is already a parameter in parquet_adapter.write_parquet()
         key_value_metadata={KEY_ORDERED_ON: ordered_on},

@@ -8,6 +8,8 @@ Created on Wed Dec  1 18:35:00 2021.
 from os import path as os_path
 
 
+# Directory separator.
+DIR_SEP = os_path.sep
 # Central key in oups world, used as ID of the column name according which
 # dataframes are ordered.
 KEY_ORDERED_ON = "ordered_on"
@@ -21,11 +23,6 @@ KEY_ORDERED_ON_MAXS = "ordered_on_maxs"
 # - an empty list, meaning identify duplicate on all columns of the dataframe,
 # - a not empty list of a string, the columns to identify row duplicates.
 KEY_DUPLICATES_ON = "duplicates_on"
-# Directory separator.
-DIR_SEP = os_path.sep
 # In a fastparquet `ParquetFile`, oups-specific metadata is stored as value for
 # key `KEY_METADATA_KEY`.
 KEY_OUPS_METADATA = "oups"
-# Others.
-PARQUET_FILE_EXTENSION = ".parquet"
-OPDMD_EXTENSION = "_opdmd"

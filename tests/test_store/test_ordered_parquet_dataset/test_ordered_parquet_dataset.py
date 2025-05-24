@@ -14,12 +14,12 @@ from pandas import DataFrame
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import KEY_FILE_IDS
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import KEY_N_ROWS
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import KEY_ORDERED_ON_MAXS
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import KEY_ORDERED_ON_MINS
+from oups.defines import KEY_FILE_IDS
+from oups.defines import KEY_N_ROWS
+from oups.defines import KEY_ORDERED_ON_MAXS
+from oups.defines import KEY_ORDERED_ON_MINS
+from oups.store import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import get_parquet_filepaths
 
 

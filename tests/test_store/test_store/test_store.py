@@ -74,7 +74,7 @@ def test_store_init(tmp_path):
     assert key in ps
 
 
-def test_exception_key_not_correct_indexer(tmp_path):
+def test_exception_store_key_not_correct_indexer(tmp_path):
     # Test with class not being 'toplevel'.
     class WeatherEntry:
         capital: str
@@ -93,7 +93,7 @@ class WeatherEntry:
     spacetime: SpaceTime
 
 
-def test_store_getitem(tmp_path):
+def test_store_write_getitem(tmp_path):
     # Initialize a parquet dataset.
     basepath = f"{tmp_path}{DIR_SEP}store"
     ps = Store(basepath, WeatherEntry)
@@ -105,14 +105,16 @@ def test_store_getitem(tmp_path):
         },
     )
     ps[we].write(ordered_on="timestamp", df=df)
+    assert ps._has_initialized_a_new_opd
     assert we in ps
+    assert not ps._has_initialized_a_new_opd
     res = ps[we].to_pandas()
     assert res.equals(df)
 
 
-def test_set_parquet_with_config(tmp_path):
+def test_store_write_getitem_with_config(tmp_path):
     # Initialize a parquet dataset with config.
-    basepath = os_path.join(tmp_path, "store")
+    basepath = f"{tmp_path}{DIR_SEP}store"
     ps = Store(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = pDataFrame(
@@ -122,43 +124,16 @@ def test_set_parquet_with_config(tmp_path):
         },
     )
     rg_size = 2
-    config = {KEY_ORDERED_ON: "timestamp", KEY_ROW_GROUP_TARGET_SIZE: rg_size}
-    ps[we] = config, df
+    ps[we].write(ordered_on="timestamp", df=df, row_group_target_size=rg_size)
     assert we in ps
     # Load only first row group.
-    res = ParquetFile(os_path.join(basepath, we.to_path))[0].to_pandas()
+    res = ParquetFile(f"{basepath}{DIR_SEP}{we.to_path}")[0].to_pandas()
     assert res.equals(df.loc[: rg_size - 1])
 
 
-def test_exception_config_not_a_dict(tmp_path):
-    # Initialize a parquet dataset with config.
-    basepath = os_path.join(tmp_path, "store")
-    ps = Store(basepath, WeatherEntry)
-    we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
-    df = pDataFrame(
-        {
-            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
-            "temperature": [8.4, 5.3, 4.9, 2.3],
-        },
-    )
-    config = []  # First silly thing that comes to mind.
-    with pytest.raises(TypeError, match="^first item"):
-        ps[we] = config, df
-
-
-def test_exception_data_not_a_dataframe(tmp_path):
-    # Initialize a parquet dataset with config.
-    basepath = os_path.join(tmp_path, "store")
-    ps = Store(basepath, WeatherEntry)
-    we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
-    df = []  # First silly thing that comes to mind.
-    with pytest.raises(TypeError, match="^data should"):
-        ps[we] = df
-
-
-def test_iterator(tmp_path):
+def test_store_iterator(tmp_path):
     # Test `__iter__`.
-    basepath = os_path.join(tmp_path, "store")
+    basepath = f"{tmp_path}{DIR_SEP}store"
     ps = Store(basepath, WeatherEntry)
     we1 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     we2 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
@@ -168,7 +143,8 @@ def test_iterator(tmp_path):
             "temperature": [8.4, 5.3, 4.9, 2.3],
         },
     )
-    ps[we1], ps[we2] = ({KEY_ORDERED_ON: "timestamp"}, df), ({KEY_ORDERED_ON: "timestamp"}, df)
+    ps[we1].write(ordered_on="timestamp", df=df)
+    ps[we2].write(ordered_on="timestamp", df=df)
     for key in ps:
         assert key in (we1, we2)
 

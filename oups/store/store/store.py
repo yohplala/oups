@@ -14,14 +14,11 @@ from typing import Type
 from sortedcontainers import SortedSet
 
 from oups.defines import DIR_SEP
-from oups.defines import OPDMD_EXTENSION
 from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
+from oups.store.ordered_parquet_dataset.metadata_filename import get_md_basename
 from oups.store.store.utils import files_at_depth
 from oups.store.store.utils import strip_path_tail
-
-
-LEN_OPDMD_EXTENSION = len(OPDMD_EXTENSION)
 
 
 def get_opd_basepath(store_path: str, key: dataclass) -> str:
@@ -74,11 +71,11 @@ def get_keys(basepath: str, indexer: Type[dataclass]) -> SortedSet:
             for path, files in files_at_depth(basepath, depth)
             for file in files
             if (
-                file.endswith(OPDMD_EXTENSION)
+                (opdmd_basename := get_md_basename(file))
                 and (
                     key := indexer.from_path(
                         DIR_SEP.join(
-                            path.rsplit(DIR_SEP, depth)[1:] + [file[:-LEN_OPDMD_EXTENSION]],
+                            path.rsplit(DIR_SEP, depth)[1:] + [opdmd_basename],
                         ),
                     )
                 )
