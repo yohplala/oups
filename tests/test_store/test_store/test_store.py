@@ -25,7 +25,7 @@ from oups.defines import DIR_SEP
 from oups.defines import KEY_ORDERED_ON
 from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
 
-from .. import TEST_DATA
+from ... import TEST_DATA
 
 
 @sublevel

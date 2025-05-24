@@ -17,8 +17,8 @@ from oups.defines import DIR_SEP
 from oups.defines import OPDMD_EXTENSION
 from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
-from oups.store.utils import files_at_depth
-from oups.store.utils import strip_path_tail
+from oups.store.store.utils import files_at_depth
+from oups.store.store.utils import strip_path_tail
 
 
 LEN_OPDMD_EXTENSION = len(OPDMD_EXTENSION)
