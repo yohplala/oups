@@ -161,6 +161,9 @@ class OrderedParquetDataset:
         'write_row_group_files()'.
     dirpath : str
         Directory path from where to load data.
+    is_opdmd_file_missing : bool
+        Flag warning that 'opdmd' file is missing, and indicating that the opd
+        instance has just been newly initialized.
     key_value_metadata : Dict[str, str]
         Key-value metadata, from user and including 'ordered_on' column name.
     max_file_id : int
@@ -234,6 +237,7 @@ class OrderedParquetDataset:
                     base_ordered_on=self._key_value_metadata[KEY_ORDERED_ON],
                     new_ordered_on=ordered_on,
                 )
+            self._is_opdmd_file_missing = False
         except FileNotFoundError:
             # Using an empty Dataframe so that it can be written in the case
             # user is only using 'write_metadata()' without adding row groups.
@@ -241,6 +245,7 @@ class OrderedParquetDataset:
                 RGS_STATS_BASE_DTYPES,
             )
             self._key_value_metadata = {KEY_ORDERED_ON: ordered_on}
+            self._is_opdmd_file_missing = True
         # While opd is in memory, 'ordered_on' is kept as a private attribute,
         # with the idea that it is an immutable dataset property, while the
         # content of 'self._key_value_metadata' is mutable.
@@ -309,6 +314,13 @@ class OrderedParquetDataset:
         Return directory path.
         """
         return self._dirpath
+
+    @property
+    def is_opdmd_file_missing(self):
+        """
+        Return True if 'opdmd' file is missing.
+        """
+        return self._is_opdmd_file_missing
 
     @property
     def key_value_metadata(self):
@@ -537,6 +549,7 @@ class OrderedParquetDataset:
             df=self.row_group_stats,
             key_value_metadata=existing_md | {KEY_ORDERED_ON: self.ordered_on},
         )
+        self._is_opdmd_file_missing = False
         # Reset 'has_row_groups_already_removed' flag, in case it was set.
         # This flag is a security to prevent iterating
         # 'remove_row_group_files()' method without the sense that the process

@@ -8,8 +8,6 @@ Created on Wed Dec  4 18:00:00 2021.
 from dataclasses import dataclass
 from os import listdir
 from os import rmdir
-from os.path import exists
-from os.path import isfile
 from shutil import rmtree
 from typing import Type
 
@@ -19,7 +17,6 @@ from oups.defines import DIR_SEP
 from oups.defines import OPDMD_EXTENSION
 from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import get_opdmd_filepath
 from oups.store.utils import files_at_depth
 from oups.store.utils import strip_path_tail
 
@@ -130,6 +127,7 @@ class Store:
         self._basepath = basepath
         self._indexer = indexer
         self._keys = get_keys(basepath, indexer)
+        self._has_initialized_a_new_opd = False
 
     @property
     def basepath(self):
@@ -150,35 +148,42 @@ class Store:
         """
         Return keys.
         """
+        if self._has_initialized_a_new_opd:
+            # Refresh keys.
+            self._keys = get_keys(self.basepath, self.indexer)
+            self._has_initialized_a_new_opd = False
         return self._keys
 
     def __len__(self):
         """
         Return number of datasets.
         """
-        return len(self._keys)
+        return len(self.keys)
 
     def __repr__(self):
         """
         List of datasets.
         """
-        return "\n".join(map(str, self._keys))
+        return "\n".join(map(str, self.keys))
 
     def __contains__(self, key):
         """
         Assess presence of this dataset.
+
+        Parameters
+        ----------
+        key : dataclass
+            Key to assess presence of.
+
         """
         # Check if corresponding 'opdmd' file exists.
-        return (key in self._keys) or (
-            exists(opdmd_filepath := get_opdmd_filepath(get_opd_basepath(self._basepath, key)))
-            and isfile(opdmd_filepath)
-        )
+        return key in self.keys
 
     def __iter__(self):
         """
         Iterate over keys.
         """
-        yield from self._keys
+        yield from self.keys
 
     def __getitem__(self, key: dataclass):
         """
@@ -191,7 +196,10 @@ class Store:
             be an instance of the dataclass provided at Store instantiation.
 
         """
-        return OrderedParquetDataset(get_opd_basepath(self._basepath, key))
+        opd = OrderedParquetDataset(get_opd_basepath(self._basepath, key))
+        if opd.is_opdmd_file_missing:
+            self._has_initialized_a_new_opd = True
+        return opd
 
     def __delitem__(self, key: dataclass):
         """
@@ -206,10 +214,10 @@ class Store:
         """
         # TODO: remove opdmd file.
         # TODO: check if rmtree raise error if directory does not exist (only metadata)
-        if key in self._keys:
+        if key in self.keys:
             # Keep track of intermediate partition folders, in case one get
             # empty.
-            basepath = self._basepath
+            basepath = self.basepath
             dirpath = f"{basepath}{DIR_SEP}{key.to_path}"
             rmtree(dirpath)
             self._keys.remove(key)

@@ -79,6 +79,7 @@ def test_opd_init_empty(tmp_path):
     assert opd.ordered_on == "a"
     assert opd.row_group_stats.empty
     assert opd.key_value_metadata == {}
+    assert opd.is_opdmd_file_missing
 
 
 def test_exception_opd_init_ordered_on(tmp_path):
@@ -99,6 +100,7 @@ def test_opd_getitem_and_len(tmp_path):
         [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
         write_opdmd=True,
     )
+    assert not opd.is_opdmd_file_missing
     assert len(opd) == len(df_ref)
     assert not opd._is_row_group_subset
     opd_sub1 = opd[1]
