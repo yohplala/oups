@@ -19,6 +19,7 @@ from oups.defines import DIR_SEP
 from oups.defines import OPDMD_EXTENSION
 from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import get_opdmd_filepath
 from oups.store.utils import files_at_depth
 from oups.store.utils import strip_path_tail
 
@@ -168,8 +169,10 @@ class Store:
         Assess presence of this dataset.
         """
         # Check if corresponding 'opdmd' file exists.
-        fpath = f"{get_opd_basepath(self._basepath, key)}{OPDMD_EXTENSION}"
-        return exists(fpath) and isfile(fpath)
+        return (key in self._keys) or (
+            exists(opdmd_filepath := get_opdmd_filepath(get_opd_basepath(self._basepath, key)))
+            and isfile(opdmd_filepath)
+        )
 
     def __iter__(self):
         """

@@ -14,7 +14,6 @@ from pandas import DataFrame
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.defines import KEY_ORDERED_ON
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import KEY_FILE_IDS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import KEY_N_ROWS
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import KEY_ORDERED_ON_MAXS
@@ -79,25 +78,18 @@ def test_opd_init_empty(tmp_path):
     assert opd.dirpath == tmp_path
     assert opd.ordered_on == "a"
     assert opd.row_group_stats.empty
-    assert opd.key_value_metadata == {KEY_ORDERED_ON: "a"}
+    assert opd.key_value_metadata == {}
 
 
-@pytest.mark.parametrize(
-    "ordered_on, err_msg",
-    [
-        ("b", "^'ordered_on' parameter value 'b' does not match"),
-    ],
-)
-def test_exception_opd_init_ordered_on(tmp_path, ordered_on, err_msg):
-    if ordered_on:
-        # Write a 1st dataset with a different 'ordered_on' column name.
-        opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
-        opd.write_row_group_files([df_ref], write_opdmd=True)
+def test_exception_opd_init_ordered_on(tmp_path):
+    # Write a 1st dataset with a different 'ordered_on' column name.
+    opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
+    opd.write_row_group_files([df_ref], write_opdmd=True)
     with pytest.raises(
         ValueError,
-        match=err_msg,
+        match="^'ordered_on' parameter value 'b'",
     ):
-        opd = OrderedParquetDataset(tmp_path, ordered_on=ordered_on)
+        opd = OrderedParquetDataset(tmp_path, ordered_on="b")
 
 
 def test_opd_getitem_and_len(tmp_path):
@@ -229,9 +221,8 @@ def test_opd_to_pandas(tmp_path):
 
 def test_opd_write_metadata(tmp_path):
     opd1 = OrderedParquetDataset(tmp_path, ordered_on="a")
-    additional_metadata_in = {"a": "b", "ts": Timestamp("2021-01-01")}
-    opd1.write_metadata(key_value_metadata=additional_metadata_in)
-    metadata_ref = {KEY_ORDERED_ON: "a", **additional_metadata_in}
+    metadata_ref = {"a": "b", "ts": Timestamp("2021-01-01")}
+    opd1.write_metadata(key_value_metadata=metadata_ref)
     assert opd1.row_group_stats.empty
     assert opd1.key_value_metadata == metadata_ref
     opd2 = OrderedParquetDataset(tmp_path)
@@ -240,7 +231,7 @@ def test_opd_write_metadata(tmp_path):
     # Changing some metadata values, removing another one.
     additional_metadata_in = {"a": "c", "ts": None}
     opd1.write_metadata(key_value_metadata=additional_metadata_in)
-    metadata_ref = {KEY_ORDERED_ON: "a", "a": "c"}
+    metadata_ref = {"a": "c"}
     assert opd1.key_value_metadata == metadata_ref
     opd2 = OrderedParquetDataset(tmp_path)
     assert opd2.key_value_metadata == metadata_ref
