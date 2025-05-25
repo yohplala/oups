@@ -209,7 +209,7 @@ class OrderedParquetDataset:
             be provided in 'kwargs' of 'write()' method.
 
         """
-        self._dirpath = str(dirpath)
+        self._dirpath = dirpath
         try:
             self._row_group_stats, self._key_value_metadata = parquet_adapter.read_parquet(
                 get_md_filepath(self.dirpath),
@@ -533,7 +533,7 @@ class OrderedParquetDataset:
                     # Case 'add'.
                     existing_md[key] = value
         if self._is_opdmd_file_missing:
-            Path(strip_path_tail(self.dirpath)).mkdir(parents=True, exist_ok=True)
+            Path(strip_path_tail(str(self.dirpath))).mkdir(parents=True, exist_ok=True)
         parquet_adapter.write_parquet(
             path=get_md_filepath(self.dirpath),
             df=self.row_group_stats,
