@@ -7,7 +7,7 @@ Created on Wed Dec  4 21:30:00 2021.
 """
 from os import scandir
 from os.path import exists
-from typing import Iterator, List, Tuple
+from typing import Iterator, List, Tuple, Union
 
 from oups.defines import DIR_SEP
 
@@ -31,7 +31,7 @@ def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[st
 
     Yields
     ------
-    Iterator[Dict[str,List[str]]]
+    Iterator[Tuple[str,List[str]]]
         List of files within directory specified by the key. Empty directories
         are not returned.
 
@@ -59,7 +59,7 @@ def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[st
             yield from files_at_depth(path, depth)
 
 
-def strip_path_tail(dirpath: str) -> str:
+def strip_path_tail(dirpath: str) -> Union[str, None]:
     """
     Remove last level directory from provided path.
 
@@ -70,9 +70,9 @@ def strip_path_tail(dirpath: str) -> str:
 
     Returns
     -------
-    str
+    Union[str, None]
         Directory path stripped from last directory.
+        If dirpath is last level itself, return `None`.
 
     """
-    if DIR_SEP in dirpath:
-        return dirpath.rsplit("/", 1)[0]
+    return dirpath.rsplit(DIR_SEP, 1)[0] if DIR_SEP in dirpath else None

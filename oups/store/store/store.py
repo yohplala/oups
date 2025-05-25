@@ -19,8 +19,8 @@ from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_basename
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
-from oups.store.store.utils import files_at_depth
-from oups.store.store.utils import strip_path_tail
+from oups.store.store.filepath_utils import files_at_depth
+from oups.store.store.filepath_utils import strip_path_tail
 
 
 def get_opd_basepath(store_path: str, key: dataclass) -> str:
@@ -98,6 +98,9 @@ class Store:
         Indexer schema (class) to be used to index parquet datasets.
     keys : SortedSet
         Set of indexes of existing parquet datasets.
+    _has_initialized_a_new_opd : bool
+        Flag to indicate that a new opd has been initialized. This flag is reset
+        when 'keys' property is accessed.
 
     Notes
     -----

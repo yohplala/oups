@@ -48,12 +48,12 @@ def test_store_init(tmp_path):
     basepath = f"{tmp_path}{DIR_SEP}store"
     ps = Store(basepath, WeatherEntry)
     assert ps.basepath == basepath
-    # 'keys' is empty as 'fields_sep' in example directories is '.',
-    # while default 'fields_sep' is '-'.
+    # 'keys' is empty as 'field_sep' in example directories is '.',
+    # while default 'field_sep' is '-'.
     assert len(ps) == 0
 
-    # Re-do with 'fields_sep' set to '.' to comply with example directories.
-    @toplevel(fields_sep=".")
+    # Re-do with 'field_sep' set to '.' to comply with example directories.
+    @toplevel(field_sep=".")
     class WeatherEntry:
         capital: str
         quantity: str

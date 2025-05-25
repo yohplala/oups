@@ -22,6 +22,12 @@ def floor_ts(ts: Timestamp, freq: str) -> Timestamp:
         Frequency string.
         https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
 
+
+    Returns
+    -------
+    Timestamp
+        Floored timestamp.
+
     """
     try:
         return ts.floor(freq)
@@ -40,6 +46,11 @@ def ceil_ts(ts: Timestamp, freq: str) -> Timestamp:
     freq : str
         Frequency string.
         https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#timeseries-offset-aliases
+
+    Returns
+    -------
+    Timestamp
+        Ceiled timestamp.
 
     """
     try:

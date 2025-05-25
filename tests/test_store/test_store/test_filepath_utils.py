@@ -9,7 +9,7 @@ import zipfile
 from os import path as os_path
 
 from oups.defines import DIR_SEP
-from oups.store.store.utils import files_at_depth
+from oups.store.store.filepath_utils import files_at_depth
 
 from ... import TEST_DATA
 

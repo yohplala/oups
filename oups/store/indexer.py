@@ -18,10 +18,13 @@ from oups.defines import DIR_SEP
 # Float removed to prevent having '.' in field values.
 TYPE_ACCEPTED = {int, str}
 # Default fields separator, if not modified by user.
-DEFAULT_FIELDS_SEP = "-"
+DEFAULT_FIELD_SEP = "-"
 # Characters forbidden in field value.
-# 'fields_sep' is also included at runtime before check.
+# 'field_sep' is also included at runtime before check.
 FORBIDDEN_CHARS = (DIR_SEP, ".")
+KEY_FIELD_SEP = "field_sep"
+KEY_FROM_PATH = "from_path"
+KEY_DEPTH = "depth"
 
 
 def _is_dataclass_instance(obj: Any) -> bool:
@@ -76,7 +79,7 @@ def _validate_toplevel_instance(toplevel: dataclass):
     toplevel : dataclass
 
     """
-    forbidden_chars = (toplevel.fields_sep, *FORBIDDEN_CHARS)
+    forbidden_chars = (toplevel.field_sep, *FORBIDDEN_CHARS)
     for fields_ in _dataclass_instance_to_lists(toplevel):
         number_of_fields = len(fields_)
         for counter, field in enumerate(fields_):
@@ -88,22 +91,20 @@ def _validate_toplevel_instance(toplevel: dataclass):
                     # there is only one field, in which case it is also in
                     # 1st position.
                     raise TypeError(
-                        "a dataclass instance cannot be the only \
-field of a level.",
+                        "a dataclass instance cannot be the only field of a level.",
                     )
                 if counter + 1 != number_of_fields:
                     # A dataclass instance cannot be in last position.
                     raise TypeError(
-                        "a dataclass instance is only possible in \
-last position.",
+                        "a dataclass instance is only possible in last position.",
                     )
             else:
                 # If not a dataclass instance.
                 field_as_str = str(field)
                 if any((symb in field_as_str for symb in forbidden_chars)):
                     raise ValueError(
-                        f"use of a forbidden character among \
-{forbidden_chars} is not possible in {field_as_str}.",
+                        f"use of a forbidden character among {forbidden_chars} "
+                        f"is not possible in {field_as_str}.",
                     )
             if not ((type(field) in TYPE_ACCEPTED) or _is_dataclass_instance(field)):
                 raise TypeError(f"field type {type(field)} not possible.")
@@ -114,7 +115,7 @@ def _dataclass_instance_to_str(toplevel: dataclass, as_path: bool = False) -> st
     """
     Return a dataclass instance as a string.
 
-    The different levels in this string are either separated with 'fields_sep'
+    The different levels in this string are either separated with 'field_sep'
     or with DIR_SEP.
 
     Parameters
@@ -123,24 +124,24 @@ def _dataclass_instance_to_str(toplevel: dataclass, as_path: bool = False) -> st
     as_path : bool, default False
         Defines separator to be used between levels of the dataclass.
         If True, use DIR_SEP ('/');
-        If False, use 'fields_sep'
+        If False, use 'field_sep'
 
     Returns
     -------
     str
         All fields values, joined:
-            - At a same level, using 'fields_sep';
-            - Between different levels, either 'fields_sep', either DIR_SEP,
+            - At a same level, using 'field_sep';
+            - Between different levels, either 'field_sep', either DIR_SEP,
               depending 'as_path'.
 
     """
-    levels_sep = DIR_SEP if as_path else toplevel.fields_sep
+    levels_sep = DIR_SEP if as_path else toplevel.field_sep
     to_str = []
     for fields_ in _dataclass_instance_to_lists(toplevel):
         # Relying on the fact that only the tail can be a dataclass instance.
-        to_str.append(toplevel.fields_sep.join(map(str, fields_[:-1])))
+        to_str.append(toplevel.field_sep.join(map(str, fields_[:-1])))
     if to_str[-1]:
-        to_str[-1] += f"{toplevel.fields_sep}{str(fields_[-1])}"
+        to_str[-1] += f"{toplevel.field_sep}{str(fields_[-1])}"
     else:
         to_str[-1] = str(fields_[-1])
     return levels_sep.join(to_str)
@@ -174,7 +175,7 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
     """
     Return a dataclass instance derived from input string.
 
-    Level separator can either be DIR_SEP or 'cls.fields_sep'.
+    Level separator can either be DIR_SEP or 'cls.field_sep'.
     If dataclass '__init__' fails, `None` is returned.
 
     Parameters
@@ -183,7 +184,7 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
         Dataclass to be used for generating dataclass instance.
     string : str
         String representation of the dataclass instance (using either
-        'cls.fields_sep' of DIR_SEP)
+        'cls.field_sep' of DIR_SEP)
 
     Returns
     -------
@@ -192,9 +193,9 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
 
     """
     types = _dataclass_fields_types_to_lists(cls)
-    # Split string depending 'fields_sep' and 'DIR_SEP', into different fields.
-    fields_sep = cls.fields_sep
-    strings_as_list = re.split(rf"{DIR_SEP}|\{fields_sep}", string)
+    # Split string depending 'field_sep' and 'DIR_SEP', into different fields.
+    field_sep = cls.field_sep
+    strings_as_list = re.split(rf"{DIR_SEP}|\{field_sep}", string)
     # Manages last level first.
     level_types = types.pop()  # remove last element
     level_length = len(level_types)
@@ -220,7 +221,7 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
     except (TypeError, ValueError):
         # TypeError if the number of arguments for instantiation of a
         # dataclass is not correct (meaning the split has not been done
-        # with the right 'fields_sep' character).
+        # with the right 'field_sep' character).
         # ValueError if there is a type mismatch, for instance when 'int'
         # is initialized from a string.
         return None
@@ -260,11 +261,11 @@ class TopLevel(type):
     """
 
     @property
-    def fields_sep(cls) -> str:
+    def field_sep(cls) -> str:
         """
         Return field separator.
         """
-        return cls._fields_sep
+        return cls._field_sep
 
     @property
     def depth(cls) -> int:
@@ -274,17 +275,18 @@ class TopLevel(type):
         return cls._depth
 
 
-def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
+def toplevel(index_class=None, *, field_sep: str = DEFAULT_FIELD_SEP):
     """
     Turn decorated class into an indexing schema.
 
     Decorated class is equipped with methods and attributes to use with a
     ``ParquetSet`` instance.
-    It has to be defined as one would define a class decorated by ``@dataclass``.
+    It has to be defined as one would define a class decorated by
+    ``@dataclass``.
 
     Parameters
     ----------
-    fields_sep : str, default '.'
+    field_sep : str, default '.'
         Character to use as separator between fields of the dataclass.
 
     Returns
@@ -293,7 +295,7 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
 
     Attributes
     ----------
-    fields_sep: str
+    field_sep: str
         Fields separator (can't assign).
     depth: int
         Number of levels, including 'toplevel' (can't assign).
@@ -312,22 +314,22 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
       - An instance can only be composed with ``int``, ``str`` or a dataclass
         object coming in last position;
       - Value of attribute can not incorporate forbidden characters like ``/``
-        and ``self.fields_sep``.
+        and ``self.field_sep``.
 
     """
 
     def tweak(index_class):
         # Re-create 'index_class' as a 'TopLevel'-inheriting class to equip it
-        # with class properties 'depth' and 'fields_sep'
+        # with class properties 'depth' and 'field_sep'
         # (as per https://stackoverflow.com/questions/5120688)
         # Explicitly add property to OtherClass.__dict__
         # (as per https://stackoverflow.com/questions/70233891)
         d = dict(index_class.__dict__)
-        d.update({"fields_sep": TopLevel.fields_sep, "depth": TopLevel.depth})
+        d.update({KEY_FIELD_SEP: TopLevel.field_sep, KEY_DEPTH: TopLevel.depth})
         index_class = TopLevel(index_class.__name__, index_class.__bases__, d)
         # Wrap with `@dataclass`.
-        # TODO
-        # When python 3.10 is more wide spread, set 'slot=True' to save RAM.
+        # TODO: when python 3.10 is more wide spread, set 'slot=True' to save
+        # RAM.
         index_class = dataclass(index_class, order=True, frozen=True)
 
         # Equip 'index_class' with what is needed to be a 'toplevel'.
@@ -336,7 +338,7 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
         index_class_init = index_class.__init__
 
         def __init__(self, *args, check: bool = True, **kws):
-            #            object.__setattr__(self, "_fields_sep", fields_sep)
+            #            object.__setattr__(self, "_field_sep", field_sep)
             index_class_init(self, *args, **kws)
             if check:
                 # Validate dataclass instance.
@@ -345,8 +347,8 @@ def toplevel(index_class=None, *, fields_sep: str = DEFAULT_FIELDS_SEP):
         index_class.__init__ = __init__
         index_class.__str__ = _dataclass_instance_to_str
 
-        # Class properties: 'fields_sep', 'depth'
-        index_class._fields_sep = fields_sep
+        # Class properties: 'field_sep', 'depth'
+        index_class._field_sep = field_sep
         index_class._depth = _get_depth(index_class)
 
         # Class instance properties: 'to_path'
@@ -374,10 +376,10 @@ def is_toplevel(toplevel) -> bool:
     Return `True` if `toplevel`-decorated class.
 
     Returns 'True' if 'toplevel' (class or instance) has been decorated with
-    '@toplevel'. It checks presence 'fields_sep' attribute and 'from_path' method.
+    '@toplevel'. It checks presence 'field_sep' attribute and 'from_path' method.
 
     """
-    return hasattr(toplevel, "fields_sep") and callable(getattr(toplevel, "from_path", None))
+    return hasattr(toplevel, KEY_FIELD_SEP) and callable(getattr(toplevel, KEY_FROM_PATH, None))
 
 
 def sublevel(index_class):
@@ -392,10 +394,8 @@ def sublevel(index_class):
 
     """
     # Wrap with `@dataclass`.
-    # TODO
-    # When python 3.10 is more wide spread, set 'slot=True' to save RAM.
+    # TODO: when python 3.10 is more wide spread, set 'slot=True' to save RAM.
     return dataclass(index_class, order=True, frozen=True)
 
 
-# TODO
-# - deep copy of an Indexer is currently not possible. Work this out.
+# TODO: deep copy of an Indexer is currently not possible. Work this out.
