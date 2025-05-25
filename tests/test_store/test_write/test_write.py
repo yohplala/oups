@@ -804,9 +804,6 @@ def test_write(
             **initial_data,
             ordered_on=ordered_on,
         )
-    #    print()
-    #    print("written_data")
-    #    print(ParquetFile(tmp_path).to_pandas())
     # Phase 'write_ordered()'.
     for write_ordered_df, expected_rgs, expected_df in zip(
         write_ordered_data,
@@ -825,14 +822,6 @@ def test_write(
         try:
             pf_rec = ParquetFile(tmp_path)
             assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
-            #            print()
-            #            print("recorded df")
-            #            print(pf_rec.to_pandas())
-            #            print("expected df")
-            #            print(expected_df)
-            #            for i, rg in enumerate(pf_rec.row_groups):
-            #                print(f"num_rows: {rg.num_rows}")
-            #                print(pf_rec[i].to_pandas())
             assert pf_rec.to_pandas().equals(expected_df)
         except FileNotFoundError:
             if not expected_rgs:

@@ -6,6 +6,7 @@ Created on Wed Dec  4 21:30:00 2021.
 
 """
 from os import scandir
+from os.path import exists
 from typing import Iterator, List, Tuple
 
 from oups.defines import DIR_SEP
@@ -35,6 +36,8 @@ def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[st
         are not returned.
 
     """
+    if not exists(basepath):
+        return
     if depth == 0:
         files = [
             entry.path.rsplit(DIR_SEP, 1)[1]

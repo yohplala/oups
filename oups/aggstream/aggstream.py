@@ -801,7 +801,7 @@ def _post_n_write_agg_chunks(
         # 'pre_buffer', 'segagg_buffer' and 'post_buffer'.
         # Oups metadata only get written for 'main_key'.
         # When 'key' is a tuple, 'main_key' is the 1st key.
-        write_config["metadata"] = {
+        write_config["key_value_metadata"] = {
             KEY_AGGSTREAM: {
                 KEY_RESTART_INDEX: last_seed_index,
                 KEY_PRE_BUFFER: pre_buffer,
@@ -815,21 +815,25 @@ def _post_n_write_agg_chunks(
     # iteration.
     if isinstance(main_res, DataFrame) or last_seed_index:
         if agg_res_type is AggResType.BOTH:
-            store[main_key] = (
-                write_config
-                | {KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][0]},
-                main_res,
+            store[main_key].write(
+                **(
+                    write_config
+                    | {KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][0]}
+                ),
+                df=main_res,
             )
-            store[snap_key] = (
-                write_config
-                | {
-                    KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][1],
-                    "metadata": None,
-                },
-                snap_res,
+            store[snap_key].write(
+                **(
+                    write_config
+                    | {
+                        KEY_ROW_GROUP_TARGET_SIZE: write_config[KEY_ROW_GROUP_TARGET_SIZE][1],
+                        "key_value_metadata": None,
+                    }
+                ),
+                df=snap_res,
             )
         else:
-            store[main_key] = write_config, main_res
+            store[main_key].write(**write_config, df=main_res)
     if initial_agg_res:
         # If there have been results, they have been processed (either written
         # directly or through 'post()'). Time to reset aggregation buffers and

@@ -15,8 +15,6 @@ store = ParquetSet(os_path.join(tmp_path, "store"), Indexer)
 seed_path = os_path.join(tmp_path, "seed")
 
 """
-from os import path as os_path
-
 import numpy as np
 import pytest
 from fastparquet import ParquetFile
@@ -48,6 +46,8 @@ from oups.aggstream.jcumsegagg import MAX
 from oups.aggstream.jcumsegagg import MIN
 from oups.aggstream.jcumsegagg import SUM
 from oups.aggstream.segmentby import by_x_rows
+from oups.defines import DIR_SEP
+from oups.defines import KEY_N_ROWS
 
 
 @toplevel
@@ -58,12 +58,12 @@ class Indexer:
 @pytest.fixture
 def store(tmp_path):
     # Reuse pre-defined Indexer.
-    return Store(os_path.join(tmp_path, "store"), Indexer)
+    return Store(f"{tmp_path}{DIR_SEP}store", Indexer)
 
 
 @pytest.fixture
 def seed_path(tmp_path):
-    return os_path.join(tmp_path, "seed")
+    return f"{tmp_path}{DIR_SEP}seed"
 
 
 key = Indexer("agg_res")
@@ -148,8 +148,7 @@ def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, s
     seed = ParquetFile(seed_path).iter_row_groups()
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Check number of rows of each row groups in aggregated results.
-    pf_res = store[key].pf
-    n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
+    n_rows_res = store[key].row_group_stats.loc[:, KEY_N_ROWS].to_list()
     assert n_rows_res == expected_n_rows[0]
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
@@ -167,12 +166,12 @@ def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, s
     )
     ref_res = DataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     ref_res[agg_col] = ref_res[agg_col].astype(DTYPE_NULLABLE_INT64)
-    rec_res = store[key].pdf
+    rec_res = store[key].to_pandas()
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index' is last timestamp, and 'post_buffer' is empty.
     # 'segagg_buffer' is not checked as being not part of 'streamagg' scope,
     # but 'cumsegagg' scope.
-    streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
+    streamagg_md = store[key].key_value_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
     assert not streamagg_md[KEY_PRE_BUFFER]
     assert not streamagg_md[KEY_POST_BUFFER]
@@ -197,8 +196,7 @@ def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, s
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Check number of rows of each row groups in aggregated results.
-    pf_res = store[key].pf
-    n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
+    n_rows_res = store[key].row_group_stats.loc[:, KEY_N_ROWS].to_list()
     assert n_rows_res == expected_n_rows[1]
     # Check aggregated results: last row has been discarded with 'discard_last'
     # `True`.
@@ -217,10 +215,10 @@ def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, s
     )
     ref_res = DataFrame({ordered_on: dti_ref, agg_col: agg_sum_ref})
     ref_res[agg_col] = ref_res[agg_col].astype(DTYPE_NULLABLE_INT64)
-    rec_res = store[key].pdf
+    rec_res = store[key].to_pandas()
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
-    streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
+    streamagg_md = store[key].key_value_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
     assert not streamagg_md[KEY_PRE_BUFFER]
     assert not streamagg_md[KEY_POST_BUFFER]
@@ -234,15 +232,14 @@ def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, s
     # Setup streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=False)
     # Test results (not trimming seed data).
-    pf_res = store[key].pf
-    n_rows_res = [rg.num_rows for rg in pf_res.row_groups]
+    n_rows_res = store[key].row_group_stats.loc[:, KEY_N_ROWS].to_list()
     assert n_rows_res == expected_n_rows[2]
     ref_res = seed_pf.to_pandas().groupby(bin_by).agg(**agg).reset_index()
     ref_res[agg_col] = ref_res[agg_col].astype(DTYPE_NULLABLE_INT64)
-    rec_res = store[key].pdf
+    rec_res = store[key].to_pandas()
     assert rec_res.equals(ref_res)
     # Check 'last_seed_index'.
-    streamagg_md = store[key]._oups_metadata[KEY_AGGSTREAM]
+    streamagg_md = store[key].key_value_metadata[KEY_AGGSTREAM]
     assert streamagg_md[KEY_RESTART_INDEX] == ts[-1]
     assert not streamagg_md[KEY_PRE_BUFFER]
     assert not streamagg_md[KEY_POST_BUFFER]
@@ -288,7 +285,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     # Test results
     ref_res = seed_df.iloc[:-2].groupby(bin_by).agg(**agg).reset_index()
     ref_res[[FIRST, LAST, MIN, MAX]] = ref_res[[FIRST, LAST, MIN, MAX]].astype(DTYPE_NULLABLE_INT64)
-    rec_res = store[key].pdf
+    rec_res = store[key].to_pandas()
     assert rec_res.equals(ref_res)
     # 1st append of new data.
     start = seed_df[ordered_on].iloc[-1]
@@ -307,7 +304,7 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     # Test results
     ref_res = concat([seed_df, seed_df2]).iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
     ref_res[[FIRST, LAST, MIN, MAX]] = ref_res[[FIRST, LAST, MIN, MAX]].astype(DTYPE_NULLABLE_INT64)
-    rec_res = store[key].pdf
+    rec_res = store[key].to_pandas()
     assert rec_res.equals(ref_res)
     # 2nd append of new data.
     start = seed_df2[ordered_on].iloc[-1]
@@ -328,8 +325,8 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
         concat([seed_df, seed_df2, seed_df3]).iloc[:-1].groupby(bin_by).agg(**agg).reset_index()
     )
     ref_res[[FIRST, LAST, MIN, MAX]] = ref_res[[FIRST, LAST, MIN, MAX]].astype(DTYPE_NULLABLE_INT64)
-    rec_res = store[key]
-    assert rec_res.pdf.equals(ref_res)
+    rec_res = store[key].to_pandas()
+    assert rec_res.equals(ref_res)
 
 
 def test_duration_weighted_mean_from_post(store, seed_path):

@@ -16,7 +16,7 @@ from re import compile
 from typing import Dict, Iterable, List, Union
 
 from numpy import iinfo
-from numpy import ones
+from numpy import isin
 from numpy import uint16
 from numpy import uint32
 from pandas import DataFrame
@@ -424,14 +424,19 @@ class OrderedParquetDataset:
         """
         if self._has_row_groups_already_removed:
             raise ValueError("removing row group files is blocked.")
+        if not file_ids:
+            return
         # Remove files from disk.
         for file_id in file_ids:
             remove(get_parquet_filepaths(self.dirpath, file_id, self._file_id_n_digits))
         # Remove corresponding file ids from 'self.row_group_stats'.
-        ids_to_keep = ones(len(self.row_group_stats), dtype=bool)
-        ids_to_keep[file_ids] = False
-        self._row_group_stats = (
-            self.row_group_stats.set_index(KEY_FILE_IDS).iloc[ids_to_keep].reset_index()
+        mask_rows_to_keep = isin(
+            self.row_group_stats.loc[:, KEY_FILE_IDS].to_numpy(),
+            file_ids,
+            invert=True,
+        )
+        self._row_group_stats = self.row_group_stats.loc[mask_rows_to_keep, :].reset_index(
+            drop=True,
         )
         self._has_row_groups_already_removed = True
 

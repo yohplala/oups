@@ -234,16 +234,17 @@ def write(
             **kwargs,
         )
         # Remove row groups of data that is overlapping.
-        file_id_loc = ordered_parquet_dataset.row_group_stats.columns.get_loc(KEY_FILE_IDS)
-        rg_file_ids = [
+        file_id_col_idx = ordered_parquet_dataset.row_group_stats.columns.get_loc(KEY_FILE_IDS)
+        rg_file_ids_to_remove = [
             file_id
             for rg_idx_mr_start_end_excl in merge_split_strategy.rg_idx_mrs_starts_ends_excl
             for file_id in ordered_parquet_dataset.row_group_stats.iloc[
                 rg_idx_mr_start_end_excl,
-                file_id_loc,
+                file_id_col_idx,
             ].to_list()
         ]
-        ordered_parquet_dataset.remove_row_group_files(file_ids=rg_file_ids)
+        if rg_file_ids_to_remove:
+            ordered_parquet_dataset.remove_row_group_files(file_ids=rg_file_ids_to_remove)
         # Rename partition files.
         if merge_split_strategy.sort_rgs_after_write:
             ordered_parquet_dataset.sort_row_groups()
