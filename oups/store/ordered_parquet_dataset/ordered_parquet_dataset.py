@@ -568,23 +568,21 @@ class OrderedParquetDataset:
 
         """
         iter_dfs = iter(dfs)
-        first_df = next(iter_dfs)
+        try:
+            first_df = next(iter_dfs)
+        except StopIteration:
+            return
         if self.ordered_on not in first_df.columns:
             raise ValueError(
                 f"'ordered_on' column '{self.ordered_on}' is not in dataframe columns.",
             )
-        dfs = chain([first_df], iter_dfs)
         buffer = []
-        max_file_id_exceeded = False
-        max_n_rows_exceeded = False
+        dtype_limit_exceeded = False
         if len(self.row_group_stats) == 0:
             Path(self.dirpath).mkdir(parents=True, exist_ok=True)
-        for file_id, df in enumerate(dfs, start=self.max_file_id + 1):
-            if file_id > self._max_allowed_file_id:
-                max_file_id_exceeded = True
-                break
-            if len(df) > self._max_n_rows:
-                max_n_rows_exceeded = True
+        for file_id, df in enumerate(chain([first_df], iter_dfs), start=self.max_file_id + 1):
+            if file_id > self._max_allowed_file_id or len(df) > self._max_n_rows:
+                dtype_limit_exceeded = True
                 break
             buffer.append(
                 (
@@ -607,18 +605,21 @@ class OrderedParquetDataset:
             ignore_index=True,
             copy=False,
         )
-        if write_metadata_file or max_file_id_exceeded or max_n_rows_exceeded:
+        if write_metadata_file or dtype_limit_exceeded:
             self.write_metadata_file()
-        if max_file_id_exceeded:
-            raise ValueError(
-                f"file id '{file_id}' exceeds max value {self._max_allowed_file_id}. "
-                "Metadata has been written before the exception has been raised.",
-            )
-        if max_n_rows_exceeded:
-            raise ValueError(
-                f"number of rows {len(df)} exceeds max value {self._max_n_rows}. "
-                "Metadata has been written before the exception has been raised.",
-            )
+        if dtype_limit_exceeded:
+            if file_id > self._max_allowed_file_id:
+                raise ValueError(
+                    f"file id '{file_id}' exceeds max value "
+                    f"{self._max_allowed_file_id}. Metadata has been written "
+                    "before the exception has been raised.",
+                )
+            else:
+                raise ValueError(
+                    f"number of rows {len(df)} exceeds max value "
+                    f"{self._max_n_rows}. Metadata has been written before the "
+                    "exception has been raised.",
+                )
 
 
 def create_custom_opd(tmp_path: str, df: DataFrame, row_group_offsets: List[int], ordered_on: str):

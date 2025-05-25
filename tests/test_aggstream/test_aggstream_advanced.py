@@ -49,6 +49,7 @@ from oups.aggstream.jcumsegagg import MIN
 from oups.aggstream.segmentby import KEY_BIN_BY
 from oups.aggstream.segmentby import KEY_SNAP_BY
 from oups.aggstream.segmentby import by_x_rows
+from oups.defines import KEY_N_ROWS
 from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
 
 
@@ -167,8 +168,7 @@ def test_3_keys_only_bins(store, seed_path):
         key3: k3_res,
     }
     for key, ref_df in ref_res.items():
-        rec_res = store[key].pdf
-        assert rec_res.equals(ref_df)
+        assert store[key].to_pandas().equals(ref_df)
     # 1st append of new data.
     start = seed_df[ordered_on].iloc[-1]
     ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
@@ -193,8 +193,7 @@ def test_3_keys_only_bins(store, seed_path):
         key3: k3_res,
     }
     for key, ref_df in ref_res.items():
-        rec_res = store[key].pdf
-        assert rec_res.equals(ref_df)
+        assert store[key].to_pandas().equals(ref_df)
     # 2nd append of new data.
     start = seed_df2[ordered_on].iloc[-1]
     ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
@@ -219,8 +218,7 @@ def test_3_keys_only_bins(store, seed_path):
         key3: k3_res,
     }
     for key, ref_df in ref_res.items():
-        rec_res = store[key].pdf
-        assert rec_res.equals(ref_df)
+        assert store[key].to_pandas().equals(ref_df)
 
 
 def test_exception_different_indexes_at_restart(store, seed_path):
@@ -365,10 +363,10 @@ def test_exception_seed_check_and_restart(store, seed_path):
         )
     # Check 'restart_index' & 'pre_buffer' in results.
     pre_buffer_ref = {"seed_val": rand_ints[ref_idx - 1]}
-    streamagg_md_key1 = store[key1]._oups_metadata[KEY_AGGSTREAM]
+    streamagg_md_key1 = store[key1].key_value_metadata[KEY_AGGSTREAM]
     assert streamagg_md_key1[KEY_RESTART_INDEX] == ts[ref_idx - 1]
     assert streamagg_md_key1[KEY_PRE_BUFFER] == pre_buffer_ref
-    streamagg_md_key2 = store[key2]._oups_metadata[KEY_AGGSTREAM]
+    streamagg_md_key2 = store[key2].key_value_metadata[KEY_AGGSTREAM]
     assert streamagg_md_key2[KEY_RESTART_INDEX] == ts[ref_idx - 1]
     assert streamagg_md_key2[KEY_PRE_BUFFER] == pre_buffer_ref
     # "Correct" seed.
@@ -386,18 +384,18 @@ def test_exception_seed_check_and_restart(store, seed_path):
         **key1_cf,
         ordered_on=ordered_on,
     )
-    assert store[key1].pdf.equals(bin_res_ref_key1.reset_index())
+    assert store[key1].to_pandas().equals(bin_res_ref_key1.reset_index())
     bin_res_ref_key2 = cumsegagg(
         data=seed.loc[~seed[filter_on], :],
         **key2_cf,
         ordered_on=ordered_on,
     )
-    assert store[key2].pdf.equals(bin_res_ref_key2.reset_index())
+    assert store[key2].to_pandas().equals(bin_res_ref_key2.reset_index())
     # Check 'pre_buffer' update.
     pre_buffer_ref = {"seed_val": rand_ints[-1] + 10}
-    streamagg_md_key1 = store[key1]._oups_metadata[KEY_AGGSTREAM]
+    streamagg_md_key1 = store[key1].key_value_metadata[KEY_AGGSTREAM]
     assert streamagg_md_key1[KEY_PRE_BUFFER] == pre_buffer_ref
-    streamagg_md_key2 = store[key2]._oups_metadata[KEY_AGGSTREAM]
+    streamagg_md_key2 = store[key2].key_value_metadata[KEY_AGGSTREAM]
     assert streamagg_md_key2[KEY_PRE_BUFFER] == pre_buffer_ref
     # Testing retrieval of 'pre_buffer'.
     as_2 = AggStream(
@@ -787,12 +785,9 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         final_write=False,
     )
     # Check that results on disk have not changed.
-    key1_res = store[key1].pdf
-    assert key1_res.equals(key1_res_ref)
-    key2_res = store[key2].pdf
-    assert key2_res.equals(key2_res_ref)
-    key3_res = store[key3].pdf
-    assert key3_res.equals(key3_res_ref)
+    assert store[key1].to_pandas().equals(key1_res_ref)
+    assert store[key2].to_pandas().equals(key2_res_ref)
+    assert store[key3].to_pandas().equals(key3_res_ref)
     # --------------#
     # Data stream 3 #
     # --------------#
@@ -810,17 +805,15 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         seed_df.loc[seed_df[filter_on], :],
         key3_cf | common_key_params,
     )
-    key1_res = store[key1].pdf
-    assert key1_res.equals(key1_res_ref)
-    key3_res = store[key3].pdf
-    assert key3_res.equals(key3_res_ref)
+    assert store[key1].to_pandas().equals(key1_res_ref)
+    assert store[key3].to_pandas().equals(key3_res_ref)
     # For 'key2', results have not changed, as seed data has been filtered out.
-    key2_res = store[key2].pdf
-    assert key2_res.equals(key2_res_ref)
+    assert store[key2].to_pandas().equals(key2_res_ref)
     # Even if no new seed data for key2, check that "last_seed_index" has been
     # updated.
     assert (
-        store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == seed_df[ordered_on].iloc[-1]
+        store[key2].key_value_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX]
+        == seed_df[ordered_on].iloc[-1]
     )
     # --------------#
     # Data stream 4 #
@@ -846,12 +839,9 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         seed_df.loc[seed_df[filter_on], :],
         key3_cf | common_key_params,
     )
-    key1_res = store[key1].pdf
-    assert key1_res.equals(key1_res_ref)
-    key2_res = store[key2].pdf
-    assert key2_res.equals(key2_res_ref)
-    key3_res = store[key3].pdf
-    assert key3_res.equals(key3_res_ref)
+    assert store[key1].to_pandas().equals(key1_res_ref)
+    assert store[key2].to_pandas().equals(key2_res_ref)
+    assert store[key3].to_pandas().equals(key3_res_ref)
     # --------------#
     # Data stream 5 #
     # --------------#
@@ -875,19 +865,18 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         seed_df.loc[~seed_df[filter_on], :],
         key2_cf | common_key_params,
     )
-    key1_res = store[key1].pdf
-    assert key1_res.equals(key1_res_ref)
-    key2_res = store[key2].pdf
-    assert key2_res.equals(key2_res_ref)
-    key3_res = store[key3].pdf
-    assert key3_res.equals(key3_res_ref)
+    assert store[key1].to_pandas().equals(key1_res_ref)
+    assert store[key2].to_pandas().equals(key2_res_ref)
+    assert store[key3].to_pandas().equals(key3_res_ref)
     # Even if no new seed data for key1 & key3, check that "last_seed_index"
     # has been updated.
     assert (
-        store[key1]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == seed_df[ordered_on].iloc[-1]
+        store[key1].key_value_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX]
+        == seed_df[ordered_on].iloc[-1]
     )
     assert (
-        store[key3]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == seed_df[ordered_on].iloc[-1]
+        store[key3].key_value_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX]
+        == seed_df[ordered_on].iloc[-1]
     )
     # --------------#
     # Data stream 6 #
@@ -921,14 +910,12 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         seed_df.loc[seed_df[filter_on], :],
         key3_cf | common_key_params,
     )
-    key1_res = store[key1].pdf
-    assert key1_res.equals(key1_res_ref)
-    key2_res = store[key2].pdf
-    assert key2_res.equals(key2_res_ref)
-    key3_res = store[key3].pdf
-    assert key3_res.equals(key3_res_ref)
+    assert store[key1].to_pandas().equals(key1_res_ref)
+    assert store[key2].to_pandas().equals(key2_res_ref)
+    assert store[key3].to_pandas().equals(key3_res_ref)
     assert (
-        store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == seed_df[ordered_on].iloc[-1]
+        store[key2].key_value_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX]
+        == seed_df[ordered_on].iloc[-1]
     )
     # --------------#
     # Data stream 7 #
@@ -950,14 +937,12 @@ def test_3_keys_bins_snaps_filters(store, seed_path):
         seed_df.loc[seed_df[filter_on], :],
         key3_cf | common_key_params,
     )
-    key1_res = store[key1].pdf
-    assert key1_res.equals(key1_res_ref)
-    key2_res = store[key2].pdf
-    assert key2_res.equals(key2_res_ref)
-    key3_res = store[key3].pdf
-    assert key3_res.equals(key3_res_ref)
+    assert store[key1].to_pandas().equals(key1_res_ref)
+    assert store[key2].to_pandas().equals(key2_res_ref)
+    assert store[key3].to_pandas().equals(key3_res_ref)
     assert (
-        store[key2]._oups_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX] == seed_df[ordered_on].iloc[-1]
+        store[key2].key_value_metadata[KEY_AGGSTREAM][KEY_RESTART_INDEX]
+        == seed_df[ordered_on].iloc[-1]
     )
 
 
@@ -1065,12 +1050,9 @@ def test_3_keys_bins_snaps_filters_restart(store, seed_path):
         seed_df.loc[seed_df[filter_on], :],
         key3_cf | common_key_params,
     )
-    key1_res = store[key1].pdf
-    assert key1_res.equals(key1_res_ref)
-    key2_res = store[key2].pdf
-    assert key2_res.equals(key2_res_ref)
-    key3_res = store[key3].pdf
-    assert key3_res.equals(key3_res_ref)
+    assert store[key1].to_pandas().equals(key1_res_ref)
+    assert store[key2].to_pandas().equals(key2_res_ref)
+    assert store[key3].to_pandas().equals(key3_res_ref)
 
 
 @pytest.mark.parametrize(
@@ -1180,8 +1162,8 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
     as1.agg(seed=seed_list, trim_start=False, discard_last=False, final_write=True)
     del as1
     # Check 'row_group_target_size' values have been both used.
-    assert [rg.num_rows for rg in store[key1_sst].pf.row_groups] == [5, 5, 3]
-    assert [rg.num_rows for rg in store[key1_bin].pf.row_groups] == [7]
+    assert store[key1_sst].row_group_stats.loc[:, KEY_N_ROWS].tolist() == [5, 5, 3]
+    assert store[key1_bin].row_group_stats.loc[:, KEY_N_ROWS].tolist() == [7]
     # New aggregation.
     as2 = AggStream(
         ordered_on=ordered_on,
@@ -1212,8 +1194,8 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
     )
     key1_bin_ref.reset_index(inplace=True)
     key1_sst_ref.reset_index(inplace=True)
-    key1_bin_res = store[key1_bin].pdf
-    key1_sst_res = store[key1_sst].pdf
+    key1_bin_res = store[key1_bin].to_pandas()
+    key1_sst_res = store[key1_sst].to_pandas()
     key2_cf.pop("post")
     _, key2_sst_ref = cumsegagg(
         data=seed_df.loc[~seed_df[filter_on], :],
@@ -1221,14 +1203,14 @@ def test_3_keys_recording_bins_snaps_filters_restart(store, seed_path, with_post
         ordered_on=ordered_on,
     )
     key2_sst_ref.reset_index(inplace=True)
-    key2_sst_res = store[key2_sst].pdf
+    key2_sst_res = store[key2_sst].to_pandas()
     key3_bin_ref, _ = cumsegagg(
         data=seed_df.loc[seed_df[filter_on], :],
         **(key3_cf | common_key_params),
         ordered_on=ordered_on,
     )
     key3_bin_ref.reset_index(inplace=True)
-    key3_bin_res = store[key3_bin].pdf
+    key3_bin_res = store[key3_bin].to_pandas()
     if with_post:
         key1_bin_ref.iloc[:, 1:] = key1_bin_ref.iloc[:, 1:] + 1
         key1_sst_ref.iloc[:, 1:] = key1_sst_ref.iloc[:, 1:] + 1
