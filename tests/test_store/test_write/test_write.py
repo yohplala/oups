@@ -369,8 +369,9 @@ from oups.store.write import write
             {
                 "df": DataFrame(
                     {
+                        # rg: [0,  ,  , 3,  ,  , 6,  ,  ,  9,   ]
                         "a": [0, 1, 3, 3, 5, 7, 7, 8, 9, 11, 12],
-                        "b": range(11),
+                        "b": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                         "c": [0] * 11,
                     },
                 ),
@@ -393,6 +394,7 @@ from oups.store.write import write
                 "dfs": [
                     DataFrame(
                         {
+                            # rg: [0,  ,  , 3,  ,  , 6,  ,  , 9,  ,  ,12, 13,   ]
                             "a": [0, 1, 3, 3, 3, 4, 5, 5, 7, 7, 8, 8, 9, 11, 12],
                             "b": [0, 1, 2, 3, 7, 7, 4, 4, 5, 6, 7, 9, 8, 9, 10],
                             "c": [0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0],
@@ -802,9 +804,9 @@ def test_write(
             **initial_data,
             ordered_on=ordered_on,
         )
-    print()
-    print("written_data")
-    print(ParquetFile(tmp_path).to_pandas())
+    #    print()
+    #    print("written_data")
+    #    print(ParquetFile(tmp_path).to_pandas())
     # Phase 'write_ordered()'.
     for write_ordered_df, expected_rgs, expected_df in zip(
         write_ordered_data,
@@ -823,11 +825,14 @@ def test_write(
         try:
             pf_rec = ParquetFile(tmp_path)
             assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
-            print()
-            print("recoreded df")
-            print(pf_rec.to_pandas())
-            print("expected df")
-            print(expected_df)
+            #            print()
+            #            print("recorded df")
+            #            print(pf_rec.to_pandas())
+            #            print("expected df")
+            #            print(expected_df)
+            #            for i, rg in enumerate(pf_rec.row_groups):
+            #                print(f"num_rows: {rg.num_rows}")
+            #                print(pf_rec[i].to_pandas())
             assert pf_rec.to_pandas().equals(expected_df)
         except FileNotFoundError:
             if not expected_rgs:
