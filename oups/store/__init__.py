@@ -5,8 +5,9 @@ Created on Wed Dec  1 18:35:00 2021.
 @author: yoh
 
 """
-from .collection import ParquetSet
 from .indexer import is_toplevel
 from .indexer import sublevel
 from .indexer import toplevel
-from .utils import conform_cmidx
+from .ordered_parquet_dataset import OrderedParquetDataset
+from .ordered_parquet_dataset import conform_cmidx
+from .store import Store

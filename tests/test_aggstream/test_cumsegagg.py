@@ -8,15 +8,15 @@ Created on Sun Mar 13 18:00:00 2022.
 from functools import partial
 
 import pytest
-from numpy import NaN as nNaN
 from numpy import all as nall
 from numpy import array
+from numpy import nan as nNaN
 from numpy import ndarray
 from pandas import NA as pNA
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import DatetimeIndex
 from pandas import NaT as pNaT
-from pandas import Timestamp as pTimestamp
+from pandas import Timestamp
 from pandas import date_range
 from pandas.core.resample import TimeGrouper
 
@@ -56,15 +56,15 @@ def test_setup_csagg():
     #                           1d-array, number of input columns in data,
     #                           to which apply this aggregation function,
     # Setup.
-    df = pDataFrame(
+    df = DataFrame(
         {
             "val1_float": [1.1, 2.1, 3.1],
             "val2_float": [4.1, 5.1, 6.1],
             "val3_int": [1, 2, 3],
             "val4_datetime": [
-                pTimestamp("2022/01/01 08:00"),
-                pTimestamp("2022/01/01 09:00"),
-                pTimestamp("2022/01/01 08:00"),
+                Timestamp("2022/01/01 08:00"),
+                Timestamp("2022/01/01 09:00"),
+                Timestamp("2022/01/01 08:00"),
             ],
         },
     )
@@ -185,7 +185,7 @@ def test_cumsegagg_bin_single_dtype(ndata, cols):
     time_idx = "datetime_idx"
     if cols:
         # 2-column data
-        data = pDataFrame(
+        data = DataFrame(
             {
                 "col1": ndata[:, 0],
                 "col2": ndata[:, 1],
@@ -199,7 +199,7 @@ def test_cumsegagg_bin_single_dtype(ndata, cols):
         }
     else:
         # 1-column data
-        data = pDataFrame(
+        data = DataFrame(
             {
                 "col1_f": ndata,
                 time_idx: ndata_dti,
@@ -233,7 +233,7 @@ def test_cumsegagg_bin_mixed_dtype():
         dtype=DTYPE_DATETIME64,
     )
     time_idx = "datetime_idx"
-    data = pDataFrame(
+    data = DataFrame(
         {
             "col1_f": ar_float[:, 0],
             "col2_f": ar_float[:, 1],
@@ -295,12 +295,12 @@ def test_cumsegagg_bin_mixed_dtype():
             [3.9, 6.0, 9.8, 9.8] + [nNaN] * 6 + [4.5, 4.5] + [1.1] * 4 + [3.2],
             # s1->s4           s5->s10  s11, s12 s13->s16   s17                (sum)
             [8, 17, 23, 23] + [0] * 6 + [2, 2] + [10] * 4 + [1],
-            [pTimestamp("2020-01-01 08:10:00")] * 4
+            [Timestamp("2020-01-01 08:10:00")] * 4
             + [pNaT] * 6
-            + [pTimestamp("2020-01-01 09:00:00")] * 6
-            + [pTimestamp("2020-01-01 09:30:00")],
+            + [Timestamp("2020-01-01 09:00:00")] * 6
+            + [Timestamp("2020-01-01 09:30:00")],
             # null_bins_dti
-            [pTimestamp("2020-01-01 09:00:00")],
+            [Timestamp("2020-01-01 09:00:00")],
             # start_s_dti
             "2020-01-01 08:15:00",
             # null_snaps_dti
@@ -341,18 +341,18 @@ def test_cumsegagg_bin_mixed_dtype():
             [4.2, 3.9] + [9.8] * 3 + [nNaN] * 5 + [4.5, nNaN] + [1.1] * 4 + [3.2],
             # s1, s2 s3->s5     s6->s10   s11, s12 s13->s16  s17                (sum)
             [7, 8] + [23] * 3 + [0] * 5 + [2, 0] + [8] * 4 + [9],
-            [pTimestamp("2020-01-01 08:10:00")] * 5
+            [Timestamp("2020-01-01 08:10:00")] * 5
             + [pNaT] * 5
-            + [pTimestamp("2020-01-01 09:00:00")]
+            + [Timestamp("2020-01-01 09:00:00")]
             + [pNaT]
-            + [pTimestamp("2020-01-01 09:10:00")] * 5,
+            + [Timestamp("2020-01-01 09:10:00")] * 5,
             # null_bins_dti
             [],
             # start_s_dti
             "2020-01-01 08:10:00",
             # null_snaps_dti
             date_range("2020-01-01 08:35:00", periods=5, freq="5min").to_list()
-            + [pTimestamp("2020-01-01 09:05:00")],
+            + [Timestamp("2020-01-01 09:05:00")],
         ),
     ],
 )
@@ -392,7 +392,7 @@ def test_cumsegagg_bin_snap_with_null_chunks(
     value = "value"
     qty = "qty"
     dti = "dti"
-    data = pDataFrame({value: values, qty: qties, dti: dtidx})
+    data = DataFrame({value: values, qty: qties, dti: dtidx})
     agg = {
         FIRST: (value, FIRST),
         MAX: (value, MAX),
@@ -416,7 +416,7 @@ def test_cumsegagg_bin_snap_with_null_chunks(
         bins_ref.loc[null_b_dti, SUM] = pNA
     assert bins_res.equals(bins_ref)
     snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5min")
-    snaps_ref = pDataFrame(
+    snaps_ref = DataFrame(
         {
             FIRST: s_first_val,
             MAX: s_max_val,
@@ -467,11 +467,11 @@ def test_cumsegagg_bin_snap_with_null_chunks(
             # s1, s2  s3->s6            s7->s14   s15                   (sum)
             [4] * 2 + [8, 17, 23, 23] + [0] * 8 + [8],
             # first timestamp in bin
-            [pTimestamp("2020-01-01 08:00:00")] * 6
+            [Timestamp("2020-01-01 08:00:00")] * 6
             + [pNaT] * 8
-            + [pTimestamp("2020-01-01 09:10:00")],
+            + [Timestamp("2020-01-01 09:10:00")],
             # null_bins_dti (label)
-            [pTimestamp("2020-01-01 09:00:00")],
+            [Timestamp("2020-01-01 09:00:00")],
             # start_s_dti
             "2020-01-01 08:05:00",
             # null_snaps_dti
@@ -508,17 +508,17 @@ def test_cumsegagg_bin_snap_with_null_chunks(
             # s1->s4       s5->s7     s8->s14   s15                    (sum)
             [4, 0, 3, 4] + [19] * 3 + [0] * 7 + [8],
             # first timestamp in bin
-            [pTimestamp("2020-01-01 08:00:00")]
+            [Timestamp("2020-01-01 08:00:00")]
             + [pNaT]
-            + [pTimestamp("2020-01-01 08:10:00")] * 5
+            + [Timestamp("2020-01-01 08:10:00")] * 5
             + [pNaT] * 7
-            + [pTimestamp("2020-01-01 09:10:00")],
+            + [Timestamp("2020-01-01 09:10:00")],
             # null_bins_dti (label)
-            [pTimestamp("2020-01-01 08:30:00")],
+            [Timestamp("2020-01-01 08:30:00")],
             # start_s_dti
             "2020-01-01 08:00:00",
             # null_snaps_dti
-            [pTimestamp("2020-01-01 08:05:00")]
+            [Timestamp("2020-01-01 08:05:00")]
             + date_range("2020-01-01 08:35:00", periods=7, freq="5min").to_list(),
         ),
     ],
@@ -557,7 +557,7 @@ def test_cumsegagg_bin_snap_with_null_chunks_other(
     value = "value"
     qty = "qty"
     dti = "dti"
-    data = pDataFrame({value: values, qty: qties, dti: dtidx})
+    data = DataFrame({value: values, qty: qties, dti: dtidx})
     agg = {
         FIRST: (value, FIRST),
         MAX: (value, MAX),
@@ -581,7 +581,7 @@ def test_cumsegagg_bin_snap_with_null_chunks_other(
         bins_ref.loc[null_b_dti, SUM] = pNA
     assert bins_res.equals(bins_ref)
     snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5min")
-    snaps_ref = pDataFrame(
+    snaps_ref = DataFrame(
         {
             FIRST: s_first_val,
             MAX: s_max_val,
@@ -677,7 +677,7 @@ def test_cumsegagg_single_bin_several_snaps(
     )
     value = "value"
     dti = "dti"
-    data = pDataFrame({value: values, dti: dtidx})
+    data = DataFrame({value: values, dti: dtidx})
     agg = {
         FIRST: (value, FIRST),
         MAX: (value, MAX),
@@ -696,7 +696,7 @@ def test_cumsegagg_single_bin_several_snaps(
     bins_ref = data.groupby(bin_by).agg(**agg)
     assert bins_res.equals(bins_ref)
     snaps_dti = date_range(start_s_dti, periods=len(s_first_val), freq="5min")
-    snaps_ref = pDataFrame(
+    snaps_ref = DataFrame(
         {
             FIRST: s_first_val,
             MAX: s_max_val,
@@ -770,7 +770,7 @@ def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
     )
     value = "value"
     dti = "dti"
-    data = pDataFrame({value: values, dti: dtidx})
+    data = DataFrame({value: values, dti: dtidx})
     agg = {
         FIRST: (value, FIRST),
         MAX: (value, MAX),
@@ -780,17 +780,17 @@ def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
     bin_by = TimeGrouper(freq="30min", closed=s_by_closed, label="right", key=dti)
     snap_by = DatetimeIndex(
         [
-            pTimestamp("2020-01-01 08:00:00"),
-            pTimestamp("2020-01-01 08:05:00"),
-            pTimestamp("2020-01-01 08:06:00"),
-            pTimestamp("2020-01-01 08:10:00"),
-            pTimestamp("2020-01-01 08:44:00"),
-            pTimestamp("2020-01-01 08:48:00"),
-            pTimestamp("2020-01-01 08:52:00"),
-            pTimestamp("2020-01-01 08:55:00"),
-            pTimestamp("2020-01-01 09:06:00"),
-            pTimestamp("2020-01-01 09:09:00"),
-            pTimestamp("2020-01-01 09:16:00"),
+            Timestamp("2020-01-01 08:00:00"),
+            Timestamp("2020-01-01 08:05:00"),
+            Timestamp("2020-01-01 08:06:00"),
+            Timestamp("2020-01-01 08:10:00"),
+            Timestamp("2020-01-01 08:44:00"),
+            Timestamp("2020-01-01 08:48:00"),
+            Timestamp("2020-01-01 08:52:00"),
+            Timestamp("2020-01-01 08:55:00"),
+            Timestamp("2020-01-01 09:06:00"),
+            Timestamp("2020-01-01 09:09:00"),
+            Timestamp("2020-01-01 09:16:00"),
         ],
     )
     bins_res, snaps_res = cumsegagg(
@@ -802,7 +802,7 @@ def test_cumsegagg_several_null_snaps_at_start_of_bins(s_by_closed, s_res):
     )
     bins_ref = data.groupby(bin_by).agg(**agg)
     assert bins_res.equals(bins_ref)
-    snaps_ref = pDataFrame(
+    snaps_ref = DataFrame(
         {
             FIRST: s_res,
             MAX: s_res,
@@ -902,7 +902,7 @@ def test_cumsegagg_binby_grouper_snapby_intervalindex(
     )
     value = "value"
     dti = "dti"
-    data = pDataFrame({value: values, dti: dtidx})
+    data = DataFrame({value: values, dti: dtidx})
     agg = {
         FIRST: (value, FIRST),
         MAX: (value, MAX),
@@ -912,12 +912,12 @@ def test_cumsegagg_binby_grouper_snapby_intervalindex(
     bin_by = TimeGrouper(freq="30min", closed=b_by_closed, label=b_by_label, key=dti)
     snap_by = DatetimeIndex(
         [
-            pTimestamp("2020-01-01 07:58:00"),
-            pTimestamp("2020-01-01 08:00:00"),
-            pTimestamp("2020-01-01 08:13:00"),
-            pTimestamp("2020-01-01 08:20:00"),
-            pTimestamp("2020-01-01 08:50:00"),
-            pTimestamp("2020-01-01 09:06:00"),
+            Timestamp("2020-01-01 07:58:00"),
+            Timestamp("2020-01-01 08:00:00"),
+            Timestamp("2020-01-01 08:13:00"),
+            Timestamp("2020-01-01 08:20:00"),
+            Timestamp("2020-01-01 08:50:00"),
+            Timestamp("2020-01-01 09:06:00"),
         ],
     )
     bins_res, snaps_res = cumsegagg(
@@ -929,7 +929,7 @@ def test_cumsegagg_binby_grouper_snapby_intervalindex(
     )
     bins_ref = data.groupby(bin_by).agg(**agg)
     assert bins_res.equals(bins_ref)
-    snaps_ref = pDataFrame(
+    snaps_ref = DataFrame(
         {
             FIRST: s_first_val,
             MAX: s_max_val,
@@ -1028,7 +1028,7 @@ def test_cumsegagg_binby_callable_snapby_intervalindex(
     )
     value = "value"
     dti = "dti"
-    data = pDataFrame({value: values, dti: dtidx})
+    data = DataFrame({value: values, dti: dtidx})
     agg = {
         FIRST: (value, FIRST),
         MAX: (value, MAX),
@@ -1037,12 +1037,12 @@ def test_cumsegagg_binby_callable_snapby_intervalindex(
     }
     snap_by = DatetimeIndex(
         [
-            pTimestamp("2020-01-01 07:58:00"),
-            pTimestamp("2020-01-01 08:00:00"),
-            pTimestamp("2020-01-01 08:13:00"),
-            pTimestamp("2020-01-01 08:20:00"),
-            pTimestamp("2020-01-01 08:50:00"),
-            pTimestamp("2020-01-01 09:06:00"),
+            Timestamp("2020-01-01 07:58:00"),
+            Timestamp("2020-01-01 08:00:00"),
+            Timestamp("2020-01-01 08:13:00"),
+            Timestamp("2020-01-01 08:20:00"),
+            Timestamp("2020-01-01 08:50:00"),
+            Timestamp("2020-01-01 09:06:00"),
         ],
     )
     bin_by = partial(by_x_rows, closed=b_by_closed)
@@ -1053,12 +1053,12 @@ def test_cumsegagg_binby_callable_snapby_intervalindex(
         ordered_on=dti,
         snap_by=snap_by,
     )
-    bins_ref = pDataFrame(
+    bins_ref = DataFrame(
         {"first": [4.0, 6.0], "max": [5.6, 9.8], "min": [3.9, 1.1], "last": [5.6, 1.1]},
         index=DatetimeIndex(["2020-01-01 08:00:00", "2020-01-01 08:19:00"]),
     )
     assert bins_res.equals(bins_ref)
-    snaps_ref = pDataFrame(
+    snaps_ref = DataFrame(
         {
             FIRST: s_first_val,
             MAX: s_max_val,
@@ -1073,7 +1073,7 @@ def test_cumsegagg_binby_callable_snapby_intervalindex(
 
 def test_exit_on_null_data():
     # Test exception if a col in 'agg' does not exist in data.
-    data = pDataFrame({"val": []})
+    data = DataFrame({"val": []})
     agg = {FIRST: ("val", FIRST)}
     bin_by = TimeGrouper(freq="10min", closed="left", label="right", key="val")
     snap_by = TimeGrouper(freq="5min", closed="left", key="val")
@@ -1092,7 +1092,7 @@ def test_exception_col_not_existing():
     dtidx = array(["2020-01-01T08:00"], dtype=DTYPE_DATETIME64)
     value = "value"
     dti = "dti"
-    data = pDataFrame({value: values, dti: dtidx})
+    data = DataFrame({value: values, dti: dtidx})
     agg = {FIRST: (f"{value}_", FIRST)}
     bin_by = TimeGrouper(freq="10min", closed="left", label="right", key=dti)
     snap_by = TimeGrouper(freq="5min", closed="left", key=dti)
@@ -1112,7 +1112,7 @@ def test_exception_error_on_0():
     dtidx = array(["2020-01-01T08:00"], dtype=DTYPE_DATETIME64)
     value = "value"
     dti = "dti"
-    data = pDataFrame({value: values, dti: dtidx})
+    data = DataFrame({value: values, dti: dtidx})
     agg = {FIRST: (value, FIRST)}
     bin_by = TimeGrouper(freq="10min", closed="left", label="right", key=dti)
     snap_by = TimeGrouper(freq="5min", closed="left", key=dti, label="right")
@@ -1132,7 +1132,7 @@ def test_exception_unknown_agg_function():
     dtidx = array(["2020-01-01T08:00"], dtype=DTYPE_DATETIME64)
     value = "value"
     dti = "dti"
-    data = pDataFrame({value: values, dti: dtidx})
+    data = DataFrame({value: values, dti: dtidx})
     agg = {SUM: ("value", "unknown")}
     bin_by = TimeGrouper(freq="10min", closed="left", label="right", key=dti)
     with pytest.raises(ValueError, match="^`unknown` aggregation function"):

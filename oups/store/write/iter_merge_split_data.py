@@ -7,7 +7,6 @@ Created on Fri Nov  8 22:30:00 2024.
 """
 from typing import Callable, List, Optional, Tuple, Union
 
-from fastparquet import ParquetFile
 from numpy.typing import NDArray
 from pandas import DataFrame
 from pandas import Series
@@ -15,24 +14,25 @@ from pandas import concat
 
 
 def iter_merge_split_data(
-    opd: ParquetFile,
+    opd,
     ordered_on: Union[str, Tuple[str]],
     df: DataFrame,
     merge_sequences: List[Tuple[int, NDArray]],
     split_sequence: Callable[[Series], List[int]],
-    duplicates_on: Optional[Union[str, List[str], List[Tuple[str]]]] = None,
+    drop_duplicates: bool,
+    subset: Optional[Union[str, List[str]]] = None,
 ):
     """
-    Yield merged and ordered chunks of data from DataFrame and ParquetFile.
+    Yield merged and ordered chunks of data from DataFrame and OrderedParquetDataset.
 
     Parameters
     ----------
-    opd : ParquetFile
+    opd : OrderedParquetDataset
         Ordered parquet dataset to merge with dataframe. Must be ordered by
         'ordered_on' column.
     ordered_on : Union[str, Tuple[str]]
         Column name by which data is ordered. Data must be in ascending order.
-    df : DataFrame
+    df : Union[DataFrame, None]
         DataFrame (pandas) ordered by 'ordered_on' column.
     merge_sequences : List[Tuple[int, NDArray]]
         Merge sequences defining how to merge data from parquet and dataframe,
@@ -43,8 +43,11 @@ def iter_merge_split_data(
         'TimePeriodMergeSplitStrategy' to compute split sequence from
         'ordered_on' column. Used to determine where to split the merged data
         into row groups.
-    duplicates_on : Optional[Union[str, List[str], List[Tuple[str]]]], default None
-        Column(s) to check for duplicates. If ``None``, no check is performed.
+    drop_duplicates : bool
+        If ``True``, duplicates are removed from both the pandas DataFrame and
+        the corresponding Parquet data overlapping with it.
+    subset : Optional[Union[str, List[str]]], default None
+        Column(s) to check for duplicates. If ``None``, all columns are used.
 
     Yields
     ------
@@ -61,8 +64,8 @@ def iter_merge_split_data(
 
     Notes
     -----
-    If 'duplicates_on' is set, duplicates are removed from both the pandas
-    DataFrame and the corresponding Parquet data overlapping with it.
+    If 'duplicates_on' is ``True````, duplicates are removed from both the
+    pandas DataFrame and the corresponding Parquet data overlapping with it.
     In case there would be duplicates only within the Parquet data, while there
     is no overlap with the pandas DataFrame, then duplicates are not removed
     from Parquet data.
@@ -72,13 +75,15 @@ def iter_merge_split_data(
     values from the pandas DataFrame will be positioned behind after the merge.
 
     """
-    df_idx_start = 0
-    # Check shape of 'cmpt_ends_excl'array of 1st merge sequence.
-    if merge_sequences[0][1].ndim != 2:
+    if len(merge_sequences) == 0:
+        return
+    elif merge_sequences[0][1].ndim != 2:
+        # Check shape of 'cmpt_ends_excl'array of 1st merge sequence.
         raise ValueError(
             "2nd item in merge sequences should be 2D numpy array, got ndim "
             f"{merge_sequences[0][1].ndim}.",
         )
+    df_idx_start = 0
     for rg_idx_start, cmpt_ends_excl in merge_sequences:
         # 1st loop over merge sequences.
         # Between each merge sequence, remainder is reset.
@@ -105,9 +110,9 @@ def iter_merge_split_data(
                 ],
                 ignore_index=True,
             ).sort_values(ordered_on, ignore_index=True)
-            if duplicates_on:
+            if drop_duplicates:
                 chunk.drop_duplicates(
-                    subset=duplicates_on,
+                    subset=subset,
                     keep="last",
                     ignore_index=True,
                     inplace=True,

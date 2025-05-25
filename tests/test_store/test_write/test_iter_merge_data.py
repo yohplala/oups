@@ -15,8 +15,8 @@ from numpy import array
 from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import create_custom_opd
 from oups.store.write.iter_merge_split_data import iter_merge_split_data
-from tests.test_store.conftest import create_parquet_file
 
 
 @pytest.fixture
@@ -40,14 +40,14 @@ def compute_split_sequence(series, max_size=2):
 
 
 @pytest.mark.parametrize(
-    "test_id,pf_data,df_data,row_group_target_size,duplicates_on,merge_sequences,expected_chunks",
+    "test_id,pf_data,df_data,row_group_target_size,drop_duplicates_on,merge_sequences,expected_chunks",
     [
         (  # DataFrame before OrderedParquetDataset, no overlap, wo duplicates_on.
             "df_before_pf_wo_duplicates_on",
             {"ordered": [3, 4, 5], "values": ["c", "d", "e"]},  # pf_data
             {"ordered": [1, 2, 2], "values": ["a", "b", "c"]},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[0, 3]]))],  # merge_sequences - no pf row group
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
@@ -59,7 +59,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [1, 2, 3], "values": ["a", "b", "c"]},  # pf_data
             {"ordered": [4, 5, 6, 7], "values": ["d", "e", "f", "g"]},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(1, array([[2, 4]]))],  # merge_sequences - incl. last pf row group
             [
                 DataFrame({"ordered": [3, 4], "values": ["c", "d"]}),
@@ -72,7 +72,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [2, 3, 4], "values": ["x", "c", "y"]},  # pf_data
             {"ordered": [1, 2, 4, 5], "values": ["a", "b", "d", "e"]},  # df_data
             3,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[1, 3], [1, 4]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [1, 2, 2], "values": ["a", "x", "b"]}),
@@ -85,7 +85,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},  # pf_data
             {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[1, 0], [2, 2], [3, 3]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "x"]}),
@@ -102,7 +102,7 @@ def compute_split_sequence(series, max_size=2):
             },  # pf_data
             {"ordered": [2, 6, 7, 11, 12], "values": ["b", "c", "d", "i", "j"]},  # df_data
             2,  # row_group_target_size
-            "ordered",  # duplicates_on
+            (True, "ordered"),  # drop_duplicates, duplicates_on
             [(0, array([[1, 1]])), (2, array([[3, 3]])), (4, array([[5, 5]]))],
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
@@ -117,7 +117,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [1, 2, 3, 4, 5], "values": ["a", "x", "y", "z", "e"]},
             {"ordered": [2, 3, 4], "values": ["b", "c", "d"]},
             2,  # row_group_target_size
-            "ordered",  # duplicates_on
+            (True, "ordered"),  # drop_duplicates, duplicates_on
             [(0, array([[1, 1], [2, 3], [3, 3]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [1, 2], "values": ["a", "b"]}),
@@ -130,7 +130,7 @@ def compute_split_sequence(series, max_size=2):
             {"ordered": [1, 2, 6], "values": ["a", "x", "y"]},
             {"ordered": [2, 3, 4, 5, 6, 7, 8], "values": ["b", "c", "d", "e", "f", "g", "h"]},
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(1, array([[1, 2], [1, 4]])), (2, array([[2, 6], [2, 7]]))],  # merge_sequences
             [
                 DataFrame({"ordered": [2, 3], "values": ["b", "c"]}),
@@ -139,23 +139,32 @@ def compute_split_sequence(series, max_size=2):
                 DataFrame({"ordered": [8], "values": ["h"]}),
             ],
         ),
-        (  # Empty DataFrame test case
+        (  # Empty DataFrame case
             "empty_dataframe",
             {"ordered": [1, 2], "values": ["a", "b"]},  # pf_data
             {"ordered": [], "values": []},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[1, 0]]))],  # merge_sequences
             [DataFrame({"ordered": [1, 2], "values": ["a", "b"]})],  # expected_chunks
         ),
-        (  # Empty OrderedParquetDataset test case
+        (  # Empty OrderedParquetDataset case
             "empty_parquetfile",
             {"ordered": [], "values": []},  # pf_data
             {"ordered": [1, 2], "values": ["a", "b"]},  # df_data
             2,  # row_group_target_size
-            None,  # duplicates_on
+            (False, None),  # drop_duplicates, duplicates_on
             [(0, array([[0, 2]]))],  # merge_sequences
             [DataFrame({"ordered": [1, 2], "values": ["a", "b"]})],  # expected_chunks
+        ),
+        (  # Empty merge sequence case
+            "empty_merge_sequence",
+            {"ordered": [1, 2], "values": ["a", "b"]},  # pf_data
+            {"ordered": [1, 2], "values": ["a", "b"]},  # df_data
+            2,  # row_group_target_size
+            (False, None),  # drop_duplicates, duplicates_on
+            [],  # merge_sequences
+            [],  # expected_chunks
         ),
     ],
 )
@@ -164,11 +173,10 @@ def test_iter_merge_data(
     pf_data,
     df_data,
     row_group_target_size,
-    duplicates_on,
+    drop_duplicates_on,
     merge_sequences,
     expected_chunks,
     tmp_path,
-    create_parquet_file=create_parquet_file,
 ):
     """
     Test iter_merge_data with various overlap scenarios.
@@ -183,8 +191,9 @@ def test_iter_merge_data(
         Data for input DataFrame.
     row_group_target_size : int
         Maximum size for each chunk.
-    duplicates_on : str or None
-        Column to check for duplicates.
+    drop_duplicates_on : Tuple[bool, Union[str, List[str], None]]
+        Boolean flag indicating if duplicates are to be dropped, and list of
+        columns to check for duplicates, including 'ordered_on' column.
     merge_sequences : list of tuples
         List of tuples containing merge sequences, where each tuple contains:
         - First element: Start index of the first row group in the merge sequence
@@ -193,24 +202,28 @@ def test_iter_merge_data(
         List of expected DataFrame chunks.
     tmp_path : Path
         Temporary directory path provided by pytest.
-    create_parquet_file : callable
+    create_custom_opd : callable
         Fixture to create temporary parquet files.
 
     """
     df = DataFrame(df_data)
     pf_data = DataFrame(pf_data)
-    ordered_parquet_dataset = create_parquet_file(
+    drop_duplicates, subset = drop_duplicates_on
+    ordered_on = "ordered"
+    ordered_parquet_dataset = create_custom_opd(
         tmp_path,
         df=pf_data,
         row_group_offsets=compute_split_sequence(pf_data.loc[:, "ordered"], row_group_target_size),
+        ordered_on=ordered_on,
     )
     merge_iter = iter_merge_split_data(
         opd=ordered_parquet_dataset,
-        ordered_on="ordered",
+        ordered_on=ordered_on,
         df=df,
         merge_sequences=merge_sequences,
         split_sequence=lambda x: compute_split_sequence(x, row_group_target_size),
-        duplicates_on=duplicates_on,
+        drop_duplicates=drop_duplicates,
+        subset=subset,
     )
     chunks = list(merge_iter)
     assert len(chunks) == len(expected_chunks)

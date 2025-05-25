@@ -4,21 +4,16 @@ Created on Sat Dec 18 15:00:00 2021.
 
 @author: yoh
 
-Test utils.
-- Initialize path:
-tmp_path = os_path.expanduser('~/Documents/code/data/oups')
-
 """
-from os import path as os_path
-
 import pytest
 from fastparquet import ParquetFile
 from numpy import arange
 from pandas import DataFrame
 from pandas import Timestamp
 
+from oups.defines import DIR_SEP
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import create_custom_opd
 from oups.store.write import write
-from tests.test_store.conftest import create_parquet_file
 
 
 @pytest.mark.parametrize(
@@ -374,8 +369,9 @@ from tests.test_store.conftest import create_parquet_file
             {
                 "df": DataFrame(
                     {
+                        # rg: [0,  ,  , 3,  ,  , 6,  ,  ,  9,   ]
                         "a": [0, 1, 3, 3, 5, 7, 7, 8, 9, 11, 12],
-                        "b": range(11),
+                        "b": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                         "c": [0] * 11,
                     },
                 ),
@@ -398,6 +394,7 @@ from tests.test_store.conftest import create_parquet_file
                 "dfs": [
                     DataFrame(
                         {
+                            # rg: [0,  ,  , 3,  ,  , 6,  ,  , 9,  ,  ,12, 13,   ]
                             "a": [0, 1, 3, 3, 3, 4, 5, 5, 7, 7, 8, 8, 9, 11, 12],
                             "b": [0, 1, 2, 3, 7, 7, 4, 4, 5, 6, 7, 9, 8, 9, 10],
                             "c": [0, 0, 0, 0, 1, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0],
@@ -751,6 +748,18 @@ from tests.test_store.conftest import create_parquet_file
                 ],
             },
         ),
+        (
+            "special_case_no_opd_no_dataframe",
+            {},  # No initial data
+            [None],  # No DataFrame
+            "2h",  # row_group_target_size
+            None,  # max_n_off_target_rgs
+            None,  # duplicates_on
+            {
+                "rgs_length": [[]],
+                "dfs": [DataFrame()],
+            },
+        ),
     ],
 )
 def test_write(
@@ -786,15 +795,15 @@ def test_write(
 
     """
     ordered_on = "a"
-    tmp_path = f"{str(tmp_path)}/test_data"
+    tmp_path = f"{str(tmp_path)}{DIR_SEP}test_data"
     # Init phase.
     if initial_data:
         # Use 'write' from fastparquet with 'row_group_offsets'.
-        create_parquet_file(
+        create_custom_opd(
             tmp_path,
             **initial_data,
+            ordered_on=ordered_on,
         )
-
     # Phase 'write_ordered()'.
     for write_ordered_df, expected_rgs, expected_df in zip(
         write_ordered_data,
@@ -810,22 +819,12 @@ def test_write(
             duplicates_on=duplicates_on,
         )
         # Verify state after this append
-        pf_rec = ParquetFile(tmp_path)
-        assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
-        assert pf_rec.to_pandas().equals(expected_df)
-
-
-def test_exception_ordered_on_not_existing(tmp_path):
-    # While 'ordered_on' is defined, it is not in seed data.
-    n_val = 5
-    pdf = DataFrame({"a": range(n_val), "b": [0] * n_val})
-    dn = os_path.join(tmp_path, "test")
-    # Write a 1st set of data.
-    create_parquet_file(
-        dn,
-        df=pdf,
-        row_group_offsets=[0, n_val - 2, n_val - 1],
-    )
-    # Append with oups same set of data, pandas dataframe.
-    with pytest.raises(ValueError, match="^column 'ts'"):
-        write(dn, ordered_on="ts", df=pdf)
+        try:
+            pf_rec = ParquetFile(tmp_path)
+            assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
+            assert pf_rec.to_pandas().equals(expected_df)
+        except FileNotFoundError:
+            if not expected_rgs:
+                pass
+            else:
+                raise

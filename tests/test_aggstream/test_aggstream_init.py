@@ -23,7 +23,7 @@ from pandas import DatetimeIndex
 from pandas.core.resample import TimeGrouper
 
 from oups import AggStream
-from oups import ParquetSet
+from oups import Store
 from oups import toplevel
 from oups.aggstream.aggstream import FIRST
 from oups.aggstream.aggstream import KEY_AGG
@@ -70,7 +70,7 @@ key = Indexer("agg_res")
 @pytest.fixture
 def store(tmp_path):
     # Reuse pre-defined Indexer.
-    return ParquetSet(os_path.join(tmp_path, "store"), Indexer)
+    return Store(os_path.join(tmp_path, "store"), Indexer)
 
 
 def always_true(**kwargs):
@@ -449,7 +449,7 @@ def test_exception_not_key_of_streamagg_results(store):
     ordered_on = "ts_order"
     val = range(1, len(ts) + 1)
     seed_pdf = DataFrame({ordered_on: ts, "val": val})
-    store[key] = {KEY_ORDERED_ON: ordered_on}, seed_pdf
+    store[key].write(ordered_on=ordered_on, df=seed_pdf)
     # Setup aggregation.
     bin_by = TimeGrouper(key=ordered_on, freq="1h", closed="left", label="left")
     agg = {SUM: ("val", SUM)}
@@ -520,7 +520,7 @@ def test_exception_not_key_of_streamagg_results(store):
         ),
     ],
 )
-def test_exceptions_Aggstream_parameters(store, other_parameters, exception_mess):
+def test_exception_aggstream_parameters(store, other_parameters, exception_mess):
     ordered_on = "ts"
     conf = {
         "store": store,

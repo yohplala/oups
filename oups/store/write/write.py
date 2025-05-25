@@ -5,123 +5,29 @@ Created on Wed Dec  6 22:30:00 2021.
 @author: yoh
 
 """
-from pickle import dumps
-from pickle import loads
-from typing import Dict, Hashable, List, Optional, Tuple, Union
+from importlib import import_module
+from typing import Dict, List, Optional, Tuple, Union
 
-from fastparquet import ParquetFile
-from fastparquet.util import update_custom_metadata
-from numpy import array
-from numpy import dtype
 from pandas import DataFrame
 from pandas import Series
 
-from oups.store.defines import OUPS_METADATA_KEY
+from oups.defines import KEY_FILE_IDS
+from oups.defines import KEY_N_ROWS
+from oups.defines import KEY_ORDERED_ON_MAXS
+from oups.defines import KEY_ORDERED_ON_MINS
 from oups.store.write.iter_merge_split_data import iter_merge_split_data
 from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
 from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
 
 
-COMPRESSION = "SNAPPY"
-DTYPE_DATETIME64 = dtype("datetime64[ns]")
-EMPTY_DATAFRAME = DataFrame()
-MIN = "min"
-MAX = "max"
 ROW_GROUP_INT_TARGET_SIZE = 6_345_000
-KEY_DUPLICATES_ON = "duplicates_on"
 KEY_MAX_N_OFF_TARGET_RGS = "max_n_off_target_rgs"
 KEY_ROW_GROUP_TARGET_SIZE = "row_group_target_size"
-# Notes to any dev.
-# Store any oups-specific metadata in this dict, such as oups-based application
-# metadata.
-# When appending new data, use `OUPS_METADATA.update()`.
-# `OUPS_METADATA` can be used as a buffer, to keep in memory the metadata to
-# be updated, till a write is triggered.
-# Metadata itself should be within a nested dict, referred to by a `md_key`.
-# By use of a `md_key`, management in parallel of metadata for several keys is
-# possible (i.e. several dataset in difference `ParquetFile`).
-OUPS_METADATA = {}
-
-
-def write_metadata(
-    pf: ParquetFile,
-    metadata: Dict[str, str] = None,
-    md_key: Hashable = None,
-):
-    """
-    Write metadata to disk.
-
-    Update oups-specific metadata and merge to user-defined metadata.
-    "oups-specific" metadata is retrieved from OUPS_METADATA dict.
-
-    Parameters
-    ----------
-    pf : ParquetFile
-        ParquetFile which metadata are to be updated.
-    metadata : Dict[str, str], optional
-        User-defined key-value metadata to write, or update in dataset. Please
-        see fastparquet for updating logic in case of `None` value being used.
-    md_key: Hashable, optional
-        Key to retrieve data in ``OUPS_METADATA`` dict, and write it as
-        specific oups metadata in parquet file. If not provided, all data
-        in ``OUPS_METADATA`` dict are retrieved to be written.
-        This parameter is not compulsory. It is needed for instance in case
-        data is written at same time for several keys. Then the right metadata
-        for each key can be found thanks to this label.
-
-    Notes
-    -----
-    - Specific oups metadata are available in global variable ``OUPS_METADATA``.
-    - Once merged to ``new_metadata``, ``OUPS_METADATA`` is reset.
-    - Update strategy of oups specific metadata depends if key found in
-      ``OUPS_METADATA``metadata` is also found in already existing metadata,
-      as well as its value.
-
-      - If not found in existing, it is added.
-      - If found in existing, it is updated.
-      - If its value is `None`, it is not added, and if found in existing, it
-        is removed from existing.
-
-    """
-    if OUPS_METADATA and md_key and md_key in OUPS_METADATA:
-        # If 'md_key' is 'None', then no metadata from ``OUPS_METADATA`` is
-        # retrieved.
-        new_oups_spec_md = OUPS_METADATA[md_key]
-        if OUPS_METADATA_KEY in (existing_metadata := pf.key_value_metadata):
-            # Case 'append' to existing metadata.
-            # oups-specific metadata is expected to be a dict itself.
-            # To be noticed, 'md_key' is not written itself in metadata to
-            # disk.
-            existing_oups_spec_md = loads(existing_metadata[OUPS_METADATA_KEY])
-            for key, value in new_oups_spec_md.items():
-                if key in existing_oups_spec_md:
-                    if value is None:
-                        # Case 'remove'.
-                        del existing_oups_spec_md[key]
-                    else:
-                        # Case 'update'.
-                        existing_oups_spec_md[key] = value
-                elif value:
-                    # Case 'add'.
-                    existing_oups_spec_md[key] = value
-        else:
-            existing_oups_spec_md = new_oups_spec_md
-        del OUPS_METADATA[md_key]
-
-        if metadata:
-            metadata[OUPS_METADATA_KEY] = dumps(existing_oups_spec_md)
-        else:
-            metadata = {OUPS_METADATA_KEY: dumps(existing_oups_spec_md)}
-
-    if metadata:
-        update_custom_metadata(pf, metadata)
-    pf._write_common_metadata()
 
 
 def _validate_duplicate_on_param(
     duplicates_on: Union[str, List[str], List[Tuple[str]]],
     ordered_on: str,
-    columns: List[str],
 ) -> List[str]:
     """
     Validate and normalize duplicate parameters.
@@ -132,15 +38,13 @@ def _validate_duplicate_on_param(
         Column(s) to check for duplicates. If empty list, all columns are used.
     ordered_on : str
         Column name by which data is ordered.
-    columns : List[str]
-        Available columns in the DataFrame.
-        If an emlpty list, related check is not performed.
 
     Returns
     -------
-    List[str]
-        Normalized list of columns to check for duplicates, including
-        'ordered_on' column. It will never be an empty list.
+    Tuple[bool, Union[List[str], None]]
+        Boolean flag indicating if duplicates are to be dropped, and list of
+        columns to check for duplicates, including 'ordered_on' column. If
+        duplicates are dropped, a ``None`` indicates to consider all columns.
 
     Raises
     ------
@@ -148,42 +52,31 @@ def _validate_duplicate_on_param(
         If distinct_bounds is not set while duplicates_on is provided.
 
     """
-    if isinstance(duplicates_on, list):
-        if duplicates_on == []:
-            if not columns:
-                raise ValueError(
-                    "not possible to set 'duplicates_on' to '[]' when not "
-                    "providing a DataFrame.",
-                )
-            else:
-                return list(columns)
-        if columns and not all(col in columns for col in duplicates_on):
-            # If columns is an empty list, it means Dataframe is empty.
-            # Don't proceed with the check.
-            missing_columns = [col for col in duplicates_on if col not in columns]
-            raise ValueError(f"duplicate columns not found in input DataFrame: {missing_columns}")
-        if ordered_on not in duplicates_on:
-            duplicates_on.append(ordered_on)
-        return duplicates_on
+    if duplicates_on is None:
+        return (False, None)
     else:
-        # 'duplicates_on' is a single column name.
-        if columns and duplicates_on not in columns:
-            raise ValueError(f"column '{duplicates_on}' not found in input DataFrame.")
-        if duplicates_on != ordered_on:
-            return [duplicates_on, ordered_on]
-        return [ordered_on]
+        if isinstance(duplicates_on, list):
+            if duplicates_on == []:
+                return (True, None)
+            elif ordered_on not in duplicates_on:
+                duplicates_on.append(ordered_on)
+            return (True, duplicates_on)
+        else:
+            # 'duplicates_on' is a single column name.
+            if duplicates_on != ordered_on:
+                return (True, [duplicates_on, ordered_on])
+            return (True, ordered_on)
 
 
 def write(
     dirpath: str,
     ordered_on: Union[str, Tuple[str]],
-    df: Optional[DataFrame] = EMPTY_DATAFRAME,
+    df: Optional[DataFrame] = None,
     row_group_target_size: Optional[Union[int, str]] = ROW_GROUP_INT_TARGET_SIZE,
     duplicates_on: Union[str, List[str], List[Tuple[str]]] = None,
     max_n_off_target_rgs: int = None,
-    compression: str = COMPRESSION,
-    metadata: Dict[str, str] = None,
-    md_key: Hashable = None,
+    key_value_metadata: Dict[str, str] = None,
+    **kwargs,
 ):
     """
     Write data to disk at location specified by path.
@@ -200,10 +93,9 @@ def write(
         It allows knowing 'where' to insert new data into existing data, i.e.
         completing or correcting past records (but it does not allow to remove
         prior data).
-
-    df : Optional[DataFrame], default empty DataFrame
-        Data to write. If not provided, an empty dataframe is created with a
-        single 'ordered_on' column.
+    df : Optional[DataFrame], default None
+        Data to write. If None, a resize of Oredered Parquet Dataset may however
+        be performed.
     row_group_target_size : Optional[Union[int, str]]
         Target size of row groups. If not set, default to ``6_345_000``, which
         for a dataframe with 6 columns of ``float64`` or ``int64`` results in a
@@ -237,16 +129,13 @@ def write(
           - A value of ``0`` or ``1`` means that new data should systematically
             be merged to the last existing one to 'complete' it (if it is not
             'complete' already).
-    compression : str, default SNAPPY
-        Algorithm to use for compressing data. This parameter is fastparquet
-        specific. Please see fastparquet documentation for more information.
-    metadata : Dict[str, str], optional
+
+    key_value_metadata : Dict[str, str], optional
         Key-value metadata to write, or update in dataset. Please see
         fastparquet for updating logic in case of `None` value being used.
-    md_key: Hashable, optional
-        Key to retrieve data in ``OUPS_METADATA`` dict, and write it as
-        specific oups metadata in parquet file. If not provided, all data
-        in ``OUPS_METADATA`` dict are retrieved to be written.
+    **kwargs :
+        Additional parameters to pass to
+        'OrderedParquetDataset.write_row_group_files()'.
 
     Notes
     -----
@@ -278,90 +167,87 @@ def write(
       target size row groups.
 
     """
-    drop_duplicates, duplicates_on = (
-        (
-            True,
-            _validate_duplicate_on_param(
-                duplicates_on=duplicates_on,
-                ordered_on=ordered_on,
-                columns=list(df.columns),
-            ),
-        )
-        if duplicates_on is not None
-        else (False, None)
+    drop_duplicates, subset = _validate_duplicate_on_param(
+        duplicates_on=duplicates_on,
+        ordered_on=ordered_on,
     )
-    if df.empty:
-        df_ordered_on = Series([])
-    else:
-        try:
-            df_ordered_on = df.loc[:, ordered_on]
-        except KeyError:
-            # Check 'ordered_on' column is within input DataFrame.
-            raise ValueError(f"column '{ordered_on}' does not exist in input DataFrame.")
-    if isinstance(dirpath, str):
-        from oups.store.router import ParquetHandle
-
-        ordered_parquet_dataset = ParquetHandle(dirpath, ordered_on=ordered_on, df_like=df)
-    else:
-        ordered_parquet_dataset = dirpath
-    opd_statistics = ordered_parquet_dataset.statistics
-    # TODO: remove below check once OPD can be correctly initialized from
-    # scratch.
-    if str(ordered_on) in opd_statistics[MIN]:
-        rg_ordered_on_mins = array(opd_statistics[MIN][str(ordered_on)])
-        rg_ordered_on_maxs = array(opd_statistics[MAX][str(ordered_on)])
-    else:
-        rg_ordered_on_mins = array([])
-        rg_ordered_on_maxs = array([])
-    if isinstance(row_group_target_size, int):
-        if drop_duplicates:
-            # Duplicates are dropped a first time in the DataFrame, so that the
-            # calculation of merge and split strategy is made with the most
-            # correct approximate number of rows in DataFrame.
-            df.drop_duplicates(subset=duplicates_on, keep="last", ignore_index=True, inplace=True)
-        merge_split_strategy = NRowsMergeSplitStrategy(
-            rg_ordered_on_mins=rg_ordered_on_mins,
-            rg_ordered_on_maxs=rg_ordered_on_maxs,
-            df_ordered_on=df_ordered_on,
-            drop_duplicates=drop_duplicates,
-            rgs_n_rows=array([rg.num_rows for rg in ordered_parquet_dataset.row_groups], dtype=int),
-            row_group_target_size=row_group_target_size,
-        )
-    else:
-        merge_split_strategy = TimePeriodMergeSplitStrategy(
-            rg_ordered_on_mins=rg_ordered_on_mins,
-            rg_ordered_on_maxs=rg_ordered_on_maxs,
-            df_ordered_on=df_ordered_on,
-            drop_duplicates=drop_duplicates,
-            row_group_time_period=row_group_target_size,
-        )
-    ordered_parquet_dataset.write_row_groups(
-        data=iter_merge_split_data(
-            opd=ordered_parquet_dataset,
+    df_ordered_on = Series([]) if df is None else df.loc[:, ordered_on]
+    ordered_parquet_dataset = (
+        # Case 'dirpath' is a path to a directory.
+        import_module("oups.store.ordered_parquet_dataset").OrderedParquetDataset(
+            dirpath,
             ordered_on=ordered_on,
-            df=df,
-            merge_sequences=merge_split_strategy.compute_merge_sequences(
-                max_n_off_target_rgs=max_n_off_target_rgs,
-            ),
-            split_sequence=merge_split_strategy.compute_split_sequence,
-            duplicates_on=duplicates_on,
-        ),
-        row_group_offsets=None,
-        sort_pnames=False,
-        compression=compression,
-        write_fmd=False,
-    )
-    # Remove row groups of data that is overlapping.
-    for rg_idx_start_end_excl in merge_split_strategy.rg_idx_mrs_starts_ends_excl:
-        ordered_parquet_dataset.remove_row_groups(
-            ordered_parquet_dataset[rg_idx_start_end_excl].row_groups,
-            write_fmd=False,
         )
-    # Rename partition files.
-    if merge_split_strategy.sort_rgs_after_write:
-        ordered_parquet_dataset.sort_rgs(ordered_on)
-        ordered_parquet_dataset._sort_part_names(write_fmd=False)
-    # Manage and write metadata.
-    # TODO: when refactoring metadata writing, use straight away
-    # 'update_common_metadata' from fastparquet.
-    write_metadata(pf=ordered_parquet_dataset, metadata=metadata, md_key=md_key)
+        if isinstance(dirpath, str)
+        else
+        # Case 'dirpath' is already an OrderedParquetDataset.
+        dirpath
+    )
+    if df is not None or len(ordered_parquet_dataset):
+        if isinstance(row_group_target_size, int):
+            if drop_duplicates and df is not None:
+                # Duplicates are dropped a first time in the DataFrame, so that the
+                # calculation of merge and split strategy is made with the most
+                # correct approximate number of rows in DataFrame.
+                df.drop_duplicates(subset=subset, keep="last", ignore_index=True, inplace=True)
+            merge_split_strategy = NRowsMergeSplitStrategy(
+                rg_ordered_on_mins=ordered_parquet_dataset.row_group_stats.loc[
+                    :,
+                    KEY_ORDERED_ON_MINS,
+                ].to_numpy(),  # rg_ordered_on_mins,
+                rg_ordered_on_maxs=ordered_parquet_dataset.row_group_stats.loc[
+                    :,
+                    KEY_ORDERED_ON_MAXS,
+                ].to_numpy(),  # rg_ordered_on_maxs,
+                df_ordered_on=df_ordered_on,
+                drop_duplicates=drop_duplicates,
+                rgs_n_rows=ordered_parquet_dataset.row_group_stats.loc[:, KEY_N_ROWS],
+                row_group_target_size=row_group_target_size,
+            )
+        else:
+            merge_split_strategy = TimePeriodMergeSplitStrategy(
+                rg_ordered_on_mins=ordered_parquet_dataset.row_group_stats.loc[
+                    :,
+                    KEY_ORDERED_ON_MINS,
+                ].to_numpy(),  # rg_ordered_on_mins,
+                rg_ordered_on_maxs=ordered_parquet_dataset.row_group_stats.loc[
+                    :,
+                    KEY_ORDERED_ON_MAXS,
+                ].to_numpy(),  # rg_ordered_on_maxs,
+                df_ordered_on=df_ordered_on,
+                drop_duplicates=drop_duplicates,
+                row_group_time_period=row_group_target_size,
+            )
+        ordered_parquet_dataset.write_row_group_files(
+            dfs=iter_merge_split_data(
+                opd=ordered_parquet_dataset,
+                ordered_on=ordered_on,
+                df=df,
+                merge_sequences=merge_split_strategy.compute_merge_sequences(
+                    max_n_off_target_rgs=max_n_off_target_rgs,
+                ),
+                split_sequence=merge_split_strategy.compute_split_sequence,
+                drop_duplicates=drop_duplicates,
+                subset=subset,
+            ),
+            write_metadata_file=False,
+            **kwargs,
+        )
+        # Remove row groups of data that is overlapping.
+        file_id_col_idx = ordered_parquet_dataset.row_group_stats.columns.get_loc(KEY_FILE_IDS)
+        rg_file_ids_to_remove = [
+            file_id
+            for rg_idx_mr_start_end_excl in merge_split_strategy.rg_idx_mrs_starts_ends_excl
+            for file_id in ordered_parquet_dataset.row_group_stats.iloc[
+                rg_idx_mr_start_end_excl,
+                file_id_col_idx,
+            ].to_list()
+        ]
+        if rg_file_ids_to_remove:
+            ordered_parquet_dataset.remove_row_group_files(file_ids=rg_file_ids_to_remove)
+        # Rename partition files.
+        if merge_split_strategy.sort_rgs_after_write:
+            ordered_parquet_dataset.sort_row_groups()
+            ordered_parquet_dataset.align_file_ids()
+    # Write metadata.
+    ordered_parquet_dataset.write_metadata_file(key_value_metadata=key_value_metadata)

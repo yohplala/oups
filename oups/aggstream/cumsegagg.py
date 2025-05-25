@@ -7,11 +7,11 @@ Created on Wed Dec  4 21:30:00 2021.
 """
 from typing import Callable, Dict, List, Optional, Tuple, Union
 
-from numpy import NaN as nNaN
 from numpy import array
 from numpy import dtype
 from numpy import full
 from numpy import isin as nisin
+from numpy import nan as nNaN
 from numpy import zeros
 from pandas import NA as pNA
 from pandas import DataFrame as pDataFrame

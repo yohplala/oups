@@ -9,10 +9,10 @@ import pytest
 from numpy import all as nall
 from numpy import arange
 from numpy import array
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import DatetimeIndex
 from pandas import Series
-from pandas import Timestamp as pTimestamp
+from pandas import Timestamp
 from pandas import date_range
 from pandas.core.resample import TimeGrouper
 
@@ -64,9 +64,9 @@ from oups.aggstream.segmentby import setup_segmentby
                 date_range(start="2020-01-01 08:25:00", end="2020-01-01 08:55:00", freq="5min"),
             ],
             [
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:20:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:10:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:20:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:50:00")},
             ],
         ),
         (
@@ -92,9 +92,9 @@ from oups.aggstream.segmentby import setup_segmentby
                 date_range(start="2020-01-01 08:45:00", end="2020-01-01 08:55:00", freq="5min"),
             ],
             [
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:00:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:40:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:00:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:40:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:50:00")},
             ],
         ),
         (
@@ -124,9 +124,9 @@ from oups.aggstream.segmentby import setup_segmentby
                 date_range(start="2020-01-01 08:40:00", end="2020-01-01 08:50:00", freq="5min"),
             ],
             [
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:00:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:40:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:00:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:40:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:50:00")},
             ],
         ),
         (
@@ -152,9 +152,9 @@ from oups.aggstream.segmentby import setup_segmentby
                 date_range(start="2020-01-01 08:25:00", end="2020-01-01 08:50:00", freq="5min"),
             ],
             [
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:15:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:25:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:15:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:25:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:50:00")},
             ],
         ),
         (
@@ -188,16 +188,16 @@ from oups.aggstream.segmentby import setup_segmentby
             ],
             [
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:06:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:12:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:06:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:12:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:18:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:21:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:18:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:21:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:50:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:50:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:50:00"),
                 },
             ],
         ),
@@ -230,9 +230,9 @@ from oups.aggstream.segmentby import setup_segmentby
                 DatetimeIndex(["2020/01/01 08:42", "2020/01/01 08:52"]),
             ],
             [
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:42:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:52:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:16:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:42:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:52:00")},
             ],
         ),
         (
@@ -281,16 +281,16 @@ from oups.aggstream.segmentby import setup_segmentby
             ],
             [
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:12:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:12:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:12:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:12:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:21:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:16:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:21:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:50:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:50:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:50:00"),
                 },
             ],
         ),
@@ -337,15 +337,15 @@ from oups.aggstream.segmentby import setup_segmentby
             ],
             [
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:06:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:12:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:06:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:12:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:12:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:21:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:12:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:21:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:50:00"),
                 },
             ],
         ),
@@ -395,14 +395,14 @@ from oups.aggstream.segmentby import setup_segmentby
             ],
             [
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:12:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:12:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:21:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:16:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:21:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:50:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:50:00"),
                 },
             ],
         ),
@@ -435,9 +435,9 @@ from oups.aggstream.segmentby import setup_segmentby
                 DatetimeIndex(["2020/01/01 08:42", "2020/01/01 08:52"]),
             ],
             [
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:42:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:52:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:16:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:42:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:52:00")},
             ],
         ),
         (
@@ -482,16 +482,16 @@ from oups.aggstream.segmentby import setup_segmentby
             ],
             [
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:03:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:12:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:03:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:12:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:03:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:21:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:03:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:21:00"),
                 },
                 {
-                    KEY_RESTART_KEY: pTimestamp("2020-01-01 08:36:00"),
-                    KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:50:00"),
+                    KEY_RESTART_KEY: Timestamp("2020-01-01 08:36:00"),
+                    KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:50:00"),
                 },
             ],
         ),
@@ -527,9 +527,9 @@ from oups.aggstream.segmentby import setup_segmentby
                 DatetimeIndex(["2020/01/01 08:42", "2020/01/01 08:52"]),
             ],
             [
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:16:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:42:00")},
-                {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:52:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:16:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:42:00")},
+                {KEY_RESTART_KEY: Timestamp("2020-01-01 08:52:00")},
             ],
         ),
     ],
@@ -546,15 +546,15 @@ def test_by_scale(
 ):
     on = Series(
         [
-            pTimestamp("2020/01/01 08:00"),  # 0
-            pTimestamp("2020/01/01 08:03"),
-            pTimestamp("2020/01/01 08:12"),  # 2
-            pTimestamp("2020/01/01 08:15"),  # 3 # 0
-            pTimestamp("2020/01/01 08:16"),
-            pTimestamp("2020/01/01 08:21"),  # 5
-            pTimestamp("2020/01/01 08:40"),  # 6 # 0
-            pTimestamp("2020/01/01 08:41"),
-            pTimestamp("2020/01/01 08:50"),  # 8
+            Timestamp("2020/01/01 08:00"),  # 0
+            Timestamp("2020/01/01 08:03"),
+            Timestamp("2020/01/01 08:12"),  # 2
+            Timestamp("2020/01/01 08:15"),  # 3 # 0
+            Timestamp("2020/01/01 08:16"),
+            Timestamp("2020/01/01 08:21"),  # 5
+            Timestamp("2020/01/01 08:40"),  # 6 # 0
+            Timestamp("2020/01/01 08:41"),
+            Timestamp("2020/01/01 08:50"),  # 8
         ],
     )
     start_idx = 0
@@ -629,12 +629,12 @@ def test_by_scale(
 def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
     on = Series(
         [
-            pTimestamp("2020/01/01 08:00"),  # 0
-            pTimestamp("2020/01/01 08:03"),
-            pTimestamp("2020/01/01 08:12"),  # 2
-            pTimestamp("2020/01/01 08:15"),  # 3
-            pTimestamp("2020/01/01 08:16"),
-            pTimestamp("2020/01/01 08:21"),  # 5
+            Timestamp("2020/01/01 08:00"),  # 0
+            Timestamp("2020/01/01 08:03"),
+            Timestamp("2020/01/01 08:12"),  # 2
+            Timestamp("2020/01/01 08:15"),  # 3
+            Timestamp("2020/01/01 08:16"),
+            Timestamp("2020/01/01 08:21"),  # 5
         ],
     )
     buffer = {}
@@ -671,9 +671,9 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
             ],
             [True, True, True],
             [
-                {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00")},
-                {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
-                {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:50")},
+                {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: Timestamp("2020/01/01 08:00")},
+                {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: Timestamp("2020/01/01 08:16")},
+                {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: Timestamp("2020/01/01 08:50")},
             ],
             [0, 0, 0],
         ),
@@ -702,18 +702,18 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
             [
                 {
                     KEY_RESTART_KEY: 4,
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00"),
-                    KEY_LAST_BIN_END: pTimestamp("2020/01/01 08:15"),
+                    KEY_LAST_BIN_LABEL: Timestamp("2020/01/01 08:00"),
+                    KEY_LAST_BIN_END: Timestamp("2020/01/01 08:15"),
                 },
                 {
                     KEY_RESTART_KEY: 2,
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16"),
-                    KEY_LAST_BIN_END: pTimestamp("2020/01/01 08:21"),
+                    KEY_LAST_BIN_LABEL: Timestamp("2020/01/01 08:16"),
+                    KEY_LAST_BIN_END: Timestamp("2020/01/01 08:21"),
                 },
                 {
                     KEY_RESTART_KEY: 1,
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:50"),
-                    KEY_LAST_BIN_END: pTimestamp("2020/01/01 08:50"),
+                    KEY_LAST_BIN_LABEL: Timestamp("2020/01/01 08:50"),
+                    KEY_LAST_BIN_END: Timestamp("2020/01/01 08:50"),
                 },
             ],
             [0, 1, 0],
@@ -741,9 +741,9 @@ def test_by_scale_exceptions(by, closed, end_indices, exception_mess):
             ],
             [True, True, True],
             [
-                {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:00")},
-                {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:16")},
-                {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2020/01/01 08:50")},
+                {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: Timestamp("2020/01/01 08:00")},
+                {KEY_RESTART_KEY: 2, KEY_LAST_BIN_LABEL: Timestamp("2020/01/01 08:16")},
+                {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: Timestamp("2020/01/01 08:50")},
             ],
             [0, 1, 0],
         ),
@@ -762,15 +762,15 @@ def test_by_x_rows(
 ):
     on = Series(
         [
-            pTimestamp("2020/01/01 08:00"),  # 0
-            pTimestamp("2020/01/01 08:03"),
-            pTimestamp("2020/01/01 08:12"),  # 2
-            pTimestamp("2020/01/01 08:15"),  # 3 # 0
-            pTimestamp("2020/01/01 08:16"),
-            pTimestamp("2020/01/01 08:21"),  # 5
-            pTimestamp("2020/01/01 08:40"),  # 6 # 0
-            pTimestamp("2020/01/01 08:41"),
-            pTimestamp("2020/01/01 08:50"),  # 8
+            Timestamp("2020/01/01 08:00"),  # 0
+            Timestamp("2020/01/01 08:03"),
+            Timestamp("2020/01/01 08:12"),  # 2
+            Timestamp("2020/01/01 08:15"),  # 3 # 0
+            Timestamp("2020/01/01 08:16"),
+            Timestamp("2020/01/01 08:21"),  # 5
+            Timestamp("2020/01/01 08:40"),  # 6 # 0
+            Timestamp("2020/01/01 08:41"),
+            Timestamp("2020/01/01 08:50"),  # 8
         ],
     )
     start_idx = 0
@@ -802,8 +802,8 @@ def test_by_x_rows(
             3,
             4,
             LEFT,
-            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
-            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 07:50")},
             array([0]),
             array([3]),
             True,
@@ -813,8 +813,8 @@ def test_by_x_rows(
             7,
             4,
             LEFT,
-            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
-            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 11:00")},
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 11:00")},
             array([0, 3]),
             array([3, 7]),
             True,
@@ -824,8 +824,8 @@ def test_by_x_rows(
             7,
             4,
             LEFT,
-            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
-            {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 12:00")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 3, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 12:00")},
             array([0, 0, 4]),
             array([0, 4, 7]),
             True,
@@ -835,8 +835,8 @@ def test_by_x_rows(
             8,
             4,
             LEFT,
-            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
-            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 15:00")},
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 1, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 15:00")},
             array([0, 3, 7]),
             array([3, 7, 8]),
             True,
@@ -846,8 +846,8 @@ def test_by_x_rows(
             8,
             4,
             LEFT,
-            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 07:50")},
-            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: pTimestamp("2022/01/01 12:00")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 07:50")},
+            {KEY_RESTART_KEY: 4, KEY_LAST_BIN_LABEL: Timestamp("2022/01/01 12:00")},
             array([0, 0, 4]),
             array([0, 4, 8]),
             True,
@@ -866,9 +866,9 @@ def test_by_x_rows_single_shot(
     unknown_last_bin_end_ref,
     n_null_bin_ref,
 ):
-    start = pTimestamp("2022/01/01 08:00")
+    start = Timestamp("2022/01/01 08:00")
     dummy_data = arange(len_data)
-    data = pDataFrame(
+    data = DataFrame(
         {"dummy_data": dummy_data, "dti": date_range(start, periods=len_data, freq="1h")},
     )
     chunk_labels_ref = data.iloc[chunk_starts_ref, -1].reset_index(drop=True)
@@ -903,7 +903,7 @@ def test_by_x_rows_single_shot(
 def test_segmentby_exceptions():
     bin_on = "dti"
     dti = date_range("2020/01/01 08:04", periods=4, freq="3min")
-    data = pDataFrame({bin_on: dti, "ordered_on": range(len(dti))})
+    data = DataFrame({bin_on: dti, "ordered_on": range(len(dti))})
     len_data = len(data)
 
     def by_empty_trailing_bin(on, buffer=None):
@@ -1075,19 +1075,19 @@ def test_segmentby_exceptions():
                 # First 'restart_key' is 1st value in data in this case because
                 # there is a single bin. This applies to snapshot as well.
                 {
-                    KEY_BIN: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10")},
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:00"),
+                    KEY_BIN: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:10")},
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:10")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:00"),
                 },
                 {
-                    KEY_BIN: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:20")},
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:20")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:20"),
+                    KEY_BIN: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:20")},
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:20")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:20"),
                 },
                 {
-                    KEY_BIN: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:20")},
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:30")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:20"),
+                    KEY_BIN: {KEY_RESTART_KEY: Timestamp("2020-01-01 09:20")},
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 09:30")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 09:20"),
                 },
             ],
         ),
@@ -1180,19 +1180,19 @@ def test_segmentby_exceptions():
                 # First 'restart_key' is 1st value in data in this case because
                 # there is a single bin.
                 {
-                    KEY_BIN: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10")},
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:15")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:00"),
+                    KEY_BIN: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:10")},
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:15")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:00"),
                 },
                 {
-                    KEY_BIN: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:20")},
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:35")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:20"),
+                    KEY_BIN: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:20")},
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:35")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:20"),
                 },
                 {
-                    KEY_BIN: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:20")},
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:40")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:20"),
+                    KEY_BIN: {KEY_RESTART_KEY: Timestamp("2020-01-01 09:20")},
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 09:40")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 09:20"),
                 },
             ],
         ),
@@ -1263,26 +1263,26 @@ def test_segmentby_exceptions():
                 {
                     KEY_BIN: {
                         KEY_RESTART_KEY: 3,
-                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:10"),
+                        KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:10"),
                     },
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:10"),
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:10")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:10"),
                 },
                 {
                     KEY_BIN: {
                         KEY_RESTART_KEY: 2,
-                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:19"),
+                        KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:19"),
                     },
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:15")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:19"),
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:15")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:19"),
                 },
                 {
                     KEY_BIN: {
                         KEY_RESTART_KEY: 1,
-                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:30"),
+                        KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 09:30"),
                     },
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:30")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:30"),
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 09:30")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 09:30"),
                 },
             ],
         ),
@@ -1371,26 +1371,26 @@ def test_segmentby_exceptions():
                 {
                     KEY_BIN: {
                         KEY_RESTART_KEY: 3,
-                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:10"),
+                        KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:10"),
                     },
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:15")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:10"),
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:15")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:10"),
                 },
                 {
                     KEY_BIN: {
                         KEY_RESTART_KEY: 2,
-                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:19"),
+                        KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:19"),
                     },
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 08:35")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:19"),
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 08:35")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:19"),
                 },
                 {
                     KEY_BIN: {
                         KEY_RESTART_KEY: 1,
-                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:30"),
+                        KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 09:30"),
                     },
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:40")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:30"),
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 09:40")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 09:30"),
                 },
             ],
         ),
@@ -1480,21 +1480,21 @@ def test_segmentby_exceptions():
                 {
                     KEY_BIN: {
                         KEY_RESTART_KEY: 4,
-                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:10"),
+                        KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:10"),
                     },
                     KEY_SNAP: {
-                        KEY_RESTART_KEY: pTimestamp("2020-01-01 08:15"),
-                        KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:17"),
+                        KEY_RESTART_KEY: Timestamp("2020-01-01 08:15"),
+                        KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:17"),
                     },
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:10"),
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:10"),
                 },
                 {
                     KEY_BIN: {
                         KEY_RESTART_KEY: 1,
-                        KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:30"),
+                        KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 09:30"),
                     },
-                    KEY_SNAP: {KEY_RESTART_KEY: pTimestamp("2020-01-01 09:40")},
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:30"),
+                    KEY_SNAP: {KEY_RESTART_KEY: Timestamp("2020-01-01 09:40")},
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 09:30"),
                 },
             ],
         ),
@@ -1556,33 +1556,33 @@ def test_segmentby_exceptions():
                 # there is a single bin.
                 {
                     KEY_BIN: {
-                        KEY_RESTART_KEY: pTimestamp("2020-01-01 08:10"),
+                        KEY_RESTART_KEY: Timestamp("2020-01-01 08:10"),
                     },
                     KEY_SNAP: {
-                        KEY_RESTART_KEY: pTimestamp("2020-01-01 08:12"),
-                        KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:12"),
+                        KEY_RESTART_KEY: Timestamp("2020-01-01 08:12"),
+                        KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:12"),
                     },
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:00"),
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:00"),
                 },
                 {
                     KEY_BIN: {
-                        KEY_RESTART_KEY: pTimestamp("2020-01-01 08:17"),
+                        KEY_RESTART_KEY: Timestamp("2020-01-01 08:17"),
                     },
                     KEY_SNAP: {
-                        KEY_RESTART_KEY: pTimestamp("2020-01-01 08:12"),
-                        KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 08:20"),
+                        KEY_RESTART_KEY: Timestamp("2020-01-01 08:12"),
+                        KEY_LAST_ON_VALUE: Timestamp("2020-01-01 08:20"),
                     },
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 08:00"),
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 08:00"),
                 },
                 {
                     KEY_BIN: {
-                        KEY_RESTART_KEY: pTimestamp("2020-01-01 09:00"),
+                        KEY_RESTART_KEY: Timestamp("2020-01-01 09:00"),
                     },
                     KEY_SNAP: {
-                        KEY_RESTART_KEY: pTimestamp("2020-01-01 09:10"),
-                        KEY_LAST_ON_VALUE: pTimestamp("2020-01-01 09:30"),
+                        KEY_RESTART_KEY: Timestamp("2020-01-01 09:10"),
+                        KEY_LAST_ON_VALUE: Timestamp("2020-01-01 09:30"),
                     },
-                    KEY_LAST_BIN_LABEL: pTimestamp("2020-01-01 09:00"),
+                    KEY_LAST_BIN_LABEL: Timestamp("2020-01-01 09:00"),
                 },
             ],
         ),
@@ -1616,7 +1616,7 @@ def test_segmentby(
         ],
         dtype=DTYPE_DATETIME64,
     )
-    data = pDataFrame({"dti": dti, "ordered_on": range(len(dti))})
+    data = DataFrame({"dti": dti, "ordered_on": range(len(dti))})
     start_idx = 0
     buffer = {}
     bin_by = setup_segmentby(bin_by, bin_on, ordered_on, snap_by)

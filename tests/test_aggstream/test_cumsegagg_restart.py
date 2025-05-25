@@ -11,11 +11,11 @@ import pytest
 from numpy import array
 from numpy import random as nrandom
 from pandas import NA as pNA
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import DatetimeIndex
 from pandas import Timedelta
-from pandas import Timestamp as pTimestamp
-from pandas import concat as pconcat
+from pandas import Timestamp
+from pandas import concat
 from pandas.core.resample import TimeGrouper
 
 from oups.aggstream.cumsegagg import DTYPE_DATETIME64
@@ -60,11 +60,11 @@ from oups.aggstream.segmentby import setup_segmentby
             [6, 11],
             TimeGrouper(freq="15min", key="dti", closed="left", label="right"),
             None,
-            [pDataFrame({FIRST: [5.6], SUM: [15]}), pDataFrame({FIRST: [3.2], SUM: [1]})],
+            [DataFrame({FIRST: [5.6], SUM: [15]}), DataFrame({FIRST: [3.2], SUM: [1]})],
             [
-                pTimestamp("2020-01-01 08:45:00"),
-                pTimestamp("2020-01-01 09:00:00"),
-                pTimestamp("2020-01-01 09:30:00"),
+                Timestamp("2020-01-01 08:45:00"),
+                Timestamp("2020-01-01 09:00:00"),
+                Timestamp("2020-01-01 09:30:00"),
             ],
             None,
         ),
@@ -86,11 +86,11 @@ from oups.aggstream.segmentby import setup_segmentby
             [5, 11],
             TimeGrouper(freq="15min", key="dti", closed="left", label="right"),
             None,
-            [pDataFrame({FIRST: [5.6], SUM: [9]}), pDataFrame({FIRST: [3.2], SUM: [1]})],
+            [DataFrame({FIRST: [5.6], SUM: [9]}), DataFrame({FIRST: [3.2], SUM: [1]})],
             [
-                pTimestamp("2020-01-01 08:45:00"),
-                pTimestamp("2020-01-01 09:00:00"),
-                pTimestamp("2020-01-01 09:30:00"),
+                Timestamp("2020-01-01 08:45:00"),
+                Timestamp("2020-01-01 09:00:00"),
+                Timestamp("2020-01-01 09:30:00"),
             ],
             None,
         ),
@@ -111,11 +111,11 @@ from oups.aggstream.segmentby import setup_segmentby
             [6, 11],
             partial(by_x_rows, by=6, closed="left"),
             "dti",
-            [pDataFrame({FIRST: [4.0], SUM: [23]}), pDataFrame({FIRST: [4.5], SUM: [11]})],
+            [DataFrame({FIRST: [4.0], SUM: [23]}), DataFrame({FIRST: [4.5], SUM: [11]})],
             [],
-            pDataFrame(
+            DataFrame(
                 {FIRST: [4.0, 4.5], SUM: [23, 11]},
-                index=[pTimestamp("2020-01-01 08:10:00"), pTimestamp("2020-01-01 09:00:00")],
+                index=[Timestamp("2020-01-01 08:10:00"), Timestamp("2020-01-01 09:00:00")],
             ),
         ),
         # 4/ 6-rows bin left closed
@@ -134,11 +134,11 @@ from oups.aggstream.segmentby import setup_segmentby
             [5, 11],
             partial(by_x_rows, by=6, closed="left"),
             "dti",
-            [pDataFrame({FIRST: [4.0], SUM: [17]}), pDataFrame({FIRST: [4.5], SUM: [11]})],
+            [DataFrame({FIRST: [4.0], SUM: [17]}), DataFrame({FIRST: [4.5], SUM: [11]})],
             [],
-            pDataFrame(
+            DataFrame(
                 {FIRST: [4.0, 4.5], SUM: [23, 11]},
-                index=[pTimestamp("2020-01-01 08:10:00"), pTimestamp("2020-01-01 09:00:00")],
+                index=[Timestamp("2020-01-01 08:10:00"), Timestamp("2020-01-01 09:00:00")],
             ),
         ),
     ],
@@ -172,7 +172,7 @@ def test_cumsegagg_bin_only(
     value = "value"
     qty = "qty"
     dti = "dti"
-    data = pDataFrame({value: values, qty: qties, dti: dtidx})
+    data = DataFrame({value: values, qty: qties, dti: dtidx})
     agg = {
         FIRST: (value, FIRST),
         SUM: (qty, SUM),
@@ -204,7 +204,7 @@ def test_cumsegagg_bin_only(
         assert buffer[KEY_LAST_CHUNK_RES].equals(last_chunk_res_ref[i])
         bin_res_to_concatenate.append(bin_res)
         start_idx = end_idx
-    bin_res = pconcat(bin_res_to_concatenate)
+    bin_res = concat(bin_res_to_concatenate)
     bin_res = bin_res[~bin_res.index.duplicated(keep="last")]
     assert bin_res.equals(bin_res_ref)
 
@@ -259,15 +259,15 @@ def test_cumsegagg_bin_only(
             ],
             [4, 9],
             # last_chunk_res_ref
-            [pDataFrame({MIN: [1], LAST: [2]}), pDataFrame({MIN: [2], LAST: [2]})],
+            [DataFrame({MIN: [1], LAST: [2]}), DataFrame({MIN: [2], LAST: [2]})],
             # bin_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [1, 1, 2], LAST: [2, 3, 2]},
                 index=DatetimeIndex(["2020-01-01 08:10", "2020-01-01 08:19", "2020-01-01 09:30"]),
                 dtype=DTYPE_NULLABLE_INT64,
             ),
             # snap_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [1, 1, 3, 1, 1, 1, 1, 1, 2], LAST: [4, 6, 3, 1, 1, 1, 3, 3, 2]},
                 index=DatetimeIndex(
                     [
@@ -315,18 +315,18 @@ def test_cumsegagg_bin_only(
             [3, 6, 9],
             # last_chunk_res_ref
             [
-                pDataFrame({MIN: [1], LAST: [6]}),
-                pDataFrame({MIN: [1], LAST: [1]}),
-                pDataFrame({MIN: [2], LAST: [2]}),
+                DataFrame({MIN: [1], LAST: [6]}),
+                DataFrame({MIN: [1], LAST: [1]}),
+                DataFrame({MIN: [2], LAST: [2]}),
             ],
             # bin_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [1, 2], LAST: [1, 2]},
                 index=DatetimeIndex(["2020-01-01 08:00", "2020-01-01 09:00"]),
                 dtype=DTYPE_NULLABLE_INT64,
             ),
             # snap_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [1, 9], LAST: [4, 9]},
                 index=DatetimeIndex(["2020-01-01 08:12", "2020-01-01 09:10"]),
                 dtype=DTYPE_NULLABLE_INT64,
@@ -371,9 +371,9 @@ def test_cumsegagg_bin_only(
             # end_indices
             [6, 9],
             # last_chunk_res_ref
-            [pDataFrame({MIN: [1], LAST: [1]}), pDataFrame({MIN: [2], LAST: [2]})],
+            [DataFrame({MIN: [1], LAST: [1]}), DataFrame({MIN: [2], LAST: [2]})],
             # bin_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [1, pNA, 3, 2], LAST: [1, pNA, 3, 2]},
                 index=DatetimeIndex(
                     [
@@ -386,7 +386,7 @@ def test_cumsegagg_bin_only(
                 dtype=DTYPE_NULLABLE_INT64,
             ),
             # snap_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [1, pNA, pNA, 9], LAST: [4, pNA, pNA, 9]},
                 index=DatetimeIndex(
                     [
@@ -437,9 +437,9 @@ def test_cumsegagg_bin_only(
             # end_indices
             [6, 9],
             # last_chunk_res_ref
-            [pDataFrame({MIN: [1], LAST: [1]}), pDataFrame({MIN: [2], LAST: [2]})],
+            [DataFrame({MIN: [1], LAST: [1]}), DataFrame({MIN: [2], LAST: [2]})],
             # bin_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [1, pNA, 3, 2], LAST: [1, pNA, 3, 2]},
                 index=DatetimeIndex(
                     [
@@ -452,7 +452,7 @@ def test_cumsegagg_bin_only(
                 dtype=DTYPE_NULLABLE_INT64,
             ),
             # snap_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [1, 1, 1, 9], LAST: [4, 1, 1, 9]},
                 index=DatetimeIndex(
                     [
@@ -495,9 +495,9 @@ def test_cumsegagg_bin_only(
             # end_indices
             [6, 9],
             # last_chunk_res_ref
-            [pDataFrame({MIN: [1], LAST: [1]}), pDataFrame({MIN: [2], LAST: [2]})],
+            [DataFrame({MIN: [1], LAST: [1]}), DataFrame({MIN: [2], LAST: [2]})],
             # bin_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [1, pNA, 3, 2], LAST: [1, pNA, 3, 2]},
                 index=DatetimeIndex(
                     [
@@ -510,7 +510,7 @@ def test_cumsegagg_bin_only(
                 dtype=DTYPE_NULLABLE_INT64,
             ),
             # snap_ref
-            pDataFrame(
+            DataFrame(
                 {MIN: [pNA, pNA, 9], LAST: [pNA, pNA, 9]},
                 index=DatetimeIndex(["2020-01-01 08:33", "2020-01-01 09:00", "2020-01-01 09:10"]),
                 dtype=DTYPE_NULLABLE_INT64,
@@ -544,7 +544,7 @@ def test_cumsegagg_bin_snap(
     )
     qty = "qty"
     dti = "dti"
-    data = pDataFrame({qty: qties, dti: dtidx})
+    data = DataFrame({qty: qties, dti: dtidx})
     agg = {
         MIN: (qty, MIN),
         LAST: (qty, LAST),
@@ -572,11 +572,11 @@ def test_cumsegagg_bin_snap(
         snap_res_to_concatenate.append(snap_res)
         start_idx = end_idx
     bin_ref.index.name = dti
-    bin_res = pconcat(bin_res_to_concatenate)
+    bin_res = concat(bin_res_to_concatenate)
     bin_res = bin_res[~bin_res.index.duplicated(keep="last")]
     assert bin_res.equals(bin_ref)
     snap_ref.index.name = dti
-    snap_res = pconcat(snap_res_to_concatenate)
+    snap_res = concat(snap_res_to_concatenate)
     snap_res = snap_res[~snap_res.index.duplicated(keep="last")]
     assert snap_res.equals(snap_ref)
 
@@ -593,13 +593,13 @@ def test_cumsegagg_bin_snap_time_grouper():
     agg = {FIRST: (val, FIRST), LAST: (val, LAST)}
     snap_by = TimeGrouper(key=ordered_on, freq="5min", closed="left", label="left")
     # Seed data.
-    start = pTimestamp("2020/01/01")
+    start = Timestamp("2020/01/01")
     rr = nrandom.default_rng(1)
     N = 50
     rand_ints = rr.integers(120, size=N)
     rand_ints.sort()
     ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
-    seed = pDataFrame({ordered_on: ts, val: rand_ints})
+    seed = DataFrame({ordered_on: ts, val: rand_ints})
     # Setup for restart
     agg_as_list = setup_cumsegagg(agg, seed.dtypes.to_dict())
     bin_by_as_dict = setup_segmentby(bin_by=bin_by, ordered_on=ordered_on, snap_by=snap_by)
@@ -619,9 +619,9 @@ def test_cumsegagg_bin_snap_time_grouper():
         bin_by=bin_by_as_dict,
         buffer=buffer,
     )
-    bin_res = pconcat([bin_res1, bin_res2])
+    bin_res = concat([bin_res1, bin_res2])
     bin_res = bin_res[~bin_res.index.duplicated(keep="last")]
-    snap_res = pconcat([snap_res1, snap_res2])
+    snap_res = concat([snap_res1, snap_res2])
     snap_res = snap_res[~snap_res.index.duplicated(keep="last")]
     # Reference results obtained by a straight execution.
     bin_res_ref, snap_res_ref = cumsegagg(
