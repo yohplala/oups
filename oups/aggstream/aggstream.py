@@ -37,7 +37,6 @@ from oups.aggstream.segmentby import setup_segmentby
 from oups.aggstream.utils import dataframe_filter
 from oups.defines import KEY_DUPLICATES_ON
 from oups.defines import KEY_ORDERED_ON
-from oups.defines import KEY_OUPS_METADATA
 from oups.store import Store
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
@@ -110,11 +109,7 @@ def _is_aggstream_result(handle: OrderedParquetDataset) -> bool:
         this latter function.
 
     """
-    # As oups specific metadata is a string produced by json library, the last
-    # 'in' condition is checking if the set of characters defined by
-    # 'AGGSTREAM' is in a string.
-    if KEY_OUPS_METADATA in handle._key_value_metadata:
-        return KEY_AGGSTREAM in handle._oups_metadata
+    return KEY_AGGSTREAM in handle.key_value_metadata
 
 
 def _init_keys_config(
@@ -340,7 +335,7 @@ def _init_buffers(
                 raise ValueError(
                     f"provided '{main_key}' data is not an AggStream result.",
                 )
-            aggstream_md = prev_agg_res._oups_metadata[KEY_AGGSTREAM]
+            aggstream_md = prev_agg_res.key_value_metadata[KEY_AGGSTREAM]
             # - 'last_seed_index' to trim accordingly head of seed data.
             # - metadata related to pre-processing of individual seed chunk.
             # - metadata related to binning process from past binnings

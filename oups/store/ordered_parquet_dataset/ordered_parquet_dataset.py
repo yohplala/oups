@@ -29,6 +29,7 @@ from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
+from oups.store.filepath_utils import strip_path_tail
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.write import write
@@ -208,7 +209,7 @@ class OrderedParquetDataset:
             be provided in 'kwargs' of 'write()' method.
 
         """
-        self._dirpath = dirpath
+        self._dirpath = str(dirpath)
         try:
             self._row_group_stats, self._key_value_metadata = parquet_adapter.read_parquet(
                 get_md_filepath(self.dirpath),
@@ -531,6 +532,8 @@ class OrderedParquetDataset:
                 elif value:
                     # Case 'add'.
                     existing_md[key] = value
+        if self._is_opdmd_file_missing:
+            Path(strip_path_tail(self.dirpath)).mkdir(parents=True, exist_ok=True)
         parquet_adapter.write_parquet(
             path=get_md_filepath(self.dirpath),
             df=self.row_group_stats,
@@ -574,7 +577,8 @@ class OrderedParquetDataset:
         buffer = []
         max_file_id_exceeded = False
         max_n_rows_exceeded = False
-        Path(self.dirpath).mkdir(parents=True, exist_ok=True)
+        if len(self.row_group_stats) == 0:
+            Path(self.dirpath).mkdir(parents=True, exist_ok=True)
         for file_id, df in enumerate(dfs, start=self.max_file_id + 1):
             if file_id > self._max_allowed_file_id:
                 max_file_id_exceeded = True

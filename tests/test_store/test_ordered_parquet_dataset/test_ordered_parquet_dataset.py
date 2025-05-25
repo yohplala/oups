@@ -75,7 +75,7 @@ def switch_row_group_file_ids(opd, file_id_1, file_id_2):
 
 def test_opd_init_empty(tmp_path):
     opd = OrderedParquetDataset(tmp_path, ordered_on="a")
-    assert opd.dirpath == tmp_path
+    assert opd.dirpath == str(tmp_path)
     assert opd.ordered_on == "a"
     assert opd.row_group_stats.empty
     assert opd.key_value_metadata == {}
