@@ -109,7 +109,7 @@ def iter_merge_split_data(
                     df_chunk,
                 ],
                 ignore_index=True,
-            ).sort_values(ordered_on, ignore_index=True)
+            ).sort_values(ordered_on, ignore_index=True, kind="stable")
             if drop_duplicates:
                 chunk.drop_duplicates(
                     subset=subset,
