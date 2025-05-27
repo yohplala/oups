@@ -12,6 +12,9 @@ from pandas import DataFrame
 from pandas import Timestamp
 
 
+KEY_LEFT = "left"
+
+
 def _get_and_validate_ordered_on_column(store, keys: List[dataclass]) -> str:
     """
     Get and validate the 'ordered_on' column name across all datasets.
@@ -203,7 +206,7 @@ def iter_row_groups(
                 slice(
                     *in_memory_data[key][ordered_on_col_name].searchsorted(
                         [current_start, current_end_excl],
-                        side="left",
+                        side=KEY_LEFT,
                     ),
                 )
             ]
