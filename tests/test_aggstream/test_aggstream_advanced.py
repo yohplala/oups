@@ -50,7 +50,7 @@ from oups.aggstream.segmentby import KEY_BIN_BY
 from oups.aggstream.segmentby import KEY_SNAP_BY
 from oups.aggstream.segmentby import by_x_rows
 from oups.defines import KEY_N_ROWS
-from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
+from oups.defines import KEY_ROW_GROUP_TARGET_SIZE
 
 
 @toplevel

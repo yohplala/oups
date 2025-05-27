@@ -24,7 +24,9 @@ from pandas import date_range
 
 from oups.date_utils import ceil_ts
 from oups.date_utils import floor_ts
-from oups.store.write.merge_split_strategies.base import OARMergeSplitStrategy
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies.base import (
+    OARMergeSplitStrategy,
+)
 
 
 LEFT = "left"

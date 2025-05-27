@@ -18,7 +18,9 @@ from pandas import Series
 from pandas import Timestamp
 from pandas import date_range
 
-from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies import (
+    TimePeriodMergeSplitStrategy,
+)
 
 
 RG_IDX_ENDS_EXCL_NOT_TO_USE_AS_SPLIT_POINTS = "rg_idx_ends_excl_not_to_use_as_split_points"

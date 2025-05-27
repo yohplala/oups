@@ -21,8 +21,12 @@ from numpy import zeros
 from numpy.typing import NDArray
 from pandas import Series
 
-from oups.store.write.merge_split_strategies.base import OARMergeSplitStrategy
-from oups.store.write.merge_split_strategies.base import get_region_start_end_delta
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies.base import (
+    OARMergeSplitStrategy,
+)
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies.base import (
+    get_region_start_end_delta,
+)
 
 
 LEFT = "left"

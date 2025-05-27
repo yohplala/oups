@@ -20,10 +20,16 @@ from numpy.typing import NDArray
 from pandas import Series
 from pandas import Timestamp
 
-from oups.store.write.merge_split_strategies.base import OARMergeSplitStrategy
-from oups.store.write.merge_split_strategies.base import get_region_indices_of_true_values
-from oups.store.write.merge_split_strategies.base import get_region_start_end_delta
-from oups.store.write.merge_split_strategies.base import set_true_in_regions
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies.base import (
+    OARMergeSplitStrategy,
+)
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies.base import (
+    get_region_indices_of_true_values,
+)
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies.base import (
+    get_region_start_end_delta,
+)
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies.base import set_true_in_regions
 
 
 RG_IDX_START = "rg_idx_start"

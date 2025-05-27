@@ -16,7 +16,7 @@ from pandas import DataFrame
 from pandas.testing import assert_frame_equal
 
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import create_custom_opd
-from oups.store.write.iter_merge_split_data import iter_merge_split_data
+from oups.store.ordered_parquet_dataset.write.iter_merge_split_data import iter_merge_split_data
 
 
 @pytest.fixture

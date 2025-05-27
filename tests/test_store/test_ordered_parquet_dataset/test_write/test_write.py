@@ -13,7 +13,7 @@ from pandas import Timestamp
 
 from oups.defines import DIR_SEP
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import create_custom_opd
-from oups.store.write import write
+from oups.store.ordered_parquet_dataset.write import write
 
 
 @pytest.mark.parametrize(
