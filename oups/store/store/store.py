@@ -77,7 +77,7 @@ def get_keys(basepath: str, indexer: Type[dataclass]) -> SortedSet:
                 and (
                     key := indexer.from_path(
                         DIR_SEP.join(
-                            path.rsplit(DIR_SEP, depth)[1:] + [opdmd_basename],
+                            str(path).rsplit(DIR_SEP, depth)[1:] + [opdmd_basename],
                         ),
                     )
                 )
