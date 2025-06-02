@@ -134,19 +134,20 @@ def _get_intersection_iterator(
     ]
     for key, ordered_on_mins in keys_ordered_on_mins.items():
         # Identify duplicates in ordered_on_mins.
-        unique_mask, insert_idx = isnotin_ordered(
-            ordered_on_starts,
-            ordered_on_mins[rg_idx_starts[key] : rg_idx_ends_excl[key]],
+        is_not_found, unfound_insert_idx = isnotin_ordered(
+            sorted_array=ordered_on_starts,
+            query_elements=ordered_on_mins[rg_idx_starts[key] : rg_idx_ends_excl[key]],
+            return_insert_positions=True,
         )
         print("key ", key)
-        print("insert_idx")
-        print(insert_idx)
-        print("unique_mask")
-        print(unique_mask)
+        print("unfound_insert_idx")
+        print(unfound_insert_idx)
+        print("is_not_found")
+        print(is_not_found)
         ordered_on_starts = insert(
             ordered_on_starts,
-            insert_idx[unique_mask],
-            ordered_on_mins[unique_mask],
+            unfound_insert_idx,
+            ordered_on_mins[is_not_found],
         )
     print("ordered_on_starts")
     print(ordered_on_starts)
