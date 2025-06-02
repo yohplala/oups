@@ -22,6 +22,7 @@ from pandas import Timestamp
 
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
+from oups.numpy_utils import isnotin_ordered
 
 
 KEY_LEFT = "left"
@@ -133,24 +134,18 @@ def _get_intersection_iterator(
     ]
     for key, ordered_on_mins in keys_ordered_on_mins.items():
         # Identify duplicates in ordered_on_mins.
-        insert_idx_left = searchsorted(
+        unique_mask, insert_idx = isnotin_ordered(
             ordered_on_starts,
             ordered_on_mins[rg_idx_starts[key] : rg_idx_ends_excl[key]],
-            side=KEY_LEFT,
-        )
-        unique_mask = insert_idx_left != searchsorted(
-            ordered_on_starts,
-            ordered_on_mins[rg_idx_starts[key] : rg_idx_ends_excl[key]],
-            side=KEY_RIGHT,
         )
         print("key ", key)
-        print("insert_idx_left")
-        print(insert_idx_left)
+        print("insert_idx")
+        print(insert_idx)
         print("unique_mask")
         print(unique_mask)
         ordered_on_starts = insert(
             ordered_on_starts,
-            insert_idx_left[unique_mask],
+            insert_idx[unique_mask],
             ordered_on_mins[unique_mask],
         )
     print("ordered_on_starts")
