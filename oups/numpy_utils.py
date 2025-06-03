@@ -27,7 +27,8 @@ def isnotin_ordered(
         Must be sorted in ascending order.
     query_elements : array
         Array of elements to search for.
-        Does not need to be sorted.
+        Must be sorted in ascending order if containing elements which are
+        are larger than the largest element in 'sorted_array'.
     return_insert_positions : bool, optional
         If True, also return the insert positions where unfound elements
         could be inserted into 'sorted_array', maintaining sort order.

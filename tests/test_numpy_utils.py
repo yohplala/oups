@@ -13,31 +13,32 @@ from oups.numpy_utils import isnotin_ordered
 
 
 @pytest.mark.parametrize(
-    "return_insert_positions, expected",
+    "expected_insert_positions",
     [
-        (False, array([True, False, False, True])),
-        (True, (array([True, False, False, True]), array([0, 5]))),
+        None,
+        array([0, 5]),
     ],
 )
-def test_isnotin_ordered(return_insert_positions, expected):
+def test_isnotin_ordered(expected_insert_positions):
     sorted_array = array([1, 2, 3, 4, 5])
     query_elements = array([0, 1, 5, 10])
     res = isnotin_ordered(
         sorted_array=sorted_array,
         query_elements=query_elements,
-        return_insert_positions=return_insert_positions,
+        return_insert_positions=expected_insert_positions is not None,
     )
-    if return_insert_positions:
+    expected_isnotin = array([True, False, False, True])
+    if expected_insert_positions is None:
         assert array_equal(
-            res[0],
-            expected[0],
-        )
-        assert array_equal(
-            res[1],
-            expected[1],
+            res,
+            expected_isnotin,
         )
     else:
         assert array_equal(
-            res,
-            expected,
+            res[0],
+            expected_isnotin,
+        )
+        assert array_equal(
+            res[1],
+            expected_insert_positions,
         )

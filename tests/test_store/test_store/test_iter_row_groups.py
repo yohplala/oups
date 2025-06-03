@@ -12,7 +12,7 @@ from pandas import Timestamp
 from oups import Store
 from oups import toplevel
 from oups.store.store.iter_row_groups import KEY_ENDS_EXCL
-from oups.store.store.iter_row_groups import _get_intersection_iterator
+from oups.store.store.iter_row_groups import _get_intersections
 
 
 ORDERED_ON = "ts"
@@ -27,9 +27,11 @@ class Indexer:
 # 2 rows per row group, 3 keys
 #   key1   key2   key3   consolidated
 #   8:00   8:35
-#   9:00   8:55
+#   9:00
+#  10:00  10:00
 #  10:00
-#  10:15
+#  10:00
+#  10:00
 #         12:10
 #         12:10
 #         12:10
@@ -38,7 +40,7 @@ class Indexer:
 #  14:15  15:15
 #                16:00
 #                16:00
-#  18:15  18:00  18:30
+#  18:15  18:00  18:15
 #  18:15  19:15  19:00
 #                22:00
 #                22:05
@@ -58,7 +60,9 @@ def store(tmp_path):
                         "08:00",
                         "09:00",
                         "10:00",
-                        "10:15",
+                        "10:00",
+                        "10:00",
+                        "10:00",
                         "14:00",
                         "14:15",
                         "18:15",
@@ -78,7 +82,7 @@ def store(tmp_path):
                     Timestamp(f"2025-01-01 {h}")
                     for h in [
                         "08:35",
-                        "08:55",
+                        "10:00",
                         "12:10",
                         "12:10",
                         "12:10",
@@ -103,7 +107,7 @@ def store(tmp_path):
                     for h in [
                         "16:00",
                         "16:00",
-                        "18:30",
+                        "18:15",
                         "19:00",
                         "22:00",
                         "22:05",
@@ -122,15 +126,14 @@ def store(tmp_path):
     "test_id, start, end_excl, expected",
     [
         (
-            "start_end_none",
+            "end_excl_10h05",
             None,
-            None,
+            Timestamp("2025-01-01 10:05"),
             {
                 "start": Timestamp("2025-01-01 08:00"),
                 "first_rg_indices": {
                     Indexer(id="key1"): 0,
                     Indexer(id="key2"): 0,
-                    Indexer(id="key3"): 0,
                 },
                 "intersection_df": DataFrame(
                     {
@@ -157,13 +160,16 @@ def store(tmp_path):
         ),
     ],
 )
-def test_get_intersection_iterator(store, test_id, start, end_excl, expected):
-    start, first_rg_indices, intersections = _get_intersection_iterator(
+def test_get_intersections(store, test_id, start, end_excl, expected):
+    first_rg_indices, intersections = _get_intersections(
         store=store,
         keys=list(store.keys),
         start=start,
         end_excl=end_excl,
     )
-    assert start == expected["start"]
+    #    assert start == expected["start"]
     assert first_rg_indices == expected["first_rg_indices"]
+    intersections = list(intersections)
+    print("intersections")
+    print(intersections)
     assert intersections == expected["intersection_df"]
