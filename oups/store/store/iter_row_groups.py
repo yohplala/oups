@@ -27,8 +27,6 @@ from oups.numpy_utils import isnotin_ordered
 
 
 KEY_LEFT = "left"
-KEY_RIGHT = "right"
-KEY_ENDS_EXCL = "ends_excl"
 
 
 def _get_and_validate_ordered_on_column(store, keys: List[dataclass]) -> str:
