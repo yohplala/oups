@@ -11,7 +11,6 @@ from pandas import Timestamp
 
 from oups import Store
 from oups import toplevel
-from oups.store.store.iter_row_groups import KEY_ENDS_EXCL
 from oups.store.store.iter_row_groups import _get_intersections
 
 
@@ -21,6 +20,11 @@ ORDERED_ON = "ts"
 @toplevel
 class Indexer:
     id: str
+
+
+key1 = Indexer(id="key1")
+key2 = Indexer(id="key2")
+key3 = Indexer(id="key3")
 
 
 # Test data
@@ -49,7 +53,6 @@ class Indexer:
 @pytest.fixture()
 def store(tmp_path):
     store = Store(tmp_path, Indexer)
-    key1 = Indexer(id="key1")
     store[key1].write(
         ordered_on=ORDERED_ON,
         df=DataFrame(
@@ -73,7 +76,6 @@ def store(tmp_path):
         ),
         row_group_target_size=2,
     )
-    key2 = Indexer(id="key2")
     store[key2].write(
         ordered_on=ORDERED_ON,
         df=DataFrame(
@@ -132,29 +134,23 @@ def store(tmp_path):
             {
                 "start": Timestamp("2025-01-01 08:00"),
                 "first_rg_indices": {
-                    Indexer(id="key1"): 0,
-                    Indexer(id="key2"): 0,
+                    key1: 0,
+                    key2: 0,
                 },
-                "intersection_df": DataFrame(
-                    {
-                        KEY_ENDS_EXCL: [
+                "intersection_df": list(
+                    zip(
+                        [
                             Timestamp(f"2025-01-01 {h}")
                             for h in [
-                                "08:35",
                                 "10:00",
-                                "12:10",
-                                "12:10",
-                                "14:00",
-                                "16:00",
-                                "18:00",
-                                "22:00",
-                                "22:05",
+                                "10:05",
                             ]
                         ],
-                        "key1": [0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        "key2": [0, 0, 0, 0, 0, 0, 0, 0, 0],
-                        "key3": [0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    },
+                        [
+                            {key1: 1, key2: 1},
+                            {key1: 3, key2: 1},
+                        ],
+                    ),
                 ),
             },
         ),
