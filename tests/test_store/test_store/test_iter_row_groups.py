@@ -133,10 +133,7 @@ def store(tmp_path):
             Timestamp("2025-01-01 10:05"),
             {
                 "start": Timestamp("2025-01-01 08:00"),
-                "first_rg_indices": {
-                    key1: 0,
-                    key2: 0,
-                },
+                "first_rg_indices": {key1: 0, key2: 0},
                 "intersection_df": list(
                     zip(
                         [Timestamp(f"2025-01-01 {h}") for h in ["10:00", "10:05"]],
@@ -151,10 +148,7 @@ def store(tmp_path):
             Timestamp("2025-01-01 10:00"),
             {
                 "start": Timestamp("2025-01-01 08:00"),
-                "first_rg_indices": {
-                    key1: 0,
-                    key2: 0,
-                },
+                "first_rg_indices": {key1: 0, key2: 0},
                 "intersection_df": list(
                     zip(
                         [Timestamp("2025-01-01 10:00")],
@@ -169,10 +163,7 @@ def store(tmp_path):
             Timestamp("2025-01-01 13:00"),
             {
                 "start": Timestamp("2025-01-01 08:00"),
-                "first_rg_indices": {
-                    key1: 0,
-                    key2: 0,
-                },
+                "first_rg_indices": {key1: 0, key2: 0},
                 "intersection_df": list(
                     zip(
                         [Timestamp(f"2025-01-01 {h}") for h in ["10:00", "12:10", "13:00"]],
@@ -187,11 +178,7 @@ def store(tmp_path):
             Timestamp("2025-01-01 16:00"),
             {
                 "start": Timestamp("2025-01-01 08:00"),
-                "first_rg_indices": {
-                    key1: 0,
-                    key2: 0,
-                    key3: 0,
-                },
+                "first_rg_indices": {key1: 0, key2: 0, key3: 0},
                 "intersection_df": list(
                     zip(
                         [
