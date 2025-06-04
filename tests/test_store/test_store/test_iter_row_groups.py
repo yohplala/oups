@@ -134,7 +134,7 @@ def store(tmp_path):
             {
                 "start": Timestamp("2025-01-01 08:00"),
                 "first_rg_indices": {key1: 0, key2: 0},
-                "intersection_df": list(
+                "intersections": list(
                     zip(
                         [Timestamp(f"2025-01-01 {h}") for h in ["10:00", "10:05"]],
                         [{key1: 1, key2: 1}, {key1: 3, key2: 1}],
@@ -149,7 +149,7 @@ def store(tmp_path):
             {
                 "start": Timestamp("2025-01-01 08:00"),
                 "first_rg_indices": {key1: 0, key2: 0},
-                "intersection_df": list(
+                "intersections": list(
                     zip(
                         [Timestamp("2025-01-01 10:00")],
                         [{key1: 1, key2: 1}],
@@ -164,7 +164,7 @@ def store(tmp_path):
             {
                 "start": Timestamp("2025-01-01 08:00"),
                 "first_rg_indices": {key1: 0, key2: 0},
-                "intersection_df": list(
+                "intersections": list(
                     zip(
                         [Timestamp(f"2025-01-01 {h}") for h in ["10:00", "12:10", "13:00"]],
                         [{key1: 1, key2: 1}, {key1: 3, key2: 1}, {key1: 3, key2: 3}],
@@ -179,7 +179,7 @@ def store(tmp_path):
             {
                 "start": Timestamp("2025-01-01 08:00"),
                 "first_rg_indices": {key1: 0, key2: 0, key3: 0},
-                "intersection_df": list(
+                "intersections": list(
                     zip(
                         [
                             Timestamp(f"2025-01-01 {h}")
@@ -205,4 +205,4 @@ def test_get_intersections(store, test_id, start, end_excl, expected):
         end_excl=end_excl,
     )
     assert first_rg_indices == expected["first_rg_indices"]
-    assert list(intersections) == expected["intersection_df"]
+    assert list(intersections) == expected["intersections"]
