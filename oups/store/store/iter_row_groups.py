@@ -11,6 +11,7 @@ from typing import Dict, Iterator, List, Optional, Tuple, Union
 
 from numpy import full
 from numpy import insert
+from numpy import isnan
 from numpy import nan
 from numpy import put
 from numpy import searchsorted
@@ -101,15 +102,17 @@ def _get_intersections(
 
     Notes
     -----
-    Algorithm:
-    1. For each key, load ordered_on_mins Series (index = row_group_idx)
-    2. Find global minimum across all keys
-    3. Collect unique boundary values and sort them
-    4. Filter boundaries by start/end_excl and ensure end_excl is final boundary
-    5. For each intersection, determine active row group index per key
-
-    A key without value in the span of interest in 'ordered_on' will not appear
-    in returned dict and yielded items.
+    - A key without value in the span of interest in 'ordered_on' will not
+      appear in returned dict and yielded items.
+    - The intersection is not exactly optimized in the sense that it will not
+      try to load row groups only when needed, but when potentially needed.
+      Current implementation, simplified, may load row group in advance and do
+      not try to release them when not needed any longer, but only when the next
+      row group needs to be loaded.
+      This enable to only have to rely on 'ordered_on_mins' values.
+      Another simplification is to load the first row group to appear for each
+      key right at the first iteration, even though it would not be needed
+      immediately.
 
     """
     print()
@@ -182,6 +185,7 @@ def _get_intersections(
     len_intersection_df = len(keys_ordered_on_starts) + 1
     keys_rg_indices = {}
     for key in keys:
+        print("key ", key)
         rg_indices = full(len_intersection_df, nan)
         print("keys_ordered_on_ends_excl[key]")
         print(keys_ordered_on_ends_excl[key])
@@ -204,35 +208,21 @@ def _get_intersections(
             ),
             keys_rg_idx_ends_excl[key],
         )
-        print("key ", key)
         print("rg_indices")
         print(rg_indices)
-        #        keys_rg_indices[str(key)] = Series(rg_indices, dtype=Int64Dtype()).ffill().bfill()
-        keys_rg_indices[key] = Series(rg_indices, dtype=Int64Dtype()).ffill().bfill()
+        if not isnan(rg_indices).all():
+            keys_rg_indices[key] = Series(rg_indices, dtype=Int64Dtype()).bfill().ffill()
 
-    intersections = DataFrame(
-        {
-            KEY_ENDS_EXCL: Series(keys_ordered_on_starts),
-            **keys_rg_indices,
-        },
-    ).dropna(axis="columns", how="all", ignore_index=True)
-    rg_idx_starts = {key: trim_starts_idx[key] - 1 for key in intersections.columns[1:]}
+    intersections = (dict(zip(keys_rg_indices, t)) for t in zip(*keys_rg_indices.values()))
+    rg_idx_starts = {key: trim_starts_idx[key] - 1 for key in keys_rg_indices}
 
     print("intersections")
+    intersections = list(intersections)
     print(intersections)
-    #    print("first val for key2")
-    #    print(intersections.iloc[0,2])
-    #    print(intersections.iloc[0,3])
-
-    #    def intersection_iter():
-    #        for row_dict in intersection_df.to_dict(orient="records", index=False):
-    #            yield row_dict.pop(KEY_ENDS_EXCL), {store.indexer.from_str(key_str): val for key_str, val in row_dict.items()}
-    print("ordered_on_excl")
+    print("keys_ordered_on_start + end_excl")
+    print(list(keys_ordered_on_starts) + [end_excl])
     print()
-    return rg_idx_starts, zip(
-        intersections.iloc[:-1, 0].to_list() + [end_excl],
-        intersections.iloc[:, 1:].to_dict(orient="records"),
-    )
+    return rg_idx_starts, zip(list(keys_ordered_on_starts) + [end_excl], intersections)
 
 
 def iter_row_groups(

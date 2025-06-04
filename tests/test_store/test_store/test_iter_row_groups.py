@@ -41,8 +41,8 @@ key3 = Indexer(id="key3")
 #         12:10
 #         12:10
 #  14:00  14:00
-#  14:15  15:15
-#                16:00
+#  14:15
+#         15:15  15:15
 #                16:00
 #  18:15  18:00  18:15
 #  18:15  19:15  19:00
@@ -107,7 +107,7 @@ def store(tmp_path):
                 ORDERED_ON: [
                     Timestamp(f"2025-01-01 {h}")
                     for h in [
-                        "16:00",
+                        "15:15",
                         "16:00",
                         "18:15",
                         "19:00",
@@ -139,16 +139,70 @@ def store(tmp_path):
                 },
                 "intersection_df": list(
                     zip(
+                        [Timestamp(f"2025-01-01 {h}") for h in ["10:00", "10:05"]],
+                        [{key1: 1, key2: 1}, {key1: 3, key2: 1}],
+                    ),
+                ),
+            },
+        ),
+        (
+            "end_excl_10h00_on_edge",
+            None,
+            Timestamp("2025-01-01 10:00"),
+            {
+                "start": Timestamp("2025-01-01 08:00"),
+                "first_rg_indices": {
+                    key1: 0,
+                    key2: 0,
+                },
+                "intersection_df": list(
+                    zip(
+                        [Timestamp("2025-01-01 10:00")],
+                        [{key1: 1, key2: 1}],
+                    ),
+                ),
+            },
+        ),
+        (
+            "end_excl_13h00",
+            None,
+            Timestamp("2025-01-01 13:00"),
+            {
+                "start": Timestamp("2025-01-01 08:00"),
+                "first_rg_indices": {
+                    key1: 0,
+                    key2: 0,
+                },
+                "intersection_df": list(
+                    zip(
+                        [Timestamp(f"2025-01-01 {h}") for h in ["10:00", "12:10", "13:00"]],
+                        [{key1: 1, key2: 1}, {key1: 3, key2: 1}, {key1: 3, key2: 3}],
+                    ),
+                ),
+            },
+        ),
+        (
+            "end_excl_16h00",
+            None,
+            Timestamp("2025-01-01 16:00"),
+            {
+                "start": Timestamp("2025-01-01 08:00"),
+                "first_rg_indices": {
+                    key1: 0,
+                    key2: 0,
+                    key3: 0,
+                },
+                "intersection_df": list(
+                    zip(
                         [
                             Timestamp(f"2025-01-01 {h}")
-                            for h in [
-                                "10:00",
-                                "10:05",
-                            ]
+                            for h in ["10:00", "12:10", "14:00", "16:00"]
                         ],
                         [
-                            {key1: 1, key2: 1},
-                            {key1: 3, key2: 1},
+                            {key1: 1, key2: 1, key3: 1},
+                            {key1: 3, key2: 1, key3: 1},
+                            {key1: 3, key2: 3, key3: 1},
+                            {key1: 4, key2: 4, key3: 1},
                         ],
                     ),
                 ),
@@ -163,9 +217,5 @@ def test_get_intersections(store, test_id, start, end_excl, expected):
         start=start,
         end_excl=end_excl,
     )
-    #    assert start == expected["start"]
     assert first_rg_indices == expected["first_rg_indices"]
-    intersections = list(intersections)
-    print("intersections")
-    print(intersections)
-    assert intersections == expected["intersection_df"]
+    assert list(intersections) == expected["intersection_df"]
