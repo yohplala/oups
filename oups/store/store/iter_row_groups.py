@@ -333,20 +333,3 @@ def iter_row_groups(
         }
         # Buffer end indices for next iteration as start indices.
         current_start_indices = current_end_indices.copy()
-
-
-# TODO: move _initialize_start_indices into iter_row_groups.
-
-
-# TODO: implement 'cache_opds' in Store class?
-# could the cache be removed, in the way of a context manager:
-# with store.workspace() as ws:
-# for each getitem in store if odp is not in keys, it is added and kept
-# the should be a lock system to avoid race conditions
-# lock when reading operation: then only write allowed
-# lock when modifying row group stats vs file_id (remove_rgs & align_fids)
-# if the operation makes that fis in metadata file lead to unexisting or wrong file
-# any other operations is forbidden
-# if the operation does not corrupt correspondence between fids in metadata file
-# and row group file on disk, then the lock does not prevent other read operations
-# there are 2 locks: soft lock and hard lock
