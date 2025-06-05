@@ -110,18 +110,19 @@ def store(tmp_path):
 expected = {
     "ordered_on_end_excl": [
         Timestamp(f"2025-01-01 {h}")
-        for h in ["10:00", "12:10", "14:00", "15:15", "18:00", "18:15", "22:00", "22:05", None]
-    ],
+        for h in ["10:00", "12:10", "14:00", "15:15", "18:00", "18:15", "22:00", "22:05"]
+    ]
+    + [None],
     "rg_idx_end_excl": [
-        {"key1": 1, "key2": 1, "key3": 1},  # 10:00
-        {"key1": 3, "key2": 1, "key3": 1},  # 12:10
-        {"key1": 3, "key2": 3, "key3": 1},  # 14:00
-        {"key1": 4, "key2": 4, "key3": 1},  # 15:15
-        {"key1": 4, "key2": 4, "key3": 1},  # 18:00
-        {"key1": 4, "key2": 5, "key3": 1},  # 18:15
-        {"key1": 5, "key2": 5, "key3": 2},  # 22:00
-        {"key1": 5, "key2": 5, "key3": 3},  # 22:05
-        {"key1": 5, "key2": 5, "key3": 4},  # None
+        {key1: 1, key2: 1, key3: 1},  # 10:00
+        {key1: 3, key2: 1, key3: 1},  # 12:10
+        {key1: 3, key2: 3, key3: 1},  # 14:00
+        {key1: 4, key2: 4, key3: 1},  # 15:15
+        {key1: 4, key2: 4, key3: 1},  # 18:00
+        {key1: 4, key2: 5, key3: 1},  # 18:15
+        {key1: 5, key2: 5, key3: 2},  # 22:00
+        {key1: 5, key2: 5, key3: 3},  # 22:05
+        {key1: 5, key2: 5, key3: 4},  # None
     ],
 }
 
@@ -138,7 +139,7 @@ expected = {
                 "first_rg_indices": {key1: 0, key2: 0},
                 "intersections": list(
                     zip(
-                        [Timestamp(f"2025-01-01 {h}") for h in ["10:00", "10:05"]],
+                        [Timestamp("2025-01-01 10:00"), Timestamp("2025-01-01 10:05")],
                         [{key1: 1, key2: 1}, {key1: 3, key2: 1}],
                     ),
                 ),
@@ -183,16 +184,8 @@ expected = {
                 "first_rg_indices": {key1: 0, key2: 0, key3: 0},
                 "intersections": list(
                     zip(
-                        [
-                            Timestamp(f"2025-01-01 {h}")
-                            for h in ["10:00", "12:10", "14:00", "16:00"]
-                        ],
-                        [
-                            {key1: 1, key2: 1, key3: 1},
-                            {key1: 3, key2: 1, key3: 1},
-                            {key1: 3, key2: 3, key3: 1},
-                            {key1: 4, key2: 4, key3: 1},
-                        ],
+                        expected["ordered_on_end_excl"][:3] + [Timestamp("2025-01-01 16:00")],
+                        expected["rg_idx_end_excl"][:4],
                     ),
                 ),
             },
