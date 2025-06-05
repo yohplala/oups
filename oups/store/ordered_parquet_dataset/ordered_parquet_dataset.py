@@ -440,6 +440,8 @@ class OrderedParquetDataset:
             drop=True,
         )
         self._has_row_groups_already_removed = True
+        # TODO: rework to include sort, align_file_ids, and finally
+        # write_metadata_file, then remove _has_row_groups_already_removed flag.
 
     def sort_row_groups(self):
         """
