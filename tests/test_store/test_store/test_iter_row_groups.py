@@ -202,7 +202,7 @@ INTERSECTIONS_AS_DF_REF = [
     [
         (
             "end_excl_10h00_on_edge",
-            False,
+            True,
             None,
             Timestamp("2025-01-01 10:00"),
             {
@@ -323,7 +323,16 @@ def test_get_intersections(store, test_id, full_test, start, end_excl, expected)
             for key, df_ref in df_dict.items():
                 if key in expected["rg_idx_starts"]:
                     if i == 0:
-                        df_ref = df_ref.iloc[start:]
-                    if i == n_intersections - 1:
-                        df_ref = df_ref.iloc[:end_excl]
+                        df_ref = df_ref.set_index(ORDERED_ON).iloc[start:].reset_index()
+                        print("df_ref after start trimming")
+                        print(df_ref)
+                    if i == n_intersections - 1 and end_excl is not None:
+                        print("df_ref before end trimming")
+                        print(df_ref)
+                        trim_end_idx = df_ref.loc[:, ORDERED_ON].searchsorted(end_excl, side="left")
+                        print("trim_end_idx")
+                        print(trim_end_idx)
+                        df_ref = df_ref.iloc[:trim_end_idx]
+                        print("df_ref after end trimming")
+                        print(df_ref)
                     assert df_ref.equals(dataset_intersections[i][key])

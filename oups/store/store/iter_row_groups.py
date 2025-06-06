@@ -354,10 +354,10 @@ def iter_row_groups(
         # TODO: rg_idx_ends_excl has to be a end_excl index
         # use slice notation to get severral row groups when having duplicates
         # in orered_on_mins.
-        for key in keys:
-            if rg_idx_ends_excl[key] != prev_rg_idx_ends_excl[key]:
+        for key, rg_idx_end_excl in rg_idx_ends_excl.items():
+            if rg_idx_end_excl != prev_rg_idx_ends_excl[key]:
                 in_memory_data[key] = store[key][
-                    prev_rg_idx_ends_excl[key] : rg_idx_ends_excl[key]
+                    prev_rg_idx_ends_excl[key] : rg_idx_ends_excl
                 ].to_pandas()
                 prev_rg_idx_ends_excl[key] = rg_idx_ends_excl[key]
                 # Reset start index to 0 for new row group.
@@ -376,11 +376,8 @@ def iter_row_groups(
         # Extract synchronized views for current span.
         # [current_start, current_end_excl)
         yield {
-            key: in_memory_data[key].iloc[
-                current_start_indices[key] : current_end_indices[key],
-                :,
-            ]
-            for key in keys
+            key: df.iloc[current_start_indices[key] : current_end_indices[key], :]
+            for key, df in in_memory_data.items()
         }
         # Buffer end indices for next iteration as start indices.
-        current_start_indices = current_end_indices.copy()
+        current_start_indices = current_end_indices
