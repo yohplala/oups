@@ -7,9 +7,14 @@ Created on Mon Jun 02 18:35:00 2025.
 """
 from typing import Tuple, Union
 
+from numpy import arange
 from numpy import array
+from numpy import flip
+from numpy import isnan
+from numpy import maximum
 from numpy import ones
 from numpy import searchsorted
+from numpy import where
 
 
 def isnotin_ordered(
@@ -69,3 +74,41 @@ def isnotin_ordered(
         sorted_array[insert_idx[:found_max_idx]] != query_elements[:found_max_idx]
     )
     return (is_not_found, insert_idx[is_not_found]) if return_insert_positions else is_not_found
+
+
+def ffill1d(arr: array) -> array:
+    """
+    Forward fill an 1D array.
+
+    Parameters
+    ----------
+    arr : array
+        Array to fill.
+
+    Returns
+    -------
+    array
+        Forward filled array.
+
+    """
+    mask = isnan(arr)
+    idx = where(~mask, arange(mask.size), 0)
+    maximum.accumulate(idx, out=idx)
+    return arr[idx]
+
+
+def bfill1d(arr: array) -> array:
+    """
+    Backward fill an array.
+
+    Parameters
+    ----------
+    arr : array
+        Array to fill.
+
+    Returns
+    -------
+    None
+
+    """
+    ffill1d(flip(arr, 0))

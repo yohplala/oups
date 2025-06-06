@@ -8,7 +8,10 @@ Created on Mon Jun 02 18:35:00 2025.
 import pytest
 from numpy import array
 from numpy import array_equal
+from numpy import nan
 
+from oups.numpy_utils import bfill1d
+from oups.numpy_utils import ffill1d
 from oups.numpy_utils import isnotin_ordered
 
 
@@ -42,3 +45,15 @@ def test_isnotin_ordered(expected_insert_positions):
             res[1],
             expected_insert_positions,
         )
+
+
+def test_ffill1d():
+    arr = ffill1d(array([nan, 1, nan, 3, nan, 5]))
+    expected = array([nan, 1, 1, 3, 3, 5])
+    assert array_equal(arr, expected, equal_nan=True)
+
+
+def test_bfill1d():
+    arr = array([1, 2, 3, 4, 5])
+    expected = array([1, 2, 3, 4, 5])
+    assert array_equal(bfill1d(arr), expected)

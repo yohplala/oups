@@ -221,14 +221,9 @@ def _get_intersections(
             rg_idx_ends_excl[confirmed_ordered_on_ends_excl_idx] = keys_rg_idx_ends_excl[key][
                 : len(confirmed_ordered_on_ends_excl_idx)
             ]
-            #        else:
-            #            rg_idx_ends_excl = keys_rg_idx_ends_excl[key]
             print("rg_idx_ends_excl with ends_excl values")
             print(rg_idx_ends_excl)
-            #        if not isnan(rg_idx_ends_excl).all():
-            keys_rg_idx_ends_excl[key] = (
-                Series(rg_idx_ends_excl, dtype=Int64Dtype()).bfill().ffill()
-            )
+            keys_rg_idx_ends_excl[key] = Series(rg_idx_ends_excl, dtype=Int64Dtype()).bfill()
         else:
             # If a key has no row group indices, the key is not added in the
             # results. This prevents useless row group in-memory loading.
