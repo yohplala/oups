@@ -26,9 +26,9 @@ class Indexer:
     id: str
 
 
-key1 = Indexer(id="key1")
-key2 = Indexer(id="key2")
-key3 = Indexer(id="key3")
+KEY1 = Indexer(id="key1")
+KEY2 = Indexer(id="key2")
+KEY3 = Indexer(id="key3")
 
 
 # Test data
@@ -37,20 +37,22 @@ key3 = Indexer(id="key3")
 #                       k1 k2 k3
 #   8:00                 0
 #         8:35              0
+#         8:35
+#         8:35              1
 #   9:00
 #  10:00  10:00          1         10:00
 #  10:00
 #  10:00                 2
 #  10:00
-#         12:10             1      12:10
+#         12:10             2      12:10
 #         12:10
-#         12:10             2
+#         12:10             3
 #         12:10
-#  14:00  14:00          3  3      14:00
+#  14:00  14:00          3  4      14:00
 #  14:15
 #         15:15  15:15         0   15:15
 #                16:00
-#         18:00             4      18:00
+#         18:00             5      18:00
 #  18:15         18:15   4     1   18:15
 #  18:15
 #                19:00
@@ -62,7 +64,7 @@ key3 = Indexer(id="key3")
 @pytest.fixture()
 def store(tmp_path):
     store = Store(tmp_path, Indexer)
-    store[key1].write(
+    store[KEY1].write(
         ordered_on=ORDERED_ON,
         df=DataFrame(
             {
@@ -77,23 +79,23 @@ def store(tmp_path):
         ),
         row_group_target_size=2,
     )
-    store[key2].write(
+    store[KEY2].write(
         ordered_on=ORDERED_ON,
         df=DataFrame(
             {
                 ORDERED_ON: [
                     Timestamp(f"2025-01-01 {h}")
                     for h in (
-                        ["08:35", "10:00", "12:10", "12:10", "12:10"]
-                        + ["12:10", "14:00", "15:15", "18:00", "19:15"]
+                        ["08:35", "08:35", "08:35", "10:00", "12:10", "12:10"]
+                        + ["12:10", "12:10", "14:00", "15:15", "18:00", "19:15"]
                     )
                 ],
             },
         ),
         row_group_target_size=2,
     )
-    key3 = Indexer(id="key3")
-    store[key3].write(
+    KEY3 = Indexer(id="key3")
+    store[KEY3].write(
         ordered_on=ORDERED_ON,
         df=DataFrame(
             {
@@ -118,54 +120,82 @@ INTERSECTIONS_AS_RG_IDX_REF = {
     ]
     + [None],
     "rg_idx_end_excl": [
-        {key1: 1, key2: 1, key3: 1},  # 10:00
-        {key1: 3, key2: 1, key3: 1},  # 12:10
-        {key1: 3, key2: 3, key3: 1},  # 14:00
-        {key1: 4, key2: 4, key3: 1},  # 15:15
-        {key1: 4, key2: 4, key3: 1},  # 18:00
-        {key1: 4, key2: 5, key3: 1},  # 18:15
-        {key1: 5, key2: 5, key3: 2},  # 22:00
-        {key1: 5, key2: 5, key3: 3},  # 22:05
-        {key1: 5, key2: 5, key3: 4},  # None
+        {KEY1: 1, KEY2: 1, KEY3: 1},  # 10:00
+        {KEY1: 3, KEY2: 1, KEY3: 1},  # 12:10
+        {KEY1: 3, KEY2: 3, KEY3: 1},  # 14:00
+        {KEY1: 4, KEY2: 4, KEY3: 1},  # 15:15
+        {KEY1: 4, KEY2: 4, KEY3: 1},  # 18:00
+        {KEY1: 4, KEY2: 5, KEY3: 1},  # 18:15
+        {KEY1: 5, KEY2: 5, KEY3: 2},  # 22:00
+        {KEY1: 5, KEY2: 5, KEY3: 3},  # 22:05
+        {KEY1: 5, KEY2: 5, KEY3: 4},  # None
     ],
 }
 
 INTERSECTIONS_AS_DF_REF = [
     {
-        key1: DataFrame(
+        KEY1: DataFrame(
             {ORDERED_ON: [Timestamp("2025-01-01 08:00"), Timestamp("2025-01-01 09:00")]},
         ),
-        key2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 08:35")]}),
-        key3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 08:35")]}),
+        KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
     {
-        key1: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")] * 4}),
-        key2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")]}),
-        key3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY1: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")] * 4}),
+        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")]}),
+        KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
     {
-        key1: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")] * 4}),
-        key2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")]}),
-        key3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY1: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")] * 4}),
+        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")]}),
+        KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
     {
-        key1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
-        key2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 12:10")] * 4}),
-        key3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 12:10")] * 4}),
+        KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
     {
-        key1: DataFrame(
+        KEY1: DataFrame(
             {ORDERED_ON: [Timestamp("2025-01-01 14:00"), Timestamp("2025-01-01 14:15")]},
         ),
-        key2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 14:00")]}),
-        key3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 14:00")]}),
+        KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
     {
-        key1: DataFrame(
-            {ORDERED_ON: [Timestamp("2025-01-01 14:00"), Timestamp("2025-01-01 14:15")]},
+        KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 15:15")]}),
+        KEY3: DataFrame(
+            {ORDERED_ON: [Timestamp("2025-01-01 15:15"), Timestamp("2025-01-01 16:00")]},
         ),
-        key2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 14:00")]}),
-        key3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+    },
+    {
+        KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 18:00")]}),
+        KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+    },
+    {
+        KEY1: DataFrame(
+            {ORDERED_ON: [Timestamp("2025-01-01 18:15"), Timestamp("2025-01-01 18:15")]},
+        ),
+        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 19:15")]}),
+        KEY3: DataFrame(
+            {ORDERED_ON: [Timestamp("2025-01-01 18:15"), Timestamp("2025-01-01 19:00")]},
+        ),
+    },
+    {
+        KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY2: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY3: DataFrame(
+            {ORDERED_ON: [Timestamp("2025-01-01 22:00"), Timestamp("2025-01-01 22:05")]},
+        ),
+    },
+    {
+        KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY2: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
+        KEY3: DataFrame(
+            {ORDERED_ON: [Timestamp("2025-01-01 22:05"), Timestamp("2025-01-01 22:05")]},
+        ),
     },
 ]
 
@@ -175,18 +205,19 @@ INTERSECTIONS_AS_DF_REF = [
     [
         (
             "end_excl_10h00_on_edge",
-            FULL_TEST,
+            True,
             None,
             Timestamp("2025-01-01 10:00"),
             {
                 "start": Timestamp("2025-01-01 08:00"),
-                "first_rg_indices": {key1: 0, key2: 0},
+                "first_rg_indices": {KEY1: 0, KEY2: 0},
                 "intersections_as_rg_idx": list(
                     zip(
                         [Timestamp("2025-01-01 10:00")],
                         INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:1],
                     ),
                 ),
+                "intersections_as_df": INTERSECTIONS_AS_DF_REF[:1],
             },
         ),
         (
@@ -196,7 +227,7 @@ INTERSECTIONS_AS_DF_REF = [
             Timestamp("2025-01-01 10:05"),
             {
                 "start": Timestamp("2025-01-01 08:00"),
-                "first_rg_indices": {key1: 0, key2: 0},
+                "first_rg_indices": {KEY1: 0, KEY2: 0},
                 "intersections_as_rg_idx": list(
                     zip(
                         [Timestamp("2025-01-01 10:00"), Timestamp("2025-01-01 10:05")],
@@ -212,7 +243,7 @@ INTERSECTIONS_AS_DF_REF = [
             Timestamp("2025-01-01 13:00"),
             {
                 "start": Timestamp("2025-01-01 08:00"),
-                "first_rg_indices": {key1: 0, key2: 0},
+                "first_rg_indices": {KEY1: 0, KEY2: 0},
                 "intersections_as_rg_idx": list(
                     zip(
                         [Timestamp(f"2025-01-01 {h}") for h in ["10:00", "12:10", "13:00"]],
@@ -228,7 +259,7 @@ INTERSECTIONS_AS_DF_REF = [
             Timestamp("2025-01-01 16:00"),
             {
                 "start": Timestamp("2025-01-01 08:00"),
-                "first_rg_indices": {key1: 0, key2: 0, key3: 0},
+                "first_rg_indices": {KEY1: 0, KEY2: 0, KEY3: 0},
                 "intersections_as_rg_idx": list(
                     zip(
                         INTERSECTIONS_AS_RG_IDX_REF["ordered_on_end_excl"][:3]
@@ -265,7 +296,12 @@ def test_get_intersections(store, test_id, full_test, start, end_excl, expected)
                 end_excl=end_excl,
             ),
         )
+        n_intersections = len(expected["intersections_as_df"])
         for i, df_dict in enumerate(expected["intersections_as_df"]):
             for key, df_ref in df_dict.items():
                 if key in expected["first_rg_indices"]:
+                    if i == 0:
+                        df_ref = df_ref.iloc[start:]
+                    if i == n_intersections - 1:
+                        df_ref = df_ref.iloc[:end_excl]
                     assert df_ref.equals(dataset_intersections[i][key])

@@ -223,7 +223,11 @@ def _get_intersections(
     print("keys_ordered_on_start + end_excl")
     print(list(keys_ordered_on_starts) + [end_excl])
     print()
-    return rg_idx_starts, zip(list(keys_ordered_on_starts) + [end_excl], intersections)
+    return (
+        rg_idx_starts,
+        rg_idx_ends_excl,
+        zip(list(keys_ordered_on_starts) + [end_excl], intersections),
+    )
 
 
 def iter_row_groups(
@@ -284,15 +288,19 @@ def iter_row_groups(
     ordered_on_col_name = _get_and_validate_ordered_on_column(store, keys)
     # Get global minimum and intersection boundary iterator and initialize
     # the "previous" (the first) row group indices.
-    prev_rg_indices, intersections = _get_intersections(
+    rg_idx_starts, rg_idx_first_ends_excl, intersections = _get_intersections(
         store,
         keys,
         start,
         end_excl,
     )
-    # Initialize state tracking.
     # Load initial row groups and initialize start indices.
-    in_memory_data = {key: store[key][prev_rg_indices[key]].to_pandas() for key in keys}
+    # Iterate over 'rg_idx_starts' because only keys with data are kept.
+    in_memory_data = {
+        key: store[key][rg_idx_start : rg_idx_first_ends_excl[key]].to_pandas()
+        for key, rg_idx_start in rg_idx_starts.items()
+    }
+    prev_rg_indices = 0
     current_start_indices = (
         {
             key: value.loc[:, ordered_on_col_name].searchsorted(start, side=KEY_LEFT)
