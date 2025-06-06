@@ -78,7 +78,7 @@ def isnotin_ordered(
 
 def ffill1d(arr: array) -> array:
     """
-    Forward fill an 1D array.
+    Forward fill an 1D array in-place (using a mask).
 
     Parameters
     ----------
@@ -87,14 +87,17 @@ def ffill1d(arr: array) -> array:
 
     Returns
     -------
-    array
-        Forward filled array.
+    None
+
+    Notes
+    -----
+    If first value is nan, it is kept as nan.
 
     """
     mask = isnan(arr)
     idx = where(~mask, arange(mask.size), 0)
     maximum.accumulate(idx, out=idx)
-    return arr[idx]
+    arr[mask] = arr[idx[mask]]
 
 
 def bfill1d(arr: array) -> array:

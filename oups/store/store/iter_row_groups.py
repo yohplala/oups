@@ -233,6 +233,7 @@ def _get_intersections(
 
     print("keys_rg_idx_ends_excl")
     print(keys_rg_idx_ends_excl)
+    # TODO: check if numpy structured array would accept Indexer as column name.
     intersections = (
         dict(zip(keys_rg_idx_ends_excl, t)) for t in zip(*keys_rg_idx_ends_excl.values())
     )

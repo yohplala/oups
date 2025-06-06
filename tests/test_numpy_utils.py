@@ -48,9 +48,9 @@ def test_isnotin_ordered(expected_insert_positions):
 
 
 def test_ffill1d():
-    arr = ffill1d(array([nan, 1, nan, 3, nan, 5]))
-    expected = array([nan, 1, 1, 3, 3, 5])
-    assert array_equal(arr, expected, equal_nan=True)
+    arr = array([nan, 1, nan, 8, nan, 5])
+    ffill1d(arr)
+    assert array_equal(arr, array([nan, 1, 1, 8, 8, 5]), equal_nan=True)
 
 
 def test_bfill1d():
