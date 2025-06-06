@@ -38,15 +38,15 @@ KEY3 = Indexer(id="key3")
 #   8:00                 0
 #         8:35              0
 #         8:35
-#         8:35              1
+#         8:35              1      is collapsed with previous row group
 #   9:00
 #  10:00  10:00          1         10:00
 #  10:00
-#  10:00                 2
+#  10:00                 2         is collapsed with previous row group
 #  10:00
 #         12:10             2      12:10
 #         12:10
-#         12:10             3
+#         12:10             3      is collapsed with previous row group
 #         12:10
 #  14:00  14:00          3  4      14:00
 #  14:15
@@ -59,7 +59,7 @@ KEY3 = Indexer(id="key3")
 #         19:15
 #                22:00         2   22:00
 #                22:05
-#                22:05         3   22:05
+#                22:05         3   is collapsed with previous row group
 #                22:05
 @pytest.fixture()
 def store(tmp_path):
@@ -115,8 +115,7 @@ def store(tmp_path):
 # Expected results.
 INTERSECTIONS_AS_RG_IDX_REF = {
     "ordered_on_end_excl": [
-        Timestamp(f"2025-01-01 {h}")
-        for h in ["10:00", "12:10", "14:00", "18:00", "18:15", "22:00", "22:05"]
+        Timestamp(f"2025-01-01 {h}") for h in ["10:00", "12:10", "14:00", "18:00", "18:15", "22:00"]
     ]
     + [None],
     "rg_idx_end_excl": [
@@ -126,7 +125,6 @@ INTERSECTIONS_AS_RG_IDX_REF = {
         {KEY1: 4, KEY2: 5, KEY3: 1},  # 18:00
         {KEY1: 4, KEY2: 6, KEY3: 1},  # 18:15
         {KEY1: 5, KEY2: 6, KEY3: 2},  # 22:00
-        {KEY1: 5, KEY2: 6, KEY3: 3},  # 22:05
         {KEY1: 5, KEY2: 6, KEY3: 4},  # None
     ],
 }
