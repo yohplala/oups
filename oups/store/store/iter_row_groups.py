@@ -209,6 +209,9 @@ def _get_intersections(
         print("rg_indices")
         print(rg_indices)
         if not isnan(rg_indices).all():
+            # If a key has no row group indices, the key is not added in the
+            # intersection dictionary. This prevent to load any row group
+            # uselessly.
             keys_rg_indices[key] = Series(rg_indices, dtype=Int64Dtype()).bfill().ffill()
 
     intersections = (dict(zip(keys_rg_indices, t)) for t in zip(*keys_rg_indices.values()))
