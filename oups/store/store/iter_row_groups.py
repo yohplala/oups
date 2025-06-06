@@ -13,7 +13,6 @@ from numpy import full
 from numpy import insert
 from numpy import isnan
 from numpy import nan
-from numpy import put
 from numpy import searchsorted
 from numpy import unique
 from pandas import DataFrame
@@ -128,34 +127,35 @@ def _get_intersections(
     for key in keys:
         print("key ", key)
         n_rgs = len(store[key].row_group_stats)
-        unique_ordered_on_mins, unique_rg_idx_ends_excl = unique(
+        _unique_ordered_on_mins, _unique_rg_idx_ends_excl = unique(
             store[key].row_group_stats.loc[:, KEY_ORDERED_ON_MINS].to_numpy(),
             return_index=True,
         )
-        trim_rg_idx_start_idx = (
-            searchsorted(unique_ordered_on_mins, start, side=KEY_LEFT) + 1 if start else 1
+        trim_rg_idx_start = (
+            searchsorted(_unique_ordered_on_mins, start, side=KEY_LEFT) + 1 if start else 1
         )
-        trim_rg_idx_end_excl_idx = min(
+        trim_rg_idx_end_excl = min(
             (
-                searchsorted(unique_ordered_on_mins, end_excl, side=KEY_LEFT) + 1
+                searchsorted(_unique_ordered_on_mins, end_excl, side=KEY_LEFT) + 1
                 if end_excl
                 else n_rgs
             ),
             n_rgs,
         )
-        print("trim_rg_idx_start_idx")
-        print(trim_rg_idx_start_idx)
-        print("trim_rg_idx_end_excl_idx")
-        print(trim_rg_idx_end_excl_idx)
-        keys_ordered_on_ends_excl[key] = unique_ordered_on_mins[
-            trim_rg_idx_start_idx:trim_rg_idx_end_excl_idx
+        print("trim_rg_idx_start")
+        print(trim_rg_idx_start)
+        print("trim_rg_idx_end_excl")
+        print(trim_rg_idx_end_excl)
+        keys_ordered_on_ends_excl[key] = _unique_ordered_on_mins[
+            trim_rg_idx_start:trim_rg_idx_end_excl
         ]
-        keys_rg_idx_ends_excl[key] = unique_rg_idx_ends_excl[
-            trim_rg_idx_start_idx:trim_rg_idx_end_excl_idx
+        print("keys_ordered_on_ends_excl[key]")
+        print(keys_ordered_on_ends_excl[key])
+        keys_rg_idx_ends_excl[key] = _unique_rg_idx_ends_excl[
+            trim_rg_idx_start:trim_rg_idx_end_excl
         ]
-        keys_rg_idx_starts[key] = unique_rg_idx_ends_excl[trim_rg_idx_start_idx - 1]
-
-        keys_rg_idx_first_ends_excl[key] = unique_rg_idx_ends_excl[trim_rg_idx_start_idx]
+        keys_rg_idx_starts[key] = _unique_rg_idx_ends_excl[trim_rg_idx_start - 1]
+        keys_rg_idx_first_ends_excl[key] = _unique_rg_idx_ends_excl[trim_rg_idx_start]
         # Collect 'ordered_on_mins' for each key, keeping unique values only.
         if unique_ordered_on_mins is None:
             unique_ordered_on_mins = keys_ordered_on_ends_excl[key][:-1]
@@ -184,7 +184,8 @@ def _get_intersections(
     print("-- 2nd loop --")
     # Adding one for last value, will be either 'end_excl' or None.
     len_unique_ordered_on_mins = len(unique_ordered_on_mins) + 1
-    keys_rg_idx_ends_excl = {}
+    print("len_unique_ordered_on_mins")
+    print(len_unique_ordered_on_mins)
     for key in keys:
         print("key ", key)
         rg_idx_ends_excl = full(len_unique_ordered_on_mins, nan)
@@ -198,15 +199,9 @@ def _get_intersections(
                 side=KEY_LEFT,
             ),
         )
-        put(
-            rg_idx_ends_excl,
-            searchsorted(
-                unique_ordered_on_mins,
-                keys_ordered_on_ends_excl[key],
-                side=KEY_LEFT,
-            ),
-            keys_rg_idx_ends_excl[key],
-        )
+        rg_idx_ends_excl[
+            searchsorted(unique_ordered_on_mins, keys_ordered_on_ends_excl[key], side=KEY_LEFT)
+        ] = keys_rg_idx_ends_excl[key]
         print("rg_idx_ends_excl with ends_excl values")
         print(rg_idx_ends_excl)
         if not isnan(rg_idx_ends_excl).all():
@@ -219,6 +214,10 @@ def _get_intersections(
         else:
             del keys_rg_idx_starts[key]
             del keys_rg_idx_first_ends_excl[key]
+            del keys_rg_idx_ends_excl[key]
+
+    print("keys_rg_idx_ends_excl")
+    print(keys_rg_idx_ends_excl)
     intersections = (
         dict(zip(keys_rg_idx_ends_excl, t)) for t in zip(*keys_rg_idx_ends_excl.values())
     )

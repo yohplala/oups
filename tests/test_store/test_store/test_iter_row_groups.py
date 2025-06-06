@@ -120,15 +120,15 @@ INTERSECTIONS_AS_RG_IDX_REF = {
     ]
     + [None],
     "rg_idx_end_excl": [
-        {KEY1: 1, KEY2: 1, KEY3: 1},  # 10:00
-        {KEY1: 3, KEY2: 1, KEY3: 1},  # 12:10
-        {KEY1: 3, KEY2: 3, KEY3: 1},  # 14:00
-        {KEY1: 4, KEY2: 4, KEY3: 1},  # 15:15
-        {KEY1: 4, KEY2: 4, KEY3: 1},  # 18:00
-        {KEY1: 4, KEY2: 5, KEY3: 1},  # 18:15
-        {KEY1: 5, KEY2: 5, KEY3: 2},  # 22:00
-        {KEY1: 5, KEY2: 5, KEY3: 3},  # 22:05
-        {KEY1: 5, KEY2: 5, KEY3: 4},  # None
+        {KEY1: 1, KEY2: 2, KEY3: 1},  # 10:00
+        {KEY1: 3, KEY2: 2, KEY3: 1},  # 12:10
+        {KEY1: 3, KEY2: 4, KEY3: 1},  # 14:00
+        {KEY1: 4, KEY2: 5, KEY3: 1},  # 15:15
+        {KEY1: 4, KEY2: 5, KEY3: 1},  # 18:00
+        {KEY1: 4, KEY2: 6, KEY3: 1},  # 18:15
+        {KEY1: 5, KEY2: 6, KEY3: 2},  # 22:00
+        {KEY1: 5, KEY2: 6, KEY3: 3},  # 22:05
+        {KEY1: 5, KEY2: 6, KEY3: 4},  # None
     ],
 }
 
@@ -137,7 +137,7 @@ INTERSECTIONS_AS_DF_REF = [
         KEY1: DataFrame(
             {ORDERED_ON: [Timestamp("2025-01-01 08:00"), Timestamp("2025-01-01 09:00")]},
         ),
-        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 08:35")]}),
+        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 08:35")] * 3}),
         KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
     {
@@ -211,7 +211,7 @@ INTERSECTIONS_AS_DF_REF = [
             {
                 "start": Timestamp("2025-01-01 08:00"),
                 "rg_idx_starts": {KEY1: 0, KEY2: 0},
-                "rg_idx_first_ends_excl": {KEY1: 1, KEY2: 1},
+                "rg_idx_first_ends_excl": {KEY1: 1, KEY2: 2},
                 "intersections_as_rg_idx": list(
                     zip(
                         [Timestamp("2025-01-01 10:00")],
