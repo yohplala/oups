@@ -136,29 +136,31 @@ def _get_intersections(
         print(_unique_ordered_on_mins)
         print("_unique_rg_idx_ends_excl")
         print(_unique_rg_idx_ends_excl)
-        trim_rg_idx_start = (
+        # Skip first row group in trimming.
+        trim_idx_first_end_excl = (
             searchsorted(_unique_ordered_on_mins, start, side=KEY_LEFT) + 1 if start else 1
         )
 
-        trim_rg_idx_end_excl = (
+        trim_idx_last_end_excl = (
             searchsorted(_unique_ordered_on_mins, end_excl, side=KEY_LEFT)
             if end_excl
             else len(_unique_ordered_on_mins)
         )
-        print("trim_rg_idx_start")
-        print(trim_rg_idx_start)
-        print("trim_rg_idx_end_excl")
-        print(trim_rg_idx_end_excl)
+        print("trim_idx_first_end_excl")
+        print(trim_idx_first_end_excl)
+        print("trim_idx_last_end_excl")
+        print(trim_idx_last_end_excl)
         keys_ordered_on_ends_excl[key] = _unique_ordered_on_mins[
-            trim_rg_idx_start:trim_rg_idx_end_excl
+            trim_idx_first_end_excl:trim_idx_last_end_excl
         ]
         print("keys_ordered_on_ends_excl[key]")
         print(keys_ordered_on_ends_excl[key])
+        # 'unique_rg_idx_ends_excl' is completed with its length as last value.
         _unique_rg_idx_ends_excl = r_[_unique_rg_idx_ends_excl, len(store[key].row_group_stats)]
         keys_rg_idx_ends_excl[key] = _unique_rg_idx_ends_excl[
-            trim_rg_idx_start : trim_rg_idx_end_excl + 1
+            trim_idx_first_end_excl : trim_idx_last_end_excl + 1
         ]
-        keys_rg_idx_starts[key] = _unique_rg_idx_ends_excl[trim_rg_idx_start - 1]
+        keys_rg_idx_starts[key] = _unique_rg_idx_ends_excl[trim_idx_first_end_excl - 1]
         # Using weird slicing notation to select 1st value to cope up when
         # 'keys_rg_idx_ends_excl[key]' is empty.
         keys_rg_idx_first_ends_excl[key] = keys_rg_idx_ends_excl[key][:1]
