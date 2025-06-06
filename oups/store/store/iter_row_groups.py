@@ -168,7 +168,7 @@ def _get_intersections(
         #        print(keys_ordered_on_ends_excl[key])
         # 'unique_rg_idx_ends_excl' is completed with its length as last value.
         if trim_idx_first_end_excl < trim_idx_last_end_excl + 1:
-            _unique_rg_idx_ends_excl = r_[_unique_rg_idx_ends_excl, len(store[key].row_group_stats)]
+            _unique_rg_idx_ends_excl = r_[_unique_rg_idx_ends_excl, n_rgs]
             keys_rg_idx_ends_excl[key] = _unique_rg_idx_ends_excl[
                 trim_idx_first_end_excl : trim_idx_last_end_excl + 1
             ]
