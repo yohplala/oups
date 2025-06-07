@@ -149,7 +149,7 @@ def _get_intersections(
         #        print(_unique_rg_idx_ends_excl)
         # Skip first row group in trimming.
         trim_idx_first_end_excl = (
-            searchsorted(_unique_ordered_on_mins, start, side=KEY_LEFT) + 1 if start else 1
+            searchsorted(_unique_ordered_on_mins, start, side=KEY_LEFT) if start else 1
         )
 
         trim_idx_last_end_excl = (
