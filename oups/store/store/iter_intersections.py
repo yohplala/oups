@@ -26,6 +26,7 @@ from oups.numpy_utils import isnotin_ordered
 
 
 KEY_LEFT = "left"
+KEY_RIGHT = "right"
 
 
 def _get_and_validate_ordered_on_column(store, keys: List[dataclass]) -> str:
@@ -112,8 +113,6 @@ def _get_intersections(
       immediately.
 
     """
-    #    print()
-    #    print("-- 1st loop --")
     if isinstance(start, Timestamp):
         start = start.to_numpy()
     if isinstance(end_excl, Timestamp):
@@ -126,9 +125,6 @@ def _get_intersections(
     keys_rg_idx_first_ends_excl = {}
     keys_rg_idx_ends_excl = {}
     for key in keys:
-        #        print("key ", key)
-        #        print("unique_ordered_on_mins")
-        #        print(unique_ordered_on_mins)
         row_group_stats = store[key].row_group_stats
         ordered_on_mins = row_group_stats.loc[:, KEY_ORDERED_ON_MINS].to_numpy()
         ordered_on_maxs = row_group_stats.loc[:, KEY_ORDERED_ON_MAXS].to_numpy()
@@ -139,41 +135,20 @@ def _get_intersections(
         mask_main_rgs[1:] = ordered_on_mins[1:] != ordered_on_maxs[:-1]
         _unique_ordered_on_mins = ordered_on_mins[mask_main_rgs]
         _unique_rg_idx_ends_excl = rg_idx[mask_main_rgs]
-        # _unique_ordered_on_mins, _unique_rg_idx_ends_excl = unique(
-        #    store[key].row_group_stats.loc[:, KEY_ORDERED_ON_MINS].to_numpy(),
-        #    return_index=True,
-        # )
-        #        print("_unique_ordered_on_mins")
-        #        print(_unique_ordered_on_mins)
-        #        print("_unique_rg_idx_ends_excl")
-        #        print(_unique_rg_idx_ends_excl)
         # Skip first row group in trimming.
         trim_idx_first_end_excl = (
-            searchsorted(_unique_ordered_on_mins, start, side=KEY_LEFT) if start else 1
+            max(searchsorted(_unique_ordered_on_mins, start, side=KEY_RIGHT), 1) if start else 1
         )
-
         trim_idx_last_end_excl = (
             searchsorted(_unique_ordered_on_mins, end_excl, side=KEY_LEFT)
             if end_excl
             else len(_unique_ordered_on_mins)
         )
-        #        print("trim_idx_first_end_excl")
-        #        print(trim_idx_first_end_excl)
-        #        print("trim_idx_last_end_excl")
-        #        print(trim_idx_last_end_excl)
-        keys_ordered_on_ends_excl[key] = _unique_ordered_on_mins[
-            trim_idx_first_end_excl:trim_idx_last_end_excl
-        ]
-        #        print("keys_ordered_on_ends_excl[key]")
-        #        print(keys_ordered_on_ends_excl[key])
         # 'unique_rg_idx_ends_excl' is completed with its length as last value.
         if trim_idx_first_end_excl < trim_idx_last_end_excl + 1:
-            _unique_rg_idx_ends_excl = r_[_unique_rg_idx_ends_excl, n_rgs]
-            keys_rg_idx_ends_excl[key] = _unique_rg_idx_ends_excl[
-                trim_idx_first_end_excl : trim_idx_last_end_excl + 1
+            keys_ordered_on_ends_excl[key] = _unique_ordered_on_mins[
+                trim_idx_first_end_excl:trim_idx_last_end_excl
             ]
-            keys_rg_idx_starts[key] = _unique_rg_idx_ends_excl[trim_idx_first_end_excl - 1]
-            keys_rg_idx_first_ends_excl[key] = keys_rg_idx_ends_excl[key][0]
             # Collect 'ordered_on_mins' for each key, keeping unique values only.
             if unique_ordered_on_mins is None:
                 unique_ordered_on_mins = keys_ordered_on_ends_excl[key]
@@ -188,42 +163,20 @@ def _get_intersections(
                     unfound_insert_idx,
                     keys_ordered_on_ends_excl[key][is_not_found],
                 )
-    #    print("unique_ordered_on_mins")
-    #    print(unique_ordered_on_mins)
-    #    print("keys_ordered_on_ends_excl")
-    #    print(keys_ordered_on_ends_excl)
-    #    print("keys_rg_idx_starts")
-    #    print(keys_rg_idx_starts)
-    #    print("keys_rg_idx_first_ends_excl")
-    #    print(keys_rg_idx_first_ends_excl)
-    #    print("keys_rg_idx_ends_excl")
-    #    print(keys_rg_idx_ends_excl)
-    #    print()
-    #    print("-- 2nd loop --")
+            _unique_rg_idx_ends_excl = r_[_unique_rg_idx_ends_excl, n_rgs]
+            keys_rg_idx_starts[key] = _unique_rg_idx_ends_excl[trim_idx_first_end_excl - 1]
+            keys_rg_idx_ends_excl[key] = _unique_rg_idx_ends_excl[
+                trim_idx_first_end_excl : trim_idx_last_end_excl + 1
+            ]
+            keys_rg_idx_first_ends_excl[key] = keys_rg_idx_ends_excl[key][0]
     # Adding one for last value, will be either 'end_excl' or None.
     len_unique_ordered_on_mins = len(unique_ordered_on_mins) + 1
-    #    print("len_unique_ordered_on_mins")
-    #    print(len_unique_ordered_on_mins)
     for key, rg_idx_ends_excl in keys_rg_idx_ends_excl.items():
-        #        print("key ", key)
-        # if key in keys_rg_idx_ends_excl:
-        #        if len(keys_rg_idx_ends_excl[key]) > 0:
         _rg_idx_ends_excl = full(len_unique_ordered_on_mins, nan)
-        # To accommodate with last row group index, which cannot be
-        # be always positioned, depending content of
+        # Forcing last row group index, which cannot be always positioned,
+        # in the case 'end_excl' is None, and therefore is not in
         # 'keys_ordered_on_ends_excl[key]'.
         _rg_idx_ends_excl[-1] = rg_idx_ends_excl[-1]
-        #            if len_unique_ordered_on_mins > 1:
-        #            print("keys_ordered_on_ends_excl[key]")
-        #            print(keys_ordered_on_ends_excl[key])
-        #            print("searchsorted")
-        #            print(
-        #                searchsorted(
-        #                    unique_ordered_on_mins,
-        #                    keys_ordered_on_ends_excl[key],
-        #                    side=KEY_LEFT,
-        #                ),
-        #            )
         confirmed_ordered_on_ends_excl_idx = searchsorted(
             unique_ordered_on_mins,
             keys_ordered_on_ends_excl[key],
@@ -232,34 +185,12 @@ def _get_intersections(
         _rg_idx_ends_excl[confirmed_ordered_on_ends_excl_idx] = rg_idx_ends_excl[
             : len(confirmed_ordered_on_ends_excl_idx)
         ]
-        #            print("rg_idx_ends_excl with ends_excl values")
-        #            print(rg_idx_ends_excl)
-        #            keys_rg_idx_ends_excl[key] = Series(rg_idx_ends_excl, dtype=Int64Dtype()).bfill()#
         keys_rg_idx_ends_excl[key] = _rg_idx_ends_excl
-    #        else:
-    # If a key has no row group indices, the key is not added in the
-    # results. This prevents useless row group in-memory loading.
-    #            del keys_rg_idx_starts[key]
-    #            del keys_rg_idx_first_ends_excl[key]
-    #            del keys_rg_idx_ends_excl[key]
-
-    #    print("keys_rg_idx_ends_excl")
-    #    print(keys_rg_idx_ends_excl)
-    #    intersections = (
-    #        dict(zip(keys_rg_idx_ends_excl, t)) for t in zip(*keys_rg_idx_ends_excl.values())
-    #    )
     intersections = DataFrame(keys_rg_idx_ends_excl, dtype=Int64Dtype())
     intersections.bfill(axis=0, inplace=True)
-    #    print("unique_ordered_on_mins + end_excl")
-    #    print(list(unique_ordered_on_mins) + [end_excl])
-    #    print("intersections")
-    #    intersections = list(intersections)
-    #    print(intersections)
-    #    print()
     return (
         keys_rg_idx_starts,
         keys_rg_idx_first_ends_excl,
-        #        zip(list(unique_ordered_on_mins) + [end_excl], intersections),
         zip(list(unique_ordered_on_mins) + [end_excl], intersections.to_dict(orient="records")),
     )
 
@@ -318,11 +249,9 @@ def iter_intersections(
     ...     # Process synchronized data
 
     """
-    print()
     # Get and validate ordered_on column name.
     ordered_on_col_name = _get_and_validate_ordered_on_column(store, keys)
-    # Get global minimum and intersection boundary iterator and initialize
-    # the "previous" (the first) row group indices.
+    # Get row group indices to start iterations with, and intersections.
     rg_idx_starts, prev_rg_idx_ends_excl, intersections = _get_intersections(
         store,
         keys,
@@ -331,41 +260,22 @@ def iter_intersections(
     )
     # Load initial row groups and initialize start indices.
     # Iterate over 'rg_idx_starts' because only keys with data are kept.
-    #   print()
-    #   print("rg_idx_starts")
-    #   print(rg_idx_starts)
-    #   print("prev_rg_idx_ends_excl")
-    #   print(prev_rg_idx_ends_excl)
     in_memory_data = {
         key: store[key][rg_idx_start : prev_rg_idx_ends_excl[key]].to_pandas()
         for key, rg_idx_start in rg_idx_starts.items()
     }
-    print("in_memory_data")
-    print(in_memory_data)
     current_start_indices = (
         {
-            key: value.loc[:, ordered_on_col_name].searchsorted(start, side=KEY_LEFT)
-            for key, value in in_memory_data.items()  # value is a DataFrame
+            key: df.loc[:, ordered_on_col_name].searchsorted(start, side=KEY_LEFT)
+            for key, df in in_memory_data.items()
         }
         if start is not None
         else defaultdict(lambda: None)
     )
     current_end_indices = {}
     for current_end_excl, rg_idx_ends_excl in intersections:
-        # TODO: rg_idx_ends_excl has to be a end_excl index
-        # use slice notation to get severral row groups when having duplicates
-        # in orered_on_mins.
-        print("current_end_excl")
-        print(current_end_excl)
-        print("prev_rg_idx_ends_excl")
-        print(prev_rg_idx_ends_excl)
-        print("rg_idx_ends_excl")
-        print(rg_idx_ends_excl)
         for key, rg_idx_end_excl in rg_idx_ends_excl.items():
             if rg_idx_end_excl != prev_rg_idx_ends_excl[key]:
-                print("updating in memory data for key ", key)
-                print("prev in memory data")
-                print(in_memory_data[key])
                 in_memory_data[key] = store[key][
                     prev_rg_idx_ends_excl[key] : rg_idx_end_excl
                 ].to_pandas()
@@ -383,14 +293,7 @@ def iter_intersections(
                     side=KEY_LEFT,
                 )
             )
-        print("current in memory data")
-        print(in_memory_data)
-        print("current_start_indices")
-        print(current_start_indices)
-        print("current_end_indices")
-        print(current_end_indices)
-        # Yield synchronized views for current span.
-        # [current_start, current_end_excl)
+        # Yield synchronized views [current_start, current_end_excl)
         yield {
             key: df.iloc[current_start_indices[key] : current_end_indices[key], :].reset_index(
                 drop=True,
@@ -399,8 +302,3 @@ def iter_intersections(
         }
         # Buffer end indices for next iteration as start indices.
         current_start_indices = current_end_indices.copy()
-
-
-# TODO: update thoroughly docstrings
-# TODO: complete test cases with end_excl = start = None and end_excl = None
-# while start is set at different timestamps.
