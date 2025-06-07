@@ -78,7 +78,7 @@ def isnotin_ordered(
 
 def ffill1d(arr: array) -> array:
     """
-    Forward fill an 1D array in-place (using a mask).
+    Forward fill 1D array in-place.
 
     Parameters
     ----------
@@ -102,7 +102,7 @@ def ffill1d(arr: array) -> array:
 
 def bfill1d(arr: array) -> array:
     """
-    Backward fill an array.
+    Backward fill 1D array in-place.
 
     Parameters
     ----------

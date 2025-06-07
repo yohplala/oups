@@ -54,6 +54,6 @@ def test_ffill1d():
 
 
 def test_bfill1d():
-    arr = array([1, 2, 3, 4, 5])
-    expected = array([1, 2, 3, 4, 5])
-    assert array_equal(bfill1d(arr), expected)
+    arr = array([nan, 1, nan, 8, nan, 5, nan])
+    bfill1d(arr)
+    assert array_equal(arr, array([1, 1, 8, 8, 5, 5, nan]), equal_nan=True)
