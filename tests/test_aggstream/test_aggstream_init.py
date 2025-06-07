@@ -55,8 +55,8 @@ from oups.aggstream.aggstream import NO_FILTER_ID
 from oups.aggstream.aggstream import SUM
 from oups.aggstream.aggstream import AggResType
 from oups.aggstream.aggstream import FilterApp
-from oups.store.write import KEY_MAX_N_OFF_TARGET_RGS
-from oups.store.write import KEY_ROW_GROUP_TARGET_SIZE
+from oups.defines import KEY_MAX_N_OFF_TARGET_RGS
+from oups.defines import KEY_ROW_GROUP_TARGET_SIZE
 
 
 @toplevel

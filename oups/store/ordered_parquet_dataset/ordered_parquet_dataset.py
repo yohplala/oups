@@ -32,7 +32,7 @@ from oups.defines import KEY_ORDERED_ON_MINS
 from oups.store.filepath_utils import strip_path_tail
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
-from oups.store.write import write
+from oups.store.ordered_parquet_dataset.write import write
 
 
 PARQUET_FILE_PREFIX = "file_"
@@ -440,6 +440,8 @@ class OrderedParquetDataset:
             drop=True,
         )
         self._has_row_groups_already_removed = True
+        # TODO: rework to include sort, align_file_ids, and finally
+        # write_metadata_file, then remove _has_row_groups_already_removed flag.
 
     def sort_row_groups(self):
         """

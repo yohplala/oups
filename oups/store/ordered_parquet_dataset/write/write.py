@@ -15,14 +15,14 @@ from oups.defines import KEY_FILE_IDS
 from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
-from oups.store.write.iter_merge_split_data import iter_merge_split_data
-from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
-from oups.store.write.merge_split_strategies import TimePeriodMergeSplitStrategy
+from oups.store.ordered_parquet_dataset.write.iter_merge_split_data import iter_merge_split_data
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies import NRowsMergeSplitStrategy
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies import (
+    TimePeriodMergeSplitStrategy,
+)
 
 
 ROW_GROUP_INT_TARGET_SIZE = 6_345_000
-KEY_MAX_N_OFF_TARGET_RGS = "max_n_off_target_rgs"
-KEY_ROW_GROUP_TARGET_SIZE = "row_group_target_size"
 
 
 def _validate_duplicate_on_param(

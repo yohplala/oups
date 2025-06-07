@@ -17,7 +17,7 @@ from numpy.testing import assert_array_equal
 from numpy.typing import NDArray
 from pandas import Series
 
-from oups.store.write.merge_split_strategies import NRowsMergeSplitStrategy
+from oups.store.ordered_parquet_dataset.write.merge_split_strategies import NRowsMergeSplitStrategy
 
 
 RG_IDX_START = "rg_idx_start"

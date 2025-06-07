@@ -7,8 +7,8 @@ files.
 
 """
 
-from .write import KEY_MAX_N_OFF_TARGET_RGS
-from .write import KEY_ROW_GROUP_TARGET_SIZE
+from ....defines import KEY_MAX_N_OFF_TARGET_RGS
+from ....defines import KEY_ROW_GROUP_TARGET_SIZE
 from .write import write
 
 
