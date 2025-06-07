@@ -9,8 +9,7 @@ import zipfile
 from os import path as os_path
 
 import pytest
-from fastparquet import ParquetFile
-from pandas import DataFrame as pDataFrame
+from pandas import DataFrame
 from pandas import MultiIndex
 from pandas import date_range
 
@@ -93,7 +92,7 @@ def test_store_write_getitem(tmp_path):
     basepath = f"{tmp_path}{DIR_SEP}store"
     ps = Store(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
-    df = pDataFrame(
+    df = DataFrame(
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 10:00", freq="2h"),
             "temperature": [8.4, 5.3],
@@ -112,7 +111,7 @@ def test_store_write_getitem_with_config(tmp_path):
     basepath = f"{tmp_path}{DIR_SEP}store"
     ps = Store(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
-    df = pDataFrame(
+    df = DataFrame(
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
@@ -122,7 +121,7 @@ def test_store_write_getitem_with_config(tmp_path):
     ps[we].write(ordered_on="timestamp", df=df, row_group_target_size=rg_size)
     assert we in ps
     # Load only first row group.
-    res = ParquetFile(f"{basepath}{DIR_SEP}{we.to_path}")[0].to_pandas()
+    res = ps[we][0].to_pandas()
     assert res.equals(df.loc[: rg_size - 1])
 
 
@@ -132,7 +131,7 @@ def test_store_iterator(tmp_path):
     ps = Store(basepath, WeatherEntry)
     we1 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     we2 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
-    df = pDataFrame(
+    df = DataFrame(
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
@@ -148,7 +147,7 @@ def test_store_pandas_write_read_roundtrip(tmp_path):
     # Set and get data, roundtrip.
     ps = Store(tmp_path, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
-    df = pDataFrame(
+    df = DataFrame(
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 2.9, 6.4],
@@ -161,7 +160,7 @@ def test_store_pandas_write_read_roundtrip(tmp_path):
 
 def test_store_write_column_multi_index(tmp_path):
     # Write column multi-index in pandas, retrieve in vaex.
-    pdf = pDataFrame(
+    pdf = DataFrame(
         {
             ("ts", ""): date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             ("temp", "1"): [8.4, 5.3, 2.9, 6.4],
@@ -182,12 +181,12 @@ def test_store_write_column_multi_index(tmp_path):
 
 def test_store_delitem(tmp_path):
     # Test `__delitem__`.
-    basepath = os_path.join(tmp_path, "store")
+    basepath = f"{tmp_path}{DIR_SEP}store"
     ps = Store(basepath, WeatherEntry)
     we1 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     we2 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "summer"))
     we3 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
-    df = pDataFrame(
+    df = DataFrame(
         {
             "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
             "temperature": [8.4, 5.3, 4.9, 2.3],
@@ -217,3 +216,37 @@ def test_store_delitem(tmp_path):
     we1_path = f"{basepath}{DIR_SEP}{we1.to_path}"
     assert os_path.exists(we1_path)
     assert os_path.exists(get_md_filepath(we1_path))
+
+
+def test_store_iter_intersections(tmp_path):
+    @toplevel
+    class WeatherEntry:
+        capital: str
+        quantity: str
+
+    basepath = f"{tmp_path}{DIR_SEP}store"
+    ps = Store(basepath, WeatherEntry)
+    we1 = WeatherEntry("paris", "temperature")
+    we2 = WeatherEntry("london", "temperature")
+    df1 = DataFrame(
+        {
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
+            "temperature": [8, 5, 4, 2],
+        },
+    )
+    ps[we1].write(ordered_on="timestamp", df=df1, row_group_target_size=2)
+    df2 = DataFrame(
+        {
+            "timestamp": date_range("2021/01/01 09:00", "2021/01/01 15:00", freq="2h"),
+            "temperature": [18, 15, 14, 12],
+        },
+    )
+    ps[we2].write(ordered_on="timestamp", df=df2, row_group_target_size=2)
+    res = list(ps.iter_intersections(keys=[we1, we2]))
+    assert len(res) == 3
+    assert res[0][we1].equals(df1.iloc[:2].reset_index(drop=True))
+    assert res[1][we1].equals(df1.iloc[2:3].reset_index(drop=True))
+    assert res[2][we1].equals(df1.iloc[3:].reset_index(drop=True))
+    assert res[0][we2].equals(df2.iloc[:2].reset_index(drop=True))
+    assert res[1][we2].equals(df2.iloc[2:2].reset_index(drop=True))
+    assert res[2][we2].equals(df2.iloc[2:].reset_index(drop=True))

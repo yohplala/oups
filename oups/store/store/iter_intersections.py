@@ -68,13 +68,14 @@ def _get_intersections(
     keys: List[dataclass],
     start: Optional[Union[int, float, Timestamp]] = None,
     end_excl: Optional[Union[int, float, Timestamp]] = None,
-) -> Tuple[Union[int, float, Timestamp], Dict[dataclass, int], Iterator[tuple]]:
+) -> Tuple[Dict[dataclass, int], Dict[dataclass, int], Iterator[tuple]]:
     """
     Create an iterator over intersection boundaries with row group indices.
 
     This function analyzes row group statistics across all keys to determine
-    intersection boundaries and the corresponding row group indices for each key.
-    Returns the global minimum ordered_on value and yields intersection boundaries.
+    intersection boundaries and the corresponding row group indices for each
+    key. Returns starting row group indices, first ending indices, and
+    intersection boundaries.
 
     Parameters
     ----------
@@ -89,10 +90,11 @@ def _get_intersections(
 
     Returns
     -------
-    tuple[Union[int, float, Timestamp], Dict[dataclass, int], Iterator[tuple]]
+    tuple[Dict[dataclass, int], Dict[dataclass, int], Iterator[tuple]]
         Tuple containing:
-        - Global minimum 'ordered_on' value across all keys,
         - Dictionary mapping each key to its starting row group index,
+        - Dictionary mapping each key to its first ending row group index
+          (exclusive) in the trimmed range,
         - Iterator yielding (current_end_excl, rg_idx_ends_excl) tuples where:
           * current_end_excl: End boundary (exclusive) for current intersection
           * rg_idx_ends_excl: Dict mapping each key to its row group index for
@@ -102,15 +104,8 @@ def _get_intersections(
     -----
     - A key without value in the span of interest in 'ordered_on' will not
       appear in returned dict and yielded items.
-    - The intersection is not exactly optimized in the sense that it will not
-      try to load row groups only when needed, but when potentially needed.
-      Current implementation, simplified, may load row group in advance and do
-      not try to release them when not needed any longer, but only when the next
-      row group needs to be loaded.
-      This enable to only have to rely on 'ordered_on_mins' values.
-      Another simplification is to load the first row group to appear for each
-      key right at the first iteration, even though it would not be needed
-      immediately.
+    - The first row group to appear for each key is loaded right at the first
+      iteration, even though it would not be needed immediately.
 
     """
     if isinstance(start, Timestamp):
@@ -169,6 +164,8 @@ def _get_intersections(
                 trim_idx_first_end_excl : trim_idx_last_end_excl + 1
             ]
             keys_rg_idx_first_ends_excl[key] = keys_rg_idx_ends_excl[key][0]
+    if unique_ordered_on_mins is None:
+        return {}, {}, iter([])
     # Adding one for last value, will be either 'end_excl' or None.
     len_unique_ordered_on_mins = len(unique_ordered_on_mins) + 1
     for key, rg_idx_ends_excl in keys_rg_idx_ends_excl.items():
@@ -243,7 +240,7 @@ def iter_intersections(
     >>> store = Store(...)
     >>> store[key1].write(data1, ordered_on='timestamp')
     >>> store[key2].write(data2, ordered_on='timestamp')
-    >>> for data_dict in store.iter_row_groups([key1, key2], start="2022-01-01"):
+    >>> for data_dict in store.iter_intersections([key1, key2], start="2022-01-01"):
     ...     df1 = data_dict[key1]  # DataFrame for key1
     ...     df2 = data_dict[key2]  # DataFrame for key2
     ...     # Process synchronized data

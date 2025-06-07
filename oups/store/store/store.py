@@ -21,6 +21,7 @@ from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_basename
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
+from oups.store.store.iter_intersections import iter_intersections
 
 
 def get_opd_basepath(store_path: str, key: dataclass) -> str:
@@ -230,3 +231,24 @@ class Store:
             while (upper_dir != basepath) and (not listdir(upper_dir)):
                 rmdir(upper_dir)
                 upper_dir = strip_path_tail(upper_dir)
+
+    def iter_intersections(self, keys, start=None, end_excl=None):
+        """
+        Iterate over row group intersections across multiple datasets in store.
+
+        Parameters
+        ----------
+        keys : List[dataclass]
+            List of dataset keys.
+        start : Optional[Union[int, float, Timestamp]], default None
+            Start value (inclusive) for the 'ordered_on' column range.
+        end_excl : Optional[Union[int, float, Timestamp]], default None
+            End value (exclusive) for the 'ordered_on' column range.
+
+        Yields
+        ------
+        Dict[dataclass, DataFrame]
+            Dictionary mapping each key to its corresponding DataFrame chunk.
+
+        """
+        return iter_intersections(self, keys, start, end_excl)
