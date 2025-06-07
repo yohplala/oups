@@ -264,7 +264,7 @@ def _get_intersections(
     )
 
 
-def iter_row_groups(
+def iter_intersections(
     store,  # Store instance
     keys: List[dataclass],
     start: Optional[Union[int, float, Timestamp]] = None,
@@ -318,6 +318,7 @@ def iter_row_groups(
     ...     # Process synchronized data
 
     """
+    print()
     # Get and validate ordered_on column name.
     ordered_on_col_name = _get_and_validate_ordered_on_column(store, keys)
     # Get global minimum and intersection boundary iterator and initialize
@@ -330,11 +331,11 @@ def iter_row_groups(
     )
     # Load initial row groups and initialize start indices.
     # Iterate over 'rg_idx_starts' because only keys with data are kept.
-    print()
-    print("rg_idx_starts")
-    print(rg_idx_starts)
-    print("prev_rg_idx_ends_excl")
-    print(prev_rg_idx_ends_excl)
+    #   print()
+    #   print("rg_idx_starts")
+    #   print(rg_idx_starts)
+    #   print("prev_rg_idx_ends_excl")
+    #   print(prev_rg_idx_ends_excl)
     in_memory_data = {
         key: store[key][rg_idx_start : prev_rg_idx_ends_excl[key]].to_pandas()
         for key, rg_idx_start in rg_idx_starts.items()
@@ -354,12 +355,21 @@ def iter_row_groups(
         # TODO: rg_idx_ends_excl has to be a end_excl index
         # use slice notation to get severral row groups when having duplicates
         # in orered_on_mins.
+        print("current_end_excl")
+        print(current_end_excl)
+        print("prev_rg_idx_ends_excl")
+        print(prev_rg_idx_ends_excl)
+        print("rg_idx_ends_excl")
+        print(rg_idx_ends_excl)
         for key, rg_idx_end_excl in rg_idx_ends_excl.items():
             if rg_idx_end_excl != prev_rg_idx_ends_excl[key]:
+                print("updating in memory data for key ", key)
+                print("prev in memory data")
+                print(in_memory_data[key])
                 in_memory_data[key] = store[key][
-                    prev_rg_idx_ends_excl[key] : rg_idx_ends_excl
+                    prev_rg_idx_ends_excl[key] : rg_idx_end_excl
                 ].to_pandas()
-                prev_rg_idx_ends_excl[key] = rg_idx_ends_excl[key]
+                prev_rg_idx_ends_excl[key] = rg_idx_end_excl
                 # Reset start index to 0 for new row group.
                 current_start_indices[key] = 0
             # Calculate end indices for current_end_excl.
@@ -373,11 +383,19 @@ def iter_row_groups(
                     side=KEY_LEFT,
                 )
             )
-        # Extract synchronized views for current span.
+        print("current in memory data")
+        print(in_memory_data)
+        print("current_start_indices")
+        print(current_start_indices)
+        print("current_end_indices")
+        print(current_end_indices)
+        # Yield synchronized views for current span.
         # [current_start, current_end_excl)
         yield {
-            key: df.iloc[current_start_indices[key] : current_end_indices[key], :]
+            key: df.iloc[current_start_indices[key] : current_end_indices[key], :].reset_index(
+                drop=True,
+            )
             for key, df in in_memory_data.items()
         }
         # Buffer end indices for next iteration as start indices.
-        current_start_indices = current_end_indices
+        current_start_indices = current_end_indices.copy()

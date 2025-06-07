@@ -12,8 +12,8 @@ from pandas import Timestamp
 
 from oups import Store
 from oups import toplevel
-from oups.store.store.iter_row_groups import _get_intersections
-from oups.store.store.iter_row_groups import iter_row_groups
+from oups.store.store.iter_intersections import _get_intersections
+from oups.store.store.iter_intersections import iter_intersections
 
 
 DTYPE_DATETIME64 = dtype("datetime64[ns]")
@@ -130,68 +130,51 @@ INTERSECTIONS_AS_RG_IDX_REF = {
 }
 
 INTERSECTIONS_AS_DF_REF = [
-    {
+    {  # 0 - 10:00
         KEY1: DataFrame(
             {ORDERED_ON: [Timestamp("2025-01-01 08:00"), Timestamp("2025-01-01 09:00")]},
         ),
         KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 08:35")] * 3}),
         KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
-    {
+    {  # 1 - 12:10
         KEY1: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")] * 4}),
         KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")]}),
         KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
-    {
-        KEY1: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")] * 4}),
-        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 10:00")]}),
-        KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
-    },
-    {
+    {  # 2 - 14:00
         KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
         KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 12:10")] * 4}),
         KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
-    {
+    {  # 3 - 18:00
         KEY1: DataFrame(
             {ORDERED_ON: [Timestamp("2025-01-01 14:00"), Timestamp("2025-01-01 14:15")]},
         ),
-        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 14:00")]}),
-        KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
-    },
-    {
-        KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
-        KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 15:15")]}),
+        KEY2: DataFrame(
+            {ORDERED_ON: [Timestamp("2025-01-01 14:00"), Timestamp("2025-01-01 15:15")]},
+        ),
         KEY3: DataFrame(
             {ORDERED_ON: [Timestamp("2025-01-01 15:15"), Timestamp("2025-01-01 16:00")]},
         ),
     },
-    {
+    {  # 4 - 18:15
         KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
         KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 18:00")]}),
         KEY3: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
     },
-    {
-        KEY1: DataFrame(
-            {ORDERED_ON: [Timestamp("2025-01-01 18:15"), Timestamp("2025-01-01 18:15")]},
-        ),
+    {  # 5 - 22:00
+        KEY1: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 18:15")] * 2}),
         KEY2: DataFrame({ORDERED_ON: [Timestamp("2025-01-01 19:15")]}),
         KEY3: DataFrame(
             {ORDERED_ON: [Timestamp("2025-01-01 18:15"), Timestamp("2025-01-01 19:00")]},
         ),
     },
-    {
+    {  # 6 - None
         KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
         KEY2: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
         KEY3: DataFrame(
-            {ORDERED_ON: [Timestamp("2025-01-01 22:00"), Timestamp("2025-01-01 22:05")]},
-        ),
-    },
-    {
-        KEY1: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
-        KEY2: DataFrame({ORDERED_ON: []}, dtype=DTYPE_DATETIME64),
-        KEY3: DataFrame(
-            {ORDERED_ON: [Timestamp("2025-01-01 22:05"), Timestamp("2025-01-01 22:05")]},
+            {ORDERED_ON: [Timestamp("2025-01-01 22:00")] + [Timestamp("2025-01-01 22:05")] * 3},
         ),
     },
 ]
@@ -220,7 +203,7 @@ INTERSECTIONS_AS_DF_REF = [
         ),
         (
             "end_excl_10h05",
-            False,
+            True,
             None,
             Timestamp("2025-01-01 10:05"),
             {
@@ -233,11 +216,12 @@ INTERSECTIONS_AS_DF_REF = [
                         INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:2],
                     ),
                 ),
+                "intersections_as_df": INTERSECTIONS_AS_DF_REF[:2],
             },
         ),
         (
             "end_excl_13h00",
-            False,
+            True,
             None,
             Timestamp("2025-01-01 13:00"),
             {
@@ -250,11 +234,12 @@ INTERSECTIONS_AS_DF_REF = [
                         INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:3],
                     ),
                 ),
+                "intersections_as_df": INTERSECTIONS_AS_DF_REF[:3],
             },
         ),
         (
             "end_excl_16h00",
-            False,
+            True,
             None,
             Timestamp("2025-01-01 16:00"),
             {
@@ -268,11 +253,12 @@ INTERSECTIONS_AS_DF_REF = [
                         INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:4],
                     ),
                 ),
+                "intersections_as_df": INTERSECTIONS_AS_DF_REF[:4],
             },
         ),
         (
             "end_excl_22h05",
-            False,
+            True,
             None,
             Timestamp("2025-01-01 22:05"),
             {
@@ -286,11 +272,12 @@ INTERSECTIONS_AS_DF_REF = [
                         INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:7],
                     ),
                 ),
+                "intersections_as_df": INTERSECTIONS_AS_DF_REF[:7],
             },
         ),
     ],
 )
-def test_get_intersections(store, test_id, full_test, start, end_excl, expected):
+def test_iter_intersections(store, test_id, full_test, start, end_excl, expected):
     rg_idx_starts, rg_idx_first_ends_excl, rg_idx_intersections = _get_intersections(
         store=store,
         keys=list(store.keys),
@@ -304,14 +291,16 @@ def test_get_intersections(store, test_id, full_test, start, end_excl, expected)
     for i, (ordered_on_end_excl_ref, rg_idx_end_excl_ref) in enumerate(
         expected["intersections_as_rg_idx"],
     ):
-        print("i ", i)
+        #        print("i ", i)
         assert ordered_on_end_excl_ref == rg_idx_intersections[i][0]
         for key in expected["rg_idx_starts"]:
-            assert rg_idx_end_excl_ref[key] == rg_idx_intersections[i][1][key]
+            rg_idx_end_excl_res = rg_idx_intersections[i][1].pop(key)
+            assert rg_idx_end_excl_ref[key] == rg_idx_end_excl_res
+        assert rg_idx_intersections[i][1] == {}
 
     if full_test:
         dataset_intersections = list(
-            iter_row_groups(
+            iter_intersections(
                 store=store,
                 keys=list(store.keys),
                 start=start,
@@ -320,19 +309,27 @@ def test_get_intersections(store, test_id, full_test, start, end_excl, expected)
         )
         n_intersections = len(expected["intersections_as_df"])
         for i, df_dict in enumerate(expected["intersections_as_df"]):
+            print("-- i -- ", i)
             for key, df_ref in df_dict.items():
                 if key in expected["rg_idx_starts"]:
                     if i == 0:
                         df_ref = df_ref.set_index(ORDERED_ON).iloc[start:].reset_index()
-                        print("df_ref after start trimming")
-                        print(df_ref)
+                    #                        print("df_ref after start trimming")
+                    #                        print(df_ref)
                     if i == n_intersections - 1 and end_excl is not None:
-                        print("df_ref before end trimming")
-                        print(df_ref)
+                        #                        print("df_ref before end trimming")
+                        #                        print(df_ref)
                         trim_end_idx = df_ref.loc[:, ORDERED_ON].searchsorted(end_excl, side="left")
-                        print("trim_end_idx")
-                        print(trim_end_idx)
+                        #                        print("trim_end_idx")
+                        #                        print(trim_end_idx)
                         df_ref = df_ref.iloc[:trim_end_idx]
-                        print("df_ref after end trimming")
-                        print(df_ref)
-                    assert df_ref.equals(dataset_intersections[i][key])
+                    #                        print("df_ref after end trimming")
+                    #                        print(df_ref)
+                    df_res = dataset_intersections[i].pop(key)
+                    print("key ", key)
+                    print("df_ref")
+                    print(df_ref)
+                    print("df_res")
+                    print(df_res)
+                    assert df_ref.equals(df_res)
+            assert dataset_intersections[i] == {}

@@ -91,7 +91,7 @@ repos:
                 oups/store/ordered_parquet_dataset/__init__.py:F401
                 oups/store/ordered_parquet_dataset/ordered_parquet_dataset.py:E203
                 oups/store/ordered_parquet_dataset/parquet_adapter.py:S403 S301
-                oups/store/store/iter_row_groups.py:E203
+                oups/store/store/iter_intersections.py:E203
                 oups/aggstream/__init__.py:F401
                 oups/aggstream/jcumsegagg.py:C901
                 oups/aggstream/segmentby.py:C901
