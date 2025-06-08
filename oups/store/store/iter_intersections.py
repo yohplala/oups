@@ -15,6 +15,7 @@ from numpy import insert
 from numpy import nan
 from numpy import ones
 from numpy import r_
+from numpy import roll
 from numpy import searchsorted
 from pandas import DataFrame
 from pandas import Int64Dtype
@@ -26,7 +27,6 @@ from oups.numpy_utils import isnotin_ordered
 
 
 KEY_LEFT = "left"
-KEY_RIGHT = "right"
 
 
 def _get_and_validate_ordered_on_column(store, keys: List[dataclass]) -> str:
@@ -119,26 +119,40 @@ def _get_intersections(
     keys_rg_idx_starts = {}
     keys_rg_idx_first_ends_excl = {}
     keys_rg_idx_ends_excl = {}
+    print()
     for key in keys:
+        print()
+        print(f"key: {key}")
         row_group_stats = store[key].row_group_stats
         ordered_on_mins = row_group_stats.loc[:, KEY_ORDERED_ON_MINS].to_numpy()
         ordered_on_maxs = row_group_stats.loc[:, KEY_ORDERED_ON_MAXS].to_numpy()
         n_rgs = len(row_group_stats)
         rg_idx = arange(n_rgs)
         # Main row groups are those not overlapping with next ones.
-        mask_main_rgs = ones(n_rgs).astype(bool)
-        mask_main_rgs[1:] = ordered_on_mins[1:] != ordered_on_maxs[:-1]
-        _unique_ordered_on_mins = ordered_on_mins[mask_main_rgs]
-        _unique_rg_idx_ends_excl = rg_idx[mask_main_rgs]
+        mask_main_rgs_for_mins = ones(n_rgs).astype(bool)
+        mask_main_rgs_for_mins[1:] = ordered_on_mins[1:] != ordered_on_maxs[:-1]
+        print(f"mask_main_rgs_for_mins: {mask_main_rgs_for_mins}")
+        mask_main_rgs_for_maxs = roll(mask_main_rgs_for_mins, -1)
+        print(f"mask_main_rgs_for_maxs: {mask_main_rgs_for_maxs}")
+        _unique_ordered_on_mins = ordered_on_mins[mask_main_rgs_for_mins]
+        # _unique_ordered_on_maxs = ordered_on_maxs[mask_main_rgs_for_maxs]
+        _unique_rg_idx_ends_excl = rg_idx[mask_main_rgs_for_mins]
+        print(f"_unique_ordered_on_mins: {_unique_ordered_on_mins}")
+        # print(f"_unique_ordered_on_maxs: {_unique_ordered_on_maxs}")
+        print(f"_unique_rg_idx_ends_excl: {_unique_rg_idx_ends_excl}")
         # Skip first row group in trimming.
         trim_idx_first_end_excl = (
-            max(searchsorted(_unique_ordered_on_mins, start, side=KEY_RIGHT), 1) if start else 1
+            searchsorted(ordered_on_maxs[mask_main_rgs_for_maxs], start, side=KEY_LEFT) + 1
+            if start
+            else 1
         )
         trim_idx_last_end_excl = (
             searchsorted(_unique_ordered_on_mins, end_excl, side=KEY_LEFT)
             if end_excl
             else len(_unique_ordered_on_mins)
         )
+        print(f"trim_idx_first_end_excl: {trim_idx_first_end_excl}")
+        print(f"trim_idx_last_end_excl: {trim_idx_last_end_excl}")
         # 'unique_rg_idx_ends_excl' is completed with its length as last value.
         if trim_idx_first_end_excl < trim_idx_last_end_excl + 1:
             keys_ordered_on_ends_excl[key] = _unique_ordered_on_mins[
@@ -163,12 +177,15 @@ def _get_intersections(
             keys_rg_idx_ends_excl[key] = _unique_rg_idx_ends_excl[
                 trim_idx_first_end_excl : trim_idx_last_end_excl + 1
             ]
+            print(f"keys_rg_idx_ends_excl: {keys_rg_idx_ends_excl[key]}")
             keys_rg_idx_first_ends_excl[key] = keys_rg_idx_ends_excl[key][0]
     if unique_ordered_on_mins is None:
         return {}, {}, iter([])
     # Adding one for last value, will be either 'end_excl' or None.
     len_unique_ordered_on_mins = len(unique_ordered_on_mins) + 1
+    print(f"unique_ordered_on_mins: {unique_ordered_on_mins}")
     for key, rg_idx_ends_excl in keys_rg_idx_ends_excl.items():
+        print(f"key: {key}")
         _rg_idx_ends_excl = full(len_unique_ordered_on_mins, nan)
         # Forcing last row group index, which cannot be always positioned,
         # in the case 'end_excl' is None, and therefore is not in
@@ -183,6 +200,7 @@ def _get_intersections(
             : len(confirmed_ordered_on_ends_excl_idx)
         ]
         keys_rg_idx_ends_excl[key] = _rg_idx_ends_excl
+        print(f"keys_rg_idx_ends_excl: {keys_rg_idx_ends_excl[key]}")
     intersections = DataFrame(keys_rg_idx_ends_excl, dtype=Int64Dtype())
     intersections.bfill(axis=0, inplace=True)
     return (
