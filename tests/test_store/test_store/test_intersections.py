@@ -419,6 +419,7 @@ def test_iter_intersections(store, test_id, full_test, start, end_excl, expected
                         df_ref = df_ref.iloc[:trim_end_idx]
                     df_res = dataset_intersections[i].pop(key)
                     if i <= 3:
+                        # TODO:: remove C901 flag in precommit
                         print("-- i / key -- ", i, key)
                         print("df_ref")
                         print(df_ref)
