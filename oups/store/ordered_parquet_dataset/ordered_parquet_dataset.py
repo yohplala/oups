@@ -13,7 +13,7 @@ from os import rename
 from os import scandir
 from pathlib import Path
 from re import compile
-from typing import Dict, Iterable, List, Union
+from typing import Dict, Iterable, List, Optional, Union
 
 from numpy import iinfo
 from numpy import isin
@@ -121,13 +121,6 @@ class OrderedParquetDataset:
         Number of digits to use for 'file_id' in filename. It is kept as an
         attribute to avoid recomputing it at each call to
         'get_parquet_file_name()'.
-    _has_row_groups_already_removed : bool
-        Flag warning that 'remove_row_group_files()' method has already been
-        called. It is reset when 'write_metadata()' method is then called.
-        This flag is a security to prevent iterating 'remove_row_group_files()'
-        method without the sense that the process involving the current opd
-        object has been completed first. It is anticipated/expected that the
-        completion of such a process involves a 'write_metadata()' step.
     _is_row_group_subset : bool
         Flag warning current opd is a subset of an bigger one (use of
         '_getitem__' method). In this case, methods interacting with file ids in
@@ -234,7 +227,6 @@ class OrderedParquetDataset:
         # content of 'self._key_value_metadata' is mutable.
         self._ordered_on = self._key_value_metadata.pop(KEY_ORDERED_ON)
         self._is_row_group_subset = False
-        self._has_row_groups_already_removed = False
 
     def __getitem__(self, item):
         """
@@ -392,7 +384,12 @@ class OrderedParquetDataset:
         # Get max 'file_id' from 'self.row_group_stats'.
         return -1 if self.row_group_stats.empty else int(self.row_group_stats[KEY_FILE_IDS].max())
 
-    def remove_row_group_files(self, file_ids: List[int]):
+    def remove_row_group_files(
+        self,
+        file_ids: List[int],
+        sort_row_groups: Optional[bool] = True,
+        key_value_metadata: Optional[Dict[str, str]] = None,
+    ):
         """
         Remove row group files from disk.
 
@@ -402,29 +399,27 @@ class OrderedParquetDataset:
         ----------
         file_ids : Iterable[int]
             File ids to remove.
+        sort_row_groups : Optional[bool], default True
+            If `True`, sort row groups after removing files.
+        key_value_metadata : Optional[Dict[str, str]], default None
+            User-defined key-value metadata to write, if 'write_metadata_file'
+            is `True`.
 
         Notes
         -----
+        After file removal, and optional row group sorting, 'align_file_ids()'
+        and 'write_metadata()' methods are called, as a result of the following
+        reasoning.
         It is anticipated that 'file_ids' may be generated from row group
         indexes. If definition of 'file_ids' from row group indexes occurs in a
         loop where 'remove_row_group_files()' is called, and that row group
         indexes are defined before execution of the loop, then row group indexes
         may not be valid anylonger at a next iteration.
-        To mitigate this issue, removing row group files is blocked after
-        running 'remove_row_group_files()' once by using
-        'has_row_groups_already_removed' flag.
-        This flag is a security to prevent iterating 'remove_row_group_files()'
-        method without the sense that the process involving the current opd
-        object has been completed first. It is anticipated/expected that the
-        completion of such a process involves a 'write_metadata()' step.
-        For this reason, writing opdmd data right after removing row group files
-        is not proposed either.
-        The 'has_row_groups_already_removed' flag is then reset when
-        'write_metadata()' method is called.
+        To mitigate this issue, 'align_file_ids()' and 'write_metadata()'
+        methods are called, aligning then row group stats in memory and on disk
+        ('_opdmd file') with the existing row group files on disk.
 
         """
-        if self._has_row_groups_already_removed:
-            raise ValueError("removing row group files is blocked.")
         if not file_ids:
             return
         # Remove files from disk.
@@ -439,9 +434,10 @@ class OrderedParquetDataset:
         self._row_group_stats = self.row_group_stats.loc[mask_rows_to_keep, :].reset_index(
             drop=True,
         )
-        self._has_row_groups_already_removed = True
-        # TODO: rework to include sort, align_file_ids, and finally
-        # write_metadata_file, then remove _has_row_groups_already_removed flag.
+        if sort_row_groups:
+            self.sort_row_groups()
+        self.align_file_ids()
+        self.write_metadata_file(key_value_metadata=key_value_metadata)
 
     def sort_row_groups(self):
         """
@@ -542,18 +538,12 @@ class OrderedParquetDataset:
             key_value_metadata=existing_md | {KEY_ORDERED_ON: self.ordered_on},
         )
         self._is_opdmd_file_missing = False
-        # Reset 'has_row_groups_already_removed' flag, in case it was set.
-        # This flag is a security to prevent iterating
-        # 'remove_row_group_files()' method without the sense that the process
-        # involving the current opd object has been completed first.
-        # It is anticipated/expected that the completion of such a process
-        # involves a 'write_metadata()' step.
-        self._has_row_groups_already_removed = False
 
     def write_row_group_files(
         self,
         dfs: Iterable[DataFrame],
         write_metadata_file: bool = True,
+        key_value_metadata: Dict[str, str] = None,
         **kwargs,
     ):
         """
@@ -565,6 +555,9 @@ class OrderedParquetDataset:
             Dataframes to write.
         write_metadata_file : bool, optional
             If `True`, write opd metadata file to disk.
+        key_value_metadata : Dict[str, str], optional
+            User-defined key-value metadata to write, if 'write_metadata_file'
+            is `True`.
         **kwargs : dict
             Additional parameters to pass to 'ParquetAdapter.write_parquet()'.
 
@@ -608,7 +601,7 @@ class OrderedParquetDataset:
             copy=False,
         )
         if write_metadata_file or dtype_limit_exceeded:
-            self.write_metadata_file()
+            self.write_metadata_file(key_value_metadata=key_value_metadata)
         if dtype_limit_exceeded:
             if file_id > self._max_allowed_file_id:
                 raise ValueError(

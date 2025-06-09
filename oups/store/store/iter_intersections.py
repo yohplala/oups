@@ -102,9 +102,8 @@ def _get_intersections(
 
     Notes
     -----
-    - A key without value in the span of interest in 'ordered_on' will not
-      appear in returned dict of row group indices (start, first end excl, and
-      end excl).
+    - A key without value in the span of interest will not appear in returned
+      dict of row group indices (start, first end excl, and end excl).
     - The first row group to appear for each key is loaded right at the first
       iteration, even though it would not be needed immediately.
     - For a given dataset, successive row groups sharing same 'ordered_on'

@@ -244,9 +244,16 @@ def write(
             ].to_list()
         ]
         if rg_file_ids_to_remove:
-            ordered_parquet_dataset.remove_row_group_files(file_ids=rg_file_ids_to_remove)
+            ordered_parquet_dataset.remove_row_group_files(
+                file_ids=rg_file_ids_to_remove,
+                sort_row_groups=merge_split_strategy.sort_rgs_after_write,
+                key_value_metadata=key_value_metadata,
+            )
+            # 'remove_row_group_files()' embeds calls to 'sort_row_groups()' and
+            # 'align_file_ids()' methods.
+            return
         # Rename partition files.
-        if merge_split_strategy.sort_rgs_after_write:
+        elif merge_split_strategy.sort_rgs_after_write:
             ordered_parquet_dataset.sort_row_groups()
             ordered_parquet_dataset.align_file_ids()
     # Write metadata.

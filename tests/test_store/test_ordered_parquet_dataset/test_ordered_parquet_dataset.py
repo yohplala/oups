@@ -132,9 +132,9 @@ def test_opd_getitem_and_max_file_id(tmp_path):
     assert opd[2:4].row_group_stats.loc[:, KEY_FILE_IDS].max() == 3
     # Remove first row group.
     opd.remove_row_group_files(file_ids=[0])
-    assert opd.max_file_id == max_file_id_ref
+    assert opd.max_file_id == max_file_id_ref - 1
     # check 'max_file_id' is correctly computed on a subset.
-    assert opd[2:4].max_file_id == max_file_id_ref
+    assert opd[2:4].max_file_id == max_file_id_ref - 1
 
 
 def test_opd_align_file_ids(tmp_path):
@@ -184,11 +184,14 @@ def test_opd_remove_row_group_files(tmp_path):
     file_ids_to_remove = [0, 2]
     file_ids_to_keep = [i for i in opd.row_group_stats.index if i not in file_ids_to_remove]
     rg_stats_ref = opd.row_group_stats.iloc[file_ids_to_keep].reset_index(drop=True)
-    assert not opd._has_row_groups_already_removed
+    rg_stats_ref.loc[:, KEY_FILE_IDS] = range(len(rg_stats_ref))
     opd.remove_row_group_files(file_ids=file_ids_to_remove)
     assert len(opd) == len(df_ref) - len(file_ids_to_remove)
+    print("opd.row_group_stats")
+    print(opd.row_group_stats)
+    print("rg_stats_ref")
+    print(rg_stats_ref)
     assert opd.row_group_stats.equals(rg_stats_ref)
-    assert opd._has_row_groups_already_removed
 
 
 def test_opd_sort_row_groups(tmp_path):
