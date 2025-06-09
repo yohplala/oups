@@ -98,6 +98,7 @@ repos:
                 oups/aggstream/cumsegagg.py:C901 E203
                 oups/aggstream/aggstream.py:C901
                 tests/*.py:D103
+                tests/test_store/test_store/test_intersections.py:C901
         ]
 
   # Pydocstyle

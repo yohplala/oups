@@ -112,21 +112,28 @@ def store(tmp_path):
 
 
 # Expected results.
-INTERSECTIONS_AS_RG_IDX_REF = {
-    "ordered_on_end_excl": [
-        Timestamp(f"2025-01-01 {h}") for h in ["10:00", "12:10", "14:00", "18:00", "18:15", "22:00"]
-    ]
-    + [None],
-    "rg_idx_end_excl": [
-        {KEY1: 1, KEY2: 2, KEY3: 1},  # 10:00
-        {KEY1: 3, KEY2: 2, KEY3: 1},  # 12:10
-        {KEY1: 3, KEY2: 4, KEY3: 1},  # 14:00
-        {KEY1: 4, KEY2: 5, KEY3: 1},  # 18:00
-        {KEY1: 4, KEY2: 6, KEY3: 1},  # 18:15
-        {KEY1: 5, KEY2: 6, KEY3: 2},  # 22:00
-        {KEY1: 5, KEY2: 6, KEY3: 4},  # None
-    ],
-}
+ORDERED_ON_END_EXCL_REF = [
+    Timestamp(f"2025-01-01 {h}") for h in ["10:00", "12:10", "14:00", "18:00", "18:15", "22:00"]
+] + [None]
+# Expected results when 'end_excl' is set and 'start' is None.
+RG_IDX_END_EXCL_REF = [
+    {KEY1: 1, KEY2: 2, KEY3: 1},  # 'end_excl' till 10:00
+    {KEY1: 3, KEY2: 2, KEY3: 1},  # 'end_excl' till 12:10
+    {KEY1: 3, KEY2: 4, KEY3: 1},  # 'end_excl' till 14:00
+    {KEY1: 4, KEY2: 5, KEY3: 1},  # 'end_excl' till 18:00
+    {KEY1: 4, KEY2: 6, KEY3: 1},  # 'end_excl' till 18:15
+    {KEY1: 5, KEY2: 6, KEY3: 2},  # 'end_excl' till 22:00
+    {KEY1: 5, KEY2: 6, KEY3: 4},  # 'end_excl' is None
+]
+# First 'rg_idx_end_excl' expected when 'start' is set.
+RG_IDX_FIRST_END_EXCL_REF = [
+    {KEY1: 1, KEY2: 2, KEY3: 1},  # 'start' till  9:00 included
+    {KEY1: 3, KEY2: 2, KEY3: 1},  # 'start' till 10:00 included
+    {KEY1: 4, KEY2: 4, KEY3: 1},  # 'start' till 12:10 included
+    {KEY1: 4, KEY2: 5, KEY3: 1},  # 'start' till 14:00 included
+    {KEY1: 5, KEY2: 5, KEY3: 1},  # 'start' till 15:15 included
+    {KEY1: 5, KEY2: 6, KEY3: 1},  # 2nd row for 'start' till 15:15 included
+]
 
 INTERSECTIONS_AS_DF_REF = [
     {  # 0 - 10:00
@@ -188,13 +195,12 @@ INTERSECTIONS_AS_DF_REF = [
             None,
             Timestamp("2025-01-01 10:00"),
             {
-                "start": Timestamp("2025-01-01 08:00"),
                 "rg_idx_starts": {KEY1: 0, KEY2: 0},
-                "rg_idx_first_ends_excl": INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][0],
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[0],
                 "intersections_as_rg_idx": list(
                     zip(
                         [Timestamp("2025-01-01 10:00")],
-                        INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:1],
+                        RG_IDX_END_EXCL_REF[:1],
                     ),
                 ),
                 "intersections_as_df": INTERSECTIONS_AS_DF_REF[:1],
@@ -206,13 +212,12 @@ INTERSECTIONS_AS_DF_REF = [
             None,
             Timestamp("2025-01-01 10:05"),
             {
-                "start": Timestamp("2025-01-01 08:00"),
                 "rg_idx_starts": {KEY1: 0, KEY2: 0},
-                "rg_idx_first_ends_excl": INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][0],
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[0],
                 "intersections_as_rg_idx": list(
                     zip(
                         [Timestamp("2025-01-01 10:00"), Timestamp("2025-01-01 10:05")],
-                        INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:2],
+                        RG_IDX_END_EXCL_REF[:2],
                     ),
                 ),
                 "intersections_as_df": INTERSECTIONS_AS_DF_REF[:2],
@@ -224,13 +229,12 @@ INTERSECTIONS_AS_DF_REF = [
             None,
             Timestamp("2025-01-01 13:00"),
             {
-                "start": Timestamp("2025-01-01 08:00"),
                 "rg_idx_starts": {KEY1: 0, KEY2: 0},
-                "rg_idx_first_ends_excl": INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][0],
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[0],
                 "intersections_as_rg_idx": list(
                     zip(
                         [Timestamp(f"2025-01-01 {h}") for h in ["10:00", "12:10", "13:00"]],
-                        INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:3],
+                        RG_IDX_END_EXCL_REF[:3],
                     ),
                 ),
                 "intersections_as_df": INTERSECTIONS_AS_DF_REF[:3],
@@ -242,14 +246,12 @@ INTERSECTIONS_AS_DF_REF = [
             None,
             Timestamp("2025-01-01 16:00"),
             {
-                "start": Timestamp("2025-01-01 08:00"),
                 "rg_idx_starts": {KEY1: 0, KEY2: 0, KEY3: 0},
-                "rg_idx_first_ends_excl": INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][0],
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[0],
                 "intersections_as_rg_idx": list(
                     zip(
-                        INTERSECTIONS_AS_RG_IDX_REF["ordered_on_end_excl"][:3]
-                        + [Timestamp("2025-01-01 16:00")],
-                        INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:4],
+                        ORDERED_ON_END_EXCL_REF[:3] + [Timestamp("2025-01-01 16:00")],
+                        RG_IDX_END_EXCL_REF[:4],
                     ),
                 ),
                 "intersections_as_df": INTERSECTIONS_AS_DF_REF[:4],
@@ -261,14 +263,12 @@ INTERSECTIONS_AS_DF_REF = [
             None,
             Timestamp("2025-01-01 22:05"),
             {
-                "start": Timestamp("2025-01-01 08:00"),
                 "rg_idx_starts": {KEY1: 0, KEY2: 0, KEY3: 0},
-                "rg_idx_first_ends_excl": INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][0],
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[0],
                 "intersections_as_rg_idx": list(
                     zip(
-                        INTERSECTIONS_AS_RG_IDX_REF["ordered_on_end_excl"][:6]
-                        + [Timestamp("2025-01-01 22:05")],
-                        INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][:7],
+                        ORDERED_ON_END_EXCL_REF[:6] + [Timestamp("2025-01-01 22:05")],
+                        RG_IDX_END_EXCL_REF[:7],
                     ),
                 ),
                 "intersections_as_df": INTERSECTIONS_AS_DF_REF[:7],
@@ -280,13 +280,12 @@ INTERSECTIONS_AS_DF_REF = [
             None,
             None,
             {
-                "start": Timestamp("2025-01-01 08:00"),
                 "rg_idx_starts": {KEY1: 0, KEY2: 0, KEY3: 0},
-                "rg_idx_first_ends_excl": INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][0],
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[0],
                 "intersections_as_rg_idx": list(
                     zip(
-                        INTERSECTIONS_AS_RG_IDX_REF["ordered_on_end_excl"],
-                        INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"],
+                        ORDERED_ON_END_EXCL_REF,
+                        RG_IDX_END_EXCL_REF,
                     ),
                 ),
                 "intersections_as_df": INTERSECTIONS_AS_DF_REF,
@@ -298,17 +297,32 @@ INTERSECTIONS_AS_DF_REF = [
             Timestamp("2025-01-01 09:00"),
             Timestamp("2025-01-01 14:00"),
             {
-                "start": Timestamp("2025-01-01 09:00"),
                 "rg_idx_starts": {KEY1: 0, KEY2: 0},
-                "rg_idx_first_ends_excl": INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][0],
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[0],
                 "intersections_as_rg_idx": list(
                     zip(
-                        INTERSECTIONS_AS_RG_IDX_REF["ordered_on_end_excl"][0:2]
-                        + [Timestamp("2025-01-01 14:00")],
-                        INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][0:3],
+                        ORDERED_ON_END_EXCL_REF[:2] + [Timestamp("2025-01-01 14:00")],
+                        RG_IDX_END_EXCL_REF[:3],
                     ),
                 ),
-                "intersections_as_df": INTERSECTIONS_AS_DF_REF[0:3],
+                "intersections_as_df": INTERSECTIONS_AS_DF_REF[:3],
+            },
+        ),
+        (  # Maybe the most representative test of intended use.
+            "start_end_excl_14h00_14h05",
+            True,
+            Timestamp("2025-01-01 14:00"),
+            Timestamp("2025-01-01 14:05"),
+            {
+                "rg_idx_starts": {KEY1: 3, KEY2: 4},
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[3],
+                "intersections_as_rg_idx": list(
+                    zip(
+                        [Timestamp("2025-01-01 14:05")],
+                        [RG_IDX_FIRST_END_EXCL_REF[3]],
+                    ),
+                ),
+                "intersections_as_df": [INTERSECTIONS_AS_DF_REF[3]],
             },
         ),
         (
@@ -317,13 +331,12 @@ INTERSECTIONS_AS_DF_REF = [
             Timestamp("2025-01-01 10:00"),
             None,
             {
-                "start": Timestamp("2025-01-01 10:00"),
                 "rg_idx_starts": {KEY1: 1, KEY2: 0, KEY3: 0},
-                "rg_idx_first_ends_excl": INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][1],
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[1],
                 "intersections_as_rg_idx": list(
                     zip(
-                        INTERSECTIONS_AS_RG_IDX_REF["ordered_on_end_excl"][1:],
-                        INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][1:],
+                        ORDERED_ON_END_EXCL_REF[1:],
+                        [RG_IDX_FIRST_END_EXCL_REF[1]] + RG_IDX_END_EXCL_REF[2:],
                     ),
                 ),
                 "intersections_as_df": INTERSECTIONS_AS_DF_REF[1:],
@@ -335,16 +348,44 @@ INTERSECTIONS_AS_DF_REF = [
             Timestamp("2025-01-01 10:05"),
             None,
             {
-                "start": Timestamp("2025-01-01 10:05"),
-                "rg_idx_starts": {KEY1: 1, KEY2: 0, KEY3: 0},
-                "rg_idx_first_ends_excl": INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][1],
+                "rg_idx_starts": {KEY1: 3, KEY2: 2, KEY3: 0},
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[2],
                 "intersections_as_rg_idx": list(
                     zip(
-                        INTERSECTIONS_AS_RG_IDX_REF["ordered_on_end_excl"][1:],
-                        INTERSECTIONS_AS_RG_IDX_REF["rg_idx_end_excl"][1:],
+                        ORDERED_ON_END_EXCL_REF[2:],
+                        [RG_IDX_FIRST_END_EXCL_REF[2]] + RG_IDX_END_EXCL_REF[3:],
                     ),
                 ),
-                "intersections_as_df": INTERSECTIONS_AS_DF_REF[1:],
+                "intersections_as_df": INTERSECTIONS_AS_DF_REF[2:],
+            },
+        ),
+        (
+            "start_15h15",
+            True,
+            Timestamp("2025-01-01 15:15"),
+            None,
+            {
+                "rg_idx_starts": {KEY1: 4, KEY2: 4, KEY3: 0},
+                "rg_idx_first_ends_excl": RG_IDX_FIRST_END_EXCL_REF[4],
+                "intersections_as_rg_idx": list(
+                    zip(
+                        ORDERED_ON_END_EXCL_REF[3:],
+                        RG_IDX_FIRST_END_EXCL_REF[4:6] + RG_IDX_END_EXCL_REF[5:],
+                    ),
+                ),
+                "intersections_as_df": INTERSECTIONS_AS_DF_REF[3:],
+            },
+        ),
+        (
+            "edge_case_empty_same_row_groups",
+            True,
+            Timestamp("2025-01-01 10:10"),
+            Timestamp("2025-01-01 10:20"),
+            {
+                "rg_idx_starts": {},
+                "rg_idx_first_ends_excl": {},
+                "intersections_as_rg_idx": [],
+                "intersections_as_df": [],
             },
         ),
     ],
@@ -379,6 +420,9 @@ def test_iter_intersections(store, test_id, full_test, start, end_excl, expected
             ),
         )
         n_intersections = len(expected["intersections_as_df"])
+        if n_intersections == 0:
+            assert dataset_intersections == []
+            return
         for i, df_dict in enumerate(expected["intersections_as_df"]):
             for key, df_ref in df_dict.items():
                 if key in expected["rg_idx_starts"]:

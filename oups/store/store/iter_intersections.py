@@ -15,6 +15,7 @@ from numpy import insert
 from numpy import nan
 from numpy import ones
 from numpy import r_
+from numpy import roll
 from numpy import searchsorted
 from pandas import DataFrame
 from pandas import Int64Dtype
@@ -26,7 +27,6 @@ from oups.numpy_utils import isnotin_ordered
 
 
 KEY_LEFT = "left"
-KEY_RIGHT = "right"
 
 
 def _get_and_validate_ordered_on_column(store, keys: List[dataclass]) -> str:
@@ -103,9 +103,17 @@ def _get_intersections(
     Notes
     -----
     - A key without value in the span of interest in 'ordered_on' will not
-      appear in returned dict and yielded items.
+      appear in returned dict of row group indices (start, first end excl, and
+      end excl).
     - The first row group to appear for each key is loaded right at the first
       iteration, even though it would not be needed immediately.
+    - For a given dataset, successive row groups sharing same 'ordered_on'
+      values (last of first row group is equal to first of second row group) are
+      'collapsed' into a single row group. More exactly, indices returned to
+      'iter_intersections()' will ensure that both row groups (as many as
+      complying with the condition) are returned as a single row group.
+      This may result in larger intersections being yielded in a same iteration
+      by 'iter_intersections()'.
 
     """
     if isinstance(start, Timestamp):
@@ -124,16 +132,17 @@ def _get_intersections(
         ordered_on_mins = row_group_stats.loc[:, KEY_ORDERED_ON_MINS].to_numpy()
         ordered_on_maxs = row_group_stats.loc[:, KEY_ORDERED_ON_MAXS].to_numpy()
         n_rgs = len(row_group_stats)
-        rg_idx = arange(n_rgs)
         # Main row groups are those not overlapping with next ones.
-        mask_main_rgs = ones(n_rgs).astype(bool)
-        mask_main_rgs[1:] = ordered_on_mins[1:] != ordered_on_maxs[:-1]
-        _unique_ordered_on_mins = ordered_on_mins[mask_main_rgs]
-        _unique_rg_idx_ends_excl = rg_idx[mask_main_rgs]
+        mask_main_rgs_for_mins = ones(n_rgs).astype(bool)
+        mask_main_rgs_for_mins[1:] = ordered_on_mins[1:] != ordered_on_maxs[:-1]
+        mask_main_rgs_for_maxs = roll(mask_main_rgs_for_mins, -1)
         # Skip first row group in trimming.
         trim_idx_first_end_excl = (
-            max(searchsorted(_unique_ordered_on_mins, start, side=KEY_RIGHT), 1) if start else 1
+            searchsorted(ordered_on_maxs[mask_main_rgs_for_maxs], start, side=KEY_LEFT) + 1
+            if start
+            else 1
         )
+        _unique_ordered_on_mins = ordered_on_mins[mask_main_rgs_for_mins]
         trim_idx_last_end_excl = (
             searchsorted(_unique_ordered_on_mins, end_excl, side=KEY_LEFT)
             if end_excl
@@ -158,7 +167,8 @@ def _get_intersections(
                     unfound_insert_idx,
                     keys_ordered_on_ends_excl[key][is_not_found],
                 )
-            _unique_rg_idx_ends_excl = r_[_unique_rg_idx_ends_excl, n_rgs]
+            rg_idx = arange(n_rgs)
+            _unique_rg_idx_ends_excl = r_[rg_idx[mask_main_rgs_for_mins], n_rgs]
             keys_rg_idx_starts[key] = _unique_rg_idx_ends_excl[trim_idx_first_end_excl - 1]
             keys_rg_idx_ends_excl[key] = _unique_rg_idx_ends_excl[
                 trim_idx_first_end_excl : trim_idx_last_end_excl + 1
