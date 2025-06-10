@@ -6,7 +6,7 @@ Created on Wed Dec  6 22:30:00 2021.
 
 """
 from importlib import import_module
-from typing import Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from pandas import DataFrame
 from pandas import Series
@@ -20,6 +20,12 @@ from oups.store.ordered_parquet_dataset.write.merge_split_strategies import NRow
 from oups.store.ordered_parquet_dataset.write.merge_split_strategies import (
     TimePeriodMergeSplitStrategy,
 )
+
+
+if TYPE_CHECKING:
+    from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import (
+        OrderedParquetDataset,
+    )
 
 
 ROW_GROUP_INT_TARGET_SIZE = 6_345_000
@@ -69,7 +75,7 @@ def _validate_duplicate_on_param(
 
 
 def write(
-    dirpath: str,
+    dirpath: Union[str, "OrderedParquetDataset"],
     ordered_on: Union[str, Tuple[str]],
     df: Optional[DataFrame] = None,
     row_group_target_size: Optional[Union[int, str]] = ROW_GROUP_INT_TARGET_SIZE,

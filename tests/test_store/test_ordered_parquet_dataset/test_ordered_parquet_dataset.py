@@ -19,9 +19,9 @@ from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
 from oups.store import OrderedParquetDataset
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import get_parquet_filepaths
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset_read_only import (
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import RGS_STATS_BASE_DTYPES
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import get_parquet_filepaths
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.read_only import (
     ReadOnlyOrderedParquetDataset,
 )
 

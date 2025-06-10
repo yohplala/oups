@@ -16,9 +16,7 @@ from pandas import DataFrame
 
 from oups.defines import PARQUET_FILE_EXTENSION
 from oups.defines import PARQUET_FILE_PREFIX
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset_base import (
-    BaseOrderedParquetDataset,
-)
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import OrderedParquetDataset
 
 
 # Find in names of parquet files the integer matching "**file_*.parquet" as 'i'.
@@ -50,7 +48,7 @@ def file_ids_in_directory(dirpath: str) -> List[int]:
     ]
 
 
-class ReadOnlyOrderedParquetDataset(BaseOrderedParquetDataset):
+class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
     """
     Read-only version of OrderedParquetDataset.
 

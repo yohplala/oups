@@ -7,7 +7,7 @@ Created on Mon May 26 18:00:00 2025.
 """
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Dict, Iterator, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
 
 from numpy import arange
 from numpy import full
@@ -24,6 +24,10 @@ from pandas import Timestamp
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
 from oups.numpy_utils import isnotin_ordered
+
+
+if TYPE_CHECKING:
+    from oups.store.store import Store
 
 
 KEY_LEFT = "left"
@@ -64,7 +68,7 @@ def _get_and_validate_ordered_on_column(store, keys: List[dataclass]) -> str:
 
 
 def _get_intersections(
-    store,  # Store instance
+    store: "Store",
     keys: List[dataclass],
     start: Optional[Union[int, float, Timestamp]] = None,
     end_excl: Optional[Union[int, float, Timestamp]] = None,

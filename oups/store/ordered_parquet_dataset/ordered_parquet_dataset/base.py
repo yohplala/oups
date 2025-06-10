@@ -35,7 +35,7 @@ from oups.store.ordered_parquet_dataset.write import write
 
 
 if TYPE_CHECKING:
-    from oups.store.ordered_parquet_dataset.ordered_parquet_dataset_read_only import (
+    from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.read_only import (
         ReadOnlyOrderedParquetDataset,
     )
 
@@ -96,7 +96,7 @@ def validate_ordered_on_match(base_ordered_on: str, new_ordered_on: str):
         )
 
 
-class BaseOrderedParquetDataset:
+class OrderedParquetDataset:
     """
     Base class for Ordered Parquet Dataset with shared functionality.
 
@@ -576,20 +576,74 @@ class BaseOrderedParquetDataset:
 
         """
         # To preserve DataFrame format when selecting single row
-        new_row_group_stats = (
+        row_group_stats_subset = (
             self.row_group_stats.iloc[item : item + 1]
             if isinstance(item, int)
             else self.row_group_stats.iloc[item]
         )
 
         # Create new instance
-        new_opd_subset = object.__new__(BaseOrderedParquetDataset)
-        new_opd_subset.__dict__ = self.__dict__ | {
-            "_row_group_stats": new_row_group_stats,
+        opd_subset = object.__new__(OrderedParquetDataset)
+        opd_subset.__dict__ = self.__dict__ | {
+            "_row_group_stats": row_group_stats_subset,
         }
         # Lazy import to avoid circular dependency
-        from oups.store.ordered_parquet_dataset.ordered_parquet_dataset_read_only import (
+        from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.read_only import (
             ReadOnlyOrderedParquetDataset,
         )
 
-        return ReadOnlyOrderedParquetDataset._from_instance(new_opd_subset)
+        return ReadOnlyOrderedParquetDataset._from_instance(opd_subset)
+
+
+def create_custom_opd(tmp_path: str, df: DataFrame, row_group_offsets: List[int], ordered_on: str):
+    """
+    Create a custom opd for testing.
+
+    Parameters
+    ----------
+    tmp_path : str
+        Temporary directory wheere to locate the opd files.
+    df : DataFrame
+        Data to write to opd files.
+    row_group_offsets : List[int]
+        Start index of row groups in 'df'.
+    ordered_on : str
+        Column name to order row groups by.
+
+
+    Returns
+    -------
+    OrderedParquetDataset
+        The created opd object.
+
+    """
+    _max_allowed_file_id = iinfo(RGS_STATS_BASE_DTYPES[KEY_FILE_IDS]).max
+    _file_id_n_digits = len(str(_max_allowed_file_id))
+    n_rows = []
+    ordered_on_mins = []
+    ordered_on_maxs = []
+    row_group_ends_excluded = row_group_offsets[1:] + [len(df)]
+    Path(tmp_path).mkdir(parents=True, exist_ok=True)
+    for file_id, (row_group_start, row_group_end_excluded) in enumerate(
+        zip(row_group_offsets, row_group_ends_excluded),
+    ):
+        df_rg = df.iloc[row_group_start:row_group_end_excluded]
+        n_rows.append(len(df_rg))
+        ordered_on_mins.append(df_rg.loc[:, ordered_on].iloc[0])
+        ordered_on_maxs.append(df_rg.loc[:, ordered_on].iloc[-1])
+        parquet_adapter.write_parquet(
+            path=get_parquet_filepaths(tmp_path, file_id, _file_id_n_digits),
+            df=df_rg,
+            # file_scheme="simple",   # not needed, is already a parameter in parquet_adapter.write_parquet()
+        )
+    row_group_stats = DataFrame(
+        data=zip(range(len(row_group_offsets)), n_rows, ordered_on_mins, ordered_on_maxs),
+        columns=RGS_STATS_COLUMNS,
+    ).astype(RGS_STATS_BASE_DTYPES)
+    parquet_adapter.write_parquet(
+        path=get_md_filepath(tmp_path),
+        df=row_group_stats,
+        # file_scheme="simple",   # not needed, is already a parameter in parquet_adapter.write_parquet()
+        key_value_metadata={KEY_ORDERED_ON: ordered_on},
+    )
+    return OrderedParquetDataset(tmp_path)
