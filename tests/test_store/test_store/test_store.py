@@ -99,9 +99,9 @@ def test_store_write_getitem(tmp_path):
         },
     )
     ps[we].write(ordered_on="timestamp", df=df)
-    assert ps._has_initialized_a_new_opd
+    assert ps._needs_keys_refresh
     assert we in ps
-    assert not ps._has_initialized_a_new_opd
+    assert not ps._needs_keys_refresh
     res = ps[we].to_pandas()
     assert res.equals(df)
 
