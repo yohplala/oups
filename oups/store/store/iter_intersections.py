@@ -271,7 +271,7 @@ def iter_intersections(
     # Load initial row groups and initialize start indices.
     # Iterate over 'rg_idx_starts' because only keys with data are kept.
     in_memory_data = {
-        key: store[key][rg_idx_start : prev_rg_idx_ends_excl[key]].to_pandas()
+        key: store[key][rg_idx_start : prev_rg_idx_ends_excl[key]]._to_pandas()
         for key, rg_idx_start in rg_idx_starts.items()
     }
     current_start_indices = (
@@ -288,7 +288,7 @@ def iter_intersections(
             if rg_idx_end_excl != prev_rg_idx_ends_excl[key]:
                 in_memory_data[key] = store[key][
                     prev_rg_idx_ends_excl[key] : rg_idx_end_excl
-                ].to_pandas()
+                ]._to_pandas()
                 prev_rg_idx_ends_excl[key] = rg_idx_end_excl
                 # Reset start index to 0 for new row group.
                 current_start_indices[key] = 0

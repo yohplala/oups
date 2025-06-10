@@ -29,6 +29,7 @@ from oups.defines import KEY_ORDERED_ON_MINS
 from oups.defines import PARQUET_FILE_EXTENSION
 from oups.defines import PARQUET_FILE_PREFIX
 from oups.store.filepath_utils import strip_path_tail
+from oups.store.ordered_parquet_dataset.lock import exclusive_lock
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.ordered_parquet_dataset.write import write
@@ -140,9 +141,10 @@ class OrderedParquetDataset:
     Methods
     -------
     to_pandas()
-        Return data as a pandas dataframe.
+        Return data as a pandas dataframe, managing concurrent access.
     write()
-        Write data to disk, merging with existing data.
+        Write data to disk, merging with existing data, and managing concurrent
+        access.
     __getitem__(self, item: Union[int, slice]) -> 'ReadOnlyOrderedParquetDataset'
         Select among the row-groups using integer/slicing.
     __len__()
@@ -154,6 +156,8 @@ class OrderedParquetDataset:
         from row_group_stats.
     _sort_row_groups()
         Sort row groups according their min value in 'ordered_on' column.
+    _to_pandas()
+        Return data as a pandas dataframe.
     _write_metadata_file()
         Write metadata to disk.
     _write_row_group_files()
@@ -283,7 +287,45 @@ class OrderedParquetDataset:
         # Get max 'file_id' from 'self.row_group_stats'.
         return -1 if self.row_group_stats.empty else int(self.row_group_stats[KEY_FILE_IDS].max())
 
+    @exclusive_lock(timeout=25, lifetime=5)
     def to_pandas(self) -> DataFrame:
+        """
+        Return data as a pandas dataframe.
+
+        Returns
+        -------
+        DataFrame
+            Dataframe.
+
+        """
+        return self._to_pandas()
+
+    @exclusive_lock(timeout=25, lifetime=15)
+    def write(self, **kwargs):
+        """
+        Write data to disk.
+
+        This method relies on 'oups.store.write.write()' function.
+
+        Parameters
+        ----------
+        **kwargs : dict
+            Keywords in 'kwargs' are forwarded to `oups.store.write.write()`.
+
+        """
+        if self.ordered_on is None:
+            if KEY_ORDERED_ON in kwargs:
+                self._ordered_on = kwargs.pop(KEY_ORDERED_ON)
+            else:
+                raise ValueError("'ordered_on' parameter is required.")
+        elif KEY_ORDERED_ON in kwargs:
+            validate_ordered_on_match(
+                base_ordered_on=self.ordered_on,
+                new_ordered_on=kwargs.pop(KEY_ORDERED_ON),
+            )
+        write(self, ordered_on=self.ordered_on, **kwargs)
+
+    def _to_pandas(self) -> DataFrame:
         """
         Return data as a pandas dataframe.
 
@@ -407,30 +449,6 @@ class OrderedParquetDataset:
         Sort row groups according their min value in 'ordered_on' column.
         """
         self._row_group_stats.sort_values(by=KEY_ORDERED_ON_MINS, inplace=True, ignore_index=True)
-
-    def write(self, **kwargs):
-        """
-        Write data to disk.
-
-        This method relies on 'oups.store.write.write()' function.
-
-        Parameters
-        ----------
-        **kwargs : dict
-            Keywords in 'kwargs' are forwarded to `oups.store.write.write()`.
-
-        """
-        if self.ordered_on is None:
-            if KEY_ORDERED_ON in kwargs:
-                self._ordered_on = kwargs.pop(KEY_ORDERED_ON)
-            else:
-                raise ValueError("'ordered_on' parameter is required.")
-        elif KEY_ORDERED_ON in kwargs:
-            validate_ordered_on_match(
-                base_ordered_on=self.ordered_on,
-                new_ordered_on=kwargs.pop(KEY_ORDERED_ON),
-            )
-        write(self, ordered_on=self.ordered_on, **kwargs)
 
     def _write_metadata_file(self, key_value_metadata: Dict[str, str] = None):
         """

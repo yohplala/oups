@@ -21,6 +21,7 @@ from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import Orde
 
 # Find in names of parquet files the integer matching "**file_*.parquet" as 'i'.
 FILE_ID_FROM_REGEX = compile(rf".*{PARQUET_FILE_PREFIX}(?P<i>[\d]+){PARQUET_FILE_EXTENSION}$")
+CACHED_PROPERTIES = {"key_value_metadata", "row_group_stats"}
 
 
 def file_ids_in_directory(dirpath: str) -> List[int]:
@@ -79,6 +80,8 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
     __len__()
         Return number of row groups in the dataset.
     to_pandas()
+        Return data as a pandas dataframe, managing concurrent access.
+    _to_pandas()
         Return data as a pandas dataframe.
 
     Restricted Operations
@@ -130,13 +133,11 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
         """
         instance = cls.__new__(cls)
         # Copy __dict__ but exclude cached property values to ensure
-        # new instance computes properties based on its own data
+        # new instance computes properties based on its own data.
         instance_dict = {
-            key: value
-            for key, value in opd.__dict__.items()
-            if key not in ("row_group_stats", "key_value_metadata")
+            key: value for key, value in opd.__dict__.items() if key not in CACHED_PROPERTIES
         }
-        # Use object.__setattr__ to bypass the custom __setattr__ method
+        # Use object.__setattr__ to bypass the custom __setattr__ method.
         object.__setattr__(instance, "__dict__", instance_dict)
         return instance
 
