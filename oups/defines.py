@@ -29,3 +29,7 @@ KEY_OUPS_METADATA = "oups"
 # Parameters for 'write()' function.
 KEY_ROW_GROUP_TARGET_SIZE = "row_group_target_size"
 KEY_MAX_N_OFF_TARGET_RGS = "max_n_off_target_rgs"
+
+# Parquet file name constants.
+PARQUET_FILE_PREFIX = "file_"
+PARQUET_FILE_EXTENSION = ".parquet"

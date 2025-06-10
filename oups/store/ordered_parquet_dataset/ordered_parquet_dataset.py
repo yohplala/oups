@@ -10,9 +10,7 @@ from functools import cached_property
 from itertools import chain
 from os import remove
 from os import rename
-from os import scandir
 from pathlib import Path
-from re import compile
 from typing import Dict, Iterable, List, Optional, Union
 
 from numpy import iinfo
@@ -29,14 +27,15 @@ from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
+from oups.defines import PARQUET_FILE_EXTENSION
+from oups.defines import PARQUET_FILE_PREFIX
 from oups.store.filepath_utils import strip_path_tail
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
+from oups.store.ordered_parquet_dataset.opd_read_only import ReadOnlyOrderedParquetDatasetProxy
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.ordered_parquet_dataset.write import write
 
 
-PARQUET_FILE_PREFIX = "file_"
-PARQUET_FILE_EXTENSION = ".parquet"
 # Do not change this order, it is expected by OrderedParquetDataset.write_row_group_files()
 RGS_STATS_COLUMNS = [KEY_FILE_IDS, KEY_N_ROWS, KEY_ORDERED_ON_MINS, KEY_ORDERED_ON_MAXS]
 RGS_STATS_BASE_DTYPES = {
@@ -46,9 +45,6 @@ RGS_STATS_BASE_DTYPES = {
 
 
 parquet_adapter = ParquetAdapter(use_arro3=False)
-
-# Find in names of parquet files the integer matching "**file_*.parquet" as 'i'.
-FILE_ID_FROM_REGEX = compile(rf".*{PARQUET_FILE_PREFIX}(?P<i>[\d]+){PARQUET_FILE_EXTENSION}$")
 
 
 def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_digits: int) -> str:
@@ -82,21 +78,6 @@ def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_d
     )
 
 
-def file_ids_in_directory(dirpath: str) -> List[int]:
-    """
-    Return an unordered list of file ids of parquet files in directory.
-
-    Find the integer matching "**file_*.parquet" in referenced path and returns them as
-    a list.
-
-    """
-    return [
-        int(FILE_ID_FROM_REGEX.match(entry.name)["i"])
-        for entry in scandir(dirpath)
-        if entry.is_file()
-    ]
-
-
 def validate_ordered_on_match(base_ordered_on: str, new_ordered_on: str):
     """
     Check if 'new_ordered_on' is equal to 'base_ordered_on'.
@@ -121,13 +102,6 @@ class OrderedParquetDataset:
         Number of digits to use for 'file_id' in filename. It is kept as an
         attribute to avoid recomputing it at each call to
         'get_parquet_file_name()'.
-    _is_row_group_subset : bool
-        Flag warning current opd is a subset of an bigger one (use of
-        '_getitem__' method). In this case, methods interacting with file ids in
-        parquet filename needs to use a 'max_file_id' based on all files in
-        directory. This flag ensures that 'max_file_id' gets assessed this way.
-        This applies to 'align_file_ids()' and 'write_row_group_files()'
-        methods.
     _max_allowed_file_id : int
         Maximum allowed file id. Kept as hidden attribute to avoid
         recomputing it at each call in 'write_row_group_files()'.
@@ -226,9 +200,8 @@ class OrderedParquetDataset:
         # with the idea that it is an immutable dataset property, while the
         # content of 'self._key_value_metadata' is mutable.
         self._ordered_on = self._key_value_metadata.pop(KEY_ORDERED_ON)
-        self._is_row_group_subset = False
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Union[int, slice]) -> ReadOnlyOrderedParquetDatasetProxy:
         """
         Select among the row-groups using integer/slicing.
 
@@ -239,22 +212,21 @@ class OrderedParquetDataset:
 
         Returns
         -------
-        OrderedParquetDataset
+        ReadOnlyOrderedParquetDatasetProxy
 
         """
-        new_opd = object.__new__(OrderedParquetDataset)
+        new_opd_subset = object.__new__(OrderedParquetDataset)
         # To preserve Dataframe format.
         new_row_group_stats = (
             self.row_group_stats.iloc[item : item + 1]
             if isinstance(item, int)
             else self.row_group_stats.iloc[item]
         )
-        new_opd.__dict__ = self.__dict__ | {
-            "_is_row_group_subset": True,
+        new_opd_subset.__dict__ = self.__dict__ | {
             "_key_value_metadata": deepcopy(self.key_value_metadata),
             "_row_group_stats": new_row_group_stats,
         }
-        return new_opd
+        return ReadOnlyOrderedParquetDatasetProxy(new_opd_subset)
 
     def __len__(self):
         """
@@ -333,8 +305,6 @@ class OrderedParquetDataset:
         - This method is not supported for row group subsets.
 
         """
-        if self._is_row_group_subset:
-            raise ValueError("'align_file_ids()' is not supported for row group subsets.")
         # Build mapping of current file ids to desired new ids.
         mask_ids_to_rename = self.row_group_stats.loc[:, KEY_FILE_IDS] != self.row_group_stats.index
         current_ids_to_rename = self.row_group_stats.loc[mask_ids_to_rename, KEY_FILE_IDS]
@@ -378,9 +348,6 @@ class OrderedParquetDataset:
         If not row group in directory, return -1.
 
         """
-        if self._is_row_group_subset:
-            # Get max 'file_id' safely by reviewing all files in directory.
-            return max(file_ids_in_directory(self.dirpath))
         # Get max 'file_id' from 'self.row_group_stats'.
         return -1 if self.row_group_stats.empty else int(self.row_group_stats[KEY_FILE_IDS].max())
 
@@ -445,13 +412,13 @@ class OrderedParquetDataset:
         """
         self._row_group_stats.sort_values(by=KEY_ORDERED_ON_MINS, inplace=True, ignore_index=True)
 
-    def to_pandas(self):
+    def to_pandas(self) -> DataFrame:
         """
         Return data as a pandas dataframe.
 
         Returns
         -------
-        pandas.DataFrame
+        DataFrame
             Dataframe.
 
         """
