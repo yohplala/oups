@@ -137,9 +137,9 @@ class OrderedParquetDataset:
         'write_row_group_files()'.
     dirpath : str
         Directory path from where to load data.
-    is_opdmd_file_missing : bool
-        Flag warning that 'opdmd' file is missing, and indicating that the opd
-        instance has just been newly initialized.
+    is_newly_initialized : bool
+        True if this dataset instance was just created and has no existing
+        metadata file. False if the dataset was loaded from existing files.
     key_value_metadata : Dict[str, str]
         Key-value metadata, from user and including 'ordered_on' column name.
     max_file_id : int
@@ -213,7 +213,7 @@ class OrderedParquetDataset:
                     base_ordered_on=self._key_value_metadata[KEY_ORDERED_ON],
                     new_ordered_on=ordered_on,
                 )
-            self._is_opdmd_file_missing = False
+            self._is_newly_initialized = False
         except FileNotFoundError:
             # Using an empty Dataframe so that it can be written in the case
             # user is only using 'write_metadata()' without adding row groups.
@@ -221,7 +221,7 @@ class OrderedParquetDataset:
                 RGS_STATS_BASE_DTYPES,
             )
             self._key_value_metadata = {KEY_ORDERED_ON: ordered_on}
-            self._is_opdmd_file_missing = True
+            self._is_newly_initialized = True
         # While opd is in memory, 'ordered_on' is kept as a private attribute,
         # with the idea that it is an immutable dataset property, while the
         # content of 'self._key_value_metadata' is mutable.
@@ -291,11 +291,11 @@ class OrderedParquetDataset:
         return self._dirpath
 
     @property
-    def is_opdmd_file_missing(self):
+    def is_newly_initialized(self):
         """
-        Return True if 'opdmd' file is missing.
+        Return True if this dataset has no existing metadata file.
         """
-        return self._is_opdmd_file_missing
+        return self._is_newly_initialized
 
     @property
     def key_value_metadata(self):
@@ -530,14 +530,14 @@ class OrderedParquetDataset:
                 elif value:
                     # Case 'add'.
                     existing_md[key] = value
-        if self._is_opdmd_file_missing:
+        if self._is_newly_initialized:
             Path(strip_path_tail(str(self.dirpath))).mkdir(parents=True, exist_ok=True)
         parquet_adapter.write_parquet(
             path=get_md_filepath(self.dirpath),
             df=self.row_group_stats,
             key_value_metadata=existing_md | {KEY_ORDERED_ON: self.ordered_on},
         )
-        self._is_opdmd_file_missing = False
+        self._is_newly_initialized = False
 
     def write_row_group_files(
         self,

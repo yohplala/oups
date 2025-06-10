@@ -265,7 +265,7 @@ class Store:
 
         """
         opd = OrderedParquetDataset(get_opd_basepath(self._basepath, key))
-        if opd.is_opdmd_file_missing:
+        if opd.is_newly_initialized:
             self._needs_keys_refresh = True
         return opd
 
