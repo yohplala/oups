@@ -85,7 +85,7 @@ def test_opd_init_empty(tmp_path):
 def test_exception_opd_init_ordered_on(tmp_path):
     # Write a 1st dataset with a different 'ordered_on' column name.
     opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
-    opd.write_row_group_files([df_ref], write_metadata_file=True)
+    opd._write_row_group_files([df_ref], write_metadata_file=True)
     with pytest.raises(
         ValueError,
         match="^'ordered_on' parameter value 'b'",
@@ -96,7 +96,7 @@ def test_exception_opd_init_ordered_on(tmp_path):
 def test_opd_getitem_and_len(tmp_path):
     opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
     range_df = list(range(len(df_ref) + 1))
-    opd.write_row_group_files(
+    opd._write_row_group_files(
         [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
         write_metadata_file=True,
     )
@@ -122,7 +122,7 @@ def test_opd_getitem_and_len(tmp_path):
 def test_opd_getitem_and_max_file_id(tmp_path):
     opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
     range_df = list(range(len(df_ref) + 1))
-    opd.write_row_group_files(
+    opd._write_row_group_files(
         [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
         write_metadata_file=True,
     )
@@ -131,7 +131,7 @@ def test_opd_getitem_and_max_file_id(tmp_path):
     assert opd.max_file_id == max_file_id_ref
     assert opd[2:4].row_group_stats.loc[:, KEY_FILE_IDS].max() == 3
     # Remove first row group.
-    opd.remove_row_group_files(file_ids=[0])
+    opd._remove_row_group_files(file_ids=[0])
     assert opd.max_file_id == max_file_id_ref - 1
     # check 'max_file_id' is correctly computed on a subset.
     assert opd[2:4].max_file_id == max_file_id_ref - 1
@@ -140,19 +140,19 @@ def test_opd_getitem_and_max_file_id(tmp_path):
 def test_opd_align_file_ids(tmp_path):
     opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
     range_df = list(range(len(df_ref) + 1))
-    opd.write_row_group_files(
+    opd._write_row_group_files(
         [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
         write_metadata_file=False,
     )
     # Remove 2nd row group. It keeps one original id and requires to update the
     # 2 last ids.
-    opd.remove_row_group_files(file_ids=[1])
+    opd._remove_row_group_files(file_ids=[1])
     # Introduce two loops in file_ids.
     # 2 <-> 3.
     # 4 <-> 5.
     switch_row_group_file_ids(opd, 2, 4)
     switch_row_group_file_ids(opd, 4, 6)
-    opd.align_file_ids()
+    opd._align_file_ids()
     ordered_on_mins_maxs_ref = [
         df_ref.loc[:, "timestamp"].iloc[0],
         df_ref.loc[:, "timestamp"].iloc[2],
@@ -176,7 +176,7 @@ def test_opd_align_file_ids(tmp_path):
 def test_opd_remove_row_group_files(tmp_path):
     opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
     range_df = list(range(len(df_ref) + 1))
-    opd.write_row_group_files(
+    opd._write_row_group_files(
         [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
         write_metadata_file=True,
     )
@@ -185,7 +185,7 @@ def test_opd_remove_row_group_files(tmp_path):
     file_ids_to_keep = [i for i in opd.row_group_stats.index if i not in file_ids_to_remove]
     rg_stats_ref = opd.row_group_stats.iloc[file_ids_to_keep].reset_index(drop=True)
     rg_stats_ref.loc[:, KEY_FILE_IDS] = range(len(rg_stats_ref))
-    opd.remove_row_group_files(file_ids=file_ids_to_remove)
+    opd._remove_row_group_files(file_ids=file_ids_to_remove)
     assert len(opd) == len(df_ref) - len(file_ids_to_remove)
     print("opd.row_group_stats")
     print(opd.row_group_stats)
@@ -197,7 +197,7 @@ def test_opd_remove_row_group_files(tmp_path):
 def test_opd_sort_row_groups(tmp_path):
     opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
     range_df = list(range(len(df_ref) + 1))
-    opd.write_row_group_files(
+    opd._write_row_group_files(
         [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
         write_metadata_file=False,
     )
@@ -207,7 +207,7 @@ def test_opd_sort_row_groups(tmp_path):
     # Un-order row groups 'ordered_on_mins' and 'ordered_on_maxs'.
     opd.row_group_stats.sort_values(by=KEY_FILE_IDS, inplace=True)
     assert not opd.row_group_stats[KEY_ORDERED_ON_MINS].is_monotonic_increasing
-    opd.sort_row_groups()
+    opd._sort_row_groups()
     assert opd.row_group_stats[KEY_ORDERED_ON_MINS].is_monotonic_increasing
     df_res = opd[2:].to_pandas()
     assert df_ref.iloc[2:].equals(df_res)
@@ -216,7 +216,7 @@ def test_opd_sort_row_groups(tmp_path):
 def test_opd_to_pandas(tmp_path):
     opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
     range_df = list(range(len(df_ref) + 1))
-    opd.write_row_group_files(
+    opd._write_row_group_files(
         [df_ref.iloc[i:j] for i, j in zip(range_df[:-1], range_df[1:])],
         write_metadata_file=True,
     )
@@ -227,7 +227,7 @@ def test_opd_to_pandas(tmp_path):
 def test_opd_write_metadata(tmp_path):
     opd1 = OrderedParquetDataset(tmp_path, ordered_on="a")
     metadata_ref = {"a": "b", "ts": Timestamp("2021-01-01")}
-    opd1.write_metadata_file(key_value_metadata=metadata_ref)
+    opd1._write_metadata_file(key_value_metadata=metadata_ref)
     assert opd1.row_group_stats.empty
     assert opd1.key_value_metadata == metadata_ref
     opd2 = OrderedParquetDataset(tmp_path)
@@ -235,7 +235,7 @@ def test_opd_write_metadata(tmp_path):
     assert opd2.key_value_metadata == metadata_ref
     # Changing some metadata values, removing another one.
     additional_metadata_in = {"a": "c", "ts": None}
-    opd1.write_metadata_file(key_value_metadata=additional_metadata_in)
+    opd1._write_metadata_file(key_value_metadata=additional_metadata_in)
     metadata_ref = {"a": "c"}
     assert opd1.key_value_metadata == metadata_ref
     opd2 = OrderedParquetDataset(tmp_path)
@@ -245,7 +245,7 @@ def test_opd_write_metadata(tmp_path):
 @pytest.mark.parametrize("write_opdmd", [False, True])
 def test_opd_write_row_group_files(tmp_path, write_opdmd):
     opd1 = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
-    opd1.write_row_group_files([df_ref.iloc[:2], df_ref.iloc[2:]], write_metadata_file=write_opdmd)
+    opd1._write_row_group_files([df_ref.iloc[:2], df_ref.iloc[2:]], write_metadata_file=write_opdmd)
     rgs_stats_ref = DataFrame(
         {
             KEY_FILE_IDS: [0, 1],
@@ -292,7 +292,7 @@ def test_exception_opd_write_row_group_files_max_file_id_reached(tmp_path, monke
     dataframes = list(dataframes())
     max_file_id = exceeding_max_n_files - 2
     # Write max_file_id dataframes.
-    opd.write_row_group_files(dataframes[:max_file_id], write_metadata_file=True)
+    opd._write_row_group_files(dataframes[:max_file_id], write_metadata_file=True)
 
     opd_tmp = OrderedParquetDataset(tmp_path)
     assert opd_tmp.row_group_stats.loc[:, KEY_FILE_IDS].iloc[-1] == max_file_id - 1
@@ -302,7 +302,7 @@ def test_exception_opd_write_row_group_files_max_file_id_reached(tmp_path, monke
         ValueError,
         match=f"^file id '{max_file_id+1}' exceeds max value {max_file_id}",
     ):
-        opd.write_row_group_files(dataframes[max_file_id:], write_metadata_file=False)
+        opd._write_row_group_files(dataframes[max_file_id:], write_metadata_file=False)
 
     opd_tmp = OrderedParquetDataset(tmp_path)
     # Check that the opmd file has been correctly rewritten.
@@ -333,7 +333,7 @@ def test_exception_opd_write_row_group_files_max_n_rows_reached(tmp_path, monkey
         ValueError,
         match=f"^number of rows {exceeding_max_n_rows} exceeds max value {exceeding_max_n_rows-1}",
     ):
-        opd.write_row_group_files([large_df])
+        opd._write_row_group_files([large_df])
 
 
 def test_exception_opd_write_row_group_files_ordered_on(tmp_path):
@@ -342,7 +342,7 @@ def test_exception_opd_write_row_group_files_ordered_on(tmp_path):
         ValueError,
         match="^'ordered_on' column 'a' is not in",
     ):
-        opd.write_row_group_files([df_ref])
+        opd._write_row_group_files([df_ref])
 
 
 def test_opd_write(tmp_path):

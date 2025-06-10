@@ -108,6 +108,8 @@ class Store:
 
     Methods
     -------
+    iter_intersections
+        Iterate over row group intersections across multiple datasets in store.
     __getitem__
         Return the ``OrderedParquetDataset`` instance corresponding to ``key``.
     __delitem__
@@ -120,8 +122,6 @@ class Store:
         List of datasets.
     __contains__
         Assess presence of this dataset.
-    iter_intersections
-        Iterate over row group intersections across multiple datasets in store.
 
     Notes
     -----

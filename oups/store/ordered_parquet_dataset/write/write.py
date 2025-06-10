@@ -218,7 +218,7 @@ def write(
                 drop_duplicates=drop_duplicates,
                 row_group_time_period=row_group_target_size,
             )
-        ordered_parquet_dataset.write_row_group_files(
+        ordered_parquet_dataset._write_row_group_files(
             dfs=iter_merge_split_data(
                 opd=ordered_parquet_dataset,
                 ordered_on=ordered_on,
@@ -244,7 +244,7 @@ def write(
             ].to_list()
         ]
         if rg_file_ids_to_remove:
-            ordered_parquet_dataset.remove_row_group_files(
+            ordered_parquet_dataset._remove_row_group_files(
                 file_ids=rg_file_ids_to_remove,
                 sort_row_groups=merge_split_strategy.sort_rgs_after_write,
                 key_value_metadata=key_value_metadata,
@@ -254,7 +254,7 @@ def write(
             return
         # Rename partition files.
         elif merge_split_strategy.sort_rgs_after_write:
-            ordered_parquet_dataset.sort_row_groups()
-            ordered_parquet_dataset.align_file_ids()
+            ordered_parquet_dataset._sort_row_groups()
+            ordered_parquet_dataset._align_file_ids()
     # Write metadata.
-    ordered_parquet_dataset.write_metadata_file(key_value_metadata=key_value_metadata)
+    ordered_parquet_dataset._write_metadata_file(key_value_metadata=key_value_metadata)

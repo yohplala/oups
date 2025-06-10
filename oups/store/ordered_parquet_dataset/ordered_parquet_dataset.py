@@ -157,24 +157,24 @@ class OrderedParquetDataset:
 
     Methods
     -------
-    __getitem__()
-        Select among the row-groups using integer/slicing.
-    __len__()
-        Return number of row groups in the dataset.
-    align_file_ids()
-        Align file ids to row group position in the dataset.
-    remove_row_group_files()
-        Remove row group files from disk. Row group indexes are also removed
-        from OrderedParquetDataset.row_group_stats.
-    sort_row_groups()
-        Sort row groups according their min value in 'ordered_on' column.
     to_pandas()
         Return data as a pandas dataframe.
     write()
         Write data to disk, merging with existing data.
-    write_metadata()
+    __getitem__()
+        Select among the row-groups using integer/slicing.
+    __len__()
+        Return number of row groups in the dataset.
+    _align_file_ids()
+        Align file ids to row group position in the dataset.
+    _remove_row_group_files()
+        Remove row group files from disk. Row group indexes are also removed
+        from OrderedParquetDataset.row_group_stats.
+    _sort_row_groups()
+        Sort row groups according their min value in 'ordered_on' column.
+    _write_metadata()
         Write metadata to disk.
-    write_row_group_files()
+    _write_row_group_files()
         Write row group as files to disk. One row group per file.
 
     Notes
@@ -318,7 +318,7 @@ class OrderedParquetDataset:
         """
         return self._row_group_stats
 
-    def align_file_ids(self):
+    def _align_file_ids(self):
         """
         Align file ids to row group position in the dataset and rename files.
 
@@ -384,7 +384,7 @@ class OrderedParquetDataset:
         # Get max 'file_id' from 'self.row_group_stats'.
         return -1 if self.row_group_stats.empty else int(self.row_group_stats[KEY_FILE_IDS].max())
 
-    def remove_row_group_files(
+    def _remove_row_group_files(
         self,
         file_ids: List[int],
         sort_row_groups: Optional[bool] = True,
@@ -407,17 +407,17 @@ class OrderedParquetDataset:
 
         Notes
         -----
-        After file removal, and optional row group sorting, 'align_file_ids()'
-        and 'write_metadata()' methods are called, as a result of the following
+        After file removal, and optional row group sorting, '_align_file_ids()'
+        and '_write_metadata()' methods are called, as a result of the following
         reasoning.
         It is anticipated that 'file_ids' may be generated from row group
         indexes. If definition of 'file_ids' from row group indexes occurs in a
-        loop where 'remove_row_group_files()' is called, and that row group
+        loop where '_remove_row_group_files()' is called, and that row group
         indexes are defined before execution of the loop, then row group indexes
         may not be valid anylonger at a next iteration.
-        To mitigate this issue, 'align_file_ids()' and 'write_metadata()'
+        To mitigate this issue, '_align_file_ids()' and '_write_metadata()'
         methods are called, aligning then row group stats in memory and on disk
-        ('_opdmd file') with the existing row group files on disk.
+        ('_opdmd' file) with the existing row group files on disk.
 
         """
         if not file_ids:
@@ -435,11 +435,11 @@ class OrderedParquetDataset:
             drop=True,
         )
         if sort_row_groups:
-            self.sort_row_groups()
-        self.align_file_ids()
-        self.write_metadata_file(key_value_metadata=key_value_metadata)
+            self._sort_row_groups()
+        self._align_file_ids()
+        self._write_metadata_file(key_value_metadata=key_value_metadata)
 
-    def sort_row_groups(self):
+    def _sort_row_groups(self):
         """
         Sort row groups according their min value in 'ordered_on' column.
         """
@@ -488,7 +488,7 @@ class OrderedParquetDataset:
             )
         write(self, ordered_on=self.ordered_on, **kwargs)
 
-    def write_metadata_file(self, key_value_metadata: Dict[str, str] = None):
+    def _write_metadata_file(self, key_value_metadata: Dict[str, str] = None):
         """
         Write metadata to disk.
 
@@ -539,7 +539,7 @@ class OrderedParquetDataset:
         )
         self._is_newly_initialized = False
 
-    def write_row_group_files(
+    def _write_row_group_files(
         self,
         dfs: Iterable[DataFrame],
         write_metadata_file: bool = True,
@@ -601,7 +601,7 @@ class OrderedParquetDataset:
             copy=False,
         )
         if write_metadata_file or dtype_limit_exceeded:
-            self.write_metadata_file(key_value_metadata=key_value_metadata)
+            self._write_metadata_file(key_value_metadata=key_value_metadata)
         if dtype_limit_exceeded:
             if file_id > self._max_allowed_file_id:
                 raise ValueError(
