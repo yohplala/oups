@@ -21,6 +21,9 @@ from oups.defines import KEY_ORDERED_ON_MINS
 from oups.store import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import RGS_STATS_BASE_DTYPES
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import get_parquet_filepaths
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset_read_only import (
+    ReadOnlyOrderedParquetDataset,
+)
 
 
 df_ref = DataFrame(
@@ -102,21 +105,24 @@ def test_opd_getitem_and_len(tmp_path):
     )
     assert not opd.is_newly_initialized
     assert len(opd) == len(df_ref)
-    assert not opd._is_row_group_subset
+    assert not isinstance(opd, ReadOnlyOrderedParquetDataset)
     opd_sub1 = opd[1]
+    assert opd_sub1.__dict__.keys() == opd.__dict__.keys()
     # Using slice notation to preserve DataFrame format.
     assert opd_sub1.row_group_stats.equals(opd._row_group_stats.iloc[1:2])
     assert opd_sub1.key_value_metadata == opd.key_value_metadata
     assert opd_sub1.ordered_on == opd.ordered_on
-    assert opd_sub1.__dict__.keys() == opd.__dict__.keys()
     assert len(opd_sub1) == 1
-    assert opd_sub1._is_row_group_subset
+    assert isinstance(opd_sub1, ReadOnlyOrderedParquetDataset)
     opd_sub2 = opd[1:3]
+    assert opd_sub2.__dict__.keys() == opd.__dict__.keys()
     assert opd_sub2.row_group_stats.equals(opd.row_group_stats.iloc[1:3])
     assert opd_sub2.key_value_metadata == opd.key_value_metadata
     assert opd_sub2.ordered_on == opd.ordered_on
-    assert opd_sub2.__dict__.keys() == opd.__dict__.keys()
     assert len(opd_sub2) == 2
+    # Check subset of a subset.
+    opd_sub3 = opd_sub2[0]
+    assert len(opd_sub3) == 1
 
 
 def test_opd_getitem_and_max_file_id(tmp_path):
@@ -187,10 +193,6 @@ def test_opd_remove_row_group_files(tmp_path):
     rg_stats_ref.loc[:, KEY_FILE_IDS] = range(len(rg_stats_ref))
     opd._remove_row_group_files(file_ids=file_ids_to_remove)
     assert len(opd) == len(df_ref) - len(file_ids_to_remove)
-    print("opd.row_group_stats")
-    print(opd.row_group_stats)
-    print("rg_stats_ref")
-    print(rg_stats_ref)
     assert opd.row_group_stats.equals(rg_stats_ref)
 
 
