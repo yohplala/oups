@@ -36,7 +36,7 @@ def get_md_basename(filepath: Union[str, Path]) -> str:
 
     Parameters
     ----------
-    filepath : str
+    filepath : Union[str, Path]
         The file path from which extract the basename.
 
     Returns
@@ -46,7 +46,10 @@ def get_md_basename(filepath: Union[str, Path]) -> str:
         otherwise.
 
     """
-    filepath_name = filepath.name if isinstance(filepath, Path) else Path(filepath).name
+    try:
+        filepath_name = filepath.name
+    except AttributeError:
+        filepath_name = Path(filepath).name
     return (
         filepath_name[: -len(OPDMD_EXTENSION)] if filepath_name.endswith(OPDMD_EXTENSION) else None
     )

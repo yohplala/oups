@@ -20,7 +20,6 @@ from pandas import DataFrame
 from pandas import Series
 from pandas import concat
 
-from oups.defines import DIR_SEP
 from oups.defines import KEY_FILE_IDS
 from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON
@@ -28,7 +27,6 @@ from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
 from oups.defines import PARQUET_FILE_EXTENSION
 from oups.defines import PARQUET_FILE_PREFIX
-from oups.store.filepath_utils import strip_path_tail
 from oups.store.ordered_parquet_dataset.lock import exclusive_lock
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
@@ -52,13 +50,13 @@ RGS_STATS_BASE_DTYPES = {
 parquet_adapter = ParquetAdapter(use_arro3=False)
 
 
-def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_digits: int) -> str:
+def get_parquet_filepaths(dirpath: Path, file_id: Union[int, Series], file_id_n_digits: int) -> str:
     """
     Get standardized parquet file path(s).
 
     Parameters
     ----------
-    dirpath : str
+    dirpath : Path
         The directory path to use in the filename.
     file_id : int or Series[int]
         The file ID to use in the filename. If a Series, a list of file paths
@@ -74,12 +72,12 @@ def get_parquet_filepaths(dirpath: str, file_id: Union[int, Series], file_id_n_d
     """
     return (
         (
-            f"{dirpath}{DIR_SEP}{PARQUET_FILE_PREFIX}"
+            str(dirpath / PARQUET_FILE_PREFIX)
             + file_id.astype("string").str.zfill(file_id_n_digits)
             + PARQUET_FILE_EXTENSION
         ).to_list()
         if isinstance(file_id, Series)
-        else f"{dirpath}{DIR_SEP}{PARQUET_FILE_PREFIX}{file_id:0{file_id_n_digits}}{PARQUET_FILE_EXTENSION}"
+        else dirpath / f"{PARQUET_FILE_PREFIX}{file_id:0{file_id_n_digits}}{PARQUET_FILE_EXTENSION}"
     )
 
 
@@ -118,7 +116,7 @@ class OrderedParquetDataset:
         Maximum allowed number of rows in a row group. Kept as hidden
         attribute to avoid recomputing it at each call in
         'write_row_group_files()'.
-    dirpath : str
+    dirpath : Path
         Directory path from where to load data.
     is_newly_initialized : bool
         True if this dataset instance was just created and has no existing
@@ -175,23 +173,23 @@ class OrderedParquetDataset:
 
     """
 
-    def __init__(self, dirpath: str, ordered_on: str = None):
+    def __init__(self, dirpath: Union[str, Path], ordered_on: str = None):
         """
         Initialize BaseOrderedParquetDataset.
 
         Parameters
         ----------
-        dirpath : str
+        dirpath : Union[str, Path]
             Directory path from where to load data.
         ordered_on : Optional[str], default None
             Column name to order row groups by. If not initialized, it can also
             be provided in 'kwargs' of 'write()' method.
 
         """
-        self._dirpath = dirpath
+        self._dirpath = Path(dirpath).resolve()
         try:
             self._row_group_stats, self._key_value_metadata = parquet_adapter.read_parquet(
-                get_md_filepath(self.dirpath),
+                get_md_filepath(self._dirpath),
                 return_key_value_metadata=True,
             )
             if ordered_on:
@@ -493,7 +491,7 @@ class OrderedParquetDataset:
                     # Case 'add'.
                     existing_md[key] = value
         if self._is_newly_initialized:
-            Path(strip_path_tail(str(self.dirpath))).mkdir(parents=True, exist_ok=True)
+            self.dirpath.parent.mkdir(parents=True, exist_ok=True)
         parquet_adapter.write_parquet(
             path=get_md_filepath(self.dirpath),
             df=self.row_group_stats,
@@ -536,7 +534,7 @@ class OrderedParquetDataset:
         buffer = []
         dtype_limit_exceeded = False
         if len(self.row_group_stats) == 0:
-            Path(self.dirpath).mkdir(parents=True, exist_ok=True)
+            self.dirpath.mkdir(parents=True, exist_ok=True)
         for file_id, df in enumerate(chain([first_df], iter_dfs), start=self.max_file_id + 1):
             if file_id > self._max_allowed_file_id or len(df) > self._max_n_rows:
                 dtype_limit_exceeded = True
@@ -613,13 +611,18 @@ class OrderedParquetDataset:
         return ReadOnlyOrderedParquetDataset._from_instance(opd_subset)
 
 
-def create_custom_opd(tmp_path: str, df: DataFrame, row_group_offsets: List[int], ordered_on: str):
+def create_custom_opd(
+    tmp_path: Union[str, Path],
+    df: DataFrame,
+    row_group_offsets: List[int],
+    ordered_on: str,
+):
     """
     Create a custom opd for testing.
 
     Parameters
     ----------
-    tmp_path : str
+    tmp_path : Union[str, Path]
         Temporary directory wheere to locate the opd files.
     df : DataFrame
         Data to write to opd files.
@@ -635,13 +638,14 @@ def create_custom_opd(tmp_path: str, df: DataFrame, row_group_offsets: List[int]
         The created opd object.
 
     """
+    tmp_path = Path(tmp_path).resolve()
     _max_allowed_file_id = iinfo(RGS_STATS_BASE_DTYPES[KEY_FILE_IDS]).max
     _file_id_n_digits = len(str(_max_allowed_file_id))
     n_rows = []
     ordered_on_mins = []
     ordered_on_maxs = []
     row_group_ends_excluded = row_group_offsets[1:] + [len(df)]
-    Path(tmp_path).mkdir(parents=True, exist_ok=True)
+    tmp_path.mkdir(parents=True, exist_ok=True)
     for file_id, (row_group_start, row_group_end_excluded) in enumerate(
         zip(row_group_offsets, row_group_ends_excluded),
     ):

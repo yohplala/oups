@@ -4,6 +4,8 @@ Tests for OrderedParquetDataset locking functionality.
 """
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Union
 
 from oups.store.ordered_parquet_dataset.lock import exclusive_lock
 
@@ -13,8 +15,8 @@ class MockDataset:
     Mock dataset class for testing the decorator.
     """
 
-    def __init__(self, dirpath):
-        self.dirpath = dirpath
+    def __init__(self, dirpath: Union[str, Path]):
+        self.dirpath = Path(dirpath).resolve()
 
     @exclusive_lock(timeout=2, lifetime=10)
     def slow_operation(self, sleep_time=1):

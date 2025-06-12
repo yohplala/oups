@@ -21,7 +21,6 @@ parent_directory/
 
 """
 from functools import wraps
-from pathlib import Path
 from typing import Optional
 
 from flufl.lock import Lock
@@ -57,8 +56,7 @@ def exclusive_lock(timeout: Optional[int] = 20, lifetime: Optional[int] = 40):
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             # Create lock file path.
-            dataset_path = Path(self.dirpath).resolve()  # absolute path
-            lock_file = dataset_path.parent / f"{dataset_path.name}{LOCK_EXTENSION}"
+            lock_file = self.dirpath.parent / f"{self.dirpath.name}{LOCK_EXTENSION}"
             # Ensure parent directory exists.
             lock_file.parent.mkdir(parents=True, exist_ok=True)
             # Use flufl.lock context manager directly.
