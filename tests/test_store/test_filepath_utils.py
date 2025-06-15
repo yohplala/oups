@@ -18,7 +18,7 @@ def test_files_at_depth(tmp_path):
     fn = os_path.join(TEST_DATA, "dummy_store.zip")
     with zipfile.ZipFile(fn, "r") as zip_ref:
         zip_ref.extractall(tmp_path)
-    basepath = os_path.join(tmp_path, "store")
+    basepath = tmp_path / "store"
     # Test with 'depth=2'.
     depth = 2
     paths_files = files_at_depth(basepath, depth)

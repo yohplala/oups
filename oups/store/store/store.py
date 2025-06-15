@@ -6,7 +6,6 @@ Created on Wed Dec  4 18:00:00 2021.
 
 """
 from dataclasses import dataclass
-from os import listdir
 from pathlib import Path
 from typing import Iterator, Type, Union
 
@@ -292,11 +291,11 @@ class Store:
             except FileNotFoundError:
                 pass
             # Remove opdmd file.
-            Path(get_md_filepath(dirpath)).unlink()
+            get_md_filepath(dirpath).unlink()
             self._keys.remove(key)
             # Remove possibly empty directories.
             upper_dir = dirpath.parent
-            while (upper_dir != basepath) and (not listdir(upper_dir)):
+            while (upper_dir != basepath) and (not list(upper_dir.iterdir())):
                 upper_dir.rmdir()
                 upper_dir = upper_dir.parent
 

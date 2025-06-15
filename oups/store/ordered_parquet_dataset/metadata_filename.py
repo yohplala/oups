@@ -12,13 +12,13 @@ from typing import Union
 OPDMD_EXTENSION = "_opdmd"
 
 
-def get_md_filepath(dirpath: Union[str, Path]) -> Path:
+def get_md_filepath(dirpath: Path) -> Path:
     """
     Get standardized opd metadata file path.
 
     Parameters
     ----------
-    dirpath : Union[str, Path]
+    dirpath : Path
         The directory path to use in the file path.
 
     Returns
@@ -27,7 +27,7 @@ def get_md_filepath(dirpath: Union[str, Path]) -> Path:
         The formatted file name.
 
     """
-    return Path(f"{dirpath}{OPDMD_EXTENSION}")
+    return dirpath.parent / (dirpath.name + OPDMD_EXTENSION)
 
 
 def get_md_basename(filepath: Union[str, Path]) -> str:
@@ -46,10 +46,8 @@ def get_md_basename(filepath: Union[str, Path]) -> str:
         otherwise.
 
     """
-    try:
-        filepath_name = filepath.name
-    except AttributeError:
-        filepath_name = Path(filepath).name
+    if isinstance(filepath, str):
+        filepath = Path(filepath)
     return (
-        filepath_name[: -len(OPDMD_EXTENSION)] if filepath_name.endswith(OPDMD_EXTENSION) else None
+        filepath.name[: -len(OPDMD_EXTENSION)] if filepath.name.endswith(OPDMD_EXTENSION) else None
     )

@@ -5,12 +5,11 @@ Created on Wed Dec  4 21:30:00 2021.
 @author: yoh
 
 """
-from os import scandir
 from pathlib import Path
-from typing import Iterator, List, Tuple, Union
+from typing import Iterator, List, Tuple
 
 
-def files_at_depth(basepath: Union[str, Path], depth: int = 2) -> Iterator[Tuple[str, List[str]]]:
+def files_at_depth(basepath: Path, depth: int = 2) -> Iterator[Tuple[Path, List[str]]]:
     """
     Yield file list in dirs.
 
@@ -21,7 +20,7 @@ def files_at_depth(basepath: Union[str, Path], depth: int = 2) -> Iterator[Tuple
 
     Parameters
     ----------
-    basepath : Union[str, Path]
+    basepath : Path
         Path to directory from which scanning.
     depth : int, default 2
         Number of levels for directories to be retained (includes top level).
@@ -29,21 +28,20 @@ def files_at_depth(basepath: Union[str, Path], depth: int = 2) -> Iterator[Tuple
 
     Yields
     ------
-    Iterator[Tuple[str,List[str]]]
+    Iterator[Tuple[Path,List[str]]]
         List of files within directory specified by the key. Empty directories
         are not returned.
 
     """
-    basepath = Path(basepath).resolve()
     if not basepath.exists():
         return
     if depth == 0:
-        files = [Path(entry.path).name for entry in scandir(basepath) if not entry.is_dir()]
+        files = [entry.name for entry in basepath.iterdir() if not entry.is_dir()]
         if files:
             yield basepath, files
     if depth > 0:
         try:
-            dirs = [entry.path for entry in scandir(basepath) if entry.is_dir()]
+            dirs = [entry for entry in basepath.iterdir() if entry.is_dir()]
         except FileNotFoundError:
             # If directory not existing, return `None`
             return

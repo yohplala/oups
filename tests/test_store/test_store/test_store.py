@@ -89,7 +89,7 @@ class WeatherEntry:
 
 def test_store_write_getitem(tmp_path):
     # Initialize a parquet dataset.
-    basepath = f"{tmp_path}{DIR_SEP}store"
+    basepath = tmp_path / "store"
     ps = Store(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = DataFrame(
@@ -108,7 +108,7 @@ def test_store_write_getitem(tmp_path):
 
 def test_store_write_getitem_with_config(tmp_path):
     # Initialize a parquet dataset with config.
-    basepath = f"{tmp_path}{DIR_SEP}store"
+    basepath = tmp_path / "store"
     ps = Store(basepath, WeatherEntry)
     we = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     df = DataFrame(
@@ -127,7 +127,7 @@ def test_store_write_getitem_with_config(tmp_path):
 
 def test_store_iterator(tmp_path):
     # Test `__iter__`.
-    basepath = f"{tmp_path}{DIR_SEP}store"
+    basepath = tmp_path / "store"
     ps = Store(basepath, WeatherEntry)
     we1 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     we2 = WeatherEntry("london", "temperature", SpaceTime("greenwich", "winter"))
@@ -196,7 +196,7 @@ def test_store_delitem(tmp_path):
     ps[we2].write(ordered_on="timestamp", df=df)
     ps[we3].write(ordered_on="timestamp", df=df)
     # Delete london-related data.
-    we3_path = f"{basepath}{DIR_SEP}{we3.to_path}"
+    we3_path = basepath / we3.to_path
     assert os_path.exists(we3_path)
     assert os_path.exists(get_md_filepath(we3_path))
     assert len(ps) == 3
@@ -205,7 +205,7 @@ def test_store_delitem(tmp_path):
     assert not os_path.exists(get_md_filepath(we3_path))
     assert len(ps) == 2
     # Delete paris-summer-related data.
-    we2_path = f"{basepath}{DIR_SEP}{we2.to_path}"
+    we2_path = basepath / we2.to_path
     assert os_path.exists(we2_path)
     assert os_path.exists(get_md_filepath(we2_path))
     del ps[we2]
@@ -213,7 +213,7 @@ def test_store_delitem(tmp_path):
     assert not os_path.exists(get_md_filepath(we2_path))
     assert len(ps) == 1
     # Check paris-winter-related data still exists.
-    we1_path = f"{basepath}{DIR_SEP}{we1.to_path}"
+    we1_path = basepath / we1.to_path
     assert os_path.exists(we1_path)
     assert os_path.exists(get_md_filepath(we1_path))
 
@@ -224,7 +224,7 @@ def test_store_iter_intersections(tmp_path):
         capital: str
         quantity: str
 
-    basepath = f"{tmp_path}{DIR_SEP}store"
+    basepath = tmp_path / "store"
     ps = Store(basepath, WeatherEntry)
     we1 = WeatherEntry("paris", "temperature")
     we2 = WeatherEntry("london", "temperature")
