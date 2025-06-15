@@ -352,6 +352,8 @@ def toplevel(index_class=None, *, field_sep: str = DEFAULT_FIELD_SEP) -> Union[T
         index_class._depth = _get_depth(index_class)
 
         # Class instance properties: 'to_path'
+        # TODO: rename 'path' to make it clear it is not a method but a
+        # property.
         _dataclass_instance_to_str_p = partial(_dataclass_instance_to_str, as_path=True)
         index_class.to_path = property(_dataclass_instance_to_str_p)
 

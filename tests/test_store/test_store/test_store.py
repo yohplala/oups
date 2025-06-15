@@ -40,7 +40,7 @@ def test_store_init(tmp_path):
         quantity: str
         spacetime: SpaceTime
 
-    basepath = f"{tmp_path}{DIR_SEP}store"
+    basepath = tmp_path / "store"
     ps = Store(basepath, WeatherEntry)
     assert ps.basepath == basepath
     # 'keys' is empty as 'field_sep' in example directories is '.',
@@ -181,7 +181,7 @@ def test_store_write_column_multi_index(tmp_path):
 
 def test_store_delitem(tmp_path):
     # Test `__delitem__`.
-    basepath = f"{tmp_path}{DIR_SEP}store"
+    basepath = tmp_path / "store"
     ps = Store(basepath, WeatherEntry)
     we1 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "winter"))
     we2 = WeatherEntry("paris", "temperature", SpaceTime("notredame", "summer"))

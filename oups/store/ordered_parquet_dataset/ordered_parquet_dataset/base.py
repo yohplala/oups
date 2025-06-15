@@ -189,7 +189,7 @@ class OrderedParquetDataset:
         self._dirpath = Path(dirpath).resolve()
         try:
             self._row_group_stats, self._key_value_metadata = parquet_adapter.read_parquet(
-                get_md_filepath(self._dirpath),
+                str(get_md_filepath(self._dirpath)),
                 return_key_value_metadata=True,
             )
             if ordered_on:

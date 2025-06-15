@@ -25,7 +25,7 @@ def test_files_at_depth(tmp_path):
     # Trim head.
     paths_files = sorted(
         [
-            (DIR_SEP.join(path.rsplit(DIR_SEP, depth)[1:]), sorted(files))
+            (DIR_SEP.join(str(path).rsplit(DIR_SEP, depth)[1:]), sorted(files))
             for path, files in paths_files
         ],
     )
@@ -39,7 +39,7 @@ def test_files_at_depth(tmp_path):
     # Trim head.
     paths_files = sorted(
         [
-            (DIR_SEP.join(path.rsplit(DIR_SEP, depth)[1:]), sorted(files))
+            (DIR_SEP.join(str(path).rsplit(DIR_SEP, depth)[1:]), sorted(files))
             for path, files in paths_files
         ],
     )
