@@ -46,7 +46,6 @@ from oups.aggstream.jcumsegagg import MAX
 from oups.aggstream.jcumsegagg import MIN
 from oups.aggstream.jcumsegagg import SUM
 from oups.aggstream.segmentby import by_x_rows
-from oups.defines import DIR_SEP
 from oups.defines import KEY_N_ROWS
 
 
@@ -58,12 +57,12 @@ class Indexer:
 @pytest.fixture
 def store(tmp_path):
     # Reuse pre-defined Indexer.
-    return Store(f"{tmp_path}{DIR_SEP}store", Indexer)
+    return Store(tmp_path / "store", Indexer)
 
 
 @pytest.fixture
 def seed_path(tmp_path):
-    return f"{tmp_path}{DIR_SEP}seed"
+    return tmp_path / "seed"
 
 
 key = Indexer("agg_res")
@@ -144,8 +143,8 @@ def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, s
     )
     seed_df = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
     row_group_offsets = [0, 4, 6, 10, 12, 13, 15]
-    fp_write(seed_path, seed_df, row_group_offsets=row_group_offsets, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_df, row_group_offsets=row_group_offsets, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Check number of rows of each row groups in aggregated results.
     n_rows_res = store[key].row_group_stats.loc[:, KEY_N_ROWS].to_list()
@@ -190,8 +189,8 @@ def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, s
     # but this also tests 'trim_start' parameter.
     # To prevent re-loading already processed data, use 'filters' in
     # ParquetFile or directly use the new pandas dataframe into 'agg'.
-    fp_write(seed_path, seed_df, file_scheme="hive", append=True)
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_df, file_scheme="hive", append=True)
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Check number of rows of each row groups in aggregated results.
@@ -224,8 +223,8 @@ def test_time_grouper_sum_agg(test_id, row_group_target_size, expected_n_rows, s
     # Check aggregation till the end of seed data.
     ts = DatetimeIndex([date + "15:20", date + "15:21"])
     seed_df = DataFrame({ordered_on: ts, "val": [11, 12]})
-    fp_write(seed_path, seed_df, file_scheme="hive", append=True)
-    seed_pf = ParquetFile(seed_path)
+    fp_write(str(seed_path), seed_df, file_scheme="hive", append=True)
+    seed_pf = ParquetFile(str(seed_path))
     seed = seed_pf.iter_row_groups()
     # Setup streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=False)
@@ -275,8 +274,8 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     seed_df = DataFrame(
         {ordered_on: ts + ts, "val": np.append(rand_ints, rand_ints + 1)},
     ).sort_values(ordered_on)
-    fp_write(seed_path, seed_df, row_group_offsets=row_group_target_size, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_df, row_group_offsets=row_group_target_size, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
@@ -288,13 +287,13 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df2 = DataFrame({ordered_on: ts, "val": rand_ints + 100}).sort_values(ordered_on)
     fp_write(
-        seed_path,
+        str(seed_path),
         seed_df2,
         row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
-    seed = ParquetFile(seed_path).iter_row_groups()
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
@@ -306,13 +305,13 @@ def test_time_grouper_first_last_min_max_agg(store, seed_path):
     ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df3 = DataFrame({ordered_on: ts, "val": rand_ints + 400}).sort_values(ordered_on)
     fp_write(
-        seed_path,
+        str(seed_path),
         seed_df3,
         row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
-    seed = ParquetFile(seed_path).iter_row_groups()
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
@@ -428,8 +427,8 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     # Setup weighted mean: need 'weight' x 'val'.
     seed_df["weighted_val"] = seed_df["weight"] * seed_df["val"]
     row_group_offsets = [0, 4, 6, 10, 12, 13, 15]
-    fp_write(seed_path, seed_df, row_group_offsets=row_group_offsets, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_df, row_group_offsets=row_group_offsets, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Check resulting dataframe.
@@ -458,13 +457,13 @@ def test_duration_weighted_mean_from_post(store, seed_path):
     # Setup weighted mean: need 'weight' x 'val'.
     seed_df2["weighted_val"] = seed_df2["weight"] * seed_df2["val"]
     fp_write(
-        seed_path,
+        str(seed_path),
         seed_df2,
         row_group_offsets=row_group_offsets,
         file_scheme="hive",
         append=True,
     )
-    seed = ParquetFile(seed_path).iter_row_groups()
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Setup streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
@@ -516,8 +515,8 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
     bin_on = "ts_bin"
     seed_pdf = DataFrame({ordered_on: ts, bin_on: ts, "val": range(1, len(ts) + 1)})
     row_group_offsets = [0, 4, 6]
-    fp_write(seed_path, seed_pdf, row_group_offsets=row_group_offsets, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_pdf, row_group_offsets=row_group_offsets, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
@@ -531,8 +530,8 @@ def test_seed_time_grouper_bin_on_as_tuple(store, seed_path):
     seed_pdf2 = DataFrame(
         {ordered_on: ts2, bin_on: ts2, "val": range(len(ts) + 1, len(ts) + len(ts2) + 1)},
     )
-    fp_write(seed_path, seed_pdf2, file_scheme="hive", append=True)
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_pdf2, file_scheme="hive", append=True)
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # 2nd streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
@@ -616,8 +615,8 @@ def test_by_callable_wo_bin_on(store, seed_path):
     seed_pdf = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
     # Forcing dtype of 'seed_pdf' to float.
     seed_pdf["val"] = seed_pdf["val"].astype("float64")
-    fp_write(seed_path, seed_pdf, row_group_offsets=13, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_pdf, row_group_offsets=13, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Get reference results, discarding last row, because of 'discard_last'.
     trimmed_seed = seed_pdf.iloc[:-2]
@@ -663,8 +662,8 @@ def test_by_callable_wo_bin_on(store, seed_path):
     # Forcing dtype of 'seed_pdf' to float.
     seed_pdf2["val"] = seed_pdf2["val"].astype("float64")
     seed_pdf2 = concat([seed_pdf, seed_pdf2], ignore_index=True)
-    fp_write(seed_path, seed_pdf2, row_group_offsets=13, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_pdf2, row_group_offsets=13, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Get reference results, discarding last row, because of 'discard_last'.
@@ -817,8 +816,8 @@ def test_by_callable_with_bin_on(store, seed_path):
     seed_pdf = DataFrame({ordered_on: ts, bin_on: val})
     # Do not change this '13'. Test a restart right on a bin start.
     row_group_offsets = [0, 13]
-    fp_write(seed_path, seed_pdf, row_group_offsets=row_group_offsets, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_pdf, row_group_offsets=row_group_offsets, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     as_.agg(seed=seed, trim_start=True, discard_last=True)
 
     def agg_with_same_bin_labels(seed_pdf):
@@ -882,8 +881,8 @@ def test_by_callable_with_bin_on(store, seed_path):
     val = np.arange(1, len(ts2) + 1)
     val[3] = 1
     seed_pdf = concat([seed_pdf, DataFrame({ordered_on: ts2, bin_on: val})], ignore_index=True)
-    fp_write(seed_path, seed_pdf, row_group_offsets=13, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_pdf, row_group_offsets=13, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Setup streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
@@ -916,8 +915,8 @@ def test_time_grouper_trim_start(store, seed_path):
     date = "2020/01/01 "
     ts = DatetimeIndex([date + "08:00", date + "08:30", date + "09:00", date + "09:30"])
     seed_pdf = DataFrame({ordered_on: ts, "val": range(1, len(ts) + 1)})
-    fp_write(seed_path, seed_pdf, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_pdf, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results.
@@ -932,8 +931,8 @@ def test_time_grouper_trim_start(store, seed_path):
     # 1st append. 2nd stremagg with 'trim_start=False'.
     ts2 = DatetimeIndex([date + "09:00", date + "09:30", date + "10:00", date + "10:30"])
     seed_pdf2 = DataFrame({ordered_on: ts2, "val": range(1, len(ts) + 1)})
-    fp_write(seed_path, seed_pdf2, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_pdf2, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=False, discard_last=True)
     # Test results.
@@ -1074,8 +1073,8 @@ def test_single_row_within_seed(store, seed_path):
     )
     val = np.arange(1, len(ts) + 1)
     seed_pdf = DataFrame({ordered_on: ts, "val": val})
-    fp_write(seed_path, seed_pdf, row_group_offsets=[0, 5, 6], file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_pdf, row_group_offsets=[0, 5, 6], file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation: no aggregation, but no error message.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results.

@@ -80,8 +80,6 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
     __len__()
         Return number of row groups in the dataset.
     to_pandas()
-        Return data as a pandas dataframe, managing concurrent access.
-    _to_pandas()
         Return data as a pandas dataframe.
 
     Restricted Operations

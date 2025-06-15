@@ -27,7 +27,7 @@ def get_md_filepath(dirpath: Path) -> Path:
         The formatted file name.
 
     """
-    return dirpath.parent / (dirpath.name + OPDMD_EXTENSION)
+    return dirpath.parent / f"{dirpath.name}{OPDMD_EXTENSION}"
 
 
 def get_md_basename(filepath: Union[str, Path]) -> str:

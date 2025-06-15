@@ -5,6 +5,7 @@ Created on Sat Dec 18 15:00:00 2021.
 @author: yoh
 
 """
+import time
 from os import rename
 
 import pytest
@@ -89,11 +90,12 @@ def test_exception_opd_init_ordered_on(tmp_path):
     # Write a 1st dataset with a different 'ordered_on' column name.
     opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
     opd._write_row_group_files([df_ref], write_metadata_file=True)
+    del opd
     with pytest.raises(
         ValueError,
         match="^'ordered_on' parameter value 'b'",
     ):
-        opd = OrderedParquetDataset(tmp_path, ordered_on="b")
+        OrderedParquetDataset(tmp_path, ordered_on="b")
 
 
 def test_opd_getitem_and_len(tmp_path):
@@ -232,22 +234,26 @@ def test_opd_write_metadata(tmp_path):
     opd1._write_metadata_file(key_value_metadata=metadata_ref)
     assert opd1.row_group_stats.empty
     assert opd1.key_value_metadata == metadata_ref
+    del opd1
     opd2 = OrderedParquetDataset(tmp_path)
     assert opd2.row_group_stats.empty
     assert opd2.key_value_metadata == metadata_ref
+    del opd2
     # Changing some metadata values, removing another one.
     additional_metadata_in = {"a": "c", "ts": None}
+    opd1 = OrderedParquetDataset(tmp_path, ordered_on="a")
     opd1._write_metadata_file(key_value_metadata=additional_metadata_in)
     metadata_ref = {"a": "c"}
     assert opd1.key_value_metadata == metadata_ref
+    del opd1
     opd2 = OrderedParquetDataset(tmp_path)
     assert opd2.key_value_metadata == metadata_ref
 
 
 @pytest.mark.parametrize("write_opdmd", [False, True])
 def test_opd_write_row_group_files(tmp_path, write_opdmd):
-    opd1 = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
-    opd1._write_row_group_files([df_ref.iloc[:2], df_ref.iloc[2:]], write_metadata_file=write_opdmd)
+    opd = OrderedParquetDataset(tmp_path, ordered_on="timestamp")
+    opd._write_row_group_files([df_ref.iloc[:2], df_ref.iloc[2:]], write_metadata_file=write_opdmd)
     rgs_stats_ref = DataFrame(
         {
             KEY_FILE_IDS: [0, 1],
@@ -262,10 +268,11 @@ def test_opd_write_row_group_files(tmp_path, write_opdmd):
             ],
         },
     ).astype(RGS_STATS_BASE_DTYPES)
-    assert opd1.row_group_stats.equals(rgs_stats_ref)
+    assert opd.row_group_stats.equals(rgs_stats_ref)
+    del opd
     if write_opdmd:
-        opd2 = OrderedParquetDataset(tmp_path)
-        assert opd2.row_group_stats.equals(rgs_stats_ref)
+        opd = OrderedParquetDataset(tmp_path)
+        assert opd.row_group_stats.equals(rgs_stats_ref)
 
 
 def test_exception_opd_write_row_group_files_max_file_id_reached(tmp_path, monkeypatch):
@@ -295,9 +302,10 @@ def test_exception_opd_write_row_group_files_max_file_id_reached(tmp_path, monke
     max_file_id = exceeding_max_n_files - 2
     # Write max_file_id dataframes.
     opd._write_row_group_files(dataframes[:max_file_id], write_metadata_file=True)
+    del opd
 
-    opd_tmp = OrderedParquetDataset(tmp_path)
-    assert opd_tmp.row_group_stats.loc[:, KEY_FILE_IDS].iloc[-1] == max_file_id - 1
+    opd = OrderedParquetDataset(tmp_path)
+    assert opd.row_group_stats.loc[:, KEY_FILE_IDS].iloc[-1] == max_file_id - 1
 
     # Try to write one more.
     with pytest.raises(
@@ -305,10 +313,11 @@ def test_exception_opd_write_row_group_files_max_file_id_reached(tmp_path, monke
         match=f"^file id '{max_file_id+1}' exceeds max value {max_file_id}",
     ):
         opd._write_row_group_files(dataframes[max_file_id:], write_metadata_file=False)
+    del opd
 
-    opd_tmp = OrderedParquetDataset(tmp_path)
+    opd = OrderedParquetDataset(tmp_path)
     # Check that the opmd file has been correctly rewritten.
-    assert opd_tmp.row_group_stats.loc[:, KEY_FILE_IDS].iloc[-1] == max_file_id
+    assert opd.row_group_stats.loc[:, KEY_FILE_IDS].iloc[-1] == max_file_id
 
 
 def test_exception_opd_write_row_group_files_max_n_rows_reached(tmp_path, monkeypatch):
@@ -355,5 +364,70 @@ def test_opd_write(tmp_path):
         max_n_off_target_rgs=2,
         duplicates_on="temperature",
     )
+    del opd
     written_df = OrderedParquetDataset(tmp_path).to_pandas()
     assert written_df.equals(df_ref)
+
+
+def test_opd_lock_prevents_concurrent_access(tmp_path):
+    """
+    Test that one OrderedParquetDataset prevents another from accessing the same
+    dataset.
+    """
+    df = DataFrame(
+        {
+            "timestamp": date_range("2021-01-01", periods=5, freq="1h"),
+            "value": [1, 2, 3, 4, 5],
+        },
+    )
+    dirpath = tmp_path / "test_dataset"
+    # Create first dataset and keep it alive
+    opd1 = OrderedParquetDataset(dirpath, ordered_on="timestamp")
+    opd1.write(df=df)
+
+    # Try to create second dataset - should timeout
+    start_time = time.time()
+    with pytest.raises(TimeoutError, match="failed to acquire lock"):
+        OrderedParquetDataset(
+            dirpath,
+            ordered_on="timestamp",
+            lock_timeout=2,  # 1 second timeout
+        )
+
+    duration = time.time() - start_time
+    # Should timeout in approximately 1 second (give some margin)
+    assert 0.8 < duration < 4.0
+    # Verify first dataset is still working
+    df_result = opd1.to_pandas()
+    assert len(df_result) == 5
+    # Clean up first dataset
+    del opd1
+    # Now second dataset should work
+    opd2 = OrderedParquetDataset(dirpath, ordered_on="timestamp")
+    df_result2 = opd2.to_pandas()
+    assert len(df_result2) == 5
+
+
+def test_opd_lock_with_exception_during_init(tmp_path):
+    """
+    Test that lock is released if exception occurs during initialization.
+    """
+    dirpath = tmp_path / "test_dataset"
+    # First, create a valid dataset to establish metadata with 'timestamp' column
+    opd_setup = OrderedParquetDataset(dirpath, ordered_on="timestamp")
+    df = DataFrame(
+        {
+            "timestamp": date_range("2021-01-01", periods=3, freq="1h"),
+            "value": [1, 2, 3],
+        },
+    )
+    opd_setup.write(df=df)
+    del opd_setup  # Clean up
+    # Now try to create dataset with conflicting ordered_on - should fail during __init__
+    with pytest.raises(ValueError, match="'ordered_on' parameter value 'different_col'"):
+        OrderedParquetDataset(dirpath, ordered_on="different_col")
+
+    # Should be able to create new dataset immediately (lock was released after init failure)
+    opd2 = OrderedParquetDataset(dirpath, ordered_on="timestamp", lock_timeout=2)
+    assert opd2 is not None
+    assert len(opd2.to_pandas()) == 3

@@ -4,6 +4,19 @@ Created on Tue Jun 10 22:30:00 2025.
 
 @author: yoh
 
+Ordered parquet dataset file structure.
+
+parent_directory/
+├── my_dataset1/                    # Dataset directory
+│   ├── file_0000.parquet
+│   └── file_0001.parquet
+├── my_dataset1_opdmd               # Metadata file
+└── my_dataset1.lock                # Exclusive lock file
+
+A lock is acquired at object creation and held for the object's entire lifetime.
+This provides simple, race-condition-free exclusive access suitable for
+scenarios with limited concurrent processes.
+
 """
 from functools import cached_property
 from itertools import chain
@@ -12,6 +25,8 @@ from os import rename
 from pathlib import Path
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Union
 
+from flufl.lock import Lock
+from flufl.lock import TimeOutError
 from numpy import iinfo
 from numpy import isin
 from numpy import uint16
@@ -27,7 +42,6 @@ from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
 from oups.defines import PARQUET_FILE_EXTENSION
 from oups.defines import PARQUET_FILE_PREFIX
-from oups.store.ordered_parquet_dataset.lock import exclusive_lock
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.ordered_parquet_dataset.write import write
@@ -45,6 +59,9 @@ RGS_STATS_BASE_DTYPES = {
     KEY_N_ROWS: uint32,
     KEY_FILE_IDS: uint16,
 }
+
+
+LOCK_EXTENSION = ".lock"
 
 
 parquet_adapter = ParquetAdapter(use_arro3=False)
@@ -109,6 +126,8 @@ class OrderedParquetDataset:
         Number of digits to use for 'file_id' in filename. It is kept as an
         attribute to avoid recomputing it at each call to
         'get_parquet_file_name()'.
+    _lock : Lock
+        Exclusive lock held for the object's entire lifetime.
     _max_allowed_file_id : int
         Maximum allowed file id. Kept as hidden attribute to avoid
         recomputing it at each call in 'write_row_group_files()'.
@@ -139,10 +158,9 @@ class OrderedParquetDataset:
     Methods
     -------
     to_pandas()
-        Return data as a pandas dataframe, managing concurrent access.
+        Return data as a pandas dataframe.
     write()
-        Write data to disk, merging with existing data, and managing concurrent
-        access.
+        Write data to disk, merging with existing data.
     __getitem__(self, item: Union[int, slice]) -> 'ReadOnlyOrderedParquetDataset'
         Select among the row-groups using integer/slicing.
     __len__()
@@ -154,8 +172,6 @@ class OrderedParquetDataset:
         from row_group_stats.
     _sort_row_groups()
         Sort row groups according their min value in 'ordered_on' column.
-    _to_pandas()
-        Return data as a pandas dataframe.
     _write_metadata_file()
         Write metadata to disk.
     _write_row_group_files()
@@ -173,9 +189,19 @@ class OrderedParquetDataset:
 
     """
 
-    def __init__(self, dirpath: Union[str, Path], ordered_on: str = None):
+    def __init__(
+        self,
+        dirpath: Union[str, Path],
+        ordered_on: str = None,
+        lock_timeout: int = 30,
+        lock_lifetime: int = 60,
+    ):
         """
         Initialize BaseOrderedParquetDataset.
+
+        A lock is acquired at object creation and held for the object's entire
+        lifetime. This provides simple, race-condition-free exclusive access
+        suitable for scenarios with limited concurrent processes.
 
         Parameters
         ----------
@@ -184,33 +210,62 @@ class OrderedParquetDataset:
         ordered_on : Optional[str], default None
             Column name to order row groups by. If not initialized, it can also
             be provided in 'kwargs' of 'write()' method.
+        lock_timeout : int, default 30
+            Maximum time to wait for lock acquisition in seconds.
+        lock_lifetime : int, default 60
+            Maximum lock lifetime.
 
         """
         self._dirpath = Path(dirpath).resolve()
+        # Acquire exclusive lock for the entire object lifetime
+        lock_file = self._dirpath.parent / f"{self._dirpath.name}{LOCK_EXTENSION}"
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = Lock(str(lock_file), lifetime=lock_lifetime)
         try:
-            self._row_group_stats, self._key_value_metadata = parquet_adapter.read_parquet(
-                str(get_md_filepath(self._dirpath)),
-                return_key_value_metadata=True,
+            self._lock.lock(timeout=lock_timeout)
+        except TimeOutError:
+            raise TimeoutError(
+                f"failed to acquire lock for dataset '{self._dirpath}' within "
+                f"{lock_timeout} seconds. Another process may be using this dataset.",
             )
-            if ordered_on:
-                validate_ordered_on_match(
-                    base_ordered_on=self._key_value_metadata[KEY_ORDERED_ON],
-                    new_ordered_on=ordered_on,
+        try:
+            # remaining initialization code.
+            try:
+                self._row_group_stats, self._key_value_metadata = parquet_adapter.read_parquet(
+                    str(get_md_filepath(self._dirpath)),
+                    return_key_value_metadata=True,
                 )
-            self._is_newly_initialized = False
-        except FileNotFoundError:
-            # Using an empty Dataframe so that it can be written in the case
-            # user is only using '_write_metadata_file()' without adding row
-            # groups.
-            self._row_group_stats = DataFrame(columns=RGS_STATS_COLUMNS).astype(
-                RGS_STATS_BASE_DTYPES,
-            )
-            self._key_value_metadata = {KEY_ORDERED_ON: ordered_on}
-            self._is_newly_initialized = True
-        # While opd is in memory, 'ordered_on' is kept as a private attribute,
-        # with the idea that it is an immutable dataset property, while the
-        # content of 'self._key_value_metadata' is mutable.
-        self._ordered_on = self._key_value_metadata.pop(KEY_ORDERED_ON)
+                if ordered_on:
+                    validate_ordered_on_match(
+                        base_ordered_on=self._key_value_metadata[KEY_ORDERED_ON],
+                        new_ordered_on=ordered_on,
+                    )
+                self._is_newly_initialized = False
+            except FileNotFoundError:
+                # Using an empty Dataframe so that it can be written in the case
+                # user is only using '_write_metadata_file()' without adding row
+                # groups.
+                self._row_group_stats = DataFrame(columns=RGS_STATS_COLUMNS).astype(
+                    RGS_STATS_BASE_DTYPES,
+                )
+                self._key_value_metadata = {KEY_ORDERED_ON: ordered_on}
+                self._is_newly_initialized = True
+            # While opd is in memory, 'ordered_on' is kept as a private attribute,
+            # with the idea that it is an immutable dataset property, while the
+            # content of 'self._key_value_metadata' is mutable.
+            self._ordered_on = self._key_value_metadata.pop(KEY_ORDERED_ON)
+        except Exception:
+            # if initialization code did not go well, release the lock.
+            if hasattr(self, "_lock") and self._lock.is_locked:
+                self._lock.unlock()
+            raise
+
+    def __del__(self):
+        """
+        Release lock when object is garbage collected.
+        """
+        if hasattr(self, "_lock") and self._lock.is_locked:
+            self._lock.unlock()
 
     def __len__(self):
         """
@@ -285,7 +340,6 @@ class OrderedParquetDataset:
         # Get max 'file_id' from 'self.row_group_stats'.
         return -1 if self.row_group_stats.empty else int(self.row_group_stats[KEY_FILE_IDS].max())
 
-    @exclusive_lock(timeout=25, lifetime=5)
     def to_pandas(self) -> DataFrame:
         """
         Return data as a pandas dataframe.
@@ -296,9 +350,15 @@ class OrderedParquetDataset:
             Dataframe.
 
         """
-        return self._to_pandas()
+        return parquet_adapter.read_parquet(
+            get_parquet_filepaths(
+                self.dirpath,
+                self.row_group_stats[KEY_FILE_IDS],
+                self._file_id_n_digits,
+            ),
+            return_key_value_metadata=False,
+        )
 
-    @exclusive_lock(timeout=25, lifetime=15)
     def write(self, **kwargs):
         """
         Write data to disk.
@@ -322,25 +382,6 @@ class OrderedParquetDataset:
                 new_ordered_on=kwargs.pop(KEY_ORDERED_ON),
             )
         write(self, ordered_on=self.ordered_on, **kwargs)
-
-    def _to_pandas(self) -> DataFrame:
-        """
-        Return data as a pandas dataframe.
-
-        Returns
-        -------
-        DataFrame
-            Dataframe.
-
-        """
-        return parquet_adapter.read_parquet(
-            get_parquet_filepaths(
-                self.dirpath,
-                self.row_group_stats[KEY_FILE_IDS],
-                self._file_id_n_digits,
-            ),
-            return_key_value_metadata=False,
-        )
 
     def _align_file_ids(self):
         """

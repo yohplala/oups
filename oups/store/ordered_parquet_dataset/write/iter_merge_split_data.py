@@ -97,7 +97,7 @@ def iter_merge_split_data(
             opd_chunk = (
                 None
                 if rg_idx_start == rg_idx_end_excl
-                else opd[rg_idx_start:rg_idx_end_excl]._to_pandas()
+                else opd[rg_idx_start:rg_idx_end_excl].to_pandas()
             )
             df_chunk = (
                 None if df_idx_start == df_idx_end_excl else df.iloc[df_idx_start:df_idx_end_excl]
