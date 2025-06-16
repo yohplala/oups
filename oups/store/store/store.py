@@ -17,6 +17,7 @@ from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_basename
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
+from oups.store.store.dataset_cache import cached_datasets
 from oups.store.store.iter_intersections import iter_intersections
 
 
@@ -303,6 +304,9 @@ class Store:
         """
         Iterate over row group intersections across multiple datasets in store.
 
+        This method handles dataset caching and lifecycle management, then
+        delegates to the core iter_intersections function.
+
         Parameters
         ----------
         keys : List[dataclass]
@@ -318,4 +322,5 @@ class Store:
             Dictionary mapping each key to its corresponding DataFrame chunk.
 
         """
-        return iter_intersections(self, keys, start, end_excl)
+        with cached_datasets(self, keys) as datasets:
+            yield from iter_intersections(datasets, start, end_excl)

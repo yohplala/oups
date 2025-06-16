@@ -197,7 +197,7 @@ class OrderedParquetDataset:
         lock_lifetime: int = 60,
     ):
         """
-        Initialize BaseOrderedParquetDataset.
+        Initialize OrderedParquetDataset.
 
         A lock is acquired at object creation and held for the object's entire
         lifetime. This provides simple, race-condition-free exclusive access
@@ -255,17 +255,15 @@ class OrderedParquetDataset:
             # content of 'self._key_value_metadata' is mutable.
             self._ordered_on = self._key_value_metadata.pop(KEY_ORDERED_ON)
         except Exception:
-            # if initialization code did not go well, release the lock.
-            if hasattr(self, "_lock") and self._lock.is_locked:
-                self._lock.unlock()
+            # If initialization code did not go well, release the lock.
+            self._lock.unlock(unconditionally=True)
             raise
 
     def __del__(self):
         """
         Release lock when object is garbage collected.
         """
-        if hasattr(self, "_lock") and self._lock.is_locked:
-            self._lock.unlock()
+        self._lock.unlock(unconditionally=True)
 
     def __len__(self):
         """

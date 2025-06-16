@@ -12,6 +12,7 @@ from pandas import Timestamp
 
 from oups import Store
 from oups import toplevel
+from oups.store.store.iter_intersections import _get_and_validate_ordered_on_column
 from oups.store.store.iter_intersections import _get_intersections
 from oups.store.store.iter_intersections import iter_intersections
 
@@ -391,9 +392,9 @@ INTERSECTIONS_AS_DF_REF = [
     ],
 )
 def test_iter_intersections(store, test_id, full_test, start, end_excl, expected):
+    datasets = {key: store[key] for key in store.keys}
     rg_idx_starts, rg_idx_first_ends_excl, rg_idx_intersections = _get_intersections(
-        store=store,
-        keys=list(store.keys),
+        datasets=datasets,
         start=start,
         end_excl=end_excl,
     )
@@ -413,8 +414,7 @@ def test_iter_intersections(store, test_id, full_test, start, end_excl, expected
     if full_test:
         dataset_intersections = list(
             iter_intersections(
-                store=store,
-                keys=list(store.keys),
+                datasets=datasets,
                 start=start,
                 end_excl=end_excl,
             ),
@@ -434,3 +434,29 @@ def test_iter_intersections(store, test_id, full_test, start, end_excl, expected
                     df_res = dataset_intersections[i].pop(key)
                     assert df_ref.equals(df_res)
             assert dataset_intersections[i] == {}
+
+
+def test_get_and_validate_ordered_on_column(store):
+    """
+    Test _get_and_validate_ordered_on_column function.
+    """
+    # Test case 1: All existing datasets have the same ordered_on column ("ts")
+    datasets_same = {KEY1: store[KEY1], KEY2: store[KEY2], KEY3: store[KEY3]}
+    result = _get_and_validate_ordered_on_column(datasets_same)
+    assert result == "ts"
+    # Free locked datasets.
+    datasets_same.clear()
+    # Test case 2: Add a 4th key with different ordered_on column name
+    key4 = Indexer(id="key4")
+    store[key4].write(
+        ordered_on="timestamp",  # Different column name
+        df=DataFrame(
+            {
+                "timestamp": [Timestamp("2025-01-01 20:00"), Timestamp("2025-01-01 21:00")],
+            },
+        ),
+    )
+    # Should raise ValueError when including the dataset with different ordered_on
+    datasets_different = {KEY1: store[KEY1], key4: store[key4]}
+    with pytest.raises(ValueError, match="^inconsistent 'ordered_on' columns"):
+        _get_and_validate_ordered_on_column(datasets_different)

@@ -133,8 +133,12 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
         # Copy __dict__ but exclude cached property values to ensure
         # new instance computes properties based on its own data.
         instance_dict = {
-            key: value for key, value in opd.__dict__.items() if key not in CACHED_PROPERTIES
+            key: value
+            for key, value in opd.__dict__.items()
+            if key not in CACHED_PROPERTIES and key != "_lock"
         }
+        # Add a reference to the original instance to keep it alive
+        instance_dict["_parent_instance"] = opd
         # Use object.__setattr__ to bypass the custom __setattr__ method.
         object.__setattr__(instance, "__dict__", instance_dict)
         return instance
@@ -163,6 +167,13 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
             return max(file_ids) if file_ids else -1
         else:
             return -1
+
+    def __del__(self):
+        """
+        Do not manage lock lifecycle.
+        """
+        # Do nothing - parent instance manages the lock
+        pass
 
     # Modification operations are blocked.
     def __setattr__(self, name: str, value: Any):

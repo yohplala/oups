@@ -7,7 +7,7 @@ Created on Mon May 26 18:00:00 2025.
 """
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Dict, Iterator, Optional, Tuple, Union
 
 from numpy import arange
 from numpy import full
@@ -24,25 +24,20 @@ from pandas import Timestamp
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
 from oups.numpy_utils import isnotin_ordered
-
-
-if TYPE_CHECKING:
-    from oups.store.store import Store
+from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 
 
 KEY_LEFT = "left"
 
 
-def _get_and_validate_ordered_on_column(store, keys: List[dataclass]) -> str:
+def _get_and_validate_ordered_on_column(datasets: Dict[dataclass, OrderedParquetDataset]) -> str:
     """
     Get and validate the 'ordered_on' column name across all datasets.
 
     Parameters
     ----------
-    store : Store
-        Store instance containing the datasets.
-    keys : List[dataclass]
-        List of dataset keys to validate.
+    datasets : Dict[dataclass, OrderedParquetDataset]
+        Dictionary mapping dataset keys to their corresponding datasets.
 
     Returns
     -------
@@ -56,20 +51,20 @@ def _get_and_validate_ordered_on_column(store, keys: List[dataclass]) -> str:
 
     """
     # Get 'ordered_on' from first key.
-    ordered_on_col = store[keys[0]].ordered_on
+    iter_datasets = iter(datasets.items())
+    first_key, first_dataset = next(iter_datasets)
     # Validate all keys have the same 'ordered_on' column.
-    for key in keys[1:]:
-        if store[key].ordered_on != ordered_on_col:
+    for key, dataset in iter_datasets:
+        if dataset.ordered_on != first_dataset.ordered_on:
             raise ValueError(
-                f"inconsistent 'ordered_on' columns. '{keys[0]}' has "
-                f"'{ordered_on_col}', but '{key}' has '{store[key].ordered_on}'.",
+                f"inconsistent 'ordered_on' columns. '{first_key}' has "
+                f"'{first_dataset.ordered_on}', but '{key}' has '{dataset.ordered_on}'.",
             )
-    return ordered_on_col
+    return first_dataset.ordered_on
 
 
 def _get_intersections(
-    store: "Store",
-    keys: List[dataclass],
+    datasets: Dict[dataclass, OrderedParquetDataset],
     start: Optional[Union[int, float, Timestamp]] = None,
     end_excl: Optional[Union[int, float, Timestamp]] = None,
 ) -> Tuple[Dict[dataclass, int], Dict[dataclass, int], Iterator[tuple]]:
@@ -83,10 +78,8 @@ def _get_intersections(
 
     Parameters
     ----------
-    store : Store
-        Store instance containing the datasets.
-    keys : List[dataclass]
-        List of dataset keys to synchronize.
+    datasets : Dict[dataclass, OrderedParquetDataset]
+        Dictionary mapping dataset keys to their corresponding datasets.
     start : Optional[Union[int, float, Timestamp]], default None
         Start value for the 'ordered_on' column range.
     end_excl : Optional[Union[int, float, Timestamp]], default None
@@ -130,8 +123,8 @@ def _get_intersections(
     keys_rg_idx_starts = {}
     keys_rg_idx_first_ends_excl = {}
     keys_rg_idx_ends_excl = {}
-    for key in keys:
-        row_group_stats = store[key].row_group_stats
+    for key, dataset in datasets.items():
+        row_group_stats = dataset.row_group_stats
         ordered_on_mins = row_group_stats.loc[:, KEY_ORDERED_ON_MINS].to_numpy()
         ordered_on_maxs = row_group_stats.loc[:, KEY_ORDERED_ON_MAXS].to_numpy()
         n_rgs = len(row_group_stats)
@@ -206,8 +199,7 @@ def _get_intersections(
 
 
 def iter_intersections(
-    store,  # Store instance
-    keys: List[dataclass],
+    datasets: Dict[dataclass, OrderedParquetDataset],
     start: Optional[Union[int, float, Timestamp]] = None,
     end_excl: Optional[Union[int, float, Timestamp]] = None,
 ) -> Iterator[Dict[dataclass, DataFrame]]:
@@ -221,11 +213,8 @@ def iter_intersections(
 
     Parameters
     ----------
-    store : Store
-        Store instance containing the datasets to iterate over.
-    keys : List[dataclass]
-        List of dataset keys to iterate over. All keys must have datasets
-        with the same 'ordered_on' column name.
+    datasets : Dict[dataclass, OrderedParquetDataset]
+        Dictionary mapping dataset keys to their corresponding datasets.
     start : Optional[Union[int, float, Timestamp]], default None
         Start value (inclusive) for the 'ordered_on' column range. If None,
         starts from the earliest value across all specified keys.
@@ -260,18 +249,17 @@ def iter_intersections(
 
     """
     # Get and validate ordered_on column name.
-    ordered_on_col_name = _get_and_validate_ordered_on_column(store, keys)
+    ordered_on_col_name = _get_and_validate_ordered_on_column(datasets)
     # Get row group indices to start iterations with, and intersections.
     rg_idx_starts, prev_rg_idx_ends_excl, intersections = _get_intersections(
-        store,
-        keys,
+        datasets,
         start,
         end_excl,
     )
     # Load initial row groups and initialize start indices.
     # Iterate over 'rg_idx_starts' because only keys with data are kept.
     in_memory_data = {
-        key: store[key][rg_idx_start : prev_rg_idx_ends_excl[key]].to_pandas()
+        key: datasets[key][rg_idx_start : prev_rg_idx_ends_excl[key]].to_pandas()
         for key, rg_idx_start in rg_idx_starts.items()
     }
     current_start_indices = (
@@ -286,7 +274,7 @@ def iter_intersections(
     for current_end_excl, rg_idx_ends_excl in intersections:
         for key, rg_idx_end_excl in rg_idx_ends_excl.items():
             if rg_idx_end_excl != prev_rg_idx_ends_excl[key]:
-                in_memory_data[key] = store[key][
+                in_memory_data[key] = datasets[key][
                     prev_rg_idx_ends_excl[key] : rg_idx_end_excl
                 ].to_pandas()
                 prev_rg_idx_ends_excl[key] = rg_idx_end_excl
