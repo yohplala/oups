@@ -22,6 +22,7 @@ from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import Orde
 # Find in names of parquet files the integer matching "**file_*.parquet" as 'i'.
 FILE_ID_FROM_REGEX = compile(rf".*{PARQUET_FILE_PREFIX}(?P<i>[\d]+){PARQUET_FILE_EXTENSION}$")
 CACHED_PROPERTIES = {"key_value_metadata", "row_group_stats"}
+PARENT_REFERENCE = "_parent"
 
 
 def file_ids_in_directory(dirpath: str) -> List[int]:
@@ -132,15 +133,19 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
         instance = cls.__new__(cls)
         # Copy __dict__ but exclude cached property values to ensure
         # new instance computes properties based on its own data.
+        # Also do not copy '_lock' to maintain lock management at parent level.
         instance_dict = {
-            key: value
-            for key, value in opd.__dict__.items()
-            if key not in CACHED_PROPERTIES and key != "_lock"
+            key: value for key, value in opd.__dict__.items() if key not in CACHED_PROPERTIES
         }
+        # TODO: remove PARENT_REFERENCE
+        # TODO: clean also tests
         # Add a reference to the original instance to keep it alive
-        instance_dict["_parent_instance"] = opd
+        # instance_dict[PARENT_REFERENCE] = opd
         # Use object.__setattr__ to bypass the custom __setattr__ method.
         object.__setattr__(instance, "__dict__", instance_dict)
+        # Increment reference count since new instance shares the lock.
+        opd._lock._ref_count += 1
+        print("ending _from_instance")
         return instance
 
     @cached_property
@@ -167,13 +172,6 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
             return max(file_ids) if file_ids else -1
         else:
             return -1
-
-    def __del__(self):
-        """
-        Do not manage lock lifecycle.
-        """
-        # Do nothing - parent instance manages the lock
-        pass
 
     # Modification operations are blocked.
     def __setattr__(self, name: str, value: Any):

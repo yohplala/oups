@@ -22,6 +22,7 @@ from oups.defines import KEY_ORDERED_ON_MINS
 from oups.store import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import RGS_STATS_BASE_DTYPES
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import get_parquet_filepaths
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.read_only import PARENT_REFERENCE
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.read_only import (
     ReadOnlyOrderedParquetDataset,
 )
@@ -109,7 +110,12 @@ def test_opd_getitem_and_len(tmp_path):
     assert len(opd) == len(df_ref)
     assert not isinstance(opd, ReadOnlyOrderedParquetDataset)
     opd_sub1 = opd[1]
-    assert opd_sub1.__dict__.keys() == opd.__dict__.keys()
+    # Check that the read-only instance has the expected attributes (excluding lock management)
+    expected_keys = set(opd.__dict__.keys())
+    actual_keys = set(opd_sub1.__dict__.keys())
+    assert PARENT_REFERENCE in actual_keys
+    actual_keys -= {PARENT_REFERENCE}
+    assert actual_keys == expected_keys
     # Using slice notation to preserve DataFrame format.
     assert opd_sub1.row_group_stats.equals(opd._row_group_stats.iloc[1:2])
     assert opd_sub1.key_value_metadata == opd.key_value_metadata
@@ -117,7 +123,10 @@ def test_opd_getitem_and_len(tmp_path):
     assert len(opd_sub1) == 1
     assert isinstance(opd_sub1, ReadOnlyOrderedParquetDataset)
     opd_sub2 = opd[1:3]
-    assert opd_sub2.__dict__.keys() == opd.__dict__.keys()
+    actual_keys_2 = set(opd_sub2.__dict__.keys())
+    assert PARENT_REFERENCE in actual_keys_2
+    actual_keys_2 -= {PARENT_REFERENCE}
+    assert actual_keys_2 == expected_keys
     assert opd_sub2.row_group_stats.equals(opd.row_group_stats.iloc[1:3])
     assert opd_sub2.key_value_metadata == opd.key_value_metadata
     assert opd_sub2.ordered_on == opd.ordered_on
@@ -143,6 +152,64 @@ def test_opd_getitem_and_max_file_id(tmp_path):
     assert opd.max_file_id == max_file_id_ref - 1
     # check 'max_file_id' is correctly computed on a subset.
     assert opd[2:4].max_file_id == max_file_id_ref - 1
+
+
+def test_opd_getitem_and_lock_preservation(tmp_path):
+    """
+    Test that lock is preserved through parent reference in
+    ReadOnlyOrderedParquetDataset.
+
+    This test verifies that:
+    1. A ReadOnlyOrderedParquetDataset keeps the parent's lock alive even after
+       parent deletion.
+    2. The lock is only released when the ReadOnlyOrderedParquetDataset is
+       deleted
+
+    """
+    df = DataFrame(
+        {
+            "timestamp": date_range("2021-01-01", periods=5, freq="1h"),
+            "value": [1, 2, 3, 4, 5],
+        },
+    )
+    dirpath = tmp_path / "test_dataset"
+    # Create original dataset
+    opd_original = OrderedParquetDataset(dirpath, ordered_on="timestamp")
+    opd_original.write(df=df, row_group_target_size="1h")
+    # Store original lock for comparison
+    # original_lock = opd_original._lock
+    # Create read-only subset
+    print("create readonly")
+    opd_readonly = opd_original[1:3]
+    print("create readonly done")
+    # assert hasattr(opd_readonly, PARENT_REFERENCE)
+    # The parent should have the same lock file path (functional equivalence)
+    # parent = getattr(opd_readonly, PARENT_REFERENCE)
+    # assert hasattr(parent, '_lock')
+    # assert parent._lock.lockfile == original_lock.lockfile
+    with pytest.raises(TimeoutError, match="failed to acquire lock"):
+        print("create new")
+        OrderedParquetDataset(dirpath, lock_timeout=1)
+    print("create new done")
+    # Delete the original dataset - lock should still be held by readonly instance
+    print("delete original")
+    del opd_original
+    print("delete original done")
+    # Attempt to create a new dataset should fail due to lock being held by
+    # readonly instance
+    with pytest.raises(TimeoutError, match="failed to acquire lock"):
+        OrderedParquetDataset(dirpath, lock_timeout=1)
+    # Verify readonly dataset still works
+    df_readonly = opd_readonly.to_pandas()
+    assert len(df_readonly) == 2  # Should have 2 rows (subset [1:3])
+    # Delete the readonly dataset, this should release the lock.
+    del opd_readonly
+    # Now creating a new dataset object should succeed immediately
+    opd_new = OrderedParquetDataset(dirpath, lock_timeout=1)
+    df_new = opd_new.to_pandas()
+    assert df_new.equals(df)
+    # Clean up
+    del opd_new
 
 
 def test_opd_align_file_ids(tmp_path):

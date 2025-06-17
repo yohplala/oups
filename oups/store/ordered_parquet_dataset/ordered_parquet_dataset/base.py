@@ -228,6 +228,8 @@ class OrderedParquetDataset:
                 f"failed to acquire lock for dataset '{self._dirpath}' within "
                 f"{lock_timeout} seconds. Another process may be using this dataset.",
             )
+        # Initialize reference counting to the lock object
+        self._lock._ref_count = 1
         try:
             # remaining initialization code.
             try:
@@ -256,14 +258,64 @@ class OrderedParquetDataset:
             self._ordered_on = self._key_value_metadata.pop(KEY_ORDERED_ON)
         except Exception:
             # If initialization code did not go well, release the lock.
-            self._lock.unlock(unconditionally=True)
+            self._release_lock()
             raise
+
+    def _release_lock(self):
+        """
+        Release lock with reference counting.
+        """
+        print("delete lock")
+        print(f"ref_count: {self._lock._ref_count}")
+        self._lock._ref_count -= 1
+        print(f"new ref_count: {self._lock._ref_count}")
+        if self._lock._ref_count <= 0:
+            self._lock.unlock(unconditionally=True)
 
     def __del__(self):
         """
         Release lock when object is garbage collected.
+
+        Uses reference counting to ensure lock is only released when all instances are
+        gone.
+
         """
-        self._lock.unlock(unconditionally=True)
+        self._release_lock()
+
+    def __getitem__(self, item: Union[int, slice]) -> "ReadOnlyOrderedParquetDataset":
+        """
+        Select among the row-groups using integer/slicing.
+
+        Parameters
+        ----------
+        item : int or slice
+            Integer or slice to select row groups.
+
+        Returns
+        -------
+        ReadOnlyOrderedParquetDataset
+            A new read-only dataset with the selected row groups.
+
+        """
+        # To preserve DataFrame format when selecting single row
+        row_group_stats_subset = (
+            self.row_group_stats.iloc[item : item + 1]
+            if isinstance(item, int)
+            else self.row_group_stats.iloc[item]
+        )
+        # Create new instance
+        opd_subset = object.__new__(OrderedParquetDataset)
+        opd_subset.__dict__ = self.__dict__ | {
+            "_row_group_stats": row_group_stats_subset,
+        }
+        # Increment reference count since new instance shares the lock
+        self._lock._ref_count += 1
+        # Lazy import to avoid circular dependency
+        from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.read_only import (
+            ReadOnlyOrderedParquetDataset,
+        )
+
+        return ReadOnlyOrderedParquetDataset._from_instance(opd_subset)
 
     def __len__(self):
         """
@@ -614,40 +666,6 @@ class OrderedParquetDataset:
                     f"{self._max_n_rows}. Metadata has been written before the "
                     "exception has been raised.",
                 )
-
-    def __getitem__(self, item: Union[int, slice]) -> "ReadOnlyOrderedParquetDataset":
-        """
-        Select among the row-groups using integer/slicing.
-
-        Parameters
-        ----------
-        item : int or slice
-            Integer or slice to select row groups.
-
-        Returns
-        -------
-        ReadOnlyOrderedParquetDataset
-            A new read-only dataset with the selected row groups.
-
-        """
-        # To preserve DataFrame format when selecting single row
-        row_group_stats_subset = (
-            self.row_group_stats.iloc[item : item + 1]
-            if isinstance(item, int)
-            else self.row_group_stats.iloc[item]
-        )
-
-        # Create new instance
-        opd_subset = object.__new__(OrderedParquetDataset)
-        opd_subset.__dict__ = self.__dict__ | {
-            "_row_group_stats": row_group_stats_subset,
-        }
-        # Lazy import to avoid circular dependency
-        from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.read_only import (
-            ReadOnlyOrderedParquetDataset,
-        )
-
-        return ReadOnlyOrderedParquetDataset._from_instance(opd_subset)
 
 
 def create_custom_opd(
