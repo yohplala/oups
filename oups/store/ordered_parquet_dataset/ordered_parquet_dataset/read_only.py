@@ -22,7 +22,6 @@ from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import Orde
 # Find in names of parquet files the integer matching "**file_*.parquet" as 'i'.
 FILE_ID_FROM_REGEX = compile(rf".*{PARQUET_FILE_PREFIX}(?P<i>[\d]+){PARQUET_FILE_EXTENSION}$")
 CACHED_PROPERTIES = {"key_value_metadata", "row_group_stats"}
-PARENT_REFERENCE = "_parent"
 
 
 def file_ids_in_directory(dirpath: str) -> List[int]:
@@ -137,15 +136,10 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
         instance_dict = {
             key: value for key, value in opd.__dict__.items() if key not in CACHED_PROPERTIES
         }
-        # TODO: remove PARENT_REFERENCE
-        # TODO: clean also tests
-        # Add a reference to the original instance to keep it alive
-        # instance_dict[PARENT_REFERENCE] = opd
         # Use object.__setattr__ to bypass the custom __setattr__ method.
         object.__setattr__(instance, "__dict__", instance_dict)
         # Increment reference count since new instance shares the lock.
         opd._lock._ref_count += 1
-        print("ending _from_instance")
         return instance
 
     @cached_property
@@ -178,19 +172,19 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
         """
         Block all attribute modification on read-only dataset.
         """
-        raise PermissionError(f"Cannot set attribute '{name}' on a read-only dataset.")
+        raise PermissionError(f"cannot set attribute '{name}' on a read-only dataset.")
 
     def write(self, **kwargs):
         """
         Block write operations.
         """
-        raise PermissionError("Cannot call 'write' on a read-only dataset.")
+        raise PermissionError("cannot call 'write' on a read-only dataset.")
 
     def _align_file_ids(self):
         """
         Block file ID alignment.
         """
-        raise PermissionError("Cannot call '_align_file_ids' on a read-only dataset.")
+        raise PermissionError("cannot call '_align_file_ids' on a read-only dataset.")
 
     def _remove_row_group_files(self, file_ids, sort_row_groups=True, key_value_metadata=None):
         """
@@ -206,13 +200,13 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
             User-defined key-value metadata to write in metadata file.
 
         """
-        raise PermissionError("Cannot call '_remove_row_group_files' on a read-only dataset.")
+        raise PermissionError("cannot call '_remove_row_group_files' on a read-only dataset.")
 
     def _sort_row_groups(self):
         """
         Block row group sorting.
         """
-        raise PermissionError("Cannot call '_sort_row_groups' on a read-only dataset.")
+        raise PermissionError("cannot call '_sort_row_groups' on a read-only dataset.")
 
     def _write_metadata_file(self, key_value_metadata=None):
         """
@@ -224,7 +218,7 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
             User-defined key-value metadata to write in metadata file.
 
         """
-        raise PermissionError("Cannot call '_write_metadata_file' on a read-only dataset.")
+        raise PermissionError("cannot call '_write_metadata_file' on a read-only dataset.")
 
     def _write_row_group_files(
         self,
@@ -246,4 +240,4 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
             User-defined key-value metadata to write in metadata file.
 
         """
-        raise PermissionError("Cannot call '_write_row_group_files' on a read-only dataset.")
+        raise PermissionError("cannot call '_write_row_group_files' on a read-only dataset.")

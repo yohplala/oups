@@ -265,10 +265,7 @@ class OrderedParquetDataset:
         """
         Release lock with reference counting.
         """
-        print("delete lock")
-        print(f"ref_count: {self._lock._ref_count}")
         self._lock._ref_count -= 1
-        print(f"new ref_count: {self._lock._ref_count}")
         if self._lock._ref_count <= 0:
             self._lock.unlock(unconditionally=True)
 
