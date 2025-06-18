@@ -67,7 +67,11 @@ LOCK_EXTENSION = ".lock"
 parquet_adapter = ParquetAdapter(use_arro3=False)
 
 
-def get_parquet_filepaths(dirpath: Path, file_id: Union[int, Series], file_id_n_digits: int) -> str:
+def get_parquet_filepaths(
+    dirpath: Path,
+    file_id: Union[int, Series],
+    file_id_n_digits: int,
+) -> Union[str, List[str]]:
     """
     Get standardized parquet file path(s).
 
@@ -117,15 +121,14 @@ class OrderedParquetDataset:
     Base class for Ordered Parquet Dataset with shared functionality.
 
     This class contains all shared attributes, properties, and methods between
-    the full OrderedParquetDataset and its read-only version. Derived classes
-    implement specific behaviors for __getitem__ and modification methods.
+    the full OrderedParquetDataset and its read-only version.
 
     Attributes
     ----------
     _file_ids_n_digits : int
         Number of digits to use for 'file_id' in filename. It is kept as an
         attribute to avoid recomputing it at each call to
-        'get_parquet_file_name()'.
+        'get_parquet_filepaths()'.
     _lock : Lock
         Exclusive lock held for the object's entire lifetime.
     _max_allowed_file_id : int
@@ -186,15 +189,25 @@ class OrderedParquetDataset:
       the dataset without being confused by this metadata file.
     - File ids (in file names) have the same number of digits. This is to ensure
       that files can be read in the correct order by other parquet readers.
+    - When creating an OrderedParquetDataset object, a lock is acquired and held
+      for the object's entire lifetime. The purpose is to provide
+      race-condition-free exclusive access suitable for scenarios with limited
+      concurrent processes.
+      The lock is acquired with a timeout and a lifetime. The timeout is the
+      maximum time to wait for lock acquisition in seconds. The lifetime is the
+      expected maximum lifetime of the lock, as a timedelta or integer number of
+      seconds, relative to when the lock is acquired.
+      Reading and writing operations refresh the lock to the lifetime it has
+      been initially provided.
 
     """
 
     def __init__(
         self,
         dirpath: Union[str, Path],
-        ordered_on: str = None,
-        lock_timeout: int = 30,
-        lock_lifetime: int = 60,
+        ordered_on: Optional[str] = None,
+        lock_timeout: Optional[int] = None,
+        lock_lifetime: Optional[int] = 15,
     ):
         """
         Initialize OrderedParquetDataset.
@@ -210,10 +223,12 @@ class OrderedParquetDataset:
         ordered_on : Optional[str], default None
             Column name to order row groups by. If not initialized, it can also
             be provided in 'kwargs' of 'write()' method.
-        lock_timeout : int, default 30
-            Maximum time to wait for lock acquisition in seconds.
-        lock_lifetime : int, default 60
-            Maximum lock lifetime.
+        lock_timeout : Optional[int], default None
+            Approximately how long the lock acquisition attempt should be made.
+            None (the default) means keep trying forever.
+        lock_lifetime : Optional[int], default 15
+            The expected maximum lifetime of the lock, as a timedelta or integer
+            number of seconds, relative to now. Defaults to 15 seconds.
 
         """
         self._dirpath = Path(dirpath).resolve()
@@ -397,6 +412,8 @@ class OrderedParquetDataset:
             Dataframe.
 
         """
+        # Refreshing the lock to the lifetime it has been provided.
+        self._lock.refresh(unconditionally=True)
         return parquet_adapter.read_parquet(
             get_parquet_filepaths(
                 self.dirpath,
@@ -627,6 +644,10 @@ class OrderedParquetDataset:
             if file_id > self._max_allowed_file_id or len(df) > self._max_n_rows:
                 dtype_limit_exceeded = True
                 break
+            if ((file_id - self.max_file_id - 1) % 10) == 0:
+                # Refreshing the lock to the lifetime it has been provided every
+                # 10 files.
+                self._lock.refresh(unconditionally=True)
             buffer.append(
                 (
                     file_id,  # file_ids

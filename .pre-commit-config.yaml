@@ -89,7 +89,7 @@ repos:
                 oups/__init__.py:F401
                 oups/store/__init__.py:F401
                 oups/store/ordered_parquet_dataset/__init__.py:F401
-                oups/store/ordered_parquet_dataset/ordered_parquet_dataset/base.py:E203
+                oups/store/ordered_parquet_dataset/ordered_parquet_dataset/base.py:E203 C901
                 oups/store/ordered_parquet_dataset/parquet_adapter.py:S403 S301
                 oups/store/store/iter_intersections.py:E203
                 oups/aggstream/__init__.py:F401
@@ -98,7 +98,6 @@ repos:
                 oups/aggstream/cumsegagg.py:C901 E203
                 oups/aggstream/aggstream.py:C901
                 tests/*.py:D103
-                tests/test_store/test_store/test_intersections.py:C901
         ]
 
   # Pydocstyle

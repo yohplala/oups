@@ -5,6 +5,8 @@ Created on Mon Jun 02 18:35:00 2025.
 
 """
 
+import time
+
 import pytest
 from numpy import dtype
 from pandas import DataFrame
@@ -12,6 +14,7 @@ from pandas import Timestamp
 
 from oups import Store
 from oups import toplevel
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.store.iter_intersections import _get_and_validate_ordered_on_column
 from oups.store.store.iter_intersections import _get_intersections
 from oups.store.store.iter_intersections import iter_intersections
@@ -393,6 +396,12 @@ INTERSECTIONS_AS_DF_REF = [
 )
 def test_iter_intersections(store, test_id, full_test, start, end_excl, expected):
     datasets = {key: store[key] for key in store.keys}
+    validate_get_intersections(datasets, start, end_excl, expected)
+    if full_test:
+        validate_iter_intersections(datasets, start, end_excl, expected)
+
+
+def validate_get_intersections(datasets, start, end_excl, expected):
     rg_idx_starts, rg_idx_first_ends_excl, rg_idx_intersections = _get_intersections(
         datasets=datasets,
         start=start,
@@ -411,29 +420,30 @@ def test_iter_intersections(store, test_id, full_test, start, end_excl, expected
             assert rg_idx_end_excl_ref[key] == rg_idx_end_excl_res
         assert rg_idx_intersections[i][1] == {}
 
-    if full_test:
-        dataset_intersections = list(
-            iter_intersections(
-                datasets=datasets,
-                start=start,
-                end_excl=end_excl,
-            ),
-        )
-        n_intersections = len(expected["intersections_as_df"])
-        if n_intersections == 0:
-            assert dataset_intersections == []
-            return
-        for i, df_dict in enumerate(expected["intersections_as_df"]):
-            for key, df_ref in df_dict.items():
-                if key in expected["rg_idx_starts"]:
-                    if i == 0 and start is not None:
-                        df_ref = df_ref.set_index(ORDERED_ON).loc[start:].reset_index()
-                    if i == n_intersections - 1 and end_excl is not None:
-                        trim_end_idx = df_ref.loc[:, ORDERED_ON].searchsorted(end_excl, side="left")
-                        df_ref = df_ref.iloc[:trim_end_idx]
-                    df_res = dataset_intersections[i].pop(key)
-                    assert df_ref.equals(df_res)
-            assert dataset_intersections[i] == {}
+
+def validate_iter_intersections(datasets, start, end_excl, expected):
+    dataset_intersections = list(
+        iter_intersections(
+            datasets=datasets,
+            start=start,
+            end_excl=end_excl,
+        ),
+    )
+    n_intersections = len(expected["intersections_as_df"])
+    if n_intersections == 0:
+        assert dataset_intersections == []
+        return
+    for i, df_dict in enumerate(expected["intersections_as_df"]):
+        for key, df_ref in df_dict.items():
+            if key in expected["rg_idx_starts"]:
+                if i == 0 and start is not None:
+                    df_ref = df_ref.set_index(ORDERED_ON).loc[start:].reset_index()
+                if i == n_intersections - 1 and end_excl is not None:
+                    trim_end_idx = df_ref.loc[:, ORDERED_ON].searchsorted(end_excl, side="left")
+                    df_ref = df_ref.iloc[:trim_end_idx]
+                df_res = dataset_intersections[i].pop(key)
+                assert df_ref.equals(df_res)
+        assert dataset_intersections[i] == {}
 
 
 def test_get_and_validate_ordered_on_column(store):
@@ -460,3 +470,32 @@ def test_get_and_validate_ordered_on_column(store):
     datasets_different = {KEY1: store[KEY1], key4: store[key4]}
     with pytest.raises(ValueError, match="^inconsistent 'ordered_on' columns"):
         _get_and_validate_ordered_on_column(datasets_different)
+
+
+def test_iter_intersections_lock_refresh_during_long_iteration(store):
+    """
+    Test that locks are properly refreshed during long-running iterations.
+    """
+    # Create datasets with short lock lifetime (2 seconds)
+    datasets = {}
+    for key in [KEY1, KEY2]:
+        # Create OPD with very short lock lifetime
+        opd = OrderedParquetDataset(
+            store.basepath / key.to_path,
+            lock_lifetime=2,  # Very short for testing
+        )
+        datasets[key] = opd
+    iteration_count = 0
+    start_time = time.time()
+    # The iterations should take longer than 2 seconds (lock lifetime)
+    for iteration_count, _ in enumerate(iter_intersections(datasets)):
+        if (iteration_count % 2) == 0:
+            time.sleep(1)  # Longer than 2-second lock lifetime
+    # Verify iteration completed successfully.
+    # 5 iterations when iterating over intersections ofkey 1 & 2.
+    assert iteration_count == 5
+    # Sleep 1s every 2 iterations. Total sleep should be slightly more than 3s.
+    assert (time.time() - start_time) > 3
+    # Lock should be still active (by not much).
+    assert datasets[KEY1]._lock.is_locked
+    assert datasets[KEY2]._lock.is_locked
