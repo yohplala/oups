@@ -42,6 +42,10 @@ def cached_datasets(
         cache = {key: store[key] for key in keys}
         yield cache
     finally:
-        # Explicitly delete each dataset to ensure immediate lock release
+        # Explicitly release locks from each dataset to ensure immediate lock
+        # release.
         for dataset in cache.values():
-            del dataset
+            # Explicitly release the lock rather than relying on __del__
+            dataset._release_lock()
+        # Clear the cache dictionary to remove all references.
+        cache.clear()
