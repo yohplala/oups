@@ -164,12 +164,18 @@ class OrderedParquetDataset:
         Return data as a pandas dataframe.
     write()
         Write data to disk, merging with existing data.
+    __del__()
+        Release lock when object is garbage collected.
+        Uses reference counting to ensure lock is only released when all
+        instances are gone.
     __getitem__(self, item: Union[int, slice]) -> 'ReadOnlyOrderedParquetDataset'
         Select among the row-groups using integer/slicing.
     __len__()
         Return number of row groups in the dataset.
     _align_file_ids()
         Align file ids to row group position in the dataset.
+    _release_lock()
+        Release lock with reference counting.
     _remove_row_group_files()
         Remove row group files from disk. Row group indexes are also removed
         from row_group_stats.
