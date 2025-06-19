@@ -636,11 +636,52 @@ class OrderedParquetDataset:
             raise ValueError(
                 f"'ordered_on' column '{self.ordered_on}' is not in dataframe columns.",
             )
-        buffer = []
-        dtype_limit_exceeded = False
         if len(self.row_group_stats) == 0:
             self.dirpath.mkdir(parents=True, exist_ok=True)
-        for file_id, df in enumerate(chain([first_df], iter_dfs), start=self.max_file_id + 1):
+        buffer, dtype_limit_exceeded, last_written_df = self._write_row_group_files_loop(
+            chain([first_df], iter_dfs),
+            **kwargs,
+        )
+        self._row_group_stats = concat(
+            [
+                None if self.row_group_stats.empty else self.row_group_stats,
+                DataFrame(data=buffer, columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES),
+            ],
+            ignore_index=True,
+            copy=False,
+        )
+        if write_metadata_file or dtype_limit_exceeded:
+            self._write_metadata_file(key_value_metadata=key_value_metadata)
+        if dtype_limit_exceeded:
+            self._handle_dtype_limit_exceeded(self.max_file_id + len(buffer), last_written_df)
+
+    def _write_row_group_files_loop(self, dfs: Iterable[DataFrame], **kwargs):
+        """
+        Write row groups as files to disk and collect row group statistics.
+
+        Helper method for '_write_row_group_files()' method.
+
+        Parameters
+        ----------
+        dfs : Iterable[DataFrame]
+            Dataframes to write.
+
+        **kwargs : dict
+            Additional parameters to pass to 'ParquetAdapter.write_parquet()'.
+
+        Returns
+        -------
+        buffer : list
+            List of row group statistics.
+        dtype_limit_exceeded : bool
+            If `True`, dtype limit has been exceeded.
+        df : DataFrame
+            Last dataframe written.
+
+        """
+        buffer = []
+        dtype_limit_exceeded = False
+        for file_id, df in enumerate(dfs, start=self.max_file_id + 1):
             if file_id > self._max_allowed_file_id or len(df) > self._max_n_rows:
                 dtype_limit_exceeded = True
                 break
@@ -661,29 +702,39 @@ class OrderedParquetDataset:
                 df=df,
                 **kwargs,
             )
-        self._row_group_stats = concat(
-            [
-                None if self.row_group_stats.empty else self.row_group_stats,
-                DataFrame(data=buffer, columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES),
-            ],
-            ignore_index=True,
-            copy=False,
-        )
-        if write_metadata_file or dtype_limit_exceeded:
-            self._write_metadata_file(key_value_metadata=key_value_metadata)
-        if dtype_limit_exceeded:
-            if file_id > self._max_allowed_file_id:
-                raise ValueError(
-                    f"file id '{file_id}' exceeds max value "
-                    f"{self._max_allowed_file_id}. Metadata has been written "
-                    "before the exception has been raised.",
-                )
-            else:
-                raise ValueError(
-                    f"number of rows {len(df)} exceeds max value "
-                    f"{self._max_n_rows}. Metadata has been written before the "
-                    "exception has been raised.",
-                )
+        return buffer, dtype_limit_exceeded, df
+
+    def _handle_dtype_limit_exceeded(self, file_id: int, df: DataFrame):
+        """
+        Handle cases where dtype limits are exceeded.
+
+        Helper method for '_write_row_group_files()' method.
+
+        Parameters
+        ----------
+        file_id : int
+            File id when a dtype limit has been exceeded.
+        df : DataFrame
+            Dataframe written when a dtype limit has been exceeded.
+
+        Raises
+        ------
+        ValueError
+            If dtype limit has been exceeded.
+
+        """
+        if file_id > self._max_allowed_file_id:
+            raise ValueError(
+                f"file id '{file_id}' exceeds max value "
+                f"{self._max_allowed_file_id}. Metadata has been written "
+                "before the exception has been raised.",
+            )
+        else:
+            raise ValueError(
+                f"number of rows {len(df)} exceeds max value "
+                f"{self._max_n_rows}. Metadata has been written before the "
+                "exception has been raised.",
+            )
 
 
 def create_custom_opd(
