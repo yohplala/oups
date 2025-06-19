@@ -21,27 +21,6 @@ from oups.store.store.dataset_cache import cached_datasets
 from oups.store.store.iter_intersections import iter_intersections
 
 
-def get_key_basepath(store_path: Path, key: dataclass) -> Path:
-    """
-    Return path to key base directory.
-
-    Parameters
-    ----------
-    store_path : Path
-        Path to store directory.
-    key : dataclass
-        Key specifying the location where to read the data from. It has to
-        be an instance of the dataclass provided at Store instantiation.
-
-    Returns
-    -------
-    Path
-        Path to key base directory.
-
-    """
-    return store_path / key.to_path
-
-
 def get_keys(basepath: Path, indexer: Type[dataclass]) -> SortedSet:
     """
     Identify ordered parquet dataset in directory.
@@ -110,6 +89,8 @@ class Store:
 
     Methods
     -------
+    get
+        Return the ``OrderedParquetDataset`` instance corresponding to ``key``.
     iter_intersections
         Iterate over row group intersections across multiple datasets in store.
     __getitem__
@@ -250,27 +231,6 @@ class Store:
         """
         yield from self.keys
 
-    def __getitem__(self, key: dataclass) -> OrderedParquetDataset:
-        """
-        Return the ``OrderedParquetDataset`` instance corresponding to ``key``.
-
-        Parameters
-        ----------
-        key : dataclass
-            Key specifying the location where to read the data from. It has to
-            be an instance of the dataclass provided at Store instantiation.
-
-        Returns
-        -------
-        OrderedParquetDataset
-            The ``OrderedParquetDataset`` instance corresponding to ``key``.
-
-        """
-        opd = OrderedParquetDataset(get_key_basepath(self.basepath, key))
-        if opd.is_newly_initialized:
-            self._needs_keys_refresh = True
-        return opd
-
     def __delitem__(self, key: dataclass):
         """
         Remove dataset from parquet set.
@@ -285,8 +245,7 @@ class Store:
         if key in self.keys:
             # Keep track of intermediate partition folders, in case one get
             # empty.
-            basepath = self.basepath
-            dirpath = get_key_basepath(basepath, key)
+            dirpath = self.basepath / key.to_path
             try:
                 remove_dir(dirpath)
             except FileNotFoundError:
@@ -296,9 +255,52 @@ class Store:
             self._keys.remove(key)
             # Remove possibly empty directories.
             upper_dir = dirpath.parent
-            while (upper_dir != basepath) and (not list(upper_dir.iterdir())):
+            while (upper_dir != self.basepath) and (not list(upper_dir.iterdir())):
                 upper_dir.rmdir()
                 upper_dir = upper_dir.parent
+
+    def __getitem__(self, key: dataclass) -> OrderedParquetDataset:
+        """
+        Return the ``OrderedParquetDataset`` instance corresponding to ``key``.
+
+        Wrapper to ``get`` method.
+
+        Parameters
+        ----------
+        key : dataclass
+            Key specifying the location where to read the data from. It has to
+            be an instance of the dataclass provided at Store instantiation.
+
+        Returns
+        -------
+        OrderedParquetDataset
+            The ``OrderedParquetDataset`` instance corresponding to ``key``.
+
+        """
+        return self.get(key)
+
+    def get(self, key: dataclass, **kwargs) -> OrderedParquetDataset:
+        """
+        Return the OrderedParquetDataset instance with custom parameters.
+
+        Parameters
+        ----------
+        key : dataclass
+            Key specifying the location where to read the data from.
+        **kwargs : dict
+            Additional parameters to pass to OrderedParquetDataset constructor
+            (e.g., 'ordered_on', 'lock_timeout', 'lock_lifetime').
+
+        Returns
+        -------
+        OrderedParquetDataset
+            The OrderedParquetDataset instance corresponding to key.
+
+        """
+        opd = OrderedParquetDataset(self.basepath / key.to_path, **kwargs)
+        if opd.is_newly_initialized:
+            self._needs_keys_refresh = True
+        return opd
 
     def iter_intersections(self, keys, start=None, end_excl=None):
         """

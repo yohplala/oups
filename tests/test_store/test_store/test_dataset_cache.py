@@ -35,8 +35,8 @@ def test_cached_datasets_releases_locks_properly(tmp_path):
             "temperature": [8, 5, 4, 2],
         },
     )
-    ps[we1].write(ordered_on="timestamp", df=df, row_group_target_size=2)
-    ps[we2].write(ordered_on="timestamp", df=df, row_group_target_size=2)
+    ps[we1].write(ordered_on="timestamp", df=df)
+    ps[we2].write(ordered_on="timestamp", df=df)
     # Use cached_datasets and verify locks are released after
     with cached_datasets(ps, [we1, we2]):
         # Verify datasets are locked during context
@@ -48,6 +48,6 @@ def test_cached_datasets_releases_locks_properly(tmp_path):
 
     # After context exit, locks should be released
     opd1 = OrderedParquetDataset(ps.basepath / we1.to_path, lock_timeout=1)
-    opd2 = OrderedParquetDataset(ps.basepath / we2.to_path, lock_timeout=1)
     assert isinstance(opd1, OrderedParquetDataset)
+    opd2 = OrderedParquetDataset(ps.basepath / we2.to_path, lock_timeout=1)
     assert isinstance(opd2, OrderedParquetDataset)

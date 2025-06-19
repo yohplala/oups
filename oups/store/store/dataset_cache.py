@@ -42,10 +42,6 @@ def cached_datasets(
         cache = {key: store[key] for key in keys}
         yield cache
     finally:
-        # Explicitly release locks from each dataset to ensure immediate lock
-        # release.
-        for dataset in cache.values():
-            # Explicitly release the lock rather than relying on __del__
-            dataset._release_lock()
-        # Clear the cache dictionary to remove all references.
-        cache.clear()
+        # Explicitly trigger OrderedParquetDataset deletion to release the lock.
+        for key in keys:
+            del cache[key]
