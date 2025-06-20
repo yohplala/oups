@@ -282,9 +282,40 @@ def test_exception_store_delitem(tmp_path):
         del store[valid_key]
 
 
-def test_store_iter_intersections_exception_handling_releases_locks(tmp_path, monkeypatch):
+def test_store_iter_intersections_exception_handling_releases_locks(tmp_path):
     """
     Test that locks are released when exception occurs during Store.iter_intersections.
+    """
+
+    @toplevel
+    class WeatherEntry:
+        capital: str
+        quantity: str
+
+    store = Store(tmp_path, WeatherEntry)
+    we1 = WeatherEntry("paris", "temperature")
+    we2 = WeatherEntry("london", "temperature")
+    # Setup data
+    df1 = DataFrame(
+        {
+            "timestamp1": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
+            "temperature": [8, 5, 4, 2],
+        },
+    )
+    df2 = df1.rename(columns={"timestamp1": "timestamp2"})
+    store[we1].write(ordered_on="timestamp1", df=df1)
+    store[we2].write(ordered_on="timestamp2", df=df2)
+    # Verify exception is raised and locks are still released
+    with pytest.raises(ValueError, match="inconsistent 'ordered_on' columns"):
+        list(store.iter_intersections([we1, we2]))
+    # After exception, locks should be released - verify we can access datasets
+    assert store.get(we1, lock_timeout=1) is not None
+    assert store.get(we2, lock_timeout=1) is not None
+
+
+def test_store_iter_intersections_concurrent_access_blocking(tmp_path):
+    """
+    Test that Store.iter_intersections blocks concurrent access to same datasets.
     """
 
     @toplevel
@@ -305,18 +336,14 @@ def test_store_iter_intersections_exception_handling_releases_locks(tmp_path, mo
     store[we1].write(ordered_on="timestamp", df=df)
     store[we2].write(ordered_on="timestamp", df=df)
 
-    # Mock an exception during iteration using monkeypatch.
-    def mock_iter_intersections(*args, **kwargs):
-        raise RuntimeError("Simulated error during iteration")
+    # Start iteration (this will acquire locks via cached_datasets)
+    iter_obj = store.iter_intersections([we1, we2])
+    next(iter_obj)  # Locks are now held
+    # Try concurrent access - should fail
+    with pytest.raises(TimeoutError):
+        store.get(we1, lock_timeout=1)
 
-    # Patch where the function is imported.
-    monkeypatch.setattr(
-        "oups.store.store.store.iter_intersections",
-        mock_iter_intersections,
-    )
-    # Verify exception is raised and locks are still released
-    with pytest.raises(RuntimeError, match="Simulated error during iteration"):
-        list(store.iter_intersections([we1, we2]))
-    # After exception, locks should be released - verify we can access datasets
-    store.get(we1, lock_timeout=1)
-    store.get(we2, lock_timeout=1)
+    # Complete iteration by exhausting iterator to release locks.
+    list(iter_obj)
+    # Now access should work.
+    assert store.get(we1, lock_timeout=1) is not None
