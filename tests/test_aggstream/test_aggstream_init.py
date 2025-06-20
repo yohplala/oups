@@ -15,7 +15,6 @@ store = ParquetSet(os_path.join(tmp_path, "store"), Indexer)
 
 """
 from copy import deepcopy
-from os import path as os_path
 
 import pytest
 from pandas import DataFrame
@@ -70,7 +69,8 @@ key = Indexer("agg_res")
 @pytest.fixture
 def store(tmp_path):
     # Reuse pre-defined Indexer.
-    return Store(os_path.join(tmp_path, "store"), Indexer)
+    #    return Store(os_path.join(tmp_path, "store"), Indexer)
+    return Store(tmp_path / "store", Indexer)
 
 
 def always_true(**kwargs):

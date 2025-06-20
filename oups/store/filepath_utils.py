@@ -5,14 +5,11 @@ Created on Wed Dec  4 21:30:00 2021.
 @author: yoh
 
 """
-from os import scandir
-from os.path import exists
-from typing import Iterator, List, Tuple, Union
-
-from oups.defines import DIR_SEP
+from pathlib import Path
+from typing import Iterator, List, Tuple
 
 
-def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[str]]]:
+def files_at_depth(basepath: Path, depth: int = 2) -> Iterator[Tuple[Path, List[str]]]:
     """
     Yield file list in dirs.
 
@@ -23,7 +20,7 @@ def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[st
 
     Parameters
     ----------
-    basepath : str
+    basepath : Path
         Path to directory from which scanning.
     depth : int, default 2
         Number of levels for directories to be retained (includes top level).
@@ -31,26 +28,20 @@ def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[st
 
     Yields
     ------
-    Iterator[Tuple[str,List[str]]]
+    Iterator[Tuple[Path,List[str]]]
         List of files within directory specified by the key. Empty directories
         are not returned.
 
     """
-    if not exists(basepath):
+    if not basepath.exists():
         return
     if depth == 0:
-        files = [
-            entry.path.rsplit(DIR_SEP, 1)[1]
-            for entry in scandir(basepath)
-            if not entry.is_dir(follow_symlinks=False)
-        ]
+        files = [entry.name for entry in basepath.iterdir() if not entry.is_dir()]
         if files:
             yield basepath, files
     if depth > 0:
         try:
-            dirs = [
-                entry.path for entry in scandir(basepath) if entry.is_dir(follow_symlinks=False)
-            ]
+            dirs = [entry for entry in basepath.iterdir() if entry.is_dir()]
         except FileNotFoundError:
             # If directory not existing, return `None`
             return
@@ -59,20 +50,19 @@ def files_at_depth(basepath: str, depth: int = 2) -> Iterator[Tuple[str, List[st
             yield from files_at_depth(path, depth)
 
 
-def strip_path_tail(dirpath: str) -> Union[str, None]:
+def remove_dir(path: Path):
     """
-    Remove last level directory from provided path.
+    Remove directory and all its contents.
 
     Parameters
     ----------
-    dirpath : str
-        Directory path.
-
-    Returns
-    -------
-    Union[str, None]
-        Directory path stripped from last directory.
-        If dirpath is last level itself, return `None`.
+    path : Path
+        Path to directory to be removed.
 
     """
-    return dirpath.rsplit(DIR_SEP, 1)[0] if DIR_SEP in dirpath else None
+    if path.is_file() or path.is_symlink():
+        path.unlink()
+        return
+    for p in path.iterdir():
+        remove_dir(p)
+    path.rmdir()

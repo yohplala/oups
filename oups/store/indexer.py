@@ -275,7 +275,7 @@ class TopLevel(type):
         return cls._depth
 
 
-def toplevel(index_class=None, *, field_sep: str = DEFAULT_FIELD_SEP):
+def toplevel(index_class=None, *, field_sep: str = DEFAULT_FIELD_SEP) -> Union[Type, Callable]:
     """
     Turn decorated class into an indexing schema.
 
@@ -318,7 +318,7 @@ def toplevel(index_class=None, *, field_sep: str = DEFAULT_FIELD_SEP):
 
     """
 
-    def tweak(index_class):
+    def create_toplevel_class(index_class):
         # Re-create 'index_class' as a 'TopLevel'-inheriting class to equip it
         # with class properties 'depth' and 'field_sep'
         # (as per https://stackoverflow.com/questions/5120688)
@@ -352,6 +352,8 @@ def toplevel(index_class=None, *, field_sep: str = DEFAULT_FIELD_SEP):
         index_class._depth = _get_depth(index_class)
 
         # Class instance properties: 'to_path'
+        # TODO: rename 'path' to make it clear it is not a method but a
+        # property.
         _dataclass_instance_to_str_p = partial(_dataclass_instance_to_str, as_path=True)
         index_class.to_path = property(_dataclass_instance_to_str_p)
 
@@ -366,9 +368,9 @@ def toplevel(index_class=None, *, field_sep: str = DEFAULT_FIELD_SEP):
 
     if index_class:
         # Calling decorator without other parameters.
-        return tweak(index_class)
+        return create_toplevel_class(index_class)
     # Calling decorator with other parameters.
-    return tweak
+    return create_toplevel_class
 
 
 def is_toplevel(toplevel) -> bool:

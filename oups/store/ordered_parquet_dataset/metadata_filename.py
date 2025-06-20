@@ -5,37 +5,38 @@ Created on Sat May 24 18:00:00 2025.
 @author: yoh
 
 """
-from oups.defines import DIR_SEP
+from pathlib import Path
+from typing import Union
 
 
 OPDMD_EXTENSION = "_opdmd"
 
 
-def get_md_filepath(dirpath: str) -> str:
+def get_md_filepath(dirpath: Path) -> Path:
     """
     Get standardized opd metadata file path.
 
     Parameters
     ----------
-    dirpath : str
+    dirpath : Path
         The directory path to use in the file path.
 
     Returns
     -------
-    str
+    Path
         The formatted file name.
 
     """
-    return f"{dirpath}{OPDMD_EXTENSION}"
+    return dirpath.parent / f"{dirpath.name}{OPDMD_EXTENSION}"
 
 
-def get_md_basename(filepath: str) -> str:
+def get_md_basename(filepath: Union[str, Path]) -> str:
     """
     Get the basename of the opd metadata file.
 
     Parameters
     ----------
-    filepath : str
+    filepath : Union[str, Path]
         The file path from which extract the basename.
 
     Returns
@@ -45,8 +46,8 @@ def get_md_basename(filepath: str) -> str:
         otherwise.
 
     """
+    if isinstance(filepath, str):
+        filepath = Path(filepath)
     return (
-        filepath.rsplit(DIR_SEP, 1)[-1][: -len(OPDMD_EXTENSION)]
-        if filepath.endswith(OPDMD_EXTENSION)
-        else None
+        filepath.name[: -len(OPDMD_EXTENSION)] if filepath.name.endswith(OPDMD_EXTENSION) else None
     )

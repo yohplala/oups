@@ -16,7 +16,6 @@ seed_path = os_path.join(tmp_path, "seed")
 
 """
 from copy import deepcopy
-from os import path as os_path
 
 import numpy as np
 import pytest
@@ -64,12 +63,12 @@ ordered_on = "ts"
 @pytest.fixture
 def store(tmp_path):
     # Reuse pre-defined Indexer.
-    return Store(os_path.join(tmp_path, "store"), Indexer)
+    return Store(tmp_path / "store", Indexer)
 
 
 @pytest.fixture
 def seed_path(tmp_path):
-    return os_path.join(tmp_path, "seed")
+    return tmp_path / "seed"
 
 
 def test_3_keys_only_bins(store, seed_path):
@@ -121,8 +120,8 @@ def test_3_keys_only_bins(store, seed_path):
     )
     bin_on = "direct_bin"
     seed_df = DataFrame({ordered_on: ts, "val": rand_ints, bin_on: bin_val})
-    fp_write(seed_path, seed_df, row_group_offsets=row_group_target_size, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_df, row_group_offsets=row_group_target_size, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
 
@@ -174,13 +173,13 @@ def test_3_keys_only_bins(store, seed_path):
     ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df2 = DataFrame({ordered_on: ts, "val": rand_ints + 100, bin_on: bin_val + 10})
     fp_write(
-        seed_path,
+        str(seed_path),
         seed_df2,
         row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
-    seed = ParquetFile(seed_path).iter_row_groups()
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
@@ -199,13 +198,13 @@ def test_3_keys_only_bins(store, seed_path):
     ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df3 = DataFrame({ordered_on: ts, "val": rand_ints + 400, bin_on: bin_val + 40})
     fp_write(
-        seed_path,
+        str(seed_path),
         seed_df3,
         row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
-    seed = ParquetFile(seed_path).iter_row_groups()
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation.
     as_.agg(seed=seed, trim_start=True, discard_last=True)
     # Test results
@@ -249,8 +248,8 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     rand_ints.sort()
     ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df = DataFrame({ordered_on: ts, "val": rand_ints})
-    fp_write(seed_path, seed_df, row_group_offsets=row_group_target_size, file_scheme="hive")
-    seed = ParquetFile(seed_path).iter_row_groups()
+    fp_write(str(seed_path), seed_df, row_group_offsets=row_group_target_size, file_scheme="hive")
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamed aggregation for 'key1'.
     as1.agg(seed=seed, trim_start=True, discard_last=True)
     # Setup a 2nd separate streamed aggregation.
@@ -270,13 +269,13 @@ def test_exception_different_indexes_at_restart(store, seed_path):
     ts = [start + Timedelta(f"{mn}min") for mn in rand_ints]
     seed_df2 = DataFrame({ordered_on: ts, "val": rand_ints + 100})
     fp_write(
-        seed_path,
+        str(seed_path),
         seed_df2,
         row_group_offsets=row_group_target_size,
         file_scheme="hive",
         append=True,
     )
-    seed = ParquetFile(seed_path).iter_row_groups()
+    seed = ParquetFile(str(seed_path)).iter_row_groups()
     # Streamagg for 'key2'.
     as2.agg(seed=seed, trim_start=True, discard_last=True)
     # Now a streamed aggregation for both keys.

@@ -6,7 +6,7 @@ Created on Wed Dec  6 22:30:00 2021.
 
 """
 from importlib import import_module
-from typing import Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from pandas import DataFrame
 from pandas import Series
@@ -20,6 +20,12 @@ from oups.store.ordered_parquet_dataset.write.merge_split_strategies import NRow
 from oups.store.ordered_parquet_dataset.write.merge_split_strategies import (
     TimePeriodMergeSplitStrategy,
 )
+
+
+if TYPE_CHECKING:
+    from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import (
+        OrderedParquetDataset,
+    )
 
 
 ROW_GROUP_INT_TARGET_SIZE = 6_345_000
@@ -69,7 +75,7 @@ def _validate_duplicate_on_param(
 
 
 def write(
-    dirpath: str,
+    dirpath: Union[str, "OrderedParquetDataset"],
     ordered_on: Union[str, Tuple[str]],
     df: Optional[DataFrame] = None,
     row_group_target_size: Optional[Union[int, str]] = ROW_GROUP_INT_TARGET_SIZE,
@@ -218,7 +224,7 @@ def write(
                 drop_duplicates=drop_duplicates,
                 row_group_time_period=row_group_target_size,
             )
-        ordered_parquet_dataset.write_row_group_files(
+        ordered_parquet_dataset._write_row_group_files(
             dfs=iter_merge_split_data(
                 opd=ordered_parquet_dataset,
                 ordered_on=ordered_on,
@@ -244,10 +250,17 @@ def write(
             ].to_list()
         ]
         if rg_file_ids_to_remove:
-            ordered_parquet_dataset.remove_row_group_files(file_ids=rg_file_ids_to_remove)
+            ordered_parquet_dataset._remove_row_group_files(
+                file_ids=rg_file_ids_to_remove,
+                sort_row_groups=merge_split_strategy.sort_rgs_after_write,
+                key_value_metadata=key_value_metadata,
+            )
+            # 'remove_row_group_files()' embeds calls to 'sort_row_groups()' and
+            # 'align_file_ids()' methods.
+            return
         # Rename partition files.
-        if merge_split_strategy.sort_rgs_after_write:
-            ordered_parquet_dataset.sort_row_groups()
-            ordered_parquet_dataset.align_file_ids()
+        elif merge_split_strategy.sort_rgs_after_write:
+            ordered_parquet_dataset._sort_row_groups()
+            ordered_parquet_dataset._align_file_ids()
     # Write metadata.
-    ordered_parquet_dataset.write_metadata_file(key_value_metadata=key_value_metadata)
+    ordered_parquet_dataset._write_metadata_file(key_value_metadata=key_value_metadata)

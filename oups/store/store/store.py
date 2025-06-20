@@ -6,41 +6,20 @@ Created on Wed Dec  4 18:00:00 2021.
 
 """
 from dataclasses import dataclass
-from os import listdir
-from os import rmdir
 from pathlib import Path
-from shutil import rmtree
-from typing import Type
+from typing import Iterator, Type, Union
 
 from sortedcontainers import SortedSet
 
-from oups.defines import DIR_SEP
 from oups.store.filepath_utils import files_at_depth
-from oups.store.filepath_utils import strip_path_tail
 from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_basename
-from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
+from oups.store.store.dataset_cache import cached_datasets
 from oups.store.store.iter_intersections import iter_intersections
 
 
-def get_opd_basepath(store_path: str, key: dataclass) -> str:
-    """
-    Return path to 'opd' base directory corresponding to given key.
-
-    Parameters
-    ----------
-    store_path : str
-        Path to store directory.
-    key : dataclass
-        Key specifying the location where to read the data from. It has to
-        be an instance of the dataclass provided at Store instantiation.
-
-    """
-    return f"{store_path}{DIR_SEP}{key.to_path}"
-
-
-def get_keys(basepath: str, indexer: Type[dataclass]) -> SortedSet:
+def get_keys(basepath: Path, indexer: Type[dataclass]) -> SortedSet:
     """
     Identify ordered parquet dataset in directory.
 
@@ -50,7 +29,7 @@ def get_keys(basepath: str, indexer: Type[dataclass]) -> SortedSet:
 
     Parameters
     ----------
-    basepath : str
+    basepath : Path
         Path to directory containing a dataset collection, in folders complying
         with the schema defined by 'indexer' dataclass.
     indexer : Type[dataclass]
@@ -76,10 +55,10 @@ def get_keys(basepath: str, indexer: Type[dataclass]) -> SortedSet:
             if (
                 (opdmd_basename := get_md_basename(file))
                 and (
-                    key := indexer.from_path(
-                        DIR_SEP.join(
-                            str(path).rsplit(DIR_SEP, depth)[1:] + [opdmd_basename],
-                        ),
+                    key := indexer.from_str(
+                        # TODO: develop indexer.from_path() method, accepting
+                        # Path objects.
+                        str(Path(*path.parts[-depth:]) / opdmd_basename),
                     )
                 )
             )
@@ -93,15 +72,37 @@ class Store:
 
     Attributes
     ----------
-    basepath : str
+    basepath : Path
         Directory path to the set of parquet datasets.
     indexer : Type[dataclass]
         Indexer schema (class) to be used to index parquet datasets.
     keys : SortedSet
         Set of indexes of existing parquet datasets.
-    _has_initialized_a_new_opd : bool
-        Flag to indicate that a new opd has been initialized. This flag is reset
-        when 'keys' property is accessed.
+    _needs_keys_refresh : bool
+        Flag indicating that the 'keys' property needs to be refreshed from
+        disk. Set to True when a new 'OrderedParquetDataset' is accessed but
+        doesn't yet have a metadata file on disk. When True, the next access to
+        the 'keys' property will rescan the filesystem to update the keys
+        collection.
+
+    Methods
+    -------
+    get
+        Return the ``OrderedParquetDataset`` instance corresponding to ``key``.
+    iter_intersections
+        Iterate over row group intersections across multiple datasets in store.
+    __getitem__
+        Return the ``OrderedParquetDataset`` instance corresponding to ``key``.
+    __delitem__
+        Remove dataset from parquet set.
+    __iter__
+        Iterate over keys.
+    __len__
+        Return number of datasets.
+    __repr__
+        List of datasets.
+    __contains__
+        Assess presence of this dataset.
 
     Notes
     -----
@@ -110,13 +111,13 @@ class Store:
 
     """
 
-    def __init__(self, basepath: str, indexer: Type[dataclass]):
+    def __init__(self, basepath: Union[str, Path], indexer: Type[dataclass]):
         """
         Instantiate parquet set.
 
         Parameters
         ----------
-        basepath : str
+        basepath : Union[str, Path]
             Path of directory containing parquet datasets.
         indexer : Type[dataclass]
             Class (not class instance) of the indexer to be used for:
@@ -127,49 +128,79 @@ class Store:
         """
         if not is_toplevel(indexer):
             raise TypeError(f"{indexer.__name__} has to be '@toplevel' decorated.")
-        self._basepath = basepath
+        self._basepath = Path(basepath).resolve()
         self._indexer = indexer
         self._keys = get_keys(basepath, indexer)
-        self._has_initialized_a_new_opd = False
+        self._needs_keys_refresh = False
 
     @property
-    def basepath(self):
+    def basepath(self) -> Path:
         """
         Return basepath.
+
+        Returns
+        -------
+        Path
+            Basepath.
+
         """
         return self._basepath
 
     @property
-    def indexer(self):
+    def indexer(self) -> Type[dataclass]:
         """
         Return indexer.
+
+        Returns
+        -------
+        Type[dataclass]
+            Indexer class.
+
         """
         return self._indexer
 
     @property
-    def keys(self):
+    def keys(self) -> SortedSet[dataclass]:
         """
         Return keys.
+
+        Returns
+        -------
+        SortedSet[dataclass]
+            Sorted set of keys.
+
         """
-        if self._has_initialized_a_new_opd:
+        if self._needs_keys_refresh:
             # Refresh keys.
             self._keys = get_keys(self.basepath, self.indexer)
-            self._has_initialized_a_new_opd = False
+            self._needs_keys_refresh = False
         return self._keys
 
-    def __len__(self):
+    def __len__(self) -> int:
         """
         Return number of datasets.
+
+        Returns
+        -------
+        int
+            Number of datasets.
+
         """
         return len(self.keys)
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """
         List of datasets.
+
+        Returns
+        -------
+        str
+            String representation of the store.
+
         """
         return "\n".join(map(str, self.keys))
 
-    def __contains__(self, key):
+    def __contains__(self, key: dataclass) -> bool:
         """
         Assess presence of this dataset.
 
@@ -178,30 +209,25 @@ class Store:
         key : dataclass
             Key to assess presence of.
 
+        Returns
+        -------
+        bool
+            True if the dataset exists, False otherwise.
+
         """
         return key in self.keys
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[dataclass]:
         """
         Iterate over keys.
+
+        Yields
+        ------
+        dataclass
+            Key of each dataset.
+
         """
         yield from self.keys
-
-    def __getitem__(self, key: dataclass):
-        """
-        Return the ``OrderedParquetDataset`` instance corresponding to ``key``.
-
-        Parameters
-        ----------
-        key : dataclass
-            Key specifying the location where to read the data from. It has to
-            be an instance of the dataclass provided at Store instantiation.
-
-        """
-        opd = OrderedParquetDataset(get_opd_basepath(self._basepath, key))
-        if opd.is_opdmd_file_missing:
-            self._has_initialized_a_new_opd = True
-        return opd
 
     def __delitem__(self, key: dataclass):
         """
@@ -213,28 +239,75 @@ class Store:
             Key specifying the location where to delete the data. It has to be
             an instance of the dataclass provided at Store instantiation.
 
+        Raises
+        ------
+        KeyError
+            If the key is not found in the store.
+
         """
         if key in self.keys:
-            # Keep track of intermediate partition folders, in case one get
-            # empty.
-            basepath = self.basepath
-            dirpath = get_opd_basepath(basepath, key)
-            try:
-                rmtree(dirpath)
-            except FileNotFoundError:
-                pass
-            # Remove opdmd file.
-            Path(get_md_filepath(dirpath)).unlink()
+            # Get OPD instance and remove its files
+            self.get(key).remove_from_disk()
+            # Update store's key collection
             self._keys.remove(key)
-            # Remove possibly empty directories.
-            upper_dir = strip_path_tail(dirpath)
-            while (upper_dir != basepath) and (not listdir(upper_dir)):
-                rmdir(upper_dir)
-                upper_dir = strip_path_tail(upper_dir)
+            # Clean up empty parent directories
+            upper_dir = (self.basepath / key.to_path).parent
+            while (upper_dir != self.basepath) and (not list(upper_dir.iterdir())):
+                upper_dir.rmdir()
+                upper_dir = upper_dir.parent
+        else:
+            raise KeyError(f"key '{key}' not found in store.")
+
+    def __getitem__(self, key: dataclass) -> OrderedParquetDataset:
+        """
+        Return the ``OrderedParquetDataset`` instance corresponding to ``key``.
+
+        Wrapper to ``get`` method.
+
+        Parameters
+        ----------
+        key : dataclass
+            Key specifying the location where to read the data from. It has to
+            be an instance of the dataclass provided at Store instantiation.
+
+        Returns
+        -------
+        OrderedParquetDataset
+            The ``OrderedParquetDataset`` instance corresponding to ``key``.
+
+        """
+        return self.get(key)
+
+    def get(self, key: dataclass, **kwargs) -> OrderedParquetDataset:
+        """
+        Return the OrderedParquetDataset instance with custom parameters.
+
+        Parameters
+        ----------
+        key : dataclass
+            Key specifying the location where to read the data from.
+        **kwargs : dict
+            Additional parameters to pass to OrderedParquetDataset constructor
+            (e.g., 'ordered_on', 'lock_timeout', 'lock_lifetime').
+
+        Returns
+        -------
+        OrderedParquetDataset
+            The OrderedParquetDataset instance corresponding to key. Creates a
+            new OrderedParquetDataset object if the key doesn't exist.
+
+        """
+        opd = OrderedParquetDataset(self.basepath / key.to_path, **kwargs)
+        if opd.is_newly_initialized:
+            self._needs_keys_refresh = True
+        return opd
 
     def iter_intersections(self, keys, start=None, end_excl=None):
         """
         Iterate over row group intersections across multiple datasets in store.
+
+        This method handles dataset caching and lifecycle management, then
+        delegates to the core iter_intersections function.
 
         Parameters
         ----------
@@ -251,4 +324,5 @@ class Store:
             Dictionary mapping each key to its corresponding DataFrame chunk.
 
         """
-        return iter_intersections(self, keys, start, end_excl)
+        with cached_datasets(self, keys) as datasets:
+            yield from iter_intersections(datasets, start, end_excl)
