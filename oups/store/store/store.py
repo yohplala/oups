@@ -239,6 +239,11 @@ class Store:
             Key specifying the location where to delete the data. It has to be
             an instance of the dataclass provided at Store instantiation.
 
+        Raises
+        ------
+        KeyError
+            If the key is not found in the store.
+
         """
         if key in self.keys:
             # Get OPD instance and remove its files
@@ -250,6 +255,8 @@ class Store:
             while (upper_dir != self.basepath) and (not list(upper_dir.iterdir())):
                 upper_dir.rmdir()
                 upper_dir = upper_dir.parent
+        else:
+            raise KeyError(f"key '{key}' not found in store.")
 
     def __getitem__(self, key: dataclass) -> OrderedParquetDataset:
         """
@@ -286,7 +293,8 @@ class Store:
         Returns
         -------
         OrderedParquetDataset
-            The OrderedParquetDataset instance corresponding to key.
+            The OrderedParquetDataset instance corresponding to key. Creates a
+            new OrderedParquetDataset object if the key doesn't exist.
 
         """
         opd = OrderedParquetDataset(self.basepath / key.to_path, **kwargs)

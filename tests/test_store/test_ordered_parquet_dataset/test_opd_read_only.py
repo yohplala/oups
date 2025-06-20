@@ -149,11 +149,18 @@ def test_exception_readonly_permission_errors(tmp_path):
     ):
         readonly_opd.ordered_on = "different_column"
 
-    # Test write() - should prevent writing data
+    # Test remove_from_disk() - should prevent clearing dataset from disk.
+    with pytest.raises(
+        PermissionError,
+        match="cannot call 'remove_from_disk' on a read-only dataset",
+    ):
+        readonly_opd.remove_from_disk()
+
+    # Test write() - should prevent writing data.
     with pytest.raises(PermissionError, match="cannot call 'write' on a read-only dataset"):
         readonly_opd.write(df=df_ref)
 
-    # Test _align_file_ids() - should prevent file ID alignment
+    # Test _align_file_ids() - should prevent file ID alignment.
     with pytest.raises(
         PermissionError,
         match="cannot call '_align_file_ids' on a read-only dataset",
@@ -167,14 +174,14 @@ def test_exception_readonly_permission_errors(tmp_path):
     ):
         readonly_opd._remove_row_group_files(file_ids=[0])
 
-    # Test _sort_row_groups() - should prevent sorting
+    # Test _sort_row_groups() - should prevent sorting.
     with pytest.raises(
         PermissionError,
         match="cannot call '_sort_row_groups' on a read-only dataset",
     ):
         readonly_opd._sort_row_groups()
 
-    # Test _write_metadata_file() - should prevent metadata writing
+    # Test _write_metadata_file() - should prevent metadata writing.
     with pytest.raises(
         PermissionError,
         match="cannot call '_write_metadata_file' on a read-only dataset",
@@ -188,7 +195,7 @@ def test_exception_readonly_permission_errors(tmp_path):
     ):
         readonly_opd._write_row_group_files([df_ref])
 
-    # Verify that read operations still work
+    # Verify that read operations still work.
     df_result = readonly_opd.to_pandas()
     assert len(df_result) == 2  # Should have 2 rows from the 2-row groups subset (indices 1 and 2)
     assert readonly_opd.ordered_on == "timestamp"

@@ -174,6 +174,12 @@ class ReadOnlyOrderedParquetDataset(OrderedParquetDataset):
         """
         raise PermissionError(f"cannot set attribute '{name}' on a read-only dataset.")
 
+    def remove_from_disk(self, preserve_metadata=False):
+        """
+        Block dataset removal.
+        """
+        raise PermissionError("cannot call 'remove_from_disk' on a read-only dataset.")
+
     def write(self, **kwargs):
         """
         Block write operations.

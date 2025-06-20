@@ -285,14 +285,6 @@ class OrderedParquetDataset:
             self._release_lock()
             raise
 
-    def _release_lock(self):
-        """
-        Release lock with reference counting.
-        """
-        self._lock._ref_count -= 1
-        if self._lock._ref_count <= 0:
-            self._lock.unlock(unconditionally=True)
-
     def __del__(self):
         """
         Release lock when object is garbage collected.
@@ -411,7 +403,7 @@ class OrderedParquetDataset:
         # Get max 'file_id' from 'self.row_group_stats'.
         return -1 if self.row_group_stats.empty else int(self.row_group_stats[KEY_FILE_IDS].max())
 
-    def remove_from_disk(self, preserve_metadata: bool = False):
+    def remove_from_disk(self, preserve_metadata: bool = False, release_lock: bool = True) -> None:
         """
         Remove all dataset files from disk and update in-memory state.
 
@@ -420,9 +412,19 @@ class OrderedParquetDataset:
         preserve_metadata : bool, default False
             If True, keep user metadata accessible but clear row_group_stats.
             If False, reset both row_group_stats and key_value_metadata.
+        release_lock : bool, default True
+            If True, release the lock after removal. Set to False if you plan
+            to continue using this OPD instance after removal.
+
+        Notes
+        -----
+        After calling this method with ``release_lock=True``, the OPD instance
+        should not be used for file operations, though metadata access remains
+        available if ``preserve_metadata=True``.
 
         """
         if not self._is_newly_initialized:
+            self._lock.refresh(unconditionally=True)
             # Remove dataset directory and all its contents
             remove_dir(self.dirpath)
             get_md_filepath(self.dirpath).unlink()
@@ -432,6 +434,8 @@ class OrderedParquetDataset:
         self._row_group_stats = DataFrame(columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES)
         if not preserve_metadata:
             self._key_value_metadata = {}
+        if release_lock:
+            self._release_lock()
 
     def to_pandas(self) -> DataFrame:
         """
@@ -523,6 +527,15 @@ class OrderedParquetDataset:
                     break
         # Set new ids.
         self._row_group_stats.loc[mask_ids_to_rename, KEY_FILE_IDS] = new_ids
+
+    def _release_lock(self):
+        """
+        Release lock with reference counting.
+        """
+        if self._lock._ref_count > 0:
+            self._lock._ref_count -= 1
+            if self._lock._ref_count == 0:
+                self._lock.unlock(unconditionally=True)
 
     def _remove_row_group_files(
         self,

@@ -250,3 +250,33 @@ def test_store_iter_intersections(tmp_path):
     assert res[0][we2].equals(df2.iloc[:2].reset_index(drop=True))
     assert res[1][we2].equals(df2.iloc[2:2].reset_index(drop=True))
     assert res[2][we2].equals(df2.iloc[2:].reset_index(drop=True))
+
+
+def test_exception_store_delitem(tmp_path):
+    """
+    Test that Store raises KeyError for non-existent keys in get, __getitem__, and
+    __delitem__.
+    """
+
+    @toplevel
+    class Indexer:
+        category: str
+        item: str
+
+    store = Store(tmp_path, Indexer)
+    # Create a valid key and add some data
+    valid_key = Indexer(category="data", item="dataset1")
+    df = DataFrame({"timestamp": [1, 2, 3], "value": [10, 20, 30]})
+    store[valid_key].write(df=df, ordered_on="timestamp")
+    # Create a new key not in store.
+    invalid_key = Indexer(category="missing", item="notfound")
+    # Test that __delitem__ raises KeyError.
+    with pytest.raises(KeyError, match="not found"):
+        del store[invalid_key]
+    # Verify valid key still works.
+    assert valid_key in store
+    assert len(store[valid_key].row_group_stats) > 0
+    # Test after deletion, accessing should raise KeyError.
+    del store[valid_key]
+    with pytest.raises(KeyError, match="not found"):
+        del store[valid_key]
