@@ -280,3 +280,43 @@ def test_exception_store_delitem(tmp_path):
     del store[valid_key]
     with pytest.raises(KeyError, match="not found"):
         del store[valid_key]
+
+
+def test_store_iter_intersections_exception_handling_releases_locks(tmp_path, monkeypatch):
+    """
+    Test that locks are released when exception occurs during Store.iter_intersections.
+    """
+
+    @toplevel
+    class WeatherEntry:
+        capital: str
+        quantity: str
+
+    store = Store(tmp_path, WeatherEntry)
+    we1 = WeatherEntry("paris", "temperature")
+    we2 = WeatherEntry("london", "temperature")
+    # Setup data
+    df = DataFrame(
+        {
+            "timestamp": date_range("2021/01/01 08:00", "2021/01/01 14:00", freq="2h"),
+            "temperature": [8, 5, 4, 2],
+        },
+    )
+    store[we1].write(ordered_on="timestamp", df=df)
+    store[we2].write(ordered_on="timestamp", df=df)
+
+    # Mock an exception during iteration using monkeypatch.
+    def mock_iter_intersections(*args, **kwargs):
+        raise RuntimeError("Simulated error during iteration")
+
+    # Patch where the function is imported.
+    monkeypatch.setattr(
+        "oups.store.store.store.iter_intersections",
+        mock_iter_intersections,
+    )
+    # Verify exception is raised and locks are still released
+    with pytest.raises(RuntimeError, match="Simulated error during iteration"):
+        list(store.iter_intersections([we1, we2]))
+    # After exception, locks should be released - verify we can access datasets
+    store.get(we1, lock_timeout=1)
+    store.get(we2, lock_timeout=1)

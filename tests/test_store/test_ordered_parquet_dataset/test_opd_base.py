@@ -357,12 +357,12 @@ def test_opd_lock_prevents_concurrent_access(tmp_path):
         OrderedParquetDataset(
             dirpath,
             ordered_on="timestamp",
-            lock_timeout=2,  # 1 second timeout
+            lock_timeout=1,  # 1 second timeout
         )
 
     duration = time.time() - start_time
     # Should timeout in approximately 1 second (give some margin)
-    assert 0.8 < duration < 4.0
+    assert 0.8 < duration < 3.0
     # Verify first dataset is still working
     df_result = opd1.to_pandas()
     assert len(df_result) == 5
@@ -394,7 +394,7 @@ def test_opd_lock_with_exception_during_init(tmp_path):
         OrderedParquetDataset(dirpath, ordered_on="different_col")
 
     # Should be able to create new dataset immediately (lock was released after init failure)
-    opd2 = OrderedParquetDataset(dirpath, ordered_on="timestamp", lock_timeout=2)
+    opd2 = OrderedParquetDataset(dirpath, ordered_on="timestamp", lock_timeout=1)
     assert opd2 is not None
     assert len(opd2.to_pandas()) == 3
 
