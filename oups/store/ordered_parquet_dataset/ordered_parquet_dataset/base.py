@@ -42,6 +42,7 @@ from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
 from oups.defines import PARQUET_FILE_EXTENSION
 from oups.defines import PARQUET_FILE_PREFIX
+from oups.store.filepath_utils import remove_dir
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
 from oups.store.ordered_parquet_dataset.write import write
@@ -160,6 +161,8 @@ class OrderedParquetDataset:
 
     Methods
     -------
+    remove_from_disk()
+        Remove all dataset files from disk and update in-memory state.
     to_pandas()
         Return data as a pandas dataframe.
     write()
@@ -407,6 +410,28 @@ class OrderedParquetDataset:
         """
         # Get max 'file_id' from 'self.row_group_stats'.
         return -1 if self.row_group_stats.empty else int(self.row_group_stats[KEY_FILE_IDS].max())
+
+    def remove_from_disk(self, preserve_metadata: bool = False):
+        """
+        Remove all dataset files from disk and update in-memory state.
+
+        Parameters
+        ----------
+        preserve_metadata : bool, default False
+            If True, keep user metadata accessible but clear row_group_stats.
+            If False, reset both row_group_stats and key_value_metadata.
+
+        """
+        if not self._is_newly_initialized:
+            # Remove dataset directory and all its contents
+            remove_dir(self.dirpath)
+            get_md_filepath(self.dirpath).unlink()
+            # Mark as newly initialized since files are gone
+            self._is_newly_initialized = True
+        # Update in-memory state
+        self._row_group_stats = DataFrame(columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES)
+        if not preserve_metadata:
+            self._key_value_metadata = {}
 
     def to_pandas(self) -> DataFrame:
         """

@@ -41,13 +41,10 @@ def test_cached_datasets_releases_locks_properly(tmp_path):
     with cached_datasets(ps, [we1, we2]):
         # Verify datasets are locked during context
         with pytest.raises(TimeoutError):
-            OrderedParquetDataset(
-                ps.basepath / we1.to_path,
-                lock_timeout=1,
-            )
+            ps.get(we1, lock_timeout=1)
 
     # After context exit, locks should be released
-    opd1 = OrderedParquetDataset(ps.basepath / we1.to_path, lock_timeout=1)
+    opd1 = ps.get(we1, lock_timeout=1)
     assert isinstance(opd1, OrderedParquetDataset)
-    opd2 = OrderedParquetDataset(ps.basepath / we2.to_path, lock_timeout=1)
+    opd2 = ps.get(we2, lock_timeout=1)
     assert isinstance(opd2, OrderedParquetDataset)

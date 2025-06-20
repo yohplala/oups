@@ -14,7 +14,6 @@ from pandas import Timestamp
 
 from oups import Store
 from oups import toplevel
-from oups.store.ordered_parquet_dataset.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.store.iter_intersections import _get_and_validate_ordered_on_column
 from oups.store.store.iter_intersections import _get_intersections
 from oups.store.store.iter_intersections import iter_intersections
@@ -480,10 +479,7 @@ def test_iter_intersections_lock_refresh_during_long_iteration(store):
     datasets = {}
     for key in [KEY1, KEY2]:
         # Create OPD with very short lock lifetime
-        opd = OrderedParquetDataset(
-            store.basepath / key.to_path,
-            lock_lifetime=2,  # Very short for testing
-        )
+        opd = store.get(key, lock_lifetime=2)  # Very short for testing
         datasets[key] = opd
     iteration_count = 0
     start_time = time.time()

@@ -12,11 +12,9 @@ from typing import Iterator, Type, Union
 from sortedcontainers import SortedSet
 
 from oups.store.filepath_utils import files_at_depth
-from oups.store.filepath_utils import remove_dir
 from oups.store.indexer import is_toplevel
 from oups.store.ordered_parquet_dataset import OrderedParquetDataset
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_basename
-from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.store.dataset_cache import cached_datasets
 from oups.store.store.iter_intersections import iter_intersections
 
@@ -243,18 +241,12 @@ class Store:
 
         """
         if key in self.keys:
-            # Keep track of intermediate partition folders, in case one get
-            # empty.
-            dirpath = self.basepath / key.to_path
-            try:
-                remove_dir(dirpath)
-            except FileNotFoundError:
-                pass
-            # Remove opdmd file.
-            get_md_filepath(dirpath).unlink()
+            # Get OPD instance and remove its files
+            self.get(key).remove_from_disk()
+            # Update store's key collection
             self._keys.remove(key)
-            # Remove possibly empty directories.
-            upper_dir = dirpath.parent
+            # Clean up empty parent directories
+            upper_dir = (self.basepath / key.to_path).parent
             while (upper_dir != self.basepath) and (not list(upper_dir.iterdir())):
                 upper_dir.rmdir()
                 upper_dir = upper_dir.parent

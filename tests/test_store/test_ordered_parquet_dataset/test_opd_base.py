@@ -20,6 +20,7 @@ from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
 from oups.store import OrderedParquetDataset
+from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import RGS_STATS_BASE_DTYPES
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import get_parquet_filepaths
 
@@ -396,3 +397,79 @@ def test_opd_lock_with_exception_during_init(tmp_path):
     opd2 = OrderedParquetDataset(dirpath, ordered_on="timestamp", lock_timeout=2)
     assert opd2 is not None
     assert len(opd2.to_pandas()) == 3
+
+
+@pytest.mark.parametrize("preserve_metadata", [False, True])
+def test_opd_remove_from_disk(tmp_path, preserve_metadata):
+    """
+    Test basic remove_from_disk functionality with metadata options.
+    """
+    opd_path = tmp_path / "test_dataset"
+    # Create and populate OPD
+    df = DataFrame({"timestamp": [1, 2, 3], "value": [10, 20, 30]})
+    opd = OrderedParquetDataset(opd_path, ordered_on="timestamp")
+    opd.write(df=df, key_value_metadata={"custom_meta": "test_value"})
+    # Remove from disk
+    opd.remove_from_disk(preserve_metadata=preserve_metadata)
+    # Verify files are removed
+    assert not opd.dirpath.exists()
+    assert not get_md_filepath(opd.dirpath).exists()
+    # Verify in-memory state
+    assert opd.is_newly_initialized
+    assert len(opd.row_group_stats) == 0
+    assert opd.ordered_on == "timestamp"  # Always preserved
+    # Check metadata handling
+    if preserve_metadata:
+        assert opd.key_value_metadata["custom_meta"] == "test_value"
+    else:
+        assert opd.key_value_metadata == {}
+
+
+def test_opd_remove_from_disk_edge_cases(tmp_path):
+    """Test edge cases: newly initialized OPD and multiple calls."""
+    opd_path = tmp_path / "test_dataset"
+    # Test 1: Newly initialized OPD (no files exist)
+    opd = OrderedParquetDataset(opd_path, ordered_on="timestamp")
+    assert opd.is_newly_initialized
+    # Should work without error
+    opd.remove_from_disk()
+    assert opd.is_newly_initialized
+    # Test 2: Multiple calls after creating files
+    df = DataFrame({"timestamp": [1], "value": [10]})
+    opd.write(df=df)
+    assert not opd.is_newly_initialized
+    # First removal
+    opd.remove_from_disk()
+    assert opd.is_newly_initialized
+    # Second removal should work without error
+    opd.remove_from_disk()
+    assert opd.is_newly_initialized
+
+
+def test_opd_remove_from_disk_workflow_integration(tmp_path):
+    """
+    Test remove_from_disk integration with normal OPD workflow.
+    """
+    opd_path = tmp_path / "test_dataset"
+    # Create OPD with initial data
+    df1 = DataFrame({"timestamp": [1, 2], "value": [10, 20]})
+    opd = OrderedParquetDataset(opd_path, ordered_on="timestamp")
+    opd.write(df=df1)
+    # Multiple references should see consistent state
+    opd_ref = opd
+    assert len(opd_ref.row_group_stats) > 0
+    # Remove from disk
+    opd.remove_from_disk()
+    # Both references see updated state
+    assert opd.is_newly_initialized
+    assert opd_ref.is_newly_initialized
+    assert len(opd.row_group_stats) == 0
+    assert len(opd_ref.row_group_stats) == 0
+    # Can write new data after removal
+    df2 = DataFrame({"timestamp": [3, 4], "value": [30, 40]})
+    opd.write(df=df2)
+    # Verify recovery
+    assert not opd.is_newly_initialized
+    assert len(opd.row_group_stats) > 0
+    result_df = opd.to_pandas()
+    assert result_df["timestamp"].equals(df2["timestamp"])
