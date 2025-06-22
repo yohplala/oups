@@ -6,6 +6,7 @@ Created on Wed Dec  6 22:30:00 2021.
 
 """
 from importlib import import_module
+from pathlib import Path
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from pandas import DataFrame
@@ -75,7 +76,7 @@ def _validate_duplicate_on_param(
 
 
 def write(
-    dirpath: Union[str, "OrderedParquetDataset"],
+    dirpath: Union[str, Path, "OrderedParquetDataset"],
     ordered_on: Union[str, Tuple[str]],
     df: Optional[DataFrame] = None,
     row_group_target_size: Optional[Union[int, str]] = ROW_GROUP_INT_TARGET_SIZE,
@@ -89,8 +90,9 @@ def write(
 
     Parameters
     ----------
-    dirpath : Union[str, OrderedParquetDataset]
-        If a string, it is the directory where writing pandas dataframe.
+    dirpath : Union[str, Path, OrderedParquetDataset]
+        If a string or a Path, it is the directory where writing pandas
+        dataframe.
         If an OrderedParquetDataset, it is the dataset where writing pandas
         dataframe.
     ordered_on : Union[str, Tuple[str]]
@@ -184,7 +186,7 @@ def write(
             dirpath,
             ordered_on=ordered_on,
         )
-        if isinstance(dirpath, str)
+        if isinstance(dirpath, (str, Path))
         else
         # Case 'dirpath' is already an OrderedParquetDataset.
         dirpath

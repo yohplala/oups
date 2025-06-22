@@ -55,10 +55,8 @@ def get_keys(basepath: Path, indexer: Type[dataclass]) -> SortedSet:
             if (
                 (opdmd_basename := get_md_basename(file))
                 and (
-                    key := indexer.from_str(
-                        # TODO: develop indexer.from_path() method, accepting
-                        # Path objects.
-                        str(Path(*path.parts[-depth:]) / opdmd_basename),
+                    key := indexer.from_path(
+                        Path(*path.parts[-depth:]) / opdmd_basename,
                     )
                 )
             )
@@ -251,7 +249,7 @@ class Store:
             # Update store's key collection
             self._keys.remove(key)
             # Clean up empty parent directories
-            upper_dir = (self.basepath / key.to_path).parent
+            upper_dir = (self.basepath / key.to_path()).parent
             while (upper_dir != self.basepath) and (not list(upper_dir.iterdir())):
                 upper_dir.rmdir()
                 upper_dir = upper_dir.parent
@@ -297,7 +295,7 @@ class Store:
             new OrderedParquetDataset object if the key doesn't exist.
 
         """
-        opd = OrderedParquetDataset(self.basepath / key.to_path, **kwargs)
+        opd = OrderedParquetDataset(self.basepath / key.to_path(), **kwargs)
         if opd.is_newly_initialized:
             self._needs_keys_refresh = True
         return opd

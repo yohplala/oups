@@ -5,14 +5,12 @@ Created on Wed Dec  1 18:35:00 2021.
 @author: yoh
 
 """
-import re
 from dataclasses import dataclass
 from dataclasses import fields
 from dataclasses import is_dataclass
-from functools import partial
+from os.path import sep
+from pathlib import Path
 from typing import Any, Callable, Iterator, List, Tuple, Type, Union
-
-from oups.defines import DIR_SEP
 
 
 # Float removed to prevent having '.' in field values.
@@ -21,7 +19,7 @@ TYPE_ACCEPTED = {int, str}
 DEFAULT_FIELD_SEP = "-"
 # Characters forbidden in field value.
 # 'field_sep' is also included at runtime before check.
-FORBIDDEN_CHARS = (DIR_SEP, ".")
+FORBIDDEN_CHARS = (sep, ".")
 KEY_FIELD_SEP = "field_sep"
 KEY_FROM_PATH = "from_path"
 KEY_DEPTH = "depth"
@@ -111,40 +109,50 @@ def _validate_toplevel_instance(toplevel: dataclass):
     return
 
 
-def _dataclass_instance_to_str(toplevel: dataclass, as_path: bool = False) -> str:
+def _dataclass_instance_format(toplevel: dataclass, to_path: bool = False) -> Union[str, Path]:
     """
-    Return a dataclass instance as a string.
-
-    The different levels in this string are either separated with 'field_sep'
-    or with DIR_SEP.
+    Return a dataclass instance formatted as a string or Path object.
 
     Parameters
     ----------
     toplevel : dataclass
-    as_path : bool, default False
-        Defines separator to be used between levels of the dataclass.
-        If True, use DIR_SEP ('/');
-        If False, use 'field_sep'
+    to_path : bool, default False
+        If True, return a Path object;
+        If False, return a string.
 
     Returns
     -------
-    str
-        All fields values, joined:
-            - At a same level, using 'field_sep';
-            - Between different levels, either 'field_sep', either DIR_SEP,
-              depending 'as_path'.
+    Union[str, Path]
+        Formatted representation of the dataclass instance
 
     """
-    levels_sep = DIR_SEP if as_path else toplevel.field_sep
-    to_str = []
-    for fields_ in _dataclass_instance_to_lists(toplevel):
-        # Relying on the fact that only the tail can be a dataclass instance.
-        to_str.append(toplevel.field_sep.join(map(str, fields_[:-1])))
-    if to_str[-1]:
-        to_str[-1] += f"{toplevel.field_sep}{str(fields_[-1])}"
-    else:
-        to_str[-1] = str(fields_[-1])
-    return levels_sep.join(to_str)
+    fields_lists = list(_dataclass_instance_to_lists(toplevel))
+    # Relying on the fact that only the tail can be a dataclass instance.
+    path_parts = [toplevel.field_sep.join(map(str, fields_[:-1])) for fields_ in fields_lists]
+    # Handle the last field of the final level
+    path_parts[-1] += (
+        f"{toplevel.field_sep}{str(fields_lists[-1][-1])}"
+        if path_parts[-1]
+        else str(fields_lists[-1][-1])
+    )
+    return Path(*path_parts) if to_path else toplevel.field_sep.join(path_parts)
+
+
+def _dataclass_instance_format_to_path(toplevel: dataclass) -> Path:
+    """
+    Return a dataclass instance formatted as a Path object.
+
+    Parameters
+    ----------
+    toplevel : dataclass
+
+    Returns
+    -------
+    Path
+        Path object representing the dataclass instance.
+
+    """
+    return _dataclass_instance_format(toplevel, to_path=True)
 
 
 def _dataclass_fields_types_to_lists(cls: Type[dataclass]) -> List[List[Any]]:
@@ -171,11 +179,13 @@ def _dataclass_fields_types_to_lists(cls: Type[dataclass]) -> List[List[Any]]:
     return types
 
 
-def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dataclass, None]:
+def _dataclass_instance_from_source(
+    cls: Type[dataclass],
+    source: Union[str, Path],
+) -> Union[dataclass, None]:
     """
-    Return a dataclass instance derived from input string.
+    Return a dataclass instance derived from input string or Path object.
 
-    Level separator can either be DIR_SEP or 'cls.field_sep'.
     If dataclass '__init__' fails, `None` is returned.
 
     Parameters
@@ -183,8 +193,7 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
     cls : Type[dataclass]
         Dataclass to be used for generating dataclass instance.
     string : str
-        String representation of the dataclass instance (using either
-        'cls.field_sep' of DIR_SEP)
+        String or Path representation of the dataclass instance.
 
     Returns
     -------
@@ -193,9 +202,16 @@ def _dataclass_instance_from_str(cls: Type[dataclass], string: str) -> Union[dat
 
     """
     types = _dataclass_fields_types_to_lists(cls)
-    # Split string depending 'field_sep' and 'DIR_SEP', into different fields.
+    # Split string into different fields, depending on the type of source.
     field_sep = cls.field_sep
-    strings_as_list = re.split(rf"{DIR_SEP}|\{field_sep}", string)
+    if isinstance(source, Path):
+        # Path case: split each part by field_sep
+        strings_as_list = [
+            substring for part in source.parts for substring in part.split(field_sep)
+        ]
+    else:
+        # String case: split only by field_sep (no directory separator).
+        strings_as_list = source.split(field_sep)
     # Manages last level first.
     level_types = types.pop()  # remove last element
     level_length = len(level_types)
@@ -345,21 +361,18 @@ def toplevel(index_class=None, *, field_sep: str = DEFAULT_FIELD_SEP) -> Union[T
                 _validate_toplevel_instance(self)
 
         index_class.__init__ = __init__
-        index_class.__str__ = _dataclass_instance_to_str
+        index_class.__str__ = _dataclass_instance_format
 
         # Class properties: 'field_sep', 'depth'
         index_class._field_sep = field_sep
         index_class._depth = _get_depth(index_class)
 
-        # Class instance properties: 'to_path'
-        # TODO: rename 'path' to make it clear it is not a method but a
-        # property.
-        _dataclass_instance_to_str_p = partial(_dataclass_instance_to_str, as_path=True)
-        index_class.to_path = property(_dataclass_instance_to_str_p)
+        # Class instance method: 'to_path'
+        index_class.to_path = _dataclass_instance_format_to_path
 
         # Classmethods: 'from_str', 'from_path'.
-        index_class.from_path = classmethod(_dataclass_instance_from_str)
-        index_class.from_str = classmethod(_dataclass_instance_from_str)
+        index_class.from_path = classmethod(_dataclass_instance_from_source)
+        index_class.from_str = classmethod(_dataclass_instance_from_source)
 
         # Serialization.
         index_class.__reduce__ = _reduce

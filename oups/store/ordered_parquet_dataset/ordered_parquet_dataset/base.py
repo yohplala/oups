@@ -40,8 +40,6 @@ from oups.defines import KEY_N_ROWS
 from oups.defines import KEY_ORDERED_ON
 from oups.defines import KEY_ORDERED_ON_MAXS
 from oups.defines import KEY_ORDERED_ON_MINS
-from oups.defines import PARQUET_FILE_EXTENSION
-from oups.defines import PARQUET_FILE_PREFIX
 from oups.store.filepath_utils import remove_dir
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 from oups.store.ordered_parquet_dataset.parquet_adapter import ParquetAdapter
@@ -53,16 +51,15 @@ if TYPE_CHECKING:
         ReadOnlyOrderedParquetDataset,
     )
 
-
+LOCK_EXTENSION = ".lock"
+PARQUET_FILE_PREFIX = "file_"
+PARQUET_FILE_EXTENSION = ".parquet"
 # Do not change this order, it is expected by OrderedParquetDataset.write_row_group_files()
 RGS_STATS_COLUMNS = [KEY_FILE_IDS, KEY_N_ROWS, KEY_ORDERED_ON_MINS, KEY_ORDERED_ON_MAXS]
 RGS_STATS_BASE_DTYPES = {
     KEY_N_ROWS: uint32,
     KEY_FILE_IDS: uint16,
 }
-
-
-LOCK_EXTENSION = ".lock"
 
 
 parquet_adapter = ParquetAdapter(use_arro3=False)
@@ -423,17 +420,18 @@ class OrderedParquetDataset:
         available if ``preserve_metadata=True``.
 
         """
-        if not self._is_newly_initialized:
-            self._lock.refresh(unconditionally=True)
-            # Remove dataset directory and all its contents
-            remove_dir(self.dirpath)
-            get_md_filepath(self.dirpath).unlink()
-            # Mark as newly initialized since files are gone
-            self._is_newly_initialized = True
-        # Update in-memory state
+        # Update in-memory state first to 'inform' all references to this
+        # OrderedParquetDataset object.
         self._row_group_stats = DataFrame(columns=RGS_STATS_COLUMNS).astype(RGS_STATS_BASE_DTYPES)
         if not preserve_metadata:
             self._key_value_metadata = {}
+        if not self._is_newly_initialized:
+            # Remove opdmd file in 2nd.
+            get_md_filepath(self.dirpath).unlink()
+            # Finally, remove dataset directory and all its contents.
+            remove_dir(self.dirpath)
+            # Mark as newly initialized since files are gone
+            self._is_newly_initialized = True
         if release_lock:
             self._release_lock()
 

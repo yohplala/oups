@@ -11,7 +11,6 @@ from numpy import arange
 from pandas import DataFrame
 from pandas import Timestamp
 
-from oups.defines import DIR_SEP
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import create_custom_opd
 from oups.store.ordered_parquet_dataset.write import write
 
@@ -795,7 +794,7 @@ def test_write(
 
     """
     ordered_on = "a"
-    tmp_path = f"{str(tmp_path)}{DIR_SEP}test_data"
+    tmp_path = tmp_path / "test_data"
     # Init phase.
     if initial_data:
         # Use 'write' from fastparquet with 'row_group_offsets'.
@@ -820,7 +819,7 @@ def test_write(
         )
         # Verify state after this append
         try:
-            pf_rec = ParquetFile(tmp_path)
+            pf_rec = ParquetFile(str(tmp_path))
             assert [rg.num_rows for rg in pf_rec.row_groups] == expected_rgs
             assert pf_rec.to_pandas().equals(expected_df)
         except FileNotFoundError:

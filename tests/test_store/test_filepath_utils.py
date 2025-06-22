@@ -7,8 +7,8 @@ Created on Wed Dec  1 18:35:00 2021.
 """
 import zipfile
 from os import path as os_path
+from os.path import sep
 
-from oups.defines import DIR_SEP
 from oups.store.filepath_utils import files_at_depth
 
 from .. import TEST_DATA
@@ -25,12 +25,12 @@ def test_files_at_depth(tmp_path):
     # Trim head.
     paths_files = sorted(
         [
-            (DIR_SEP.join(str(path).rsplit(DIR_SEP, depth)[1:]), sorted(files))
+            (sep.join(str(path).rsplit(sep, depth)[1:]), sorted(files))
             for path, files in paths_files
         ],
     )
     paths_ref2 = [
-        (f"stockholm.pressure{DIR_SEP}flemings.spring", ["innerplace.morning_opdmd"]),
+        (f"stockholm.pressure{sep}flemings.spring", ["innerplace.morning_opdmd"]),
     ]
     assert paths_files == paths_ref2
     # Test with 'depth=2'.
@@ -39,7 +39,7 @@ def test_files_at_depth(tmp_path):
     # Trim head.
     paths_files = sorted(
         [
-            (DIR_SEP.join(str(path).rsplit(DIR_SEP, depth)[1:]), sorted(files))
+            (sep.join(str(path).rsplit(sep, depth)[1:]), sorted(files))
             for path, files in paths_files
         ],
     )
@@ -54,9 +54,6 @@ def test_files_at_depth(tmp_path):
     paths_files = files_at_depth(basepath, depth)
     # Trim head.
     paths_files = sorted(
-        [
-            (DIR_SEP.join(path.rsplit(DIR_SEP, depth)[1:]), sorted(files))
-            for path, files in paths_files
-        ],
+        [(sep.join(path.rsplit(sep, depth)[1:]), sorted(files)) for path, files in paths_files],
     )
     assert paths_files == []
