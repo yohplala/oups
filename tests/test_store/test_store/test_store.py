@@ -7,6 +7,7 @@ Created on Wed Dec  1 18:35:00 2021.
 """
 import zipfile
 from os import path as os_path
+from pathlib import Path
 
 import pytest
 from pandas import DataFrame
@@ -16,7 +17,6 @@ from pandas import date_range
 from oups import Store
 from oups import sublevel
 from oups import toplevel
-from oups.defines import DIR_SEP
 from oups.store.ordered_parquet_dataset.metadata_filename import get_md_filepath
 
 from ... import TEST_DATA
@@ -30,7 +30,7 @@ class SpaceTime:
 
 def test_store_init(tmp_path):
     # Test store 'discovery' from existing directories.
-    fn = f"{TEST_DATA}{DIR_SEP}dummy_store.zip"
+    fn = Path(TEST_DATA, "dummy_store.zip")
     with zipfile.ZipFile(fn, "r") as zip_ref:
         zip_ref.extractall(tmp_path)
 
@@ -75,7 +75,7 @@ def test_exception_store_key_not_correct_indexer(tmp_path):
         quantity: str
         spacetime: SpaceTime
 
-    basepath = f"{tmp_path}{DIR_SEP}store"
+    basepath = tmp_path / "store"
     with pytest.raises(TypeError, match="^WeatherEntry"):
         Store(basepath, WeatherEntry)
 
@@ -196,7 +196,7 @@ def test_store_delitem(tmp_path):
     ps[we2].write(ordered_on="timestamp", df=df)
     ps[we3].write(ordered_on="timestamp", df=df)
     # Delete london-related data.
-    we3_path = basepath / we3.to_path
+    we3_path = basepath / we3.to_path()
     assert os_path.exists(we3_path)
     assert os_path.exists(get_md_filepath(we3_path))
     assert len(ps) == 3
@@ -205,7 +205,7 @@ def test_store_delitem(tmp_path):
     assert not os_path.exists(get_md_filepath(we3_path))
     assert len(ps) == 2
     # Delete paris-summer-related data.
-    we2_path = basepath / we2.to_path
+    we2_path = basepath / we2.to_path()
     assert os_path.exists(we2_path)
     assert os_path.exists(get_md_filepath(we2_path))
     del ps[we2]
@@ -213,7 +213,7 @@ def test_store_delitem(tmp_path):
     assert not os_path.exists(get_md_filepath(we2_path))
     assert len(ps) == 1
     # Check paris-winter-related data still exists.
-    we1_path = basepath / we1.to_path
+    we1_path = basepath / we1.to_path()
     assert os_path.exists(we1_path)
     assert os_path.exists(get_md_filepath(we1_path))
 

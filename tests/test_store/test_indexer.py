@@ -8,6 +8,8 @@ Created on Wed Dec  1 18:35:00 2021.
 from dataclasses import FrozenInstanceError
 from dataclasses import asdict
 from dataclasses import fields
+from os.path import sep
+from pathlib import Path
 
 import pytest
 from cloudpickle import dumps
@@ -16,7 +18,6 @@ from cloudpickle import loads
 from oups import is_toplevel
 from oups import sublevel
 from oups import toplevel
-from oups.defines import DIR_SEP
 from oups.store.indexer import DEFAULT_FIELD_SEP
 
 
@@ -144,15 +145,15 @@ def test_toplevel_nested_dataclass_attributes():
         TopLevel.depth = 4
 
 
-def test_sublevel_with_single_attribute():
+def test_sublevel_single_attribute_to_path():
     @sublevel
     class SubLevel1:
         pu: str
 
     sl1 = SubLevel1("oh")
     tl = TopLevel("ah", 5, sl1)
-    to_str_ref = f"ah{DEFAULT_FIELD_SEP}5{DIR_SEP}oh"
-    assert tl.to_path == to_str_ref
+    ref_path = Path(f"ah{DEFAULT_FIELD_SEP}5", "oh")
+    assert tl.to_path() == ref_path
 
 
 def test_toplevel_nested_dataclass_validation():
@@ -190,14 +191,15 @@ def test_toplevel_nested_dataclass_validation():
     with pytest.raises(TypeError, match="^a dataclass instance cannot be"):
         TopLevel("aha", 2, sl1)
 
-    # Test validation with a string embedding a forbidden character: DIR_SEP.
+    # Test validation with a string embedding a forbidden character: directory
+    # separator.
     @sublevel
     class SubLevel1:
         pu: int
         il: str
         iv: SubLevel2
 
-    sl1 = SubLevel1(4, f"6{DIR_SEP}2", sl2)
+    sl1 = SubLevel1(4, f"6{sep}2", sl2)
     with pytest.raises(ValueError, match="^use of a forbidden"):
         TopLevel("aha", 2, sl1)
 
@@ -212,8 +214,8 @@ def test_toplevel_nested_dataclass_str_roundtrip_3_levels():
     sl2 = SubLevel2("ou", 3, 7)
     sl1 = SubLevel1(5, "oh", sl2)
     tl = TopLevel("aha", 2, sl1)
-    path_res = tl.to_path
-    path_ref = DIR_SEP.join(["aha-2", "5-oh", "ou-3-7"])
+    path_res = tl.to_path()
+    path_ref = Path("aha-2", "5-oh", "ou-3-7")
     assert path_res == path_ref
     tl_from_path = TopLevel.from_path(path_res)
     assert tl == tl_from_path
@@ -238,8 +240,8 @@ def test_toplevel_nested_dataclass_str_roundtrip_2_levels():
     # Test '._to_path', '_from_str' and '_from_path'.
     sl1 = SubLevel1(5, "oh")
     tl = TopLevel("aha", sl1)
-    path_res = tl.to_path
-    path_ref = DIR_SEP.join(["aha", "5-oh"])
+    path_res = tl.to_path()
+    path_ref = Path("aha", "5-oh")
     assert path_res == path_ref
     tl_from_path = TopLevel.from_path(path_res)
     assert tl == tl_from_path

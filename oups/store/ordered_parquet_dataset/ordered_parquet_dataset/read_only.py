@@ -14,8 +14,8 @@ from typing import Any, List
 
 from pandas import DataFrame
 
-from oups.defines import PARQUET_FILE_EXTENSION
-from oups.defines import PARQUET_FILE_PREFIX
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import PARQUET_FILE_EXTENSION
+from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import PARQUET_FILE_PREFIX
 from oups.store.ordered_parquet_dataset.ordered_parquet_dataset.base import OrderedParquetDataset
 
 

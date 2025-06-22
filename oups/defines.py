@@ -5,11 +5,6 @@ Created on Wed Dec  1 18:35:00 2021.
 @author: yoh
 
 """
-from os import path as os_path
-
-
-# Directory separator.
-DIR_SEP = os_path.sep
 # Central key in oups world, used as ID of the column name according which
 # dataframes are ordered.
 KEY_ORDERED_ON = "ordered_on"
@@ -29,7 +24,3 @@ KEY_OUPS_METADATA = "oups"
 # Parameters for 'write()' function.
 KEY_ROW_GROUP_TARGET_SIZE = "row_group_target_size"
 KEY_MAX_N_OFF_TARGET_RGS = "max_n_off_target_rgs"
-
-# Parquet file name constants.
-PARQUET_FILE_PREFIX = "file_"
-PARQUET_FILE_EXTENSION = ".parquet"
