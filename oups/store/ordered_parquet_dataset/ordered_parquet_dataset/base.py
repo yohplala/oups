@@ -242,6 +242,8 @@ class OrderedParquetDataset:
         lock_file = self._dirpath.parent / f"{self._dirpath.name}{LOCK_EXTENSION}"
         lock_file.parent.mkdir(parents=True, exist_ok=True)
         self._lock = Lock(str(lock_file), lifetime=lock_lifetime)
+        # Initiate '_ref_count'.
+        self._lock._ref_count = 0
         try:
             self._lock.lock(timeout=lock_timeout)
         except TimeOutError:
@@ -249,8 +251,8 @@ class OrderedParquetDataset:
                 f"failed to acquire lock for dataset '{self._dirpath}' within "
                 f"{lock_timeout} seconds. Another process may be using this dataset.",
             )
-        # Initialize reference counting to the lock object
-        self._lock._ref_count = 1
+        # Increment reference counting to the lock object
+        self._lock._ref_count += 1
         try:
             # remaining initialization code.
             try:
