@@ -6,20 +6,35 @@
 oups
 ====
 
-*oups* stands for Ordered Updatable Parquet Store.
+*oups* stands for **Ordered Updatable Parquet Store**.
 
-*oups* Python library provides convenience functions and class to manage a collection of parquet datasets. This includes mostly collection indexing, and ability to update ordered datasets.
+*oups* is a Python library that provides powerful tools for managing collections of ordered parquet datasets. It enables efficient storage, indexing, and querying of time-series data with validated ordering and good performance.
 
-Index
------
+Key Features
+------------
+
+- **Ordered Storage**: Validates data ordering within datasets
+- **Schema-based Indexing**: Hierarchical organization using dataclass schemas
+- **Incremental Updates**: Efficiently merge new data with existing datasets
+- **Row Group Management**: Optimizing storage layout
+- **Duplicate Handling**: Configurable duplicate detection and removal
+- **Lock-based Concurrency**: Safe concurrent access to datasets
+- **Cross-dataset Queries**: Query multiple datasets simultaneously
+
+Documentation
+-------------
 
 .. toctree::
-    install
-    quickstart
-    purpose
-    indexing
-    parquetset
-    api
+   :maxdepth: 2
+
+   install
+   quickstart
+   purpose
+   store
+   api
+
+Indices and Tables
+------------------
 
 * :ref:`genindex`
 
