@@ -1,4 +1,13 @@
 repos:
+  # Commitizen
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.8.0
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+      - id: commitizen-branch
+        stages: [push]
+
   # Pre-commit hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
