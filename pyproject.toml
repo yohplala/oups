@@ -23,6 +23,7 @@ flufl-lock = ">=8.2.0"
 black = ">=25.1"
 pre-commit = ">=4.2.0"
 pytest = ">=8.3.5"
+commitizen = ">=4.8.0"
 
 [build-system]
 requires = [
@@ -33,3 +34,12 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# Commitizen configuration using Poetry version provider
+[tool.commitizen]
+name = "cz_conventional_commits"
+version_provider = "poetry"
+tag_format = "$version"
+update_changelog_on_bump = true
+annotated_tag = true
+changelog_incremental = true
