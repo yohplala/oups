@@ -153,8 +153,8 @@ def by_scale(
         Ordered date time index over which performing the binning as defined
         per 'by'.
     by : Grouper or Series or tuple of 2 Series
-        Setup to define binning as a pandas TimeGrouper, or values contained in a
-        Series.
+        Setup to define binning as a pandas TimeGrouper, or values contained in
+        a Series.
         If a Series, values are used both as ends and labels of chunks.
         If a tuple of 2 Series, values in first Series are labels of chunks,
         and second Series are ends of chunks.
@@ -207,6 +207,7 @@ def by_scale(
         # to use 'closed' provided.
         if closed is None:
             closed = by.closed
+        # TODO: replace with date_utils.floor_ts() and date_utils.ceil_ts()?
         start, end = gtre(
             first=first,
             last=on.iloc[-1],
