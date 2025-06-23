@@ -28,7 +28,7 @@ jobs:
 
       # Build docs
       - name: Build docs
-        run: catchsegv sphinx-build docs/source docs/build
+        run: sphinx-build docs/source docs/build
 
       # Add nojeckyll
       - name: Add nojeckyll

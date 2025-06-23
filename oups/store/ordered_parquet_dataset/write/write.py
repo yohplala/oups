@@ -180,6 +180,9 @@ def write(
         ordered_on=ordered_on,
     )
     df_ordered_on = Series([]) if df is None else df.loc[:, ordered_on]
+    # Check that df_ordered_on is sorted.
+    if not df_ordered_on.is_monotonic_increasing:
+        raise ValueError("'df_ordered_on' must be sorted in ascending order.")
     ordered_parquet_dataset = (
         # Case 'dirpath' is a path to a directory.
         import_module("oups.store.ordered_parquet_dataset").OrderedParquetDataset(
