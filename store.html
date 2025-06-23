@@ -1,0 +1,369 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="./">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Store Architecture &mdash; oups latest documentation</title>
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d75fae25" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=c6e86fd7"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="API Reference" href="api.html" />
+    <link rel="prev" title="Why oups?" href="purpose.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            oups
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
+<li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
+<li class="toctree-l1"><a class="reference internal" href="purpose.html">Why <em>oups</em>?</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Store Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#main-components">Main Components</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#indexer">Indexer</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#orderedparquetdataset">OrderedParquetDataset</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#store">Store</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#advanced-features">Advanced Features</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#write-method">Write Method</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#iter-intersections">iter_intersections</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#best-practices">Best Practices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#see-also">See Also</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="index.html">oups</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Store Architecture</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="_sources/store.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="store-architecture">
+<h1>Store Architecture<a class="headerlink" href="#store-architecture" title="Link to this heading"></a></h1>
+<p>The <code class="docutils literal notranslate"><span class="pre">oups.store</span></code> module provides the core functionality for managing collections of ordered parquet datasets. It consists of three main components working together to provide efficient storage, indexing, and querying of time-series data.</p>
+<section id="overview">
+<h2>Overview<a class="headerlink" href="#overview" title="Link to this heading"></a></h2>
+<p>The store architecture is designed around three key components:</p>
+<ol class="arabic simple">
+<li><p><strong>Indexer</strong>: Provides a schema-based indexing system for organizing datasets</p></li>
+<li><p><strong>OrderedParquetDataset</strong>: Manages individual parquet datasets with ordering validation</p></li>
+<li><p><strong>Store</strong>: Provides a collection interface for multiple indexed datasets</p></li>
+</ol>
+</section>
+<section id="main-components">
+<h2>Main Components<a class="headerlink" href="#main-components" title="Link to this heading"></a></h2>
+<section id="indexer">
+<h3>Indexer<a class="headerlink" href="#indexer" title="Link to this heading"></a></h3>
+<p>The indexer system allows you to define hierarchical schemas for organizing your datasets using dataclasses decorated with <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> and optionally <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code>. This provides a structured way to organize related datasets in common directories.</p>
+<p><strong>Motivation</strong></p>
+<p>Datasets are gathered in a parent directory as a collection. Each materializes as parquet files located in a child directory whose naming is derived from a user-defined index. By formalizing this index through dataclasses, index management (user scope) is dissociated from path management (<em>oups</em> scope).</p>
+<p><strong>Decorators</strong></p>
+<p><em>oups</em> provides 2 class decorators for defining an indexing logic:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> is compulsory, and defines naming logic of the first directory level</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code> is optional, and can be used as many times as needed for sub-directories</p></li>
+</ul>
+<p><strong>&#64;toplevel Decorator</strong></p>
+<p>The <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> decorator:</p>
+<ul class="simple">
+<li><p>Generates <em>paths</em> from attribute values (<code class="docutils literal notranslate"><span class="pre">__str__</span></code> and <code class="docutils literal notranslate"><span class="pre">to_path</span></code> methods)</p></li>
+<li><p>Generates class instances (<code class="docutils literal notranslate"><span class="pre">from_path</span></code> classmethod)</p></li>
+<li><p>Validates attribute values at instantiation</p></li>
+<li><p>Calls <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> with <code class="docutils literal notranslate"><span class="pre">order</span></code> and <code class="docutils literal notranslate"><span class="pre">frozen</span></code> parameters set as <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+<li><p>Accepts an optional <code class="docutils literal notranslate"><span class="pre">fields_sep</span></code> parameter (default <code class="docutils literal notranslate"><span class="pre">-</span></code>) to define field separators</p></li>
+<li><p>Only accepts <code class="docutils literal notranslate"><span class="pre">int</span></code> or <code class="docutils literal notranslate"><span class="pre">str</span></code> attribute types</p></li>
+<li><p>If an attribute is a <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code>-decorated class, it must be positioned last</p></li>
+</ul>
+<p><strong>&#64;sublevel Decorator</strong></p>
+<p>The <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code> decorator:</p>
+<ul class="simple">
+<li><p>Is an alias for <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> with <code class="docutils literal notranslate"><span class="pre">order</span></code> and <code class="docutils literal notranslate"><span class="pre">frozen</span></code> set as <code class="docutils literal notranslate"><span class="pre">True</span></code></p></li>
+<li><p>Only accepts <code class="docutils literal notranslate"><span class="pre">int</span></code> or <code class="docutils literal notranslate"><span class="pre">str</span></code> attribute types</p></li>
+<li><p>If another deeper sub-level is defined, it must be positioned as last attribute</p></li>
+</ul>
+<p><strong>Hierarchical Example</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">toplevel</span><span class="p">,</span> <span class="n">sublevel</span>
+
+<span class="nd">@sublevel</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Sampling</span><span class="p">:</span>
+    <span class="n">frequency</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="nd">@toplevel</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Measure</span><span class="p">:</span>
+    <span class="n">quantity</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">city</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">sampling</span><span class="p">:</span> <span class="n">Sampling</span>
+
+<span class="c1"># Define different indexes for temperature in Berlin</span>
+<span class="n">berlin_1D</span> <span class="o">=</span> <span class="n">Measure</span><span class="p">(</span><span class="s1">&#39;temperature&#39;</span><span class="p">,</span> <span class="s1">&#39;berlin&#39;</span><span class="p">,</span> <span class="n">Sampling</span><span class="p">(</span><span class="s1">&#39;1D&#39;</span><span class="p">))</span>
+<span class="n">berlin_1W</span> <span class="o">=</span> <span class="n">Measure</span><span class="p">(</span><span class="s1">&#39;temperature&#39;</span><span class="p">,</span> <span class="s1">&#39;berlin&#39;</span><span class="p">,</span> <span class="n">Sampling</span><span class="p">(</span><span class="s1">&#39;1W&#39;</span><span class="p">))</span>
+
+<span class="c1"># When this indexer is connected to a Store, the directory structure will look like:</span>
+<span class="c1"># temperature-berlin/</span>
+<span class="c1"># ├── 1D/</span>
+<span class="c1"># │   ├── file_0000.parquet</span>
+<span class="c1"># │   └── file_0001.parquet</span>
+<span class="c1"># └── 1W/</span>
+<span class="c1">#     ├── file_0000.parquet</span>
+<span class="c1">#     └── file_0001.parquet</span>
+</pre></div>
+</div>
+<p><strong>Simple Example</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">toplevel</span>
+
+<span class="nd">@toplevel</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TimeSeriesIndex</span><span class="p">:</span>
+    <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">date</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="c1"># This creates a schema where datasets are organized as:</span>
+<span class="c1"># symbol-date/ (e.g., &quot;AAPL-2023.01.01/&quot;)</span>
+</pre></div>
+</div>
+</section>
+<section id="orderedparquetdataset">
+<h3>OrderedParquetDataset<a class="headerlink" href="#orderedparquetdataset" title="Link to this heading"></a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">OrderedParquetDataset</span></code> is the core class for managing individual parquet datasets with strict ordering validation. It provides:</p>
+<p><strong>Key Features:</strong></p>
+<ul class="simple">
+<li><p><strong>Ordered Storage</strong>: Data is stored in row groups ordered by a specified column</p></li>
+<li><p><strong>Incremental Updates</strong>: Efficiently merge new data with existing data</p></li>
+<li><p><strong>Row Group Management</strong>: Automatic splitting and merging of row groups</p></li>
+<li><p><strong>Metadata Tracking</strong>: Comprehensive metadata for each row group</p></li>
+<li><p><strong>Metadata Updates</strong>: Add, update, or remove custom key-value metadata</p></li>
+<li><p><strong>Duplicate Handling</strong>: Configurable duplicate detection and removal</p></li>
+<li><p><strong>Write Optimization</strong>: Configurable row group sizes and merge strategies</p></li>
+</ul>
+<p><strong>File Structure:</strong></p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>parent_directory/
+├── my_dataset/                # Dataset directory
+│   ├── file_0000.parquet      # Row group files
+│   └── file_0001.parquet
+├── my_dataset_opdmd           # Metadata file
+└── my_dataset.lock            # Lock file
+</pre></div>
+</div>
+<p><strong>Example:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrderedParquetDataset</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="c1"># Create or load a dataset</span>
+<span class="n">dataset</span> <span class="o">=</span> <span class="n">OrderedParquetDataset</span><span class="p">(</span><span class="s2">&quot;/path/to/dataset&quot;</span><span class="p">,</span> <span class="n">ordered_on</span><span class="o">=</span><span class="s2">&quot;timestamp&quot;</span><span class="p">)</span>
+
+<span class="c1"># Write data</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+    <span class="s2">&quot;timestamp&quot;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">&quot;2023-01-01&quot;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">1000</span><span class="p">),</span>
+    <span class="s2">&quot;value&quot;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span>
+<span class="p">})</span>
+<span class="n">dataset</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">)</span>
+
+<span class="c1"># Read data back</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+<section id="store">
+<h3>Store<a class="headerlink" href="#store" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">Store</span></code> class provides a collection interface for managing multiple <code class="docutils literal notranslate"><span class="pre">OrderedParquetDataset</span></code> instances organized according to an indexer schema.</p>
+<p><strong>Key Features:</strong></p>
+<ul class="simple">
+<li><p><strong>Schema-based Organization</strong>: Uses indexer schemas for dataset discovery</p></li>
+<li><p><strong>Lazy Loading</strong>: Datasets are loaded on-demand</p></li>
+<li><p><strong>Collection Interface</strong>: Dictionary-like access to datasets</p></li>
+<li><p><strong>Cross-dataset Operations</strong>: Advanced querying across multiple datasets</p></li>
+<li><p><strong>Automatic Discovery</strong>: Finds existing datasets matching the schema</p></li>
+</ul>
+<p><strong>Example:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">Store</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">toplevel</span>
+
+<span class="nd">@toplevel</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">StockIndex</span><span class="p">:</span>
+    <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">year</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="c1"># Create store</span>
+<span class="n">store</span> <span class="o">=</span> <span class="n">Store</span><span class="p">(</span><span class="s2">&quot;/path/to/data&quot;</span><span class="p">,</span> <span class="n">StockIndex</span><span class="p">)</span>
+
+<span class="c1"># Access datasets</span>
+<span class="n">aapl_2023</span> <span class="o">=</span> <span class="n">store</span><span class="p">[</span><span class="n">StockIndex</span><span class="p">(</span><span class="s2">&quot;AAPL&quot;</span><span class="p">,</span> <span class="s2">&quot;2023&quot;</span><span class="p">)]</span>
+
+<span class="c1"># Iterate over all datasets</span>
+<span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">store</span><span class="p">:</span>
+    <span class="n">dataset</span> <span class="o">=</span> <span class="n">store</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dataset </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2"> has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span><span class="si">}</span><span class="s2"> row groups&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="advanced-features">
+<h2>Advanced Features<a class="headerlink" href="#advanced-features" title="Link to this heading"></a></h2>
+<section id="write-method">
+<h3>Write Method<a class="headerlink" href="#write-method" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">write()</span></code> function provides advanced data writing capabilities:</p>
+<p><strong>Parameters:</strong></p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">row_group_target_size</span></code>: Control row group sizes (int or pandas frequency string)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code>: Specify columns for duplicate detection</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">max_n_off_target_rgs</span></code>: Control row group coalescing behavior</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">key_value_metadata</span></code>: Store custom metadata (supports add/update/remove operations)</p></li>
+</ul>
+<p><strong>Example:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">write</span>
+
+<span class="c1"># Write with time-based row groups and metadata</span>
+<span class="n">write</span><span class="p">(</span>
+    <span class="s2">&quot;/path/to/dataset&quot;</span><span class="p">,</span>
+    <span class="n">ordered_on</span><span class="o">=</span><span class="s2">&quot;timestamp&quot;</span><span class="p">,</span>
+    <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+    <span class="n">row_group_target_size</span><span class="o">=</span><span class="s2">&quot;1D&quot;</span><span class="p">,</span>  <span class="c1"># One row group per day</span>
+    <span class="n">duplicates_on</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;timestamp&quot;</span><span class="p">,</span> <span class="s2">&quot;symbol&quot;</span><span class="p">],</span>
+    <span class="n">key_value_metadata</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="s2">&quot;market_data&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;2.1&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;processed_by&quot;</span><span class="p">:</span> <span class="s2">&quot;data_pipeline&quot;</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+
+<span class="c1"># Update existing metadata (add new, update existing, remove with None)</span>
+<span class="n">write</span><span class="p">(</span>
+    <span class="s2">&quot;/path/to/dataset&quot;</span><span class="p">,</span>
+    <span class="n">ordered_on</span><span class="o">=</span><span class="s2">&quot;timestamp&quot;</span><span class="p">,</span>
+    <span class="n">df</span><span class="o">=</span><span class="n">new_df</span><span class="p">,</span>
+    <span class="n">key_value_metadata</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;2.2&quot;</span><span class="p">,</span>        <span class="c1"># Update existing</span>
+        <span class="s2">&quot;last_updated&quot;</span><span class="p">:</span> <span class="s2">&quot;2023-12-01&quot;</span><span class="p">,</span>  <span class="c1"># Add new</span>
+        <span class="s2">&quot;processed_by&quot;</span><span class="p">:</span> <span class="kc">None</span>     <span class="c1"># Remove existing</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="iter-intersections">
+<h3>iter_intersections<a class="headerlink" href="#iter-intersections" title="Link to this heading"></a></h3>
+<p>The <code class="docutils literal notranslate"><span class="pre">iter_intersections()</span></code> method enables efficient querying across multiple datasets with overlapping ranges:</p>
+<p><strong>Key Features:</strong></p>
+<ul class="simple">
+<li><p><strong>Range Queries</strong>: Query specific ranges (time, numeric, etc.) across multiple datasets</p></li>
+<li><p><strong>Intersection Detection</strong>: Automatically finds overlapping row groups</p></li>
+<li><p><strong>Memory Efficient</strong>: Streams data without loading entire datasets</p></li>
+<li><p><strong>Synchronized Iteration</strong>: Iterates through multiple datasets in sync</p></li>
+</ul>
+<p><strong>Example:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Query multiple datasets for overlapping data</span>
+<span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">StockIndex</span><span class="p">(</span><span class="s2">&quot;AAPL&quot;</span><span class="p">,</span> <span class="s2">&quot;2023&quot;</span><span class="p">),</span> <span class="n">StockIndex</span><span class="p">(</span><span class="s2">&quot;GOOGL&quot;</span><span class="p">,</span> <span class="s2">&quot;2023&quot;</span><span class="p">)]</span>
+
+<span class="k">for</span> <span class="n">intersection</span> <span class="ow">in</span> <span class="n">store</span><span class="o">.</span><span class="n">iter_intersections</span><span class="p">(</span>
+    <span class="n">keys</span><span class="p">,</span>
+    <span class="n">start</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2023-01-01&quot;</span><span class="p">),</span>
+    <span class="n">end_excl</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2023-02-01&quot;</span><span class="p">)</span>
+<span class="p">):</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">df</span> <span class="ow">in</span> <span class="n">intersection</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Data from </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="si">}</span><span class="s2"> rows&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="best-practices">
+<h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading"></a></h2>
+<ol class="arabic simple">
+<li><p><strong>Indexer Design</strong>: Design your indexer schema to match your data access patterns</p></li>
+<li><p><strong>Ordered Column</strong>: Choose an appropriate column for ordering (typically timestamp)</p></li>
+<li><p><strong>Row Group Size</strong>: Balance between query performance and storage efficiency</p></li>
+<li><p><strong>Duplicate Handling</strong>: Use <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code> when data quality is a concern</p></li>
+<li><p><strong>Metadata</strong>: Use key-value metadata to store important dataset information</p></li>
+</ol>
+</section>
+<section id="see-also">
+<h2>See Also<a class="headerlink" href="#see-also" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> - Complete API reference</p></li>
+<li><p><a class="reference internal" href="quickstart.html"><span class="doc">Quickstart</span></a> - Getting started guide</p></li>
+</ul>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="purpose.html" class="btn btn-neutral float-left" title="Why oups?" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="api.html" class="btn btn-neutral float-right" title="API Reference" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2022, Yohplala.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

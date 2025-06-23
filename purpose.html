@@ -1,25 +1,25 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
+<html class="writer-html5" lang="en" data-content_root="./">
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Why oups? &mdash; oups latest documentation</title>
-      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d75fae25" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
   
-        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
-        <script src="_static/jquery.js"></script>
-        <script src="_static/underscore.js"></script>
-        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="_static/doctools.js"></script>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=c6e86fd7"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Collection indexing" href="indexing.html" />
+    <link rel="next" title="Store Architecture" href="store.html" />
     <link rel="prev" title="Quickstart" href="quickstart.html" /> 
 </head>
 
@@ -28,30 +28,33 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="index.html" class="icon icon-home"> oups
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            oups
           </a>
-              <div class="version">
-                latest
-              </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="install.html">Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Why <em>oups</em>?</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#use-cases">Use Cases</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#alternatives">Alternatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#oups-advantages"><em>oups</em> Advantages</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#example-comparison">Example Comparison</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="indexing.html">Collection indexing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="parquetset.html"><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code></a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="store.html">Store Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
 </ul>
 
         </div>
@@ -67,8 +70,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>Why <em>oups</em>?</li>
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Why <em>oups</em>?</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/purpose.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -79,28 +82,111 @@
            <div itemprop="articleBody">
              
   <section id="why-oups">
-<h1>Why <em>oups</em>?<a class="headerlink" href="#why-oups" title="Permalink to this heading"></a></h1>
+<h1>Why <em>oups</em>?<a class="headerlink" href="#why-oups" title="Link to this heading"></a></h1>
 <section id="purpose">
-<h2>Purpose<a class="headerlink" href="#purpose" title="Permalink to this heading"></a></h2>
-<p>Targeting the management of ‘large-size’ collections of ordered datasets (more specifically time series), <em>oups</em> provides convenience class and functions to ease their identification, creation, update, and loading.
-These datasets may contain different data (from different channels or feeds) or be the results of different processings of the same raw data.</p>
+<h2>Purpose<a class="headerlink" href="#purpose" title="Link to this heading"></a></h2>
+<p><em>oups</em> (Ordered Updatable Parquet Store) is designed for managing large collections of ordered datasets, particularly time-series data. It provides a comprehensive framework for efficient storage, indexing, and querying of structured data with validated ordering.</p>
+<p><strong>Key Design Goals:</strong></p>
 <ul class="simple">
-<li><p><em>oups</em> most notably hides path management. By decorating a likewise <code class="docutils literal notranslate"><span class="pre">dataclasss</span></code> with <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> decorator, this class is turned into an index generator, with all attributes and functions so that path to related datasets can be generated.</p></li>
-<li><p>it also provides an <em>efficient</em> update logic suited for ordered datasets (low memory footprint).</p></li>
+<li><p><strong>Schema-driven Organization</strong>: Use dataclass schemas to automatically organize and discover datasets</p></li>
+<li><p><strong>Ordered Storage Validation</strong>: Verify strict ordering within datasets for optimal query performance</p></li>
+<li><p><strong>Efficient Updates</strong>: Support incremental data updates with intelligent merging strategies</p></li>
+<li><p><strong>Memory Efficiency</strong>: Minimize memory footprint during read/write operations</p></li>
+<li><p><strong>Concurrent Access</strong>: Provide safe concurrent access through file-based locking</p></li>
+<li><p><strong>Flexible Querying</strong>: Enable cross-dataset queries and range-based data retrieval</p></li>
+</ul>
+<p><strong>Core Features:</strong></p>
+<ul class="simple">
+<li><p><strong>Hierarchical Indexing</strong>: Define complex organizational schemas using <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> decorated dataclasses</p></li>
+<li><p><strong>Row Group Management</strong>: Use of parquet file structure to optimize both storage and query performance</p></li>
+<li><p><strong>Duplicate Handling</strong>: Configurable duplicate detection and removal</p></li>
+<li><p><strong>Metadata Support</strong>: Rich metadata storage alongside datasets</p></li>
+<li><p><strong>Range Queries</strong>: Efficient querying across time ranges and multiple datasets simultaneously</p></li>
+</ul>
+</section>
+<section id="use-cases">
+<h2>Use Cases<a class="headerlink" href="#use-cases" title="Link to this heading"></a></h2>
+<p>You may think of using <em>oups</em> for:</p>
+<ul class="simple">
+<li><p><strong>Financial Time Series</strong>: Managing market data, trading records, and risk metrics across multiple instruments</p></li>
+<li><p><strong>IoT Data Collection</strong>: Organizing sensor data from multiple devices and locations</p></li>
+<li><p><strong>Analytics Pipelines</strong>: Storing intermediate and final results of data processing workflows</p></li>
+<li><p><strong>Research Data</strong>: Managing experimental datasets with complex organizational requirements</p></li>
 </ul>
 </section>
 <section id="alternatives">
-<h2>Alternatives<a class="headerlink" href="#alternatives" title="Permalink to this heading"></a></h2>
-<p>Other libraries out there already exist to manage collections of datasets,</p>
-<ul class="simple">
-<li><p>many that I have not tested, for instance <a class="reference external" href="https://github.com/man-group/arctic">Arctic</a>,</p></li>
-<li><p>one that I have tested, <a class="reference external" href="https://github.com/ranaroussi/pystore">pystore</a>. Being based on Dask, it supports parallelized reading/writing out of the box. Its update logic can be reviewed in <a class="reference external" href="https://github.com/ranaroussi/pystore/blob/ed9beca774312811527c80d199c3cf437623477b/pystore/collection.py#L181">collection.py</a>. Not elaborating about its <a class="reference external" href="https://github.com/ranaroussi/pystore/issues/56">possible performance issues</a>, and only focusing on this logic applicability, current procedure implies that any duplicate rows be dropped, except last (duplicate considering all columns, but not the index, the latter being necessarily a <code class="docutils literal notranslate"><span class="pre">DatetimeIndex</span></code> as per <em>pystore</em> implementation). But this hard-coded logic <a class="reference external" href="https://github.com/ranaroussi/pystore/issues/43">may not suit all dataflows</a>.</p></li>
+<h2>Alternatives<a class="headerlink" href="#alternatives" title="Link to this heading"></a></h2>
+<p>Several alternatives exist for managing dataset collections:</p>
+<dl class="simple">
+<dt><strong>Arctic (MongoDB-based)</strong></dt><dd><ul class="simple">
+<li><p>Provides powerful time-series storage</p></li>
+<li><p>Requires MongoDB infrastructure</p></li>
+<li><p>More complex deployment and maintenance</p></li>
 </ul>
-<p>In comparison, current version of <em>oups</em>,</p>
-<ul class="simple">
-<li><p>is not based on Dask but directly on <a class="reference external" href="https://fastparquet.readthedocs.io/en/latest/">fastparquet</a>. No parallelized reading/writing is possible.</p></li>
-<li><p>provides an <em>efficient</em> update function with a user-defined logic for optionally dropping duplicates.</p></li>
+</dd>
+<dt><strong>PyStore (Dask-based)</strong></dt><dd><ul class="simple">
+<li><p>Supports parallelized operations</p></li>
+<li><p>Less flexible organizational schemas</p></li>
+<li><p><a class="reference external" href="https://github.com/ranaroussi/pystore/issues/56">Performance concerns</a> in some scenarios</p></li>
 </ul>
+</dd>
+<dt><strong>DuckDB or DataFusion</strong></dt><dd><ul class="simple">
+<li><p>Excellent query performance</p></li>
+<li><p>SQL-based querying</p></li>
+</ul>
+</dd>
+<dt><strong>Direct Parquet + File Management</strong></dt><dd><ul class="simple">
+<li><p>Maximum control over file structure</p></li>
+<li><p>Requires implementing indexing, updates, and concurrency manually</p></li>
+<li><p>This is how <em>oups</em> started</p></li>
+</ul>
+</dd>
+</dl>
+</section>
+<section id="oups-advantages">
+<h2><em>oups</em> Advantages<a class="headerlink" href="#oups-advantages" title="Link to this heading"></a></h2>
+<p>Compared to these alternatives, <em>oups</em> offers:</p>
+<ul class="simple">
+<li><p><strong>Pure Python Implementation</strong>: No external database dependencies</p></li>
+<li><p><strong>Flexible Duplicate Handling</strong>: User-defined logic for handling duplicate rows</p></li>
+<li><p><strong>Automated Path Management</strong>: Schema-driven directory organization</p></li>
+<li><p><strong>Incremental Updates</strong>: Efficient merging of new data with existing datasets</p></li>
+<li><p><strong>Ordering Validation</strong>: Built-in verification of data ordering for optimal performance</p></li>
+<li><p><strong>Simple API</strong>: An interface not requiring SQL knowledge</p></li>
+<li><p><strong>Lock-based Concurrency</strong>: Safe concurrent access without complex coordination</p></li>
+</ul>
+</section>
+<section id="example-comparison">
+<h2>Example Comparison<a class="headerlink" href="#example-comparison" title="Link to this heading"></a></h2>
+<p><strong>Traditional Approach:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Manual path management</span>
+<span class="n">path</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;/data/</span><span class="si">{</span><span class="n">symbol</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">year</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">month</span><span class="si">}</span><span class="s2">/data.parquet&quot;</span>
+
+<span class="c1"># Manual duplicate handling</span>
+<span class="n">existing_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_parquet</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+<span class="n">new_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">([</span><span class="n">existing_df</span><span class="p">,</span> <span class="n">new_data</span><span class="p">])</span>
+<span class="n">new_df</span> <span class="o">=</span> <span class="n">new_df</span><span class="o">.</span><span class="n">drop_duplicates</span><span class="p">()</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s1">&#39;timestamp&#39;</span><span class="p">)</span>
+<span class="n">new_df</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>With oups:</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nd">@toplevel</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DataIndex</span><span class="p">:</span>
+    <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">year</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">month</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="n">store</span> <span class="o">=</span> <span class="n">Store</span><span class="p">(</span><span class="s2">&quot;/data&quot;</span><span class="p">,</span> <span class="n">DataIndex</span><span class="p">)</span>
+<span class="n">key</span> <span class="o">=</span> <span class="n">DataIndex</span><span class="p">(</span><span class="s2">&quot;AAPL&quot;</span><span class="p">,</span> <span class="s2">&quot;2023&quot;</span><span class="p">,</span> <span class="s2">&quot;01&quot;</span><span class="p">)</span>
+
+<span class="c1"># Automatic path management, duplicate handling, and ordering</span>
+<span class="n">store</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">write</span><span class="p">(</span>
+    <span class="n">df</span><span class="o">=</span><span class="n">new_data</span><span class="p">,</span>
+    <span class="n">ordered_on</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">,</span>
+    <span class="n">duplicates_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;timestamp&#39;</span><span class="p">,</span> <span class="s1">&#39;symbol&#39;</span><span class="p">]</span>
+<span class="p">)</span>
+</pre></div>
+</div>
 </section>
 </section>
 
@@ -109,7 +195,7 @@ These datasets may contain different data (from different channels or feeds) or 
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
         <a href="quickstart.html" class="btn btn-neutral float-left" title="Quickstart" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="indexing.html" class="btn btn-neutral float-right" title="Collection indexing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="store.html" class="btn btn-neutral float-right" title="Store Architecture" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

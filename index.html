@@ -1,25 +1,25 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
+<html class="writer-html5" lang="en" data-content_root="./">
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>oups &mdash; oups latest documentation</title>
-      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d75fae25" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
   
-        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
-        <script src="_static/jquery.js"></script>
-        <script src="_static/underscore.js"></script>
-        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="_static/doctools.js"></script>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=c6e86fd7"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Install" href="install.html" /> 
+    <link rel="next" title="Installation" href="install.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -27,26 +27,26 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="#" class="icon icon-home"> oups
+
+          
+          
+          <a href="#" class="icon icon-home">
+            oups
           </a>
-              <div class="version">
-                latest
-              </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <ul>
-<li class="toctree-l1"><a class="reference internal" href="install.html">Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a></li>
 <li class="toctree-l1"><a class="reference internal" href="purpose.html">Why <em>oups</em>?</a></li>
-<li class="toctree-l1"><a class="reference internal" href="indexing.html">Collection indexing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="parquetset.html"><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code></a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="store.html">Store Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
 </ul>
 
         </div>
@@ -62,8 +62,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="#" class="icon icon-home"></a> &raquo;</li>
-      <li>oups</li>
+      <li><a href="#" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">oups</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -74,48 +74,73 @@
            <div itemprop="articleBody">
              
   <section id="oups">
-<h1>oups<a class="headerlink" href="#oups" title="Permalink to this heading"></a></h1>
-<p><em>oups</em> stands for Ordered Updatable Parquet Store.</p>
-<p><em>oups</em> Python library provides convenience functions and class to manage a collection of parquet datasets. This includes mostly collection indexing, and ability to update ordered datasets.</p>
-<section id="index">
-<h2>Index<a class="headerlink" href="#index" title="Permalink to this heading"></a></h2>
+<h1>oups<a class="headerlink" href="#oups" title="Link to this heading"></a></h1>
+<p><em>oups</em> stands for <strong>Ordered Updatable Parquet Store</strong>.</p>
+<p><em>oups</em> is a Python library that provides powerful tools for managing collections of ordered parquet datasets. It enables efficient storage, indexing, and querying of time-series data with validated ordering and good performance.</p>
+<section id="key-features">
+<h2>Key Features<a class="headerlink" href="#key-features" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p><strong>Ordered Storage</strong>: Validates data ordering within datasets</p></li>
+<li><p><strong>Schema-based Indexing</strong>: Hierarchical organization using dataclass schemas</p></li>
+<li><p><strong>Incremental Updates</strong>: Efficiently merge new data with existing datasets</p></li>
+<li><p><strong>Row Group Management</strong>: Optimizing storage layout</p></li>
+<li><p><strong>Duplicate Handling</strong>: Configurable duplicate detection and removal</p></li>
+<li><p><strong>Lock-based Concurrency</strong>: Safe concurrent access to datasets</p></li>
+<li><p><strong>Cross-dataset Queries</strong>: Query multiple datasets simultaneously</p></li>
+</ul>
+</section>
+<section id="documentation">
+<h2>Documentation<a class="headerlink" href="#documentation" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="install.html">Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="install.html#using-poetry-recommended">Using Poetry (Recommended)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="install.html#using-pip-development-install">Using Pip (Development Install)</a></li>
+<li class="toctree-l2"><a class="reference internal" href="install.html#dependencies">Dependencies</a></li>
+<li class="toctree-l2"><a class="reference internal" href="install.html#verification">Verification</a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="quickstart.html">Quickstart</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#parquetset-and-indexing">ParquetSet and indexing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#writing-new-data">Writing new data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="quickstart.html#reading-existing-data">Reading existing data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#basic-concepts">Basic Concepts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#setting-up-an-indexer">Setting Up an Indexer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#creating-a-store">Creating a Store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#working-with-datasets">Working with Datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#adding-more-data">Adding More Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#exploring-your-store">Exploring Your Store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#advanced-features">Advanced Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="quickstart.html#next-steps">Next Steps</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="purpose.html">Why <em>oups</em>?</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="purpose.html#purpose">Purpose</a></li>
+<li class="toctree-l2"><a class="reference internal" href="purpose.html#use-cases">Use Cases</a></li>
 <li class="toctree-l2"><a class="reference internal" href="purpose.html#alternatives">Alternatives</a></li>
+<li class="toctree-l2"><a class="reference internal" href="purpose.html#oups-advantages"><em>oups</em> Advantages</a></li>
+<li class="toctree-l2"><a class="reference internal" href="purpose.html#example-comparison">Example Comparison</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="indexing.html">Collection indexing</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="indexing.html#motivation">Motivation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="indexing.html#proposal">Proposal</a></li>
-<li class="toctree-l2"><a class="reference internal" href="indexing.html#example">Example</a></li>
-<li class="toctree-l2"><a class="reference internal" href="indexing.html#toplevel"><code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="indexing.html#sublevel"><code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code></a></li>
+<li class="toctree-l1"><a class="reference internal" href="store.html">Store Architecture</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="store.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="store.html#main-components">Main Components</a></li>
+<li class="toctree-l2"><a class="reference internal" href="store.html#advanced-features">Advanced Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="store.html#best-practices">Best Practices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="store.html#see-also">See Also</a></li>
 </ul>
 </li>
-<li class="toctree-l1"><a class="reference internal" href="parquetset.html"><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code></a><ul>
-<li class="toctree-l2"><a class="reference internal" href="parquetset.html#purpose-and-creation">Purpose and creation</a></li>
-<li class="toctree-l2"><a class="reference internal" href="parquetset.html#usage-notes">Usage notes</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="parquetset.html#dataframe-format">Dataframe format</a></li>
-<li class="toctree-l3"><a class="reference internal" href="parquetset.html#writing">Writing</a></li>
-<li class="toctree-l3"><a class="reference internal" href="parquetset.html#reading">Reading</a></li>
-<li class="toctree-l3"><a class="reference internal" href="parquetset.html#updating">Updating</a></li>
-<li class="toctree-l3"><a class="reference internal" href="parquetset.html#other-goodies">Other “goodies”</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="api.html#indexer-functions">Indexer Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#core-classes">Core Classes</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#write-operations">Write Operations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#utility-functions">Utility Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#type-definitions">Type Definitions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="api.html#examples">Examples</a></li>
 </ul>
 </li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a></li>
 </ul>
 </div>
+</section>
+<section id="indices-and-tables">
+<h2>Indices and Tables<a class="headerlink" href="#indices-and-tables" title="Link to this heading"></a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
 </ul>
@@ -126,7 +151,7 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="install.html" class="btn btn-neutral float-right" title="Install" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="install.html" class="btn btn-neutral float-right" title="Installation" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

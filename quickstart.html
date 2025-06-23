@@ -1,26 +1,26 @@
+
+
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
+<html class="writer-html5" lang="en" data-content_root="./">
 <head>
-  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Quickstart &mdash; oups latest documentation</title>
-      <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-      <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
+      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d75fae25" />
+      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
+
   
-        <script data-url_root="./" id="documentation_options" src="_static/documentation_options.js"></script>
-        <script src="_static/jquery.js"></script>
-        <script src="_static/underscore.js"></script>
-        <script src="_static/_sphinx_javascript_frameworks_compat.js"></script>
-        <script src="_static/doctools.js"></script>
+      <script src="_static/jquery.js?v=5d32c60e"></script>
+      <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="_static/documentation_options.js?v=c6e86fd7"></script>
+      <script src="_static/doctools.js?v=9bcbadda"></script>
+      <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="Why oups?" href="purpose.html" />
-    <link rel="prev" title="Install" href="install.html" /> 
+    <link rel="prev" title="Installation" href="install.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -28,31 +28,36 @@
     <nav data-toggle="wy-nav-shift" class="wy-nav-side">
       <div class="wy-side-scroll">
         <div class="wy-side-nav-search" >
-            <a href="index.html" class="icon icon-home"> oups
+
+          
+          
+          <a href="index.html" class="icon icon-home">
+            oups
           </a>
-              <div class="version">
-                latest
-              </div>
 <div role="search">
   <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
     <input type="hidden" name="check_keywords" value="yes" />
     <input type="hidden" name="area" value="default" />
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <ul class="current">
-<li class="toctree-l1"><a class="reference internal" href="install.html">Install</a></li>
+<li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">Quickstart</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#parquetset-and-indexing">ParquetSet and indexing</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#writing-new-data">Writing new data</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#reading-existing-data">Reading existing data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#basic-concepts">Basic Concepts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#setting-up-an-indexer">Setting Up an Indexer</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#creating-a-store">Creating a Store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#working-with-datasets">Working with Datasets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#adding-more-data">Adding More Data</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#exploring-your-store">Exploring Your Store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#advanced-features">Advanced Features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#next-steps">Next Steps</a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="purpose.html">Why <em>oups</em>?</a></li>
-<li class="toctree-l1"><a class="reference internal" href="indexing.html">Collection indexing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="parquetset.html"><code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code></a></li>
-<li class="toctree-l1"><a class="reference internal" href="api.html">API reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="store.html">Store Architecture</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api.html">API Reference</a></li>
 </ul>
 
         </div>
@@ -68,8 +73,8 @@
         <div class="rst-content">
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>Quickstart</li>
+      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Quickstart</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/quickstart.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -80,63 +85,185 @@
            <div itemprop="articleBody">
              
   <section id="quickstart">
-<h1>Quickstart<a class="headerlink" href="#quickstart" title="Permalink to this heading"></a></h1>
-<section id="parquetset-and-indexing">
-<h2>ParquetSet and indexing<a class="headerlink" href="#parquetset-and-indexing" title="Permalink to this heading"></a></h2>
-<p>An instance of <code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> class gathers a collection of datasets.
-<code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instantiation requires the definition of a <em>collection path</em> and a dataset <em>indexing logic</em>.</p>
-<p><strong>Collection path</strong></p>
-<p>It is directory path (existing or not) where will be (are) gathered directories for each dataset.</p>
-<p><strong>Indexing logic</strong></p>
-<p>A logic is formalized by use of a decorated class. Indices themselves are then materialized by instantiating this class, and more specifically by the instance attributes values.</p>
-<p>The class itself is declared just as a <a class="reference external" href="https://docs.python.org/3/library/dataclasses.html">dataclass</a>.
-<code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> is then used as a class decorator (and not <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code>).</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span> <span class="nn">os</span> <span class="kn">import</span> <span class="n">path</span> <span class="k">as</span> <span class="n">os_path</span>
-<span class="kn">from</span> <span class="nn">oups</span> <span class="kn">import</span> <span class="n">ParquetSet</span><span class="p">,</span> <span class="n">toplevel</span>
+<h1>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading"></a></h1>
+<p>This guide will get you started with the <code class="docutils literal notranslate"><span class="pre">oups.store</span></code> module for managing ordered parquet datasets.</p>
+<section id="basic-concepts">
+<h2>Basic Concepts<a class="headerlink" href="#basic-concepts" title="Link to this heading"></a></h2>
+<p>The store module is built around three key concepts:</p>
+<ol class="arabic simple">
+<li><p><strong>Indexer</strong>: Defines how datasets are organized using dataclass schemas</p></li>
+<li><p><strong>OrderedParquetDataset</strong>: Individual datasets with validated ordering</p></li>
+<li><p><strong>Store</strong>: Collection manager for multiple datasets</p></li>
+</ol>
+<p>Let’s walk through a complete example.</p>
+</section>
+<section id="setting-up-an-indexer">
+<h2>Setting Up an Indexer<a class="headerlink" href="#setting-up-an-indexer" title="Link to this heading"></a></h2>
+<p>First, define how you want to organize your datasets using a class decorated with <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">toplevel</span>
 
-<span class="c1"># Define an indexing logic to generate each individual dataset folder name.</span>
 <span class="nd">@toplevel</span>
-<span class="k">class</span> <span class="nc">DatasetIndex</span><span class="p">:</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">WeatherIndex</span><span class="p">:</span>
     <span class="n">country</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">city</span><span class="p">:</span> <span class="nb">str</span>
+</pre></div>
+</div>
+<p>This creates a schema where datasets will be organized in directories like <code class="docutils literal notranslate"><span class="pre">germany-berlin/</span></code>, <code class="docutils literal notranslate"><span class="pre">france-paris/</span></code>, etc.</p>
+</section>
+<section id="creating-a-store">
+<h2>Creating a Store<a class="headerlink" href="#creating-a-store" title="Link to this heading"></a></h2>
+<p>Create a store instance that will manage your collection of datasets:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">Store</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 
-<span class="c1"># Define a collection path.</span>
-<span class="n">dirpath</span> <span class="o">=</span> <span class="n">os_path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s1">&#39;~/Documents/code/data/weather_knowledge_base&#39;</span><span class="p">)</span>
+<span class="c1"># Define the base directory for your data collection</span>
+<span class="n">data_path</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">expanduser</span><span class="p">(</span><span class="s1">&#39;~/Documents/data/weather_data&#39;</span><span class="p">)</span>
 
-<span class="c1"># Initialize a parquet dataset collection.</span>
-<span class="n">ps</span> <span class="o">=</span> <span class="n">ParquetSet</span><span class="p">(</span><span class="n">dirpath</span><span class="p">,</span> <span class="n">DatasetIndex</span><span class="p">)</span>
+<span class="c1"># Create the store</span>
+<span class="n">store</span> <span class="o">=</span> <span class="n">Store</span><span class="p">(</span><span class="n">data_path</span><span class="p">,</span> <span class="n">WeatherIndex</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="writing-new-data">
-<h2>Writing new data<a class="headerlink" href="#writing-new-data" title="Permalink to this heading"></a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<section id="working-with-datasets">
+<h2>Working with Datasets<a class="headerlink" href="#working-with-datasets" title="Link to this heading"></a></h2>
+<p><strong>Writing Data</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 
-<span class="c1"># Index of a first dataset, for some temperature records related to Berlin.</span>
-<span class="n">idx1</span> <span class="o">=</span> <span class="n">DatasetIndex</span><span class="p">(</span><span class="s1">&#39;germany&#39;</span><span class="p">,</span><span class="s1">&#39;berlin&#39;</span><span class="p">)</span>
-<span class="c1"># Data to be recorded.</span>
-<span class="n">df1</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s1">&#39;timestamp&#39;</span><span class="p">:</span><span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2021/01/01&#39;</span><span class="p">,</span> <span class="s1">&#39;2021/01/05&#39;</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;1D&#39;</span><span class="p">),</span>
-                    <span class="s1">&#39;temperature&#39;</span><span class="p">:</span><span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span><span class="mi">15</span><span class="p">)})</span>
-<span class="c1"># Populate parquet collection with a first dataset.</span>
-<span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span> <span class="o">=</span> <span class="n">df1</span>
+<span class="c1"># Create an index for Berlin weather data</span>
+<span class="n">berlin_key</span> <span class="o">=</span> <span class="n">WeatherIndex</span><span class="p">(</span><span class="s1">&#39;germany&#39;</span><span class="p">,</span> <span class="s1">&#39;berlin&#39;</span><span class="p">)</span>
+
+<span class="c1"># Create sample data</span>
+<span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+    <span class="s1">&#39;timestamp&#39;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2023-01-01&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;D&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;temperature&#39;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">,</span> <span class="mi">50</span><span class="p">),</span>
+    <span class="s1">&#39;humidity&#39;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="mi">30</span><span class="p">,</span> <span class="mi">60</span><span class="p">)</span>
+<span class="p">})</span>
+
+<span class="c1"># Get reference to the dataset (initializes the dataset if it doesn&#39;t exist)</span>
+<span class="n">berlin_dataset</span> <span class="o">=</span> <span class="n">store</span><span class="p">[</span><span class="n">berlin_key</span><span class="p">]</span>
+
+<span class="c1"># Write the data with timestamp ordering</span>
+<span class="n">berlin_dataset</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span> <span class="n">ordered_on</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
-<p><code class="docutils literal notranslate"><span class="pre">weather_knowledge_base</span></code> folder has now been created with new data.</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">data</span>
-<span class="o">|-</span> <span class="n">weather_knowledge_base</span>
-   <span class="o">|-</span> <span class="n">germany</span><span class="o">-</span><span class="n">berlin</span>
-      <span class="o">|-</span> <span class="n">_common_metadata</span>
-      <span class="o">|-</span> <span class="n">_metadata</span>
-      <span class="o">|-</span> <span class="n">part</span><span class="mf">.0</span><span class="o">.</span><span class="n">parquet</span>
+<p>The directory structure will now look like:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>weather_data/
+├── germany-berlin/
+│   ├── file_0000.parquet
+│   └── file_0001.parquet
+├── germany-berlin_opdmd
+└── germany-berlin.lock
+</pre></div>
+</div>
+<p><strong>Reading Data</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Read all data back as a pandas DataFrame</span>
+<span class="n">result_df</span> <span class="o">=</span> <span class="n">berlin_dataset</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Dataset has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">result_df</span><span class="p">)</span><span class="si">}</span><span class="s2"> rows&quot;</span><span class="p">)</span>
+
+<span class="c1"># Check dataset metadata</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Ordered on: </span><span class="si">{</span><span class="n">berlin_dataset</span><span class="o">.</span><span class="n">ordered_on</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Number of row groups: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">berlin_dataset</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
-<section id="reading-existing-data">
-<h2>Reading existing data<a class="headerlink" href="#reading-existing-data" title="Permalink to this heading"></a></h2>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Read data as a pandas dataframe.</span>
-<span class="n">df</span> <span class="o">=</span> <span class="n">ps</span><span class="p">[</span><span class="n">idx1</span><span class="p">]</span><span class="o">.</span><span class="n">pdf</span>
+<section id="adding-more-data">
+<h2>Adding More Data<a class="headerlink" href="#adding-more-data" title="Link to this heading"></a></h2>
+<p><strong>Incremental Updates</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Add more recent data</span>
+<span class="n">new_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+    <span class="s1">&#39;timestamp&#39;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2023-02-01&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;D&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;temperature&#39;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="mi">15</span><span class="p">,</span> <span class="mi">30</span><span class="p">),</span>
+    <span class="s1">&#39;humidity&#39;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="mi">40</span><span class="p">,</span> <span class="mi">55</span><span class="p">)</span>
+<span class="p">})</span>
+
+<span class="c1"># This will merge with existing data in the correct order</span>
+<span class="n">berlin_dataset</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">new_df</span><span class="p">,</span> <span class="n">ordered_on</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">)</span>
 </pre></div>
 </div>
+<p><strong>Adding Another City</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Add data for Paris</span>
+<span class="n">paris_key</span> <span class="o">=</span> <span class="n">WeatherIndex</span><span class="p">(</span><span class="s1">&#39;france&#39;</span><span class="p">,</span> <span class="s1">&#39;paris&#39;</span><span class="p">)</span>
+<span class="n">paris_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span>
+    <span class="s1">&#39;timestamp&#39;</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s1">&#39;2023-01-01&#39;</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s1">&#39;D&#39;</span><span class="p">),</span>
+    <span class="s1">&#39;temperature&#39;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="mi">25</span><span class="p">,</span> <span class="mi">50</span><span class="p">),</span>
+    <span class="s1">&#39;humidity&#39;</span><span class="p">:</span> <span class="nb">range</span><span class="p">(</span><span class="mi">35</span><span class="p">,</span> <span class="mi">60</span><span class="p">)</span>
+<span class="p">})</span>
+
+<span class="n">store</span><span class="p">[</span><span class="n">paris_key</span><span class="p">]</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">paris_df</span><span class="p">,</span> <span class="n">ordered_on</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="exploring-your-store">
+<h2>Exploring Your Store<a class="headerlink" href="#exploring-your-store" title="Link to this heading"></a></h2>
+<p><strong>List All Datasets</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total datasets: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">store</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">store</span><span class="p">:</span>
+    <span class="n">dataset</span> <span class="o">=</span> <span class="n">store</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span><span class="si">}</span><span class="s2"> row groups&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Query Multiple Datasets</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Query data from multiple cities for a specific time range</span>
+<span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">WeatherIndex</span><span class="p">(</span><span class="s1">&#39;germany&#39;</span><span class="p">,</span> <span class="s1">&#39;berlin&#39;</span><span class="p">),</span> <span class="n">WeatherIndex</span><span class="p">(</span><span class="s1">&#39;france&#39;</span><span class="p">,</span> <span class="s1">&#39;paris&#39;</span><span class="p">)]</span>
+
+<span class="n">start_date</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s1">&#39;2023-01-15&#39;</span><span class="p">)</span>
+<span class="n">end_date</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s1">&#39;2023-01-25&#39;</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">intersection</span> <span class="ow">in</span> <span class="n">store</span><span class="o">.</span><span class="n">iter_intersections</span><span class="p">(</span><span class="n">keys</span><span class="p">,</span> <span class="n">start</span><span class="o">=</span><span class="n">start_date</span><span class="p">,</span> <span class="n">end_excl</span><span class="o">=</span><span class="n">end_date</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">df</span> <span class="ow">in</span> <span class="n">intersection</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Data from </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="si">}</span><span class="s2"> rows&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Temperature range: </span><span class="si">{</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="si">}</span><span class="s2">-</span><span class="si">{</span><span class="n">df</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="advanced-features">
+<h2>Advanced Features<a class="headerlink" href="#advanced-features" title="Link to this heading"></a></h2>
+<p><strong>Time-based Row Groups</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">write</span>
+
+<span class="c1"># Organize data into daily row groups</span>
+<span class="n">write</span><span class="p">(</span>
+    <span class="n">store</span><span class="p">[</span><span class="n">berlin_key</span><span class="p">],</span>
+    <span class="n">ordered_on</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">,</span>
+    <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+    <span class="n">row_group_target_size</span><span class="o">=</span><span class="s1">&#39;1D&#39;</span>  <span class="c1"># One row group per day</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Handling Duplicates</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Remove duplicates based on timestamp and location</span>
+<span class="n">write</span><span class="p">(</span>
+    <span class="n">store</span><span class="p">[</span><span class="n">berlin_key</span><span class="p">],</span>
+    <span class="n">ordered_on</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">,</span>
+    <span class="n">df</span><span class="o">=</span><span class="n">df_with_duplicates</span><span class="p">,</span>
+    <span class="n">duplicates_on</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;timestamp&#39;</span><span class="p">]</span>  <span class="c1"># Drop rows with same timestamp</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Custom Metadata</strong></p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Add metadata to your dataset</span>
+<span class="n">write</span><span class="p">(</span>
+    <span class="n">store</span><span class="p">[</span><span class="n">berlin_key</span><span class="p">],</span>
+    <span class="n">ordered_on</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">,</span>
+    <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+    <span class="n">key_value_metadata</span><span class="o">=</span><span class="p">{</span>
+        <span class="s1">&#39;source&#39;</span><span class="p">:</span> <span class="s1">&#39;weather_station_001&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;units&#39;</span><span class="p">:</span> <span class="s1">&#39;celsius&#39;</span><span class="p">,</span>
+        <span class="s1">&#39;version&#39;</span><span class="p">:</span> <span class="s1">&#39;1.0&#39;</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+</section>
+<section id="next-steps">
+<h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
+<ul class="simple">
+<li><p>Explore the complete <a class="reference internal" href="store.html"><span class="doc">Store Architecture</span></a> architecture documentation</p></li>
+<li><p>Learn more about indexing in <a class="reference internal" href="store.html"><span class="doc">Store Architecture</span></a> (Indexer section)</p></li>
+<li><p>Review the full <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> reference</p></li>
+<li><p>Understand the <a class="reference internal" href="purpose.html"><span class="doc">Why oups?</span></a> and design philosophy</p></li>
+</ul>
 </section>
 </section>
 
@@ -144,7 +271,7 @@
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="install.html" class="btn btn-neutral float-left" title="Install" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="install.html" class="btn btn-neutral float-left" title="Installation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
         <a href="purpose.html" class="btn btn-neutral float-right" title="Why oups?" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 

@@ -1,70 +1,207 @@
 Quickstart
 ==========
 
-ParquetSet and indexing
------------------------
+This guide will get you started with the ``oups.store`` module for managing ordered parquet datasets.
 
-An instance of ``ParquetSet`` class gathers a collection of datasets.
-``ParquetSet`` instantiation requires the definition of a *collection path* and a dataset *indexing logic*.
+Basic Concepts
+--------------
 
-**Collection path**
+The store module is built around three key concepts:
 
-It is directory path (existing or not) where will be (are) gathered directories for each dataset.
+1. **Indexer**: Defines how datasets are organized using dataclass schemas
+2. **OrderedParquetDataset**: Individual datasets with validated ordering
+3. **Store**: Collection manager for multiple datasets
 
-**Indexing logic**
+Let's walk through a complete example.
 
-A logic is formalized by use of a decorated class. Indices themselves are then materialized by instantiating this class, and more specifically by the instance attributes values.
+Setting Up an Indexer
+---------------------
 
-The class itself is declared just as a `dataclass <https://docs.python.org/3/library/dataclasses.html>`_.
-``@toplevel`` is then used as a class decorator (and not ``@dataclass``).
+First, define how you want to organize your datasets using a class decorated with ``@toplevel``:
 
 .. code-block:: python
 
-    from os import path as os_path
-    from oups import ParquetSet, toplevel
+    from oups.store import toplevel
 
-    # Define an indexing logic to generate each individual dataset folder name.
     @toplevel
-    class DatasetIndex:
+    class WeatherIndex:
         country: str
         city: str
 
-    # Define a collection path.
-    dirpath = os_path.expanduser('~/Documents/code/data/weather_knowledge_base')
+This creates a schema where datasets will be organized in directories like ``germany-berlin/``, ``france-paris/``, etc.
 
-    # Initialize a parquet dataset collection.
-    ps = ParquetSet(dirpath, DatasetIndex)
+Creating a Store
+-----------------
 
-Writing new data
-----------------
+Create a store instance that will manage your collection of datasets:
+
+.. code-block:: python
+
+    from oups.store import Store
+    import os
+
+    # Define the base directory for your data collection
+    data_path = os.path.expanduser('~/Documents/data/weather_data')
+
+    # Create the store
+    store = Store(data_path, WeatherIndex)
+
+Working with Datasets
+----------------------
+
+**Writing Data**
 
 .. code-block:: python
 
     import pandas as pd
 
-    # Index of a first dataset, for some temperature records related to Berlin.
-    idx1 = DatasetIndex('germany','berlin')
-    # Data to be recorded.
-    df1 = pd.DataFrame({'timestamp':pd.date_range('2021/01/01', '2021/01/05', freq='1D'),
-    	                'temperature':range(10,15)})
-    # Populate parquet collection with a first dataset.
-    ps[idx1] = df1
+    # Create an index for Berlin weather data
+    berlin_key = WeatherIndex('germany', 'berlin')
 
-``weather_knowledge_base`` folder has now been created with new data.
+    # Create sample data
+    df = pd.DataFrame({
+        'timestamp': pd.date_range('2023-01-01', periods=30, freq='D'),
+        'temperature': range(20, 50),
+        'humidity': range(30, 60)
+    })
+
+    # Get reference to the dataset (initializes the dataset if it doesn't exist)
+    berlin_dataset = store[berlin_key]
+
+    # Write the data with timestamp ordering
+    berlin_dataset.write(df=df, ordered_on='timestamp')
+
+The directory structure will now look like:
 
 .. code-block::
 
-    data
-    |- weather_knowledge_base
-       |- germany-berlin
-          |- _common_metadata
-          |- _metadata
-          |- part.0.parquet
+    weather_data/
+    ├── germany-berlin/
+    │   ├── file_0000.parquet
+    │   └── file_0001.parquet
+    ├── germany-berlin_opdmd
+    └── germany-berlin.lock
 
-Reading existing data
----------------------
+**Reading Data**
 
 .. code-block:: python
 
-    # Read data as a pandas dataframe.
-    df = ps[idx1].pdf
+    # Read all data back as a pandas DataFrame
+    result_df = berlin_dataset.to_pandas()
+    print(f"Dataset has {len(result_df)} rows")
+
+    # Check dataset metadata
+    print(f"Ordered on: {berlin_dataset.ordered_on}")
+    print(f"Number of row groups: {len(berlin_dataset)}")
+
+Adding More Data
+-----------------
+
+**Incremental Updates**
+
+.. code-block:: python
+
+    # Add more recent data
+    new_df = pd.DataFrame({
+        'timestamp': pd.date_range('2023-02-01', periods=15, freq='D'),
+        'temperature': range(15, 30),
+        'humidity': range(40, 55)
+    })
+
+    # This will merge with existing data in the correct order
+    berlin_dataset.write(df=new_df, ordered_on='timestamp')
+
+**Adding Another City**
+
+.. code-block:: python
+
+    # Add data for Paris
+    paris_key = WeatherIndex('france', 'paris')
+    paris_df = pd.DataFrame({
+        'timestamp': pd.date_range('2023-01-01', periods=25, freq='D'),
+        'temperature': range(25, 50),
+        'humidity': range(35, 60)
+    })
+
+    store[paris_key].write(df=paris_df, ordered_on='timestamp')
+
+Exploring Your Store
+---------------------
+
+**List All Datasets**
+
+.. code-block:: python
+
+    print(f"Total datasets: {len(store)}")
+
+    for key in store:
+        dataset = store[key]
+        print(f"{key}: {len(dataset)} row groups")
+
+**Query Multiple Datasets**
+
+.. code-block:: python
+
+    # Query data from multiple cities for a specific time range
+    keys = [WeatherIndex('germany', 'berlin'), WeatherIndex('france', 'paris')]
+
+    start_date = pd.Timestamp('2023-01-15')
+    end_date = pd.Timestamp('2023-01-25')
+
+    for intersection in store.iter_intersections(keys, start=start_date, end_excl=end_date):
+        for key, df in intersection.items():
+            print(f"Data from {key}: {len(df)} rows")
+            print(f"Temperature range: {df['temperature'].min()}-{df['temperature'].max()}")
+
+Advanced Features
+-----------------
+
+**Time-based Row Groups**
+
+.. code-block:: python
+
+    from oups.store import write
+
+    # Organize data into daily row groups
+    write(
+        store[berlin_key],
+        ordered_on='timestamp',
+        df=df,
+        row_group_target_size='1D'  # One row group per day
+    )
+
+**Handling Duplicates**
+
+.. code-block:: python
+
+    # Remove duplicates based on timestamp and location
+    write(
+        store[berlin_key],
+        ordered_on='timestamp',
+        df=df_with_duplicates,
+        duplicates_on=['timestamp']  # Drop rows with same timestamp
+    )
+
+**Custom Metadata**
+
+.. code-block:: python
+
+    # Add metadata to your dataset
+    write(
+        store[berlin_key],
+        ordered_on='timestamp',
+        df=df,
+        key_value_metadata={
+            'source': 'weather_station_001',
+            'units': 'celsius',
+            'version': '1.0'
+        }
+    )
+
+Next Steps
+----------
+
+- Explore the complete :doc:`store` architecture documentation
+- Learn more about indexing in :doc:`store` (Indexer section)
+- Review the full :doc:`api` reference
+- Understand the :doc:`purpose` and design philosophy
