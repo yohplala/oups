@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "oups"
-version = "2025.06.4"
+version = "2025.06.5"
 description = "Collection of parquet datasets."
 authors = ["Yohplala"]
 license = "Apache-2.0"

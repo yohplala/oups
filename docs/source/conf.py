@@ -53,7 +53,7 @@ autosummary_generate = False
 autodoc_member_order = "bysource"
 
 # Configure autodoc to exclude deeply nested modules
-autodoc_mock_imports = ["fastparquet", "numpy", "pandas", "sortedcontainers"]
+autodoc_mock_imports = ["fastparquet", "flufl", "numpy", "pandas", "sortedcontainers"]
 
 # Exclude internal implementation modules to prevent duplicates
 exclude_patterns = []
