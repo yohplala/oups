@@ -28,7 +28,7 @@ Documentation
    :maxdepth: 2
 
    install
-   quickstart
+   tutorial
    purpose
    store
    api

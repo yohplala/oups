@@ -1,5 +1,5 @@
-Quickstart
-==========
+Tutorial
+========
 
 This guide will get you started with the ``oups.store`` module for managing ordered parquet datasets.
 
@@ -13,6 +13,33 @@ The store module is built around three key concepts:
 3. **Store**: Collection manager for multiple datasets
 
 Let's walk through a complete example.
+
+Understanding Types and Parameters
+----------------------------------
+
+Before diving into examples, it's helpful to understand the key types and parameters used throughout the oups library:
+
+**Index Types**
+
+Indexer classes are dataclasses decorated with ``@toplevel`` that define the schema for organizing datasets. They can optionally include ``@sublevel`` classes for hierarchical organization.
+
+**Ordered Column Types**
+
+The ``ordered_on`` parameter accepts:
+
+- ``str``: Single column name (e.g., ``"timestamp"``)
+- ``Tuple[str]``: Multi-index column name for hierarchical columns (e.g., ``("date", "time")``)
+
+**Row Group Target Size Types**
+
+The ``row_group_target_size`` parameter accepts:
+
+- ``int``: Target number of rows per row group (e.g., ``10000``)
+- ``str``: Pandas frequency string for time-based grouping (e.g., ``"1D"`` for daily, ``"1H"`` for hourly)
+
+**Key-Value Metadata**
+
+Custom metadata stored as ``Dict[str, str]`` alongside parquet files. This can include source information, processing parameters, or any other relevant metadata.
 
 Setting Up an Indexer
 ---------------------
@@ -156,6 +183,28 @@ Exploring Your Store
 Advanced Features
 -----------------
 
+**Hierarchical Indexing**
+
+For more complex organization, you can create hierarchical indexers using ``@sublevel``:
+
+.. code-block:: python
+
+    from oups.store import toplevel, sublevel
+
+    @sublevel
+    class DateInfo:
+        year: str
+        month: str
+
+    @toplevel
+    class HierarchicalIndex:
+        symbol: str
+        date_info: DateInfo
+
+    # This creates paths like: AAPL/2023-01/
+    key = HierarchicalIndex("AAPL", DateInfo("2023", "01"))
+    store_hierarchical = Store("/path/to/financial_data", HierarchicalIndex)
+
 **Time-based Row Groups**
 
 .. code-block:: python
@@ -168,6 +217,29 @@ Advanced Features
         ordered_on='timestamp',
         df=df,
         row_group_target_size='1D'  # One row group per day
+    )
+
+**Advanced Write Options**
+
+The ``write`` function supports many advanced options for optimizing storage and handling duplicates:
+
+.. code-block:: python
+
+    from oups.store import write
+
+    # Advanced write with all options
+    write(
+        "/path/to/dataset",
+        ordered_on="timestamp",
+        df=df,
+        row_group_target_size="1D",  # Daily row groups
+        duplicates_on=["timestamp", "symbol"],  # Drop duplicates based on these columns
+        max_n_off_target_rgs=2,  # Coalesce small row groups
+        key_value_metadata={
+            "source": "bloomberg",
+            "version": "1.0",
+            "processed_by": "data_pipeline"
+        }
     )
 
 **Handling Duplicates**
@@ -198,10 +270,44 @@ Advanced Features
         }
     )
 
+    # Update existing metadata (add new, update existing, remove with None)
+    write(
+        store[berlin_key],
+        ordered_on='timestamp',
+        df=new_df,
+        key_value_metadata={
+            'version': '1.1',        # Update existing
+            'last_updated': '2023-12-01',  # Add new
+            'processed_by': None     # Remove existing
+        }
+    )
+
+**Cross-Dataset Queries**
+
+For more complex scenarios, you can query multiple datasets simultaneously:
+
+.. code-block:: python
+
+    # Define a financial indexer for cross-dataset queries
+    @toplevel
+    class StockIndex:
+        category: str
+        subcategory: str
+
+    # Query multiple datasets simultaneously
+    keys = [StockIndex("stocks", "tech"), StockIndex("stocks", "finance")]
+
+    for intersection in store.iter_intersections(
+        keys,
+        start=pd.Timestamp("2023-01-01"),
+        end_excl=pd.Timestamp("2023-02-01")
+    ):
+        for key, df in intersection.items():
+            print(f"Processing {key}: {len(df)} rows")
+
 Next Steps
 ----------
 
-- Explore the complete :doc:`store` architecture documentation
-- Learn more about indexing in :doc:`store` (Indexer section)
+- Learn more about indexing and explore the complete :doc:`store` architecture documentation
 - Review the full :doc:`api` reference
 - Understand the :doc:`purpose` and design philosophy

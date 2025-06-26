@@ -6,7 +6,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Quickstart &mdash; oups latest documentation</title>
+  <title>Tutorial &mdash; oups latest documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=d75fae25" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=e59714d7" />
 
@@ -44,8 +44,9 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <ul class="current">
 <li class="toctree-l1"><a class="reference internal" href="install.html">Installation</a></li>
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Quickstart</a><ul>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Tutorial</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="#basic-concepts">Basic Concepts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#understanding-types-and-parameters">Understanding Types and Parameters</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#setting-up-an-indexer">Setting Up an Indexer</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#creating-a-store">Creating a Store</a></li>
 <li class="toctree-l2"><a class="reference internal" href="#working-with-datasets">Working with Datasets</a></li>
@@ -74,9 +75,9 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-      <li class="breadcrumb-item active">Quickstart</li>
+      <li class="breadcrumb-item active">Tutorial</li>
       <li class="wy-breadcrumbs-aside">
-            <a href="_sources/quickstart.rst.txt" rel="nofollow"> View page source</a>
+            <a href="_sources/tutorial.rst.txt" rel="nofollow"> View page source</a>
       </li>
   </ul>
   <hr/>
@@ -84,8 +85,8 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="quickstart">
-<h1>Quickstart<a class="headerlink" href="#quickstart" title="Link to this heading"></a></h1>
+  <section id="tutorial">
+<h1>Tutorial<a class="headerlink" href="#tutorial" title="Link to this heading"></a></h1>
 <p>This guide will get you started with the <code class="docutils literal notranslate"><span class="pre">oups.store</span></code> module for managing ordered parquet datasets.</p>
 <section id="basic-concepts">
 <h2>Basic Concepts<a class="headerlink" href="#basic-concepts" title="Link to this heading"></a></h2>
@@ -96,6 +97,26 @@
 <li><p><strong>Store</strong>: Collection manager for multiple datasets</p></li>
 </ol>
 <p>Let’s walk through a complete example.</p>
+</section>
+<section id="understanding-types-and-parameters">
+<h2>Understanding Types and Parameters<a class="headerlink" href="#understanding-types-and-parameters" title="Link to this heading"></a></h2>
+<p>Before diving into examples, it’s helpful to understand the key types and parameters used throughout the oups library:</p>
+<p><strong>Index Types</strong></p>
+<p>Indexer classes are dataclasses decorated with <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> that define the schema for organizing datasets. They can optionally include <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code> classes for hierarchical organization.</p>
+<p><strong>Ordered Column Types</strong></p>
+<p>The <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> parameter accepts:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">str</span></code>: Single column name (e.g., <code class="docutils literal notranslate"><span class="pre">&quot;timestamp&quot;</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">Tuple[str]</span></code>: Multi-index column name for hierarchical columns (e.g., <code class="docutils literal notranslate"><span class="pre">(&quot;date&quot;,</span> <span class="pre">&quot;time&quot;)</span></code>)</p></li>
+</ul>
+<p><strong>Row Group Target Size Types</strong></p>
+<p>The <code class="docutils literal notranslate"><span class="pre">row_group_target_size</span></code> parameter accepts:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">int</span></code>: Target number of rows per row group (e.g., <code class="docutils literal notranslate"><span class="pre">10000</span></code>)</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">str</span></code>: Pandas frequency string for time-based grouping (e.g., <code class="docutils literal notranslate"><span class="pre">&quot;1D&quot;</span></code> for daily, <code class="docutils literal notranslate"><span class="pre">&quot;1H&quot;</span></code> for hourly)</p></li>
+</ul>
+<p><strong>Key-Value Metadata</strong></p>
+<p>Custom metadata stored as <code class="docutils literal notranslate"><span class="pre">Dict[str,</span> <span class="pre">str]</span></code> alongside parquet files. This can include source information, processing parameters, or any other relevant metadata.</p>
 </section>
 <section id="setting-up-an-indexer">
 <h2>Setting Up an Indexer<a class="headerlink" href="#setting-up-an-indexer" title="Link to this heading"></a></h2>
@@ -219,6 +240,25 @@
 </section>
 <section id="advanced-features">
 <h2>Advanced Features<a class="headerlink" href="#advanced-features" title="Link to this heading"></a></h2>
+<p><strong>Hierarchical Indexing</strong></p>
+<p>For more complex organization, you can create hierarchical indexers using <code class="docutils literal notranslate"><span class="pre">&#64;sublevel</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">toplevel</span><span class="p">,</span> <span class="n">sublevel</span>
+
+<span class="nd">@sublevel</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DateInfo</span><span class="p">:</span>
+    <span class="n">year</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">month</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="nd">@toplevel</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">HierarchicalIndex</span><span class="p">:</span>
+    <span class="n">symbol</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">date_info</span><span class="p">:</span> <span class="n">DateInfo</span>
+
+<span class="c1"># This creates paths like: AAPL/2023-01/</span>
+<span class="n">key</span> <span class="o">=</span> <span class="n">HierarchicalIndex</span><span class="p">(</span><span class="s2">&quot;AAPL&quot;</span><span class="p">,</span> <span class="n">DateInfo</span><span class="p">(</span><span class="s2">&quot;2023&quot;</span><span class="p">,</span> <span class="s2">&quot;01&quot;</span><span class="p">))</span>
+<span class="n">store_hierarchical</span> <span class="o">=</span> <span class="n">Store</span><span class="p">(</span><span class="s2">&quot;/path/to/financial_data&quot;</span><span class="p">,</span> <span class="n">HierarchicalIndex</span><span class="p">)</span>
+</pre></div>
+</div>
 <p><strong>Time-based Row Groups</strong></p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">write</span>
 
@@ -228,6 +268,26 @@
     <span class="n">ordered_on</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">,</span>
     <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
     <span class="n">row_group_target_size</span><span class="o">=</span><span class="s1">&#39;1D&#39;</span>  <span class="c1"># One row group per day</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Advanced Write Options</strong></p>
+<p>The <code class="docutils literal notranslate"><span class="pre">write</span></code> function supports many advanced options for optimizing storage and handling duplicates:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">oups.store</span><span class="w"> </span><span class="kn">import</span> <span class="n">write</span>
+
+<span class="c1"># Advanced write with all options</span>
+<span class="n">write</span><span class="p">(</span>
+    <span class="s2">&quot;/path/to/dataset&quot;</span><span class="p">,</span>
+    <span class="n">ordered_on</span><span class="o">=</span><span class="s2">&quot;timestamp&quot;</span><span class="p">,</span>
+    <span class="n">df</span><span class="o">=</span><span class="n">df</span><span class="p">,</span>
+    <span class="n">row_group_target_size</span><span class="o">=</span><span class="s2">&quot;1D&quot;</span><span class="p">,</span>  <span class="c1"># Daily row groups</span>
+    <span class="n">duplicates_on</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;timestamp&quot;</span><span class="p">,</span> <span class="s2">&quot;symbol&quot;</span><span class="p">],</span>  <span class="c1"># Drop duplicates based on these columns</span>
+    <span class="n">max_n_off_target_rgs</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="c1"># Coalesce small row groups</span>
+    <span class="n">key_value_metadata</span><span class="o">=</span><span class="p">{</span>
+        <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="s2">&quot;bloomberg&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;version&quot;</span><span class="p">:</span> <span class="s2">&quot;1.0&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;processed_by&quot;</span><span class="p">:</span> <span class="s2">&quot;data_pipeline&quot;</span>
+    <span class="p">}</span>
 <span class="p">)</span>
 </pre></div>
 </div>
@@ -253,14 +313,45 @@
         <span class="s1">&#39;version&#39;</span><span class="p">:</span> <span class="s1">&#39;1.0&#39;</span>
     <span class="p">}</span>
 <span class="p">)</span>
+
+<span class="c1"># Update existing metadata (add new, update existing, remove with None)</span>
+<span class="n">write</span><span class="p">(</span>
+    <span class="n">store</span><span class="p">[</span><span class="n">berlin_key</span><span class="p">],</span>
+    <span class="n">ordered_on</span><span class="o">=</span><span class="s1">&#39;timestamp&#39;</span><span class="p">,</span>
+    <span class="n">df</span><span class="o">=</span><span class="n">new_df</span><span class="p">,</span>
+    <span class="n">key_value_metadata</span><span class="o">=</span><span class="p">{</span>
+        <span class="s1">&#39;version&#39;</span><span class="p">:</span> <span class="s1">&#39;1.1&#39;</span><span class="p">,</span>        <span class="c1"># Update existing</span>
+        <span class="s1">&#39;last_updated&#39;</span><span class="p">:</span> <span class="s1">&#39;2023-12-01&#39;</span><span class="p">,</span>  <span class="c1"># Add new</span>
+        <span class="s1">&#39;processed_by&#39;</span><span class="p">:</span> <span class="kc">None</span>     <span class="c1"># Remove existing</span>
+    <span class="p">}</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p><strong>Cross-Dataset Queries</strong></p>
+<p>For more complex scenarios, you can query multiple datasets simultaneously:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># Define a financial indexer for cross-dataset queries</span>
+<span class="nd">@toplevel</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">StockIndex</span><span class="p">:</span>
+    <span class="n">category</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">subcategory</span><span class="p">:</span> <span class="nb">str</span>
+
+<span class="c1"># Query multiple datasets simultaneously</span>
+<span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="n">StockIndex</span><span class="p">(</span><span class="s2">&quot;stocks&quot;</span><span class="p">,</span> <span class="s2">&quot;tech&quot;</span><span class="p">),</span> <span class="n">StockIndex</span><span class="p">(</span><span class="s2">&quot;stocks&quot;</span><span class="p">,</span> <span class="s2">&quot;finance&quot;</span><span class="p">)]</span>
+
+<span class="k">for</span> <span class="n">intersection</span> <span class="ow">in</span> <span class="n">store</span><span class="o">.</span><span class="n">iter_intersections</span><span class="p">(</span>
+    <span class="n">keys</span><span class="p">,</span>
+    <span class="n">start</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2023-01-01&quot;</span><span class="p">),</span>
+    <span class="n">end_excl</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">&quot;2023-02-01&quot;</span><span class="p">)</span>
+<span class="p">):</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">df</span> <span class="ow">in</span> <span class="n">intersection</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processing </span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">df</span><span class="p">)</span><span class="si">}</span><span class="s2"> rows&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
 <section id="next-steps">
 <h2>Next Steps<a class="headerlink" href="#next-steps" title="Link to this heading"></a></h2>
 <ul class="simple">
-<li><p>Explore the complete <a class="reference internal" href="store.html"><span class="doc">Store Architecture</span></a> architecture documentation</p></li>
-<li><p>Learn more about indexing in <a class="reference internal" href="store.html"><span class="doc">Store Architecture</span></a> (Indexer section)</p></li>
+<li><p>Learn more about indexing and explore the complete <a class="reference internal" href="store.html"><span class="doc">Store Architecture</span></a> architecture documentation</p></li>
 <li><p>Review the full <a class="reference internal" href="api.html"><span class="doc">API Reference</span></a> reference</p></li>
 <li><p>Understand the <a class="reference internal" href="purpose.html"><span class="doc">Why oups?</span></a> and design philosophy</p></li>
 </ul>
@@ -278,7 +369,7 @@
   <hr/>
 
   <div role="contentinfo">
-    <p>&#169; Copyright 2022, Yohplala.</p>
+    <p>&#169; Copyright 2025, Yohplala.</p>
   </div>
 
   Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
