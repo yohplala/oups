@@ -47,14 +47,36 @@
 <li class="toctree-l1"><a class="reference internal" href="purpose.html">Why <em>oups</em>?</a></li>
 <li class="toctree-l1"><a class="reference internal" href="store.html">Store Architecture</a></li>
 <li class="toctree-l1 current"><a class="current reference internal" href="#">API Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="#indexer-functions">Indexer Functions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#core-classes">Core Classes</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#orderedparquetdataset">OrderedParquetDataset</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#store">Store</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#indexer-functions">Indexer Functions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#oups.store.toplevel"><code class="docutils literal notranslate"><span class="pre">toplevel()</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#oups.store.field_sep"><code class="docutils literal notranslate"><span class="pre">field_sep</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#oups.store.depth"><code class="docutils literal notranslate"><span class="pre">depth</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l2"><a class="reference internal" href="#write-operations">Write Operations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="#utility-functions">Utility Functions</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#oups.store.sublevel"><code class="docutils literal notranslate"><span class="pre">sublevel()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#oups.store.is_toplevel"><code class="docutils literal notranslate"><span class="pre">is_toplevel()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#core-classes">Core Classes</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#orderedparquetdataset">OrderedParquetDataset</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#oups.store.OrderedParquetDataset"><code class="docutils literal notranslate"><span class="pre">OrderedParquetDataset</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#store">Store</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#oups.store.Store"><code class="docutils literal notranslate"><span class="pre">Store</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#write-operations">Write Operations</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#oups.store.write"><code class="docutils literal notranslate"><span class="pre">write()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#utility-functions">Utility Functions</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#oups.store.check_cmidx"><code class="docutils literal notranslate"><span class="pre">check_cmidx()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#oups.store.conform_cmidx"><code class="docutils literal notranslate"><span class="pre">conform_cmidx()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -88,21 +110,566 @@
 <p>This section provides detailed API documentation for the main store components.</p>
 <section id="indexer-functions">
 <h2>Indexer Functions<a class="headerlink" href="#indexer-functions" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="oups.store.toplevel">
+<span class="sig-name descname"><span class="pre">toplevel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index_class</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">*</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">field_sep</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'-'</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Type</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Callable</span></span></span><a class="headerlink" href="#oups.store.toplevel" title="Link to this definition"></a></dt>
+<dd><p>Turn decorated class into an indexing schema.</p>
+<p>Decorated class is equipped with methods and attributes to use with a
+<code class="docutils literal notranslate"><span class="pre">ParquetSet</span></code> instance.
+It has to be defined as one would define a class decorated by
+<code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>field_sep</strong> (<em>str</em><em>, </em><em>default '.'</em>) – Character to use as separator between fields of the dataclass.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>Decorated class.</em></p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.field_sep">
+<span class="sig-name descname"><span class="pre">field_sep</span></span><a class="headerlink" href="#oups.store.field_sep" title="Link to this definition"></a></dt>
+<dd><p>Fields separator (can’t assign).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.depth">
+<span class="sig-name descname"><span class="pre">depth</span></span><a class="headerlink" href="#oups.store.depth" title="Link to this definition"></a></dt>
+<dd><p>Number of levels, including ‘toplevel’ (can’t assign).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<p class="rubric">Notes</p>
+<p><code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> is actually called when decorating with <code class="docutils literal notranslate"><span class="pre">&#64;toplevel</span></code> with
+parameters set to:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">order=True</span></code>,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">frozen=True</span></code></p></li>
+</ul>
+</div></blockquote>
+<p>When class is instantiated, a validation step is conducted on attributes
+types and values.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>An instance can only be composed with <code class="docutils literal notranslate"><span class="pre">int</span></code>, <code class="docutils literal notranslate"><span class="pre">str</span></code> or a dataclass
+object coming in last position;</p></li>
+<li><p>Value of attribute can not incorporate forbidden characters like <code class="docutils literal notranslate"><span class="pre">/</span></code>
+and <code class="docutils literal notranslate"><span class="pre">self.field_sep</span></code>.</p></li>
+</ul>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oups.store.sublevel">
+<span class="sig-name descname"><span class="pre">sublevel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">index_class</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.sublevel" title="Link to this definition"></a></dt>
+<dd><p>Define a subdirectory level.</p>
+<p>This decorator really is an alias of <code class="docutils literal notranslate"><span class="pre">&#64;dataclass</span></code> decorator, with
+parameters set to:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">order=True</span></code>,</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">frozen=True</span></code></p></li>
+</ul>
+</div></blockquote>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oups.store.is_toplevel">
+<span class="sig-name descname"><span class="pre">is_toplevel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">toplevel</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">bool</span></span></span><a class="headerlink" href="#oups.store.is_toplevel" title="Link to this definition"></a></dt>
+<dd><p>Return <cite>True</cite> if <cite>toplevel</cite>-decorated class.</p>
+<p>Returns ‘True’ if ‘toplevel’ (class or instance) has been decorated with
+<a class="reference external" href="mailto:'&#37;&#52;&#48;toplevel">‘<span>&#64;</span>toplevel</a>’. It checks presence ‘field_sep’ attribute and ‘from_path’ method.</p>
+</dd></dl>
+
 </section>
 <section id="core-classes">
 <h2>Core Classes<a class="headerlink" href="#core-classes" title="Link to this heading"></a></h2>
 <section id="orderedparquetdataset">
 <h3>OrderedParquetDataset<a class="headerlink" href="#orderedparquetdataset" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">OrderedParquetDataset</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dirpath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ordered_on</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lock_timeout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lock_lifetime</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">15</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset" title="Link to this definition"></a></dt>
+<dd><p>Base class for Ordered Parquet Dataset with shared functionality.</p>
+<p>This class contains all shared attributes, properties, and methods between
+the full OrderedParquetDataset and its read-only version.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._file_ids_n_digits">
+<span class="sig-name descname"><span class="pre">_file_ids_n_digits</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset._file_ids_n_digits" title="Link to this definition"></a></dt>
+<dd><p>Number of digits to use for ‘file_id’ in filename. It is kept as an
+attribute to avoid recomputing it at each call to
+‘get_parquet_filepaths()’.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._lock">
+<span class="sig-name descname"><span class="pre">_lock</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset._lock" title="Link to this definition"></a></dt>
+<dd><p>Exclusive lock held for the object’s entire lifetime.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Lock</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._max_allowed_file_id">
+<span class="sig-name descname"><span class="pre">_max_allowed_file_id</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset._max_allowed_file_id" title="Link to this definition"></a></dt>
+<dd><p>Maximum allowed file id. Kept as hidden attribute to avoid
+recomputing it at each call in ‘write_row_group_files()’.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._max_n_rows">
+<span class="sig-name descname"><span class="pre">_max_n_rows</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset._max_n_rows" title="Link to this definition"></a></dt>
+<dd><p>Maximum allowed number of rows in a row group. Kept as hidden
+attribute to avoid recomputing it at each call in
+‘write_row_group_files()’.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.dirpath">
+<span class="sig-name descname"><span class="pre">dirpath</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset.dirpath" title="Link to this definition"></a></dt>
+<dd><p>Directory path from where to load data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Path</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.is_newly_initialized">
+<span class="sig-name descname"><span class="pre">is_newly_initialized</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset.is_newly_initialized" title="Link to this definition"></a></dt>
+<dd><p>True if this dataset instance was just created and has no existing
+metadata file. False if the dataset was loaded from existing files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.key_value_metadata">
+<span class="sig-name descname"><span class="pre">key_value_metadata</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset.key_value_metadata" title="Link to this definition"></a></dt>
+<dd><p>Key-value metadata, from user and including ‘ordered_on’ column name.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dict[str, str]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.max_file_id">
+<span class="sig-name descname"><span class="pre">max_file_id</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset.max_file_id" title="Link to this definition"></a></dt>
+<dd><p>Maximum file id in current directory.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.ordered_on">
+<span class="sig-name descname"><span class="pre">ordered_on</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset.ordered_on" title="Link to this definition"></a></dt>
+<dd><p>Column name to order row groups by. Can be set either at opd
+instantiation or in ‘kwargs’ of ‘write()’ method. Once set, it cannot
+be changed.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.row_group_stats">
+<span class="sig-name descname"><span class="pre">row_group_stats</span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset.row_group_stats" title="Link to this definition"></a></dt>
+<dd><dl class="simple">
+<dt>Row groups statistics,</dt><dd><ul class="simple">
+<li><p>“ordered_on_min”, min value in ‘ordered_on’ column for this group,</p></li>
+<li><p>“ordered_on_max”, max value in ‘ordered_on’ column for this group,</p></li>
+<li><p>“n_rows”: number of rows per row group,</p></li>
+<li><p>“file_id”: an int indicating the file id for this group.</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.remove_from_disk">
+<span class="sig-name descname"><span class="pre">remove_from_disk</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset.remove_from_disk" title="Link to this definition"></a></dt>
+<dd><p>Remove all dataset files from disk and update in-memory state.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.to_pandas">
+<span class="sig-name descname"><span class="pre">to_pandas</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset.to_pandas" title="Link to this definition"></a></dt>
+<dd><p>Return data as a pandas dataframe.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.write">
+<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset.write" title="Link to this definition"></a></dt>
+<dd><p>Write data to disk, merging with existing data.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.__del__">
+<span class="sig-name descname"><span class="pre">__del__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset.__del__" title="Link to this definition"></a></dt>
+<dd><p>Release lock when object is garbage collected.
+Uses reference counting to ensure lock is only released when all
+instances are gone.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.__getitem__">
+<span class="sig-name descname"><span class="pre">__getitem__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">self</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">slice</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="s"><span class="pre">'ReadOnlyOrderedParquetDataset'</span></span></span></span><a class="headerlink" href="#oups.store.OrderedParquetDataset.__getitem__" title="Link to this definition"></a></dt>
+<dd><p>Select among the row-groups using integer/slicing.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset.__len__">
+<span class="sig-name descname"><span class="pre">__len__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset.__len__" title="Link to this definition"></a></dt>
+<dd><p>Return number of row groups in the dataset.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._align_file_ids">
+<span class="sig-name descname"><span class="pre">_align_file_ids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset._align_file_ids" title="Link to this definition"></a></dt>
+<dd><p>Align file ids to row group position in the dataset.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._release_lock">
+<span class="sig-name descname"><span class="pre">_release_lock</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset._release_lock" title="Link to this definition"></a></dt>
+<dd><p>Release lock with reference counting.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._remove_row_group_files">
+<span class="sig-name descname"><span class="pre">_remove_row_group_files</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset._remove_row_group_files" title="Link to this definition"></a></dt>
+<dd><p>Remove row group files from disk. Row group indexes are also removed
+from row_group_stats.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._sort_row_groups">
+<span class="sig-name descname"><span class="pre">_sort_row_groups</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset._sort_row_groups" title="Link to this definition"></a></dt>
+<dd><p>Sort row groups according their min value in ‘ordered_on’ column.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._write_metadata_file">
+<span class="sig-name descname"><span class="pre">_write_metadata_file</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset._write_metadata_file" title="Link to this definition"></a></dt>
+<dd><p>Write metadata to disk.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.OrderedParquetDataset._write_row_group_files">
+<span class="sig-name descname"><span class="pre">_write_row_group_files</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.OrderedParquetDataset._write_row_group_files" title="Link to this definition"></a></dt>
+<dd><p>Write row group as files to disk. One row group per file.</p>
+</dd></dl>
+
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>There is one row group per file.</p></li>
+<li><p>Dataset metadata are written in a separate file in parquet format, located
+at the same level than the dataset directory (not within the directory).
+This way, if provided the directory path, another parquet reader can read
+the dataset without being confused by this metadata file.</p></li>
+<li><p>File ids (in file names) have the same number of digits. This is to ensure
+that files can be read in the correct order by other parquet readers.</p></li>
+<li><p>When creating an OrderedParquetDataset object, a lock is acquired and held
+for the object’s entire lifetime. The purpose is to provide
+race-condition-free exclusive access suitable for scenarios with limited
+concurrent processes.
+The lock is acquired with a timeout and a lifetime. The timeout is the
+maximum time to wait for lock acquisition in seconds. The lifetime is the
+expected maximum lifetime of the lock, as a timedelta or integer number of
+seconds, relative to when the lock is acquired.
+Reading and writing operations refresh the lock to the lifetime it has
+been initially provided.</p></li>
+</ul>
+</dd></dl>
+
 </section>
 <section id="store">
 <h3>Store<a class="headerlink" href="#store" title="Link to this heading"></a></h3>
+<dl class="py class">
+<dt class="sig sig-object py" id="oups.store.Store">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">Store</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">basepath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">indexer</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Type</span><span class="p"><span class="pre">[</span></span><span class="pre">dataclass</span><span class="p"><span class="pre">]</span></span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.Store" title="Link to this definition"></a></dt>
+<dd><p>Sorted list of keys (indexes to parquet datasets).</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.Store.basepath">
+<span class="sig-name descname"><span class="pre">basepath</span></span><a class="headerlink" href="#oups.store.Store.basepath" title="Link to this definition"></a></dt>
+<dd><p>Directory path to the set of parquet datasets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Path</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.Store.indexer">
+<span class="sig-name descname"><span class="pre">indexer</span></span><a class="headerlink" href="#oups.store.Store.indexer" title="Link to this definition"></a></dt>
+<dd><p>Indexer schema (class) to be used to index parquet datasets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Type[dataclass]</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.Store.keys">
+<span class="sig-name descname"><span class="pre">keys</span></span><a class="headerlink" href="#oups.store.Store.keys" title="Link to this definition"></a></dt>
+<dd><p>Set of indexes of existing parquet datasets.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>SortedSet</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="oups.store.Store._needs_keys_refresh">
+<span class="sig-name descname"><span class="pre">_needs_keys_refresh</span></span><a class="headerlink" href="#oups.store.Store._needs_keys_refresh" title="Link to this definition"></a></dt>
+<dd><p>Flag indicating that the ‘keys’ property needs to be refreshed from
+disk. Set to True when a new ‘OrderedParquetDataset’ is accessed but
+doesn’t yet have a metadata file on disk. When True, the next access to
+the ‘keys’ property will rescan the filesystem to update the keys
+collection.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>bool</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.Store.get">
+<span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.Store.get" title="Link to this definition"></a></dt>
+<dd><p>Return the <code class="docutils literal notranslate"><span class="pre">OrderedParquetDataset</span></code> instance corresponding to <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.Store.iter_intersections">
+<span class="sig-name descname"><span class="pre">iter_intersections</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.Store.iter_intersections" title="Link to this definition"></a></dt>
+<dd><p>Iterate over row group intersections across multiple datasets in store.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.Store.__getitem__">
+<span class="sig-name descname"><span class="pre">__getitem__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.Store.__getitem__" title="Link to this definition"></a></dt>
+<dd><p>Return the <code class="docutils literal notranslate"><span class="pre">OrderedParquetDataset</span></code> instance corresponding to <code class="docutils literal notranslate"><span class="pre">key</span></code>.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.Store.__delitem__">
+<span class="sig-name descname"><span class="pre">__delitem__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.Store.__delitem__" title="Link to this definition"></a></dt>
+<dd><p>Remove dataset from parquet set.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.Store.__iter__">
+<span class="sig-name descname"><span class="pre">__iter__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.Store.__iter__" title="Link to this definition"></a></dt>
+<dd><p>Iterate over keys.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.Store.__len__">
+<span class="sig-name descname"><span class="pre">__len__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.Store.__len__" title="Link to this definition"></a></dt>
+<dd><p>Return number of datasets.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.Store.__repr__">
+<span class="sig-name descname"><span class="pre">__repr__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.Store.__repr__" title="Link to this definition"></a></dt>
+<dd><p>List of datasets.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="oups.store.Store.__contains__">
+<span class="sig-name descname"><span class="pre">__contains__</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.Store.__contains__" title="Link to this definition"></a></dt>
+<dd><p>Assess presence of this dataset.</p>
+</dd></dl>
+
+<p class="rubric">Notes</p>
+<p><code class="docutils literal notranslate"><span class="pre">SortedSet</span></code> is the data structure retained for <code class="docutils literal notranslate"><span class="pre">keys</span></code> instead of
+<code class="docutils literal notranslate"><span class="pre">SortedList</span></code> as its <code class="docutils literal notranslate"><span class="pre">__contains__</span></code> appears faster.</p>
+</dd></dl>
+
 </section>
 </section>
 <section id="write-operations">
 <h2>Write Operations<a class="headerlink" href="#write-operations" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="oups.store.write">
+<span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">dirpath</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Path</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="#oups.store.OrderedParquetDataset" title="oups.store.OrderedParquetDataset"><span class="pre">OrderedParquetDataset</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">ordered_on</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pandas.DataFrame</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">row_group_target_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">int</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">6345000</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">duplicates_on</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">List</span><span class="p"><span class="pre">[</span></span><span class="pre">Tuple</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_n_off_target_rgs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">key_value_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Dict</span><span class="p"><span class="pre">[</span></span><span class="pre">str</span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="pre">str</span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.write" title="Link to this definition"></a></dt>
+<dd><p>Write data to disk at location specified by path.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>dirpath</strong> (<em>Union</em><em>[</em><em>str</em><em>, </em><em>Path</em><em>, </em><a class="reference internal" href="#oups.store.OrderedParquetDataset" title="oups.store.OrderedParquetDataset"><em>OrderedParquetDataset</em></a><em>]</em>) – If a string or a Path, it is the directory where writing pandas
+dataframe.
+If an OrderedParquetDataset, it is the dataset where writing pandas
+dataframe.</p></li>
+<li><p><strong>ordered_on</strong> (<em>Union</em><em>[</em><em>str</em><em>, </em><em>Tuple</em><em>[</em><em>str</em><em>]</em><em>]</em>) – Name of the column with respect to which dataset is in ascending order.
+If column multi-index, name of the column is a tuple.
+It allows knowing ‘where’ to insert new data into existing data, i.e.
+completing or correcting past records (but it does not allow to remove
+prior data).</p></li>
+<li><p><strong>df</strong> (<em>Optional</em><em>[</em><em>DataFrame</em><em>]</em><em>, </em><em>default None</em>) – Data to write. If None, a resize of Oredered Parquet Dataset may however
+be performed.</p></li>
+<li><p><strong>row_group_target_size</strong> (<em>Optional</em><em>[</em><em>Union</em><em>[</em><em>int</em><em>, </em><em>str</em><em>]</em><em>]</em>) – Target size of row groups. If not set, default to <code class="docutils literal notranslate"><span class="pre">6_345_000</span></code>, which
+for a dataframe with 6 columns of <code class="docutils literal notranslate"><span class="pre">float64</span></code> or <code class="docutils literal notranslate"><span class="pre">int64</span></code> results in a
+memory footprint (RAM) of about 290MB.
+It can be a pandas <cite>freqstr</cite> as well, to gather data by timestamp over a
+defined period.</p></li>
+<li><p><strong>duplicates_on</strong> (<em>Union</em><em>[</em><em>str</em><em>, </em><em>List</em><em>[</em><em>str</em><em>]</em><em>, </em><em>List</em><em>[</em><em>Tuple</em><em>[</em><em>str</em><em>]</em><em>]</em><em>]</em><em>, </em><em>optional</em>) – Column names according which ‘row duplicates’ can be identified (i.e.
+rows sharing same values on these specific columns) so as to drop
+them. Duplicates are only identified in new data, and existing
+recorded row groups that overlap with new data.
+If duplicates are dropped, only last is kept.
+To identify row duplicates using all columns, empty list <code class="docutils literal notranslate"><span class="pre">[]</span></code> can be
+used instead of all columns names.
+If not set, default to <code class="docutils literal notranslate"><span class="pre">None</span></code>, meaning no row is dropped.</p></li>
+<li><p><strong>max_n_off_target_rgs</strong> (<em>int</em><em>, </em><em>optional</em>) – <p>Max expected number of ‘off target’ row groups.
+If ‘row_group_target_size’ is an <code class="docutils literal notranslate"><span class="pre">int</span></code>, then a ‘complete’ row group
+is one which size is ‘close to’ <code class="docutils literal notranslate"><span class="pre">row_group_target_size</span></code> (&gt;=80%).
+If ‘row_group_target_size’ is a pandas <cite>freqstr</cite>, and if there are several
+row groups in the last period defined by the <cite>freqstr</cite>, then these row
+groups are considered incomplete.
+To evaluate number of ‘incomplete’ row groups, only those at the end of
+an existing dataset are accounted for. ‘Incomplete’ row groups in the
+middle of ‘complete’ row groups are not accounted for (they can be
+created by insertion of new data in the middle of existing data).
+If not set, default to <code class="docutils literal notranslate"><span class="pre">None</span></code>.</p>
+<blockquote>
+<div><ul>
+<li><p><code class="docutils literal notranslate"><span class="pre">None</span></code> value induces no coalescing of row groups. If there is no
+drop of duplicates, new data is systematically appended.</p></li>
+<li><p>A value of <code class="docutils literal notranslate"><span class="pre">0</span></code> or <code class="docutils literal notranslate"><span class="pre">1</span></code> means that new data should systematically
+be merged to the last existing one to ‘complete’ it (if it is not
+‘complete’ already).</p></li>
+</ul>
+</div></blockquote>
+</p></li>
+<li><p><strong>key_value_metadata</strong> (<em>Dict</em><em>[</em><em>str</em><em>, </em><em>str</em><em>]</em><em>, </em><em>optional</em>) – Key-value metadata to write, or update in dataset. Please see
+fastparquet for updating logic in case of <cite>None</cite> value being used.</p></li>
+<li><p><strong>**kwargs</strong> – Additional parameters to pass to
+‘OrderedParquetDataset.write_row_group_files()’.</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Notes</p>
+<ul class="simple">
+<li><p>When writing a dataframe with this function,</p>
+<ul>
+<li><p>index of dataframe is not written to disk.</p></li>
+<li><p>parquet file scheme is ‘hive’ (one row group per parquet file).</p></li>
+</ul>
+</li>
+<li><p>Coalescing off target size row groups is triggered if actual number of off
+target row groups is larger than <code class="docutils literal notranslate"><span class="pre">max_n_off_target_rgs</span></code>.
+This assessment is however only triggered if <code class="docutils literal notranslate"><span class="pre">max_n_off_target_rgs</span></code> is
+set. Otherwise, new data is simply appended, without prior check.</p></li>
+<li><p>When <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code> is set, ‘ordered_on’ column is added to
+<code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code> list, if not already part of it. Purpose is to enable a
+first approximate search for duplicates, to load data of interest only.</p></li>
+<li><p>For simple data appending, i.e. without need to drop duplicates, it is
+advised to keep <code class="docutils literal notranslate"><span class="pre">ordered_on</span></code> and <code class="docutils literal notranslate"><span class="pre">duplicates_on</span></code> parameters set to
+<code class="docutils literal notranslate"><span class="pre">None</span></code> as this parameter will trigger unnecessary evaluations.</p></li>
+<li><p>Off target size row groups are row groups:</p>
+<ul>
+<li><p>either not reaching the maximum number of rows if
+‘row_group_target_size’ is an <code class="docutils literal notranslate"><span class="pre">int</span></code>,</p></li>
+<li><p>or several row groups lying in the same time period if
+‘row_group_target_size’ is a pandas ‘freqstr’.</p></li>
+</ul>
+</li>
+<li><p>When incorporating new data within recorded data, existing off target size
+row groups will only be resized if there is intersection with new data.
+Otherwise, new data is only added, without merging with existing off
+target size row groups.</p></li>
+</ul>
+</dd></dl>
+
 </section>
 <section id="utility-functions">
 <h2>Utility Functions<a class="headerlink" href="#utility-functions" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="oups.store.check_cmidx">
+<span class="sig-name descname"><span class="pre">check_cmidx</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cmidx</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pandas.MultiIndex</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.check_cmidx" title="Link to this definition"></a></dt>
+<dd><p>Check if column multi-index complies with fastparquet requirements.</p>
+<p>Library fastparquet requires names for each level in a Multiindex.
+Also, column names have to be tuple of string.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>cmidx</strong> (<em>MultiIndex</em>) – MultiIndex to check.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="oups.store.conform_cmidx">
+<span class="sig-name descname"><span class="pre">conform_cmidx</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">pandas.DataFrame</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#oups.store.conform_cmidx" title="Link to this definition"></a></dt>
+<dd><p>Conform pandas column multi-index.</p>
+<p>Library fastparquet has several requirements to handle column MultiIndex.</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>It requires names for each level in a Multiindex. If these are not set,
+there are set to ‘’, an empty string.</p></li>
+<li><p>It requires column names to be tuple of string. If an object is
+different than a string (for instance float or int), it is turned into
+a string.</p></li>
+</ul>
+</div></blockquote>
+<p>DataFrame is modified in-place.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>df</strong> (<em>DataFrame</em>) – DataFrame with a column multi-index to check and possibly adjust.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><em>None</em></p>
+</dd>
+</dl>
+</dd></dl>
+
 </section>
 </section>
 
