@@ -264,4 +264,4 @@ See Also
 --------
 
 - :doc:`api` - Complete API reference
-- :doc:`quickstart` - Getting started guide
+- :doc:`tutorial` - Getting started guide

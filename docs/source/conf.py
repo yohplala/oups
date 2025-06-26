@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 # -- Project information -----------------------------------------------------
 
 project = "oups"
-copyright = "2022, Yohplala"
+copyright = "2025, Yohplala"
 author = "Yohplala"
 version = "latest"
 release = version
@@ -48,21 +48,19 @@ numpydoc_show_class_members = False
 add_module_names = False
 todo_include_todos = False
 
-autosummary_generate = True
+# Disable autosummary_generate to prevent automatic discovery of nested modules
+autosummary_generate = False
 autodoc_member_order = "bysource"
+
+# Configure autodoc to exclude deeply nested modules
+autodoc_mock_imports = ["fastparquet", "numpy", "pandas", "sortedcontainers"]
+
+# Exclude internal implementation modules to prevent duplicates
+exclude_patterns = []
 
 napoleon_google_docstring = False
 # Do not show the return type as separate section
 napoleon_use_rtype = False
-
-# List of modules to be mocked up.
-# (external dependencies not met at build time)
-autodoc_mock_imports = ["fastparquet", "numpy", "pandas", "sortedcontainers", "vaex"]
-
-# List of patterns, relative to source directory, that match files and
-# directories to ignore when looking for source files.
-# This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = []
 
 # -- Options for HTML output -------------------------------------------------
 
