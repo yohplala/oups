@@ -1,3 +1,9 @@
+Edit 27/06/2025:
+This repository has been moved to Codeberg [here](https://codeberg.org/Pierrot/oups).
+Thank you for your understanding.
+
+
+
 # Welcome to oups!
 
 ## What is oups?
