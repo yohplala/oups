@@ -15,6 +15,55 @@ format YYYY.MM.patch.
 
 ## 2025.06
 
+### [2025.06.5] - 2025-06-26
+
+    PR #27: doc - Full refactoring of store documentation.
+
+    Files changed in this PR:
+    .github/workflows/docs.yml
+    .pre-commit-config.yaml
+    docs/source/api.rst
+    docs/source/conf.py
+    docs/source/index.rst
+    docs/source/indexing.rst
+    docs/source/install.rst
+    docs/source/parquetset.rst
+    docs/source/purpose.rst
+    docs/source/quickstart.rst
+    docs/source/store.rst
+    oups/__init__.py
+    oups/store/ordered_parquet_dataset/write/write.py
+    pyproject.toml
+
+**Documentation improvements** - [PR #27](https://github.com/yohplala/oups/pull/27)
+
+- **Categories:** Documentation, Configuration, Code
+- **Files changed:** 14 files
+
+### [2025.06.4] - 2025-06-22
+
+    PR #26: pathlib_in_indexer - Use of pathlib's Path instead of os.path.sep.
+
+    Files changed in this PR:
+    oups/defines.py
+    oups/store/indexer.py
+    oups/store/ordered_parquet_dataset/ordered_parquet_dataset/base.py
+    oups/store/ordered_parquet_dataset/ordered_parquet_dataset/read_only.py
+    oups/store/ordered_parquet_dataset/write/write.py
+    oups/store/store/store.py
+    tests/test_store/test_filepath_utils.py
+    tests/test_store/test_indexer.py
+    tests/test_store/test_ordered_parquet_dataset/__init__.py
+    tests/test_store/test_ordered_parquet_dataset/test_ordered_parquet_dataset/test_opd_base.py
+    tests/test_store/test_ordered_parquet_dataset/test_ordered_parquet_dataset/test_opd_read_only.py
+    tests/test_store/test_ordered_parquet_dataset/test_write/test_write.py
+    tests/test_store/test_store/test_store.py
+
+**Path handling improvements** - [PR #26](https://github.com/yohplala/oups/pull/26)
+
+- **Categories:** Tests, Code, Storage
+- **Files changed:** 13 files
+
 ### [2025.06.3] - 2025-06-20
 
     PR #25: concurrent_opd_access - Prevent concurrent access to a same OPD.
